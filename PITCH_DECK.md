@@ -70,7 +70,7 @@ Hospitals and research institutions need to share medical imaging data — MRI, 
 9.  Approved study routed to destination institution
 ```
 
-**Key**: Patient-identifying data **never leaves the hospital network**. The de-identification engine follows **DICOM PS3.15 Annex E** — the official industry standard that defines exactly which data elements to remove, zero out, or replace to strip all 18 HIPAA Safe Harbor identifier categories from medical images. The process is **modality-agnostic** — it works identically whether the study is a brain MRI, a chest X-ray, or a cardiac ultrasound.
+**Key**: Patient-identifying data **never leaves the hospital network**. The de-identification engine follows [**DICOM PS3.15 Annex E**](https://dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_e.html) — the official industry standard that defines exactly which data elements to remove, zero out, or replace to strip all 18 HIPAA Safe Harbor identifier categories from medical images. The process is **modality-agnostic** — it works identically whether the study is a brain MRI, a chest X-ray, or a cardiac ultrasound.
 
 ---
 
