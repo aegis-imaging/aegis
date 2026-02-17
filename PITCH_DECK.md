@@ -60,14 +60,14 @@ Hospitals and research institutions need to share medical imaging data — MRI, 
 
 ```
 1.  Uploader opens AEGIS in their browser (no install)
-2.  Drags DICOM folder into the upload portal (any modality)
-3.  Browser parses files and strips all PHI tags (PS3.15 Annex E)
+2.  Drags DICOM files into the upload portal (any modality)
+3.  Browser parses and strips all PHI tags (PS3.15 Annex E)
 4.  Uploader reviews before/after anonymization preview
-5.  Confirms → encrypted upload to GCP (only de-identified data leaves site)
+5.  Confirms → encrypted upload to GCP (de-identified only)
 6.  Server validates de-identification completeness
-7.  Head imaging → automated defacing; all other modalities → direct to clean store
-8.  Admin reviews quality in OHIF viewer, approves or rejects
-9.  Approved study is routed to destination project/institution
+7.  Head scans → auto-defacing; others → clean store
+8.  Admin reviews in OHIF viewer, approves or rejects
+9.  Approved study routed to destination institution
 ```
 
 **Key**: Patient-identifying data **never leaves the hospital network**. The de-identification engine is **modality-agnostic** — it works identically whether the study is a brain MRI, a chest X-ray, or a cardiac ultrasound.
