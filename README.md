@@ -2,14 +2,15 @@
 
 **Anonymized Exchange Gateway for Imaging Studies**
 
-A GCP-hosted platform for secure, HIPAA-compliant sharing of brain MRI, PET, and CT imaging data between hospitals, universities, and research institutions.
+A GCP-hosted platform for secure, HIPAA-compliant sharing of medical imaging data (all DICOM modalities) between hospitals, universities, and research institutions.
 
 ## What It Does
 
-- **Browser-based anonymization** — DICOM tag-level de-identification happens in the browser before data leaves the hospital network. No software installation required.
-- **Server-side defacing** — Automated facial feature removal from 3D head scans after upload.
+- **Browser-based anonymization** — DICOM tag-level de-identification happens in the browser before data leaves the hospital network. No software installation required. Works with any DICOM modality.
+- **Server-side defacing** — Automated facial feature removal from 3D head scans after upload. Non-head modalities bypass defacing automatically.
 - **Secure cloud routing** — Encrypted transmission to a GCP Healthcare API DICOM store with DICOMweb endpoints.
 - **Admin review** — OHIF-powered viewer for QC, defacing review, and study management.
+- **Modality-agnostic** — Supports MRI, CT, PET, PET/CT, ultrasound, X-ray, nuclear medicine, mammography, and all other DICOM-compliant imaging. MVP focuses on brain MRI/PET/CT.
 
 ## Architecture
 
@@ -30,8 +31,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design.
 ## Tech Stack
 
 - **Backend**: Go on Cloud Run (`distroless` containers)
+- **Database**: Cloud SQL (PostgreSQL 15)
 - **Frontend**: React + TypeScript
 - **DICOM**: GCP Healthcare API (DICOMweb), dcmjs, dicomParser
+- **Analytics**: BigQuery (DICOM metadata export, audit dashboards)
+- **AI/ML**: Vertex AI (burned-in PHI detection, image QC)
 - **Defacing**: mri_deface, dcm2niix, pydicom (Python Cloud Run sidecar)
 - **Viewer**: OHIF Viewer
 - **Infrastructure**: Terraform, Cloud Build

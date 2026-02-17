@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Go
+api/aegis-api
+
+# Terraform
+terraform/**/.terraform/
+terraform/**/*.tfstate
+terraform/**/*.tfstate.backup
+terraform/**/*.tfplan
+terraform/**/.terraform.lock.hcl
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.tfvars
+!*.tfvars.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test data (DICOM files — do not commit)
+test-data/
+
+# Python (defacing service)
+defacing/__pycache__/
+defacing/*.pyc
+defacing/.venv/
