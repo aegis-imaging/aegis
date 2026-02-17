@@ -121,17 +121,17 @@ draw.rounded_rectangle(
 )
 
 # ── Subtitle ──
-sub_font = font(36)
-sub = "Anonymized Exchange Gateway"
+sub_font = font(32)
+sub = "Anonymization & Exchange Gateway"
 sw = draw.textlength(sub, font=sub_font)
-draw.text((cx - sw / 2, text_y + 180), sub, fill=TEAL, font=sub_font)
+draw.text((cx - sw / 2, text_y + 176), sub, fill=TEAL, font=sub_font)
 
 sub2 = "for Imaging Studies"
 sw2 = draw.textlength(sub2, font=sub_font)
-draw.text((cx - sw2 / 2, text_y + 225), sub2, fill=TEAL, font=sub_font)
+draw.text((cx - sw2 / 2, text_y + 218), sub2, fill=TEAL, font=sub_font)
 
 # ── Modality badges ──
-badge_y = text_y + 290
+badge_y = text_y + 278
 badge_font = font(22)
 badges = ["Brain MRI", "PET", "CT", "DICOM"]
 badge_colors = ["#1565C0", "#7B1FA2", "#00695C", "#E65100"]

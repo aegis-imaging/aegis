@@ -1,6 +1,6 @@
 # AEGIS — Project Guide
 
-Anonymized Exchange Gateway for Imaging Studies. GCP-hosted platform for HIPAA-compliant sharing of medical imaging data across all DICOM modalities. MVP focus: brain MRI, PET, and CT.
+Anonymization & Exchange Gateway for Imaging Studies. GCP-hosted platform for HIPAA-compliant sharing of medical imaging data across all DICOM modalities. MVP focus: brain MRI, PET, and CT.
 
 ## Repository Structure (Monorepo)
 
@@ -59,6 +59,7 @@ cd terraform/infra && terraform init && terraform plan
 ## Key Architecture Decisions
 
 - Client-side DICOM tag anonymization in browser before upload (zero-install at sending sites)
+- Dual-ingress model: external-site browser upload and internal-enterprise ingestion both enter the same enterprise GCP tenancy and processing pipeline
 - Server-side defacing in separate Python Cloud Run service
 - Two DICOM stores: `raw` (tag-de-identified) and `clean` (fully processed including defacing)
 - Go for main API (minimal CVE surface, fast cold starts), Python only for defacing sidecar
@@ -71,6 +72,7 @@ cd terraform/infra && terraform init && terraform plan
 
 ## Conventions
 
+- Product naming: always use **Anonymization & Exchange Gateway for Imaging Studies** for first mention, then **AEGIS** thereafter.
 - Go: standard library preferred, minimal dependencies
 - Frontend: functional React components, TypeScript strict mode
 - Terraform: one module per logical resource group

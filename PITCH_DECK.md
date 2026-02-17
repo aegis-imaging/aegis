@@ -10,10 +10,17 @@ body_class: markdown-body
 <div style="text-align: center; padding: 60px 0 30px;">
   <img src="logo-small.png" alt="AEGIS Logo" style="width: 220px; margin-bottom: 20px;" />
   <h1 style="font-size: 42px; margin: 0; color: #1a1a2e;">AEGIS</h1>
-  <p style="font-size: 22px; color: #4a4a6a; margin: 8px 0 0;">Anonymized Exchange Gateway for Imaging Studies</p>
+  <p style="font-size: 22px; color: #4a4a6a; margin: 8px 0 0;">Anonymization &amp; Exchange Gateway for Imaging Studies</p>
   <hr style="width: 60%; margin: 30px auto; border: 1px solid #e0e0e0;" />
   <p style="font-size: 16px; color: #6b7280;">A GCP-native platform for secure, HIPAA-compliant sharing of medical imaging data across all DICOM modalities</p>
 </div>
+
+---
+
+## Naming Quick Check
+
+- First mention: **Anonymization & Exchange Gateway for Imaging Studies**
+- After first mention: **AEGIS**
 
 ---
 
