@@ -1,14 +1,18 @@
 # AEGIS — Architecture Plan
-*Anonymized Exchange Gateway for Imaging Studies*
+*Anonymization & Exchange Gateway for Imaging Studies*
 
 ### Why "AEGIS"?
-The name **AEGIS** serves double duty. As an acronym, it describes exactly what the system does: an **A**nonymized **E**xchange **G**ateway for **I**maging **S**tudies. The word itself comes from Greek mythology — the aegis was the shield of Zeus and Athena, a symbol of protection. This captures the platform's core mission: shielding patient identity while enabling the free flow of medical imaging data for research.
+The name **AEGIS** serves double duty. As an acronym, it describes exactly what the system does: an **A**nonymization & **E**xchange **G**ateway for **I**maging **S**tudies. The word itself comes from Greek mythology — the aegis was the shield of Zeus and Athena, a symbol of protection. This captures the platform's core mission: shielding patient identity while enabling the free flow of medical imaging data for research.
 
 ## Context
 
 Medical imaging studies across **all DICOM modalities** need to be shared between hospitals, universities, and research institutions. Before transmission, DICOM images must be de-identified of all PHI per HIPAA Safe Harbor rules (18 identifier categories). Head imaging additionally requires **defacing** (removing facial features from 3D volumes to prevent re-identification via facial reconstruction). Sending hospitals have locked-down IT environments where installing software is difficult or impossible.
 
-AEGIS is a GCP-hosted platform where external institutions can upload DICOM data of **any modality** that is **anonymized client-side in the browser** (tag-level de-identification) before leaving their local machine, then transmitted encrypted to a secured GCP tenancy for storage, server-side processing, routing, and downstream delivery.
+AEGIS is a GCP-hosted platform with **two ingress paths** into the enterprise GCP tenancy:
+1. **External-site ingress** — external institutions upload DICOM data of any modality after browser-based tag anonymization.
+2. **Internal-enterprise ingress** — studies originating within the enterprise network are ingested directly into the same tenancy.
+
+Both paths converge on a common processing pipeline (validation, de-identification policy enforcement, optional defacing, QC, and audit), after which approved data is routed/shared to authorized downstream recipients.
 
 ### Supported Modalities
 AEGIS supports **all DICOM-compliant imaging modalities**, including but not limited to:
@@ -359,25 +363,21 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 ## Data Flow
 
 ```
-1. User navigates to upload.aegis.example.com
-2. Selects DICOM files/folders via browser file picker
-3. Browser parses DICOM headers in Web Workers (dcmjs)
-4. De-identification engine applies tag-level rules (PS3.15 Annex E)
-5. User reviews anonymization preview (before/after tag diff)
-6. User confirms → browser requests signed upload URLs from Go API
-7. Tag-anonymized DICOM files uploaded to GCS staging bucket
-   (chunked, resumable, TLS 1.2+)
-8. Go API receives upload-complete webhook
-9. Go API ingests files into Healthcare API DICOM store via STOW-RS
-10. Pub/Sub notification triggers processing:
+1. Data enters through one of two ingress paths:
+  - **External-site path**: uploader uses `upload.aegis.example.com`, browser performs client-side tag anonymization, then uploads de-identified files.
+  - **Internal-enterprise path**: internal system/user ingests studies directly into enterprise-controlled intake (API/DICOMweb/batch ingest).
+2. Go API records intake session and metadata in PostgreSQL audit/application tables.
+3. Ingested files are written to staging / intake and then into Healthcare API DICOM store.
+4. Pub/Sub notification triggers common processing pipeline:
     a. Server-side de-id validation (Healthcare API)
     b. If head imaging → trigger defacing service
        If non-head → move directly to "clean" store
     c. (Head only) Defacing service processes and stores to "clean" store
-11. Admin reviews in dashboard (OHIF Viewer)
+5. Admin reviews in dashboard (OHIF Viewer)
     - Tag anonymization completeness check
     - Defacing quality review (head imaging only — before/after)
-12. Admin approves → study available for routing/download/export
+6. Admin approves → study becomes shareable/exportable under policy.
+7. External partner access is granted via controlled mechanisms (signed download links, authorized DICOMweb routes, or approved project-level export channels).
 ```
 
 ---

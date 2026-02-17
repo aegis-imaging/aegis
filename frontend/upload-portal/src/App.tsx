@@ -6,7 +6,20 @@ import { parseDicomFile, buildStudySummary, isDicomFile } from './dicom/parser'
 import { deidentify } from './dicom/deid'
 import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag } from './types'
 
-type Stage = 'select' | 'parsing' | 'preview' | 'ready'
+type Stage = 'select' | 'parsing' | 'preview' | 'uploading' | 'ready'
+
+type UploadInitResponse = {
+  session_id: string
+  upload_urls: string[]
+}
+
+type UploadCompleteResponse = {
+  session_id: string
+  status: string
+  study?: {
+    study_instance_uid: string
+  }
+}
 
 export function App() {
   const [stage, setStage] = useState<Stage>('select')
@@ -15,6 +28,8 @@ export function App() {
   const [tagChanges, setTagChanges] = useState<DicomTag[]>([])
   const [privateTagsRemoved, setPrivateTagsRemoved] = useState(0)
   const [parseProgress, setParseProgress] = useState({ current: 0, total: 0 })
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
+  const [uploadResult, setUploadResult] = useState<UploadCompleteResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleFilesSelected = useCallback(async (selectedFiles: File[]) => {
@@ -78,8 +93,82 @@ export function App() {
     setSummary(null)
     setTagChanges([])
     setPrivateTagsRemoved(0)
+    setUploadProgress({ current: 0, total: 0 })
+    setUploadResult(null)
     setError(null)
   }, [])
+
+  const handleUpload = useCallback(async () => {
+    if (!summary || files.length === 0) {
+      setError('No files available for upload.')
+      return
+    }
+
+    setError(null)
+    setStage('uploading')
+    setUploadProgress({ current: 0, total: files.length })
+
+    try {
+      const initRes = await fetch('/api/upload/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_slug: 'default',
+          file_count: files.length,
+          study_metadata: {
+            study_instance_uid: summary.studyInstanceUid,
+            modality: summary.modality,
+            body_part: summary.bodyPart,
+            study_description: summary.studyDescription,
+            series_count: summary.seriesCount,
+            instance_count: summary.imageCount,
+          },
+        }),
+      })
+
+      if (!initRes.ok) {
+        throw new Error(`Upload init failed (${initRes.status})`)
+      }
+
+      const initData = (await initRes.json()) as UploadInitResponse
+      if (!initData.upload_urls || initData.upload_urls.length !== files.length) {
+        throw new Error('Upload initialization returned unexpected URL count')
+      }
+
+      for (let i = 0; i < files.length; i++) {
+        const putRes = await fetch(initData.upload_urls[i], {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/dicom',
+          },
+          body: files[i].arrayBuffer,
+        })
+
+        if (!putRes.ok) {
+          throw new Error(`File upload failed at index ${i} (${putRes.status})`)
+        }
+
+        setUploadProgress({ current: i + 1, total: files.length })
+      }
+
+      const completeRes = await fetch('/api/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: initData.session_id }),
+      })
+
+      if (!completeRes.ok) {
+        throw new Error(`Upload completion failed (${completeRes.status})`)
+      }
+
+      const completeData = (await completeRes.json()) as UploadCompleteResponse
+      setUploadResult(completeData)
+      setStage('ready')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+      setStage('preview')
+    }
+  }, [files, summary])
 
   return (
     <div style={{
@@ -94,7 +183,7 @@ export function App() {
           AEGIS Upload Portal
         </h1>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '15px' }}>
-          Anonymized Exchange Gateway for Imaging Studies
+          Anonymization & Exchange Gateway for Imaging Studies
         </p>
       </header>
 
@@ -167,7 +256,7 @@ export function App() {
               Start over
             </button>
             <button
-              onClick={() => setStage('ready')}
+              onClick={handleUpload}
               style={{
                 padding: '10px 24px',
                 borderRadius: '8px',
@@ -185,6 +274,30 @@ export function App() {
         </div>
       )}
 
+      {stage === 'uploading' && (
+        <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+          <p style={{ fontSize: '16px', marginBottom: '16px' }}>
+            Uploading files... {uploadProgress.current} / {uploadProgress.total}
+          </p>
+          <div style={{
+            height: '8px',
+            backgroundColor: '#e5e7eb',
+            borderRadius: '4px',
+            overflow: 'hidden',
+            maxWidth: '400px',
+            margin: '0 auto',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${uploadProgress.total ? (uploadProgress.current / uploadProgress.total) * 100 : 0}%`,
+              backgroundColor: '#2563eb',
+              borderRadius: '4px',
+              transition: 'width 0.2s ease',
+            }} />
+          </div>
+        </div>
+      )}
+
       {/* Step 3: Ready to upload (placeholder) */}
       {stage === 'ready' && (
         <div style={{
@@ -196,11 +309,17 @@ export function App() {
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>{'\u2705'}</div>
           <h2 style={{ margin: '0 0 8px', fontSize: '20px' }}>
-            Anonymization confirmed
+            Upload complete
           </h2>
           <p style={{ color: '#6b7280', marginBottom: '24px' }}>
-            {files.length} files ready for upload. Upload endpoint not yet connected.
+            {files.length} files uploaded successfully.
           </p>
+          {uploadResult && (
+            <p style={{ color: '#4b5563', marginBottom: '24px', fontSize: '14px' }}>
+              Session: {uploadResult.session_id}
+              {uploadResult.study?.study_instance_uid ? ` · Study UID: ${uploadResult.study.study_instance_uid}` : ''}
+            </p>
+          )}
           <button
             onClick={handleReset}
             style={{
