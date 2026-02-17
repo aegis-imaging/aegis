@@ -1,10 +1,14 @@
-# DICOMRouter — Architecture Plan
+# AEGIS — Architecture Plan
+*Anonymized Exchange Gateway for Imaging Studies*
+
+### Why "AEGIS"?
+The name **AEGIS** serves double duty. As an acronym, it describes exactly what the system does: an **A**nonymized **E**xchange **G**ateway for **I**maging **S**tudies. The word itself comes from Greek mythology — the aegis was the shield of Zeus and Athena, a symbol of protection. This captures the platform's core mission: shielding patient identity while enabling the free flow of medical imaging data for research.
 
 ## Context
 
 Medical imaging studies (primarily **brain MRI, PET, and CT**) need to be shared between hospitals, universities, and research institutions. Before transmission, DICOM images must be de-identified of all PHI per HIPAA Safe Harbor rules (18 identifier categories). Head imaging also requires **defacing** (removing facial features from 3D volumes to prevent re-identification via facial reconstruction). Sending hospitals have locked-down IT environments where installing software is difficult or impossible.
 
-DICOMRouter will be a GCP-hosted platform where external institutions can upload DICOM data that is **anonymized client-side in the browser** (tag-level de-identification) before leaving their local machine, then transmitted encrypted to a secured GCP tenancy for storage, server-side defacing, routing, and downstream processing.
+AEGIS will be a GCP-hosted platform where external institutions can upload DICOM data that is **anonymized client-side in the browser** (tag-level de-identification) before leaving their local machine, then transmitted encrypted to a secured GCP tenancy for storage, server-side defacing, routing, and downstream processing.
 
 ### Primary Modalities
 - **Brain MRI** (T1, T2, FLAIR, DWI, fMRI, etc.)
@@ -84,14 +88,14 @@ DICOMRouter will be a GCP-hosted platform where external institutions can upload
 
 ## Repository Structure (5 Repos)
 
-### 1. `dicom-router-terraform-prj` — GCP Project Bootstrap
+### 1. `aegis-terraform-prj` — GCP Project Bootstrap
 - Terraform for project-level resources: APIs, billing, org policies
 - Service account creation, IAM bindings
 - VPC Service Controls perimeter
 - Cloud KMS key rings and keys
 - BAA configuration documentation
 
-### 2. `dicom-router-terraform-infra` — Infrastructure
+### 2. `aegis-terraform-infra` — Infrastructure
 - VPC, subnets, Cloud NAT, firewall rules
 - Cloud Run service definitions (API, admin dashboard, defacing service)
 - Cloud Storage buckets (staging, archive)
@@ -103,7 +107,7 @@ DICOMRouter will be a GCP-hosted platform where external institutions can upload
 - Artifact Registry for Docker images
 - Monitoring, alerting, audit log sinks
 
-### 3. `dicom-router-api` — Backend API (Go)
+### 3. `aegis-api` — Backend API (Go)
 - Cloud Run service, `distroless` Docker image (~10-20 MB)
 - Endpoints:
   - `POST /api/upload/init` — generate signed URL for GCS upload
@@ -116,7 +120,7 @@ DICOMRouter will be a GCP-hosted platform where external institutions can upload
 - Auth middleware (JWT / Google Identity tokens)
 - Pub/Sub event handlers for DICOM ingest events
 
-### 4. `dicom-router-frontend` — React Applications
+### 4. `aegis-frontend` — React Applications
 - Monorepo with two apps + shared libraries
 - **Upload Portal** (public-facing):
   - DICOM file selection (drag-and-drop, directory picker via `<input webkitdirectory>`)
@@ -134,7 +138,7 @@ DICOMRouter will be a GCP-hosted platform where external institutions can upload
   - User/institution management
   - Audit log viewer
 
-### 5. `dicom-router-client` — Uploader Library (TypeScript)
+### 5. `aegis-client` — Uploader Library (TypeScript)
 - Reusable TypeScript library extracted from the Upload Portal
 - Can be embedded in other web apps or used standalone
 - Core modules: DICOM parser, de-identification engine, upload client
@@ -261,7 +265,7 @@ Defacing runs server-side after images are received. This is a dedicated Python 
 ## Data Flow
 
 ```
-1. User navigates to upload.dicomrouter.example.com
+1. User navigates to upload.aegis.example.com
 2. Selects DICOM files/folders via browser file picker
 3. Browser parses DICOM headers in Web Workers (dcmjs)
 4. De-identification engine applies tag-level rules (PS3.15 Annex E)
@@ -303,7 +307,7 @@ Defacing runs server-side after images are received. This is a dedicated Python 
 
 ## Comparison to Existing Platforms
 
-| Aspect | DICOMRouter | XNAT | Flywheel | LONI IDA | MIRC CTP |
+| Aspect | AEGIS | XNAT | Flywheel | LONI IDA | MIRC CTP |
 |--------|-------------|------|----------|----------|----------|
 | **Hosting** | GCP managed | Self-hosted | Commercial SaaS | On-prem | On-prem gateway |
 | **Client de-id** | Browser (zero install) | Electron desktop app | CLI / Edge connector | Java desktop app | On-site Java app |
