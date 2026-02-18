@@ -56,7 +56,7 @@ func Load() *Config {
 
 		DefacingServiceURL: os.Getenv("DEFACING_SERVICE_URL"), // e.g. http://localhost:8081
 
-		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"), ","),
+		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002"), ","),
 
 		AuthEnabled: os.Getenv("AUTH_ENABLED") == "true",
 
