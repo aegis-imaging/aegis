@@ -25,6 +25,8 @@ type Study = {
   source: string
   status: string
   defacing_required: boolean
+  phi_scan_required: boolean
+  phi_scan_status: string
   instance_count: number
   created_at: string
 }
@@ -146,8 +148,9 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' }) {
-  const cls = `badge badge--${label}`
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' }) {
+  const modifier = prefix === 'phi' && label === 'clean' ? 'phi-clean' : label
+  const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
 }
 
@@ -524,6 +527,12 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   // Show "Review defacing" for head studies that have been defaced (raw files preserved).
   const canReviewDeface = study.defacing_required &&
     ['defaced', 'approved'].includes(study.status)
+  const canPhiScan = study.phi_scan_required && study.phi_scan_status === 'pending'
+
+  const handlePhiScan = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
+    onAction()
+  }
 
   return (
     <>
@@ -533,6 +542,7 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <td>{study.body_part || '—'}</td>
         <td><Badge label={study.source} prefix="source" /></td>
         <td><Badge label={study.status} prefix="status" /></td>
+        <td>{study.phi_scan_required ? <Badge label={study.phi_scan_status || 'n/a'} prefix="phi" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
@@ -548,6 +558,9 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
                 {shareOpen ? 'Close' : 'Share'}
               </button>
             )}
+            {canPhiScan && (
+              <button type="button" className="btn btn--phi-scan" onClick={handlePhiScan}>Scan for PHI</button>
+            )}
             {canReviewDeface && (
               <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
                 {defaceOpen ? 'Close review' : 'Review defacing'}
@@ -561,21 +574,21 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
       </tr>
       {shareOpen && (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={9}>
             <SharePanel study={study} onClose={() => setShareOpen(false)} />
           </td>
         </tr>
       )}
       {defaceOpen && (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={9}>
             <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />
           </td>
         </tr>
       )}
       {viewOpen && (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={9}>
             <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
           </td>
         </tr>
@@ -880,6 +893,7 @@ function RoutingPanel() {
                 onChange={e => setRuleForm(f => ({ ...f, action: e.target.value, destination_id: null }))}>
                 <option value="require_qa">require_qa — hold for manual review (default)</option>
                 <option value="require_defacing">require_defacing — force defacing even if not head</option>
+                <option value="require_phi_scan">require_phi_scan — scan pixels for burned-in PHI</option>
                 <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
                 <option value="reject">reject — auto-reject</option>
                 <option value="route_to">route_to — forward to external destination</option>
@@ -2237,6 +2251,7 @@ export function App() {
                     <th>Body Part</th>
                     <th>Source</th>
                     <th>Status</th>
+                    <th>PHI Scan</th>
                     <th className="align-right">Files</th>
                     <th>Received</th>
                     <th>Actions</th>
