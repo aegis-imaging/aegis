@@ -464,8 +464,8 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 19. ✅ **Upload portal QoL**: `onFileStart` callback in `@aegis/client`; per-file filename display below progress bar; per-file PUT auto-retry (3× with exponential backoff) (PR #22)
 
 ### Phase 4: Advanced Processing (Vertex AI)
-20. **Burned-in PHI detection**: Vertex AI Document AI / Vision OCR on pixel data
-18. **QC automation**: Vertex AI custom models for image quality assessment
+20. ✅ **Burned-in PHI detection**: Python OCR service (`phi-detection/`) with Tesseract backend (local dev) and Vertex AI Document AI (production); `require_phi_scan` routing rule action; `phi_scan_required`/`phi_scan_status` study fields; async dispatch from Go API; admin dashboard PHI scan badge + scan button (PR #29)
+21. **QC automation**: Vertex AI custom models for image quality assessment
 19. **Smart routing**: ML-based modality/anatomy classification for studies with poor metadata
 20. **BIDS conversion**: dcm2niix-based pipeline for research output format
 21. **Batch import tools**: CLI / API for bulk historical data migration

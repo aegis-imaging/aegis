@@ -124,6 +124,20 @@ func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.S
 			outcome = "already rejected (no-op)"
 		}
 
+	case "require_phi_scan":
+		if !s.PhiScanRequired {
+			s.PhiScanRequired = true
+			s.PhiScanStatus = "pending"
+			if err := model.SetPhiScanRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set phi_scan_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "phi_scan_required set to true"
+			}
+		} else {
+			outcome = "phi_scan_required already true (no-op)"
+		}
+
 	case "route_to":
 		if r.DestinationID == nil {
 			outcome = "error: route_to rule has no destination_id"

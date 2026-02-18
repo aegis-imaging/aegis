@@ -39,6 +39,7 @@ aegis/
 │   └── admin-dashboard/  # React — internal QC, OHIF viewer, study management
 ├── client/               # TypeScript DICOM anonymization library (npm package)
 ├── defacing/             # Python defacing service (mri_deface, dcm2niix)
+├── phi-detection/        # Python burned-in PHI detection service (Tesseract OCR)
 └── docs/                 # Shared research, references, and analysis (see docs/README.md)
 ```
 
@@ -167,6 +168,7 @@ Routing rules are evaluated on every study ingest (upload complete + internal in
 | Action | Effect |
 |--------|--------|
 | `require_defacing` | Forces `defacing_required=true` |
+| `require_phi_scan` | Forces `phi_scan_required=true`, sets `phi_scan_status=pending` |
 | `auto_approve` | Skips manual QC, sets `status=approved` |
 | `require_qa` | No-op — holds for manual review (default) |
 | `reject` | Auto-rejects the study |
@@ -252,6 +254,48 @@ Projects now support full CRUD via the API and a dedicated admin dashboard tab.
 
 - **`onFileStart` callback** — `UploadOptions.onFileStart?(filename, index, total)` fires before each file's upload begins; upload portal uses it to display the current filename below the progress bar.
 - **Auto-retry** — each file PUT is retried up to 3× with 1 s / 2 s / 4 s exponential backoff before failing. Transparent to callers.
+
+### Burned-in PHI Detection (`phi-detection/`, `api/handler/phi_scan.go`)
+
+Server-side OCR on DICOM pixel data to detect burned-in text (patient names, dates, accession numbers) that tag-level de-identification misses. Runs as a separate Python FastAPI service, called asynchronously from the Go API — same pattern as the defacing service.
+
+**Running locally:**
+```bash
+cd phi-detection
+pip install -r requirements.txt
+# Requires tesseract-ocr installed: brew install tesseract (macOS) or apt-get install tesseract-ocr (Linux)
+uvicorn app.main:app --port 8082
+# Then set PHI_DETECTION_SERVICE_URL=http://localhost:8082 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `PHI_DETECTION_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `PHI_TOOL` | `auto` | Backend selection: `auto` or `tesseract` |
+| `PHI_CONFIDENCE_THRESHOLD` | `0.4` | Minimum OCR confidence (0.0–1.0) |
+| `PHI_MIN_TEXT_LENGTH` | `3` | Minimum text length to report |
+
+**Study fields:**
+- `phi_scan_required` — boolean flag, set by `require_phi_scan` routing rule action
+- `phi_scan_status` — `''` (not required), `pending`, `scanning`, `clean`, `flagged`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/phi-scan` — trigger PHI scan (returns 202 Accepted, runs async)
+
+**Pipeline:**
+1. Routing rule with action `require_phi_scan` sets `phi_scan_required=true` and `phi_scan_status=pending`
+2. Admin clicks "Scan for PHI" → Go handler sets status to `scanning` and dispatches to Python service
+3. Python service reads each DICOM file, extracts pixel data, runs Tesseract OCR
+4. Results returned: `phi_scan_status` set to `clean` (no text found) or `flagged` (text detected)
+5. Findings stored as JSONB in audit trail (`phi_scan.complete` entries)
+6. Admin can still approve flagged studies (the flag is informational)
+
+**Admin dashboard:**
+- PHI Scan column with status badge (pending/scanning/clean/flagged/failed)
+- "Scan for PHI" button for pending studies
+- `require_phi_scan` option in routing rules action dropdown
 
 ### Terraform
 ```bash
