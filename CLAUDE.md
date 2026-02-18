@@ -72,6 +72,27 @@ cd frontend/upload-portal && npm install && npm run dev   # runs on :3000, proxi
 cd frontend/admin-dashboard && npm install && npm run dev  # runs on :3001, proxies /api to :8080
 ```
 
+### OHIF Viewer
+OHIF Viewer runs as a Docker container on `:3002`, configured to load DICOM images via the Go API's DICOMweb proxy.
+
+```bash
+docker compose up ohif       # start OHIF only
+docker compose up            # start postgres + mailpit + ohif
+# OHIF available at http://localhost:3002
+```
+
+`ohif-config.js` (repo root) configures the OHIF data source pointing at `http://localhost:8080/dicomweb`.
+
+**DICOMweb proxy** (`api/handler/dicomweb.go`) — minimal QIDO-RS + WADO-RS, no DICOM library:
+- `GET /dicomweb/studies` — list studies from DB
+- `GET /dicomweb/studies/{studyUID}/series` — single fake series per study
+- `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances` — enumerate instances by file count
+- `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}` — stream raw DICOM bytes
+
+SOPInstanceUID format: `{studyUID}.1.{fileIndex}` (index maps to `dicom/{store}/{studyUID}/{index}.dcm`).
+
+In the admin dashboard, each study row has a **View** button (inline iframe) and an **Open in new tab ↗** link.
+
 ### Terraform
 ```bash
 cd terraform/project && terraform init && terraform plan
