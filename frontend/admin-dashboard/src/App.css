@@ -310,6 +310,8 @@
   cursor: pointer;
 }
 
+.text-capitalize { text-transform: capitalize; }
+
 /* ── Shares list ─────────────────────────────────────────────────────────── */
 .shares-table {
   width: 100%;
