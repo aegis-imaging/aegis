@@ -76,18 +76,63 @@ func GetStudyByUID(ctx context.Context, db *sql.DB, uid string) (*Study, error) 
 	return &s, nil
 }
 
-func ListStudies(ctx context.Context, db *sql.DB, projectID string, limit, offset int) ([]Study, error) {
-	query := `SELECT` + studyColumns + ` FROM studies`
+// StudyFilters holds optional filter values for ListStudies / CountStudies.
+type StudyFilters struct {
+	ProjectID string
+	Status    string // received|defacing|clean|defaced|approved|rejected
+	Modality  string // MRI|CT|PET|… (case-insensitive prefix match)
+	Source    string // external|internal
+	Search    string // substring match on study_instance_uid or study_description
+}
+
+func studyWhere(f StudyFilters) (string, []any) {
+	var clauses []string
 	var args []any
-	argN := 1
+	n := 1
 
-	if projectID != "" {
-		query += fmt.Sprintf(` WHERE project_id = $%d`, argN)
-		args = append(args, projectID)
-		argN++
+	if f.ProjectID != "" {
+		clauses = append(clauses, fmt.Sprintf(`project_id = $%d`, n))
+		args = append(args, f.ProjectID)
+		n++
 	}
+	if f.Status != "" {
+		clauses = append(clauses, fmt.Sprintf(`status = $%d`, n))
+		args = append(args, f.Status)
+		n++
+	}
+	if f.Modality != "" {
+		clauses = append(clauses, fmt.Sprintf(`upper(modality) = upper($%d)`, n))
+		args = append(args, f.Modality)
+		n++
+	}
+	if f.Source != "" {
+		clauses = append(clauses, fmt.Sprintf(`source = $%d`, n))
+		args = append(args, f.Source)
+		n++
+	}
+	if f.Search != "" {
+		clauses = append(clauses, fmt.Sprintf(
+			`(study_instance_uid ILIKE $%d OR study_description ILIKE $%d)`, n, n))
+		args = append(args, "%"+f.Search+"%")
+		n++
+	}
+	_ = n
 
-	query += ` ORDER BY created_at DESC`
+	where := ""
+	if len(clauses) > 0 {
+		where = " WHERE " + clauses[0]
+		for _, c := range clauses[1:] {
+			where += " AND " + c
+		}
+	}
+	return where, args
+}
+
+func ListStudies(ctx context.Context, db *sql.DB, f StudyFilters, limit, offset int) ([]Study, error) {
+	where, args := studyWhere(f)
+	argN := len(args) + 1
+
+	query := `SELECT` + studyColumns + ` FROM studies` + where + ` ORDER BY created_at DESC`
 
 	if limit > 0 {
 		query += fmt.Sprintf(` LIMIT $%d`, argN)
@@ -114,6 +159,13 @@ func ListStudies(ctx context.Context, db *sql.DB, projectID string, limit, offse
 		studies = append(studies, s)
 	}
 	return studies, rows.Err()
+}
+
+func CountStudies(ctx context.Context, db *sql.DB, f StudyFilters) (int, error) {
+	where, args := studyWhere(f)
+	var total int
+	err := db.QueryRowContext(ctx, `SELECT count(*) FROM studies`+where, args...).Scan(&total)
+	return total, err
 }
 
 func UpdateStudyStatus(ctx context.Context, db *sql.DB, id, status string) error {

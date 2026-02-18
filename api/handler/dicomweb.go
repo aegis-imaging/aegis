@@ -94,7 +94,7 @@ func (s *Server) DicomwebStudies(w http.ResponseWriter, r *http.Request) {
 		studies = []model.Study{*st}
 	} else {
 		var err error
-		studies, err = model.ListStudies(r.Context(), s.db, "", 100, 0)
+		studies, err = model.ListStudies(r.Context(), s.db, model.StudyFilters{}, 100, 0)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
