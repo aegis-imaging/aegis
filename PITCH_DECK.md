@@ -3,8 +3,31 @@ pdf_options:
   format: Letter
   margin: 20mm
   printBackground: true
-stylesheet: https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css
-body_class: markdown-body
+css: |
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #24292e;
+    overflow: visible !important;
+  }
+  h1 { font-size: 2em; margin: 0.67em 0; }
+  h2 { font-size: 1.5em; margin: 1.2em 0 0.6em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.4em; }
+  h3 { font-size: 1.2em; margin: 1em 0 0.4em; }
+  p  { margin: 0.8em 0; }
+  ul, ol { padding-left: 2em; margin: 0.8em 0; }
+  li { margin: 0.3em 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 13px; }
+  th { background: #f6f8fa; font-weight: 600; text-align: left; padding: 8px 12px; border: 1px solid #d0d7de; }
+  td { padding: 7px 12px; border: 1px solid #d0d7de; vertical-align: top; }
+  code { background: #f6f8fa; padding: 2px 5px; border-radius: 4px; font-size: 85%; }
+  pre  { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; }
+  hr   { border: none; border-top: 1px solid #e5e7eb; margin: 2em 0; }
+  blockquote { border-left: 4px solid #d0d7de; margin: 0; padding: 0 1em; color: #57606a; }
+  sup  { font-size: 75%; vertical-align: super; }
+  em   { font-style: italic; }
+  strong { font-weight: 600; }
+  a { color: #0969da; }
 ---
 
 <div style="text-align: center; padding: 60px 0 30px;">
@@ -202,25 +225,31 @@ Production costs scale with data volume. A 1,000-session multi-site study (~500 
 
 ---
 
+<div style="page-break-before: always;">
+
 ## References
 
-1. Aryanto KYE, Oudkerk M, van Ooijen PMA. "Free DICOM de-identification tools in clinical research: functioning and safety of patient privacy." *European Radiology.* 2015;25(12):3685–3695. DOI: 10.1007/s00330-015-3794-0
+<ol style="font-size: 13px; line-height: 1.7;">
+<li>Aryanto KYE, Oudkerk M, van Ooijen PMA. "Free DICOM de-identification tools in clinical research: functioning and safety of patient privacy." <em>European Radiology.</em> 2015;25(12):3685–3695. DOI: 10.1007/s00330-015-3794-0</li>
 
-2. Schwarz CG, et al. "Identification of Anonymous MRI Research Participants with Face-Recognition Software." *New England Journal of Medicine.* 2019;381(17):1684–1686. DOI: 10.1056/NEJMc1908881
+<li>Schwarz CG, et al. "Identification of Anonymous MRI Research Participants with Face-Recognition Software." <em>New England Journal of Medicine.</em> 2019;381(17):1684–1686. DOI: 10.1056/NEJMc1908881</li>
 
-3. Vcelak P, et al. "Identification and classification of DICOM files with burned-in text content." *International Journal of Medical Informatics.* 2019;126:128–137. DOI: 10.1016/j.ijmedinf.2019.02.011
+<li>Vcelak P, et al. "Identification and classification of DICOM files with burned-in text content." <em>International Journal of Medical Informatics.</em> 2019;126:128–137. DOI: 10.1016/j.ijmedinf.2019.02.011</li>
 
-4. National Institutes of Health. "Final NIH Policy for Data Management and Sharing." NOT-OD-21-013. Effective January 25, 2023. https://grants.nih.gov/grants/guide/notice-files/NOT-OD-21-013.html
+<li>National Institutes of Health. "Final NIH Policy for Data Management and Sharing." NOT-OD-21-013. Effective January 25, 2023. grants.nih.gov/grants/guide/notice-files/NOT-OD-21-013.html</li>
 
-5. Lai J, et al. "Drivers of Start-Up Delays in Global Randomized Clinical Trials." *Therapeutic Innovation & Regulatory Science.* 2021;55(1):212–227. DOI: 10.1007/s43441-020-00207-2
+<li>Lai J, et al. "Drivers of Start-Up Delays in Global Randomized Clinical Trials." <em>Therapeutic Innovation &amp; Regulatory Science.</em> 2021;55(1):212–227. DOI: 10.1007/s43441-020-00207-2</li>
 
-6. Fact.MR. *Medical Image Exchange System Market.* February 2024. Via GlobeNewswire: https://www.globenewswire.com/news-release/2024/02/08/2825768
+<li>Fact.MR. <em>Medical Image Exchange System Market.</em> February 2024. globenewswire.com/news-release/2024/02/08/2825768</li>
 
-7. Pei L, Farahani K, et al. "Medical Image De-Identification Benchmark Challenge." arXiv:2507.23608 (preprint, under review). NCI challenge page: https://www.cancer.gov/about-nci/organization/cbiit/news-events/news/2024/participate-nci-medical-image-de-identification-benchmark-challenge-miccai-2024
+<li>Pei L, Farahani K, et al. "Medical Image De-Identification Benchmark Challenge." arXiv:2507.23608 (preprint, under review). NCI CBIIT, MICCAI 2024.</li>
 
-8. National Electrical Manufacturers Association. *DICOM PS3.15: Security and System Management Profiles, Annex E.* Current version. https://dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_e.html
+<li>National Electrical Manufacturers Association. <em>DICOM PS3.15: Security and System Management Profiles, Annex E.</em> dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_e.html</li>
 
-9. U.S. Department of Health and Human Services. "Guidance Regarding Methods for De-identification of Protected Health Information in Accordance with the HIPAA Privacy Rule." 45 CFR § 164.514(b). https://www.hhs.gov/hipaa/for-professionals/special-topics/de-identification/index.html
+<li>U.S. Department of Health and Human Services. "Guidance Regarding Methods for De-identification of PHI in Accordance with the HIPAA Privacy Rule." 45 CFR § 164.514(b). hhs.gov/hipaa/for-professionals/special-topics/de-identification/</li>
+</ol>
+
+</div>
 
 ---
 
