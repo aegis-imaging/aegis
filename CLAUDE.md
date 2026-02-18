@@ -98,6 +98,8 @@ In the admin dashboard:
 - Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side before/after OHIF panel. OHIF selects the data source via `?dataSource=dicomweb-raw` (before) or `?dataSource=dicomweb` (after).
 - **Routing tab** — manage Destinations and Routing Rules (see below).
 - **Institutions tab** — manage institutions and their project memberships.
+- **Profiles tab** — manage per-project anonymization profiles (see below).
+- **Notifications tab** — manage email digest subscriptions (see below).
 
 ### Routing Rules Engine (`api/routing/`, `api/handler/routing.go`)
 
@@ -148,6 +150,36 @@ Institutions represent organisations that send or receive studies.
 - `DELETE /api/institutions/{id}/projects/{projectID}` — unlink
 
 Studies carry an `institution_id` FK (nullable) for full traceability.
+
+### Anonymization Profiles (`api/handler/anon_profile.go`, `api/model/anon_profile.go`)
+
+Named per-project overrides for the client-side DICOM PS3.15 Basic Profile de-identification.
+Tags listed in `retained_tags` are kept as-is instead of being stripped/zeroed.
+
+**REST API:**
+- `GET /api/projects/{projectID}/anon-profiles` — list profiles for a project
+- `POST /api/projects/{projectID}/anon-profiles` — create profile (`name`, `retained_tags: []string`, `description`)
+- `GET /api/anon-profiles/{id}` / `PUT /api/anon-profiles/{id}` / `DELETE /api/anon-profiles/{id}`
+- `PUT /api/projects/{projectID}/default-anon-profile` — set default profile (`{"profile_id":"<uuid>"}`, empty string to clear)
+- `GET /api/projects/{slug}/active-anon-profile` — returns the default profile for the project (204 if none); used by the upload portal
+
+The upload portal fetches the active profile before each upload and passes `retainedTags` into `@aegis/client`'s `DeidOptions`. Non-fatal if the fetch fails (falls back to full strip).
+
+`retained_tags` is a JSONB array of DICOM keyword strings, e.g. `["PatientAge","StudyDate"]`.
+
+### Email Digest Subscriptions (`api/handler/digest.go`, `api/digest/scheduler.go`)
+
+Weekly or monthly plain-text summary emails per project. No PHI — only study counts and share activity.
+
+**REST API:**
+- `GET /api/digest-subscriptions` — all subscriptions
+- `GET /api/projects/{projectID}/digest-subscriptions` — filtered by project
+- `POST /api/projects/{projectID}/digest-subscriptions` — create (`email`, `frequency: weekly|monthly`)
+- `DELETE /api/digest-subscriptions/{id}`
+
+**Scheduler**: goroutine started from `main.go` on startup; `time.Ticker` fires every hour; queries `digest_subscriptions` where digest is due (7 days for weekly, 30 for monthly since `last_sent_at`); sends email; updates `last_sent_at`. Silent no-op when `SMTP_HOST` is unset.
+
+**Digest content**: project name, period label, received/approved/rejected/pending study counts, export shares created. No study UIDs or identifiers.
 
 ### Terraform
 ```bash
