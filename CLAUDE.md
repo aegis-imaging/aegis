@@ -100,6 +100,8 @@ In the admin dashboard:
 - **Institutions tab** — manage institutions and their project memberships.
 - **Profiles tab** — manage per-project anonymization profiles (see below).
 - **Notifications tab** — manage email digest subscriptions (see below).
+- **Projects tab** — create and edit projects (name, slug, description); shows default anon profile badge.
+- **Users tab** — manage authorised admin users and their roles (admin|viewer).
 
 ### Routing Rules Engine (`api/routing/`, `api/handler/routing.go`)
 
@@ -180,6 +182,35 @@ Weekly or monthly plain-text summary emails per project. No PHI — only study c
 **Scheduler**: goroutine started from `main.go` on startup; `time.Ticker` fires every hour; queries `digest_subscriptions` where digest is due (7 days for weekly, 30 for monthly since `last_sent_at`); sends email; updates `last_sent_at`. Silent no-op when `SMTP_HOST` is unset.
 
 **Digest content**: project name, period label, received/approved/rejected/pending study counts, export shares created. No study UIDs or identifiers.
+
+### Admin Users (`api/handler/admin_user.go`, `api/model/admin_user.go`)
+
+Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production; this table is a registry for access control and auditing.
+
+**REST API** (`/api/admin-users`): CRUD.
+
+| Field | Notes |
+|-------|-------|
+| `role` | `admin` (full access) or `viewer` (read-only — future enforcement) |
+| `enabled` | Soft-disable without deleting |
+| `notes` | Free-text notes for the admin record |
+
+All mutations emit audit entries (`admin_user.created`, `admin_user.updated`, `admin_user.deleted`).
+
+### Project Settings (`api/handler/project.go`)
+
+Projects now support full CRUD via the API and a dedicated admin dashboard tab.
+
+**New endpoints:**
+- `GET /api/projects/{id}` — fetch a single project by ID
+- `PUT /api/projects/{id}` — update name, slug, description; emits `project.updated` audit entry
+
+`POST /api/projects` now auto-generates slug from name if `slug` is omitted.
+
+### Upload Portal QoL (`client/src/upload/client.ts`)
+
+- **`onFileStart` callback** — `UploadOptions.onFileStart?(filename, index, total)` fires before each file's upload begins; upload portal uses it to display the current filename below the progress bar.
+- **Auto-retry** — each file PUT is retried up to 3× with 1 s / 2 s / 4 s exponential backoff before failing. Transparent to callers.
 
 ### Terraform
 ```bash
