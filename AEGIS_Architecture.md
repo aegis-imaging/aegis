@@ -45,7 +45,7 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
 - **Client-side tag anonymization** — PHI stripped in the browser before upload
 - **Server-side defacing** — facial feature removal from head imaging after upload (too compute-intensive for browser); other modalities pass through without defacing
 - **Zero-install at sending sites** — pure web app, no browser extensions, no desktop software required
-- **GCP-native** — leverage Healthcare API, Cloud Run, Cloud Storage, Terraform
+- **Multi-cloud** — application layer is cloud-agnostic (GCP, AWS, or Azure); storage, auth, and container orchestration abstracted behind pluggable interfaces; Terraform modules provided for GCP and AWS
 
 ---
 
@@ -224,10 +224,12 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
   - OHIF Viewer components (MIT) for admin dashboard
 - Web Workers for background DICOM processing (keeps UI responsive)
 
-### Infrastructure: Terraform + Cloud Build
-- Terraform Google provider for all GCP resources
-- Cloud Build for CI/CD (triggered by GitHub pushes)
-- Artifact Registry for Docker images
+### Infrastructure: Terraform (Multi-Cloud)
+- **GCP**: `terraform/project/` (bootstrap) + `terraform/infra/` (Cloud Run, Healthcare API, Cloud SQL, GCS)
+- **AWS**: `terraform/aws/` (VPC, ECS Fargate, RDS, S3, ALB, ECR, KMS, SNS/SQS)
+- **Azure**: Planned
+- CI/CD: GitHub Actions (Go build+vet, Python syntax, TypeScript type check, Docker build)
+- Docker images stored in Artifact Registry (GCP) or ECR (AWS)
 
 ### DICOM Storage: GCP Healthcare API
 - **DICOMweb** (STOW-RS, WADO-RS, QIDO-RS) — no need to self-host dcm4chee or Orthanc
@@ -416,7 +418,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 | Aspect | AEGIS | XNAT | Flywheel | LONI IDA | MIRC CTP |
 |--------|-------------|------|----------|----------|----------|
-| **Hosting** | GCP managed | Self-hosted | Commercial SaaS | On-prem | On-prem gateway |
+| **Hosting** | Multi-cloud (GCP, AWS, Azure) | Self-hosted | Commercial SaaS | On-prem | On-prem gateway |
 | **Client de-id** | Browser (zero install) | Electron desktop app | CLI / Edge connector | Java desktop app | On-site Java app |
 | **Server de-id** | Healthcare API + defacing svc | DicomEdit scripts | Built-in | Post-upload | Pipeline stages |
 | **Defacing** | Automated server-side | Manual or plugin | Built-in | Separate | Not included |
@@ -429,9 +431,9 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 **Key differentiators**:
 1. Zero-install browser-based anonymization — no Java, no Electron, no CLI
 2. Modality-agnostic: works with any DICOM data, not limited to a single specialty
-3. GCP-native with Healthcare API — managed DICOMweb, built-in de-id, BigQuery analytics
+3. Multi-cloud — runs on GCP, AWS, or Azure with Terraform modules for each; no cloud lock-in
 4. Automated server-side defacing pipeline for head imaging
-5. Vertex AI for burned-in PHI detection and image QC
+5. Pluggable AI backends — local (Tesseract, pydicom) for dev, cloud AI (Vertex AI, SageMaker) for production
 6. Minimal vulnerability surface (Go backend, distroless containers)
 
 ---
@@ -472,6 +474,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 25. ✅ **MRI protocol compliance**: Python protocol service (`protocol-service/`) with pydicom-based parameter extraction for both Classic and Enhanced DICOM; `protocol_templates` table for per-project, per-manufacturer/model/software-version/sequence-type parameter rules with configurable tolerances and severity levels (critical/warning/info); `require_protocol_check` routing rule action; `protocol_required`/`protocol_status` study fields; async dispatch from Go API; admin dashboard Protocol badge + Check Protocol button + Protocol Templates CRUD tab (PR #41)
 26. **Defacing tool upgrades**: DeepDefacer or afni_refacer for improved quality
 26. ✅ **Authentication middleware**: Per-route auth middleware (`api/middleware/auth.go`) supporting GCP IAP and Azure AD Easy Auth; `RequireAuth` wrapper for admin routes; `RequireRole` for future viewer enforcement; `GET /api/auth/me` identity endpoint; `admin_users` lookup with case-insensitive email; dev mode auto-auth via `DEV_USER_EMAIL`; all audit entries now record real user email; admin dashboard shows current user and handles 401/403 errors (PR #36)
+27. ✅ **Multi-cloud AWS support**: S3 storage backend (`api/storage/s3.go`) implementing the Storage interface with presigned URLs, copy-based move, and S3-compatible endpoint support (MinIO/LocalStack); AWS ALB + Cognito auth provider in middleware (JWT email extraction from `X-Amzn-Oidc-Data` header); `S3_BUCKET`/`S3_REGION`/`S3_ENDPOINT` config; `terraform/aws/main.tf` with VPC, RDS PostgreSQL 15, S3, ECS Fargate cluster, ALB, ECR, KMS, SNS/SQS, CloudWatch (PR #50)
 
 ### Future Ideas (not planned)
 - DIMSE adapter for sites that can run an edge connector
