@@ -16,6 +16,7 @@
     "src"
   ],
   "scripts": {
+    "prepare": "tsc",
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint ."
