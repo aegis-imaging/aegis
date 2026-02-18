@@ -124,6 +124,12 @@ func main() {
 	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", srv.CreateDigestSubscription)
 	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", srv.DeleteDigestSubscription)
 
+	// Admin users — authorised dashboard users and their roles.
+	mux.HandleFunc("GET /api/admin-users", srv.ListAdminUsers)
+	mux.HandleFunc("POST /api/admin-users", srv.CreateAdminUser)
+	mux.HandleFunc("PUT /api/admin-users/{id}", srv.UpdateAdminUser)
+	mux.HandleFunc("DELETE /api/admin-users/{id}", srv.DeleteAdminUser)
+
 	mux.HandleFunc("POST /api/deface/{studyUID}", srv.TriggerDeface)
 
 	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by OHIF Viewer.
