@@ -41,8 +41,9 @@ aegis/
 ├── defacing/             # Python defacing service (mri_deface, dcm2niix)
 ├── phi-detection/        # Python burned-in PHI detection service (Tesseract OCR)
 ├── qc-service/           # Python QC automation service (pydicom + numpy)
-├── bids-service/         # Python NIfTI/BIDS conversion service (dcm2niix)
-└── docs/                 # Shared research, references, and analysis (see docs/README.md)
+├── bids-service/            # Python NIfTI/BIDS conversion service (dcm2niix)
+├── classification-service/  # Python metadata classification service (DICOM heuristics)
+└── docs/                    # Shared research, references, and analysis (see docs/README.md)
 ```
 
 Planned to split into 5 separate repos once interfaces stabilize:
@@ -173,6 +174,7 @@ Routing rules are evaluated on every study ingest (upload complete + internal in
 | `require_phi_scan` | Forces `phi_scan_required=true`, sets `phi_scan_status=pending` |
 | `require_qc_check` | Forces `qc_required=true`, sets `qc_status=pending` |
 | `require_bids_conversion` | Forces `bids_required=true`, sets `bids_status=pending` |
+| `require_classification` | Forces `classification_required=true`, sets `classification_status=pending` |
 | `auto_approve` | Skips manual QC, sets `status=approved` |
 | `require_qa` | No-op — holds for manual review (default) |
 | `reject` | Auto-rejects the study |
@@ -404,6 +406,54 @@ Subject label = first 8 chars of SHA-256 hash of StudyInstanceUID (privacy-prese
 - "Convert to BIDS" button for pending studies
 - "Download BIDS" link for completed studies
 - `require_bids_conversion` option in routing rules action dropdown
+
+### Metadata Classification Service (`classification-service/`, `api/handler/classification.go`)
+
+Classifies study modality and body part by reading DICOM headers. Studies can arrive with empty `modality` and `body_part` when DICOM tags are missing — this service fills them in using heuristic analysis (local dev) or Vertex AI (production), then **re-evaluates routing rules** so modality/body_part-dependent rules fire correctly.
+
+**Running locally:**
+```bash
+cd classification-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8085
+# Then set CLASSIFICATION_SERVICE_URL=http://localhost:8085 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `CLASSIFICATION_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `CLASSIFY_TOOL` | `auto` | Backend selection: `auto` or `heuristic` |
+| `CLASSIFY_CONFIDENCE_THRESHOLD` | `0.5` | Minimum confidence (0.0–1.0) to update metadata |
+
+**Study fields:**
+- `classification_required` — boolean flag, set by `require_classification` routing rule action
+- `classification_status` — `''` (not required), `pending`, `classifying`, `classified`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/classify` — trigger classification (returns 202 Accepted, runs async)
+
+**Heuristic backend classification strategy** (priority order):
+1. **Direct DICOM tags** — `Modality` (0008,0060) + `BodyPartExamined` (0018,0015) → confidence 0.95
+2. **SOP Class UID** (0008,0016) → modality mapping (CT, MR, PT, US, CR, etc.) → confidence 0.90
+3. **SeriesDescription / ProtocolName** → body part regex (HEAD, CHEST, ABDOMEN, SPINE, EXTREMITY, NECK) → confidence 0.75
+4. **StudyDescription** → same patterns → confidence 0.65
+5. **Fallback** → empty (inconclusive)
+
+**Pipeline:**
+1. Routing rule with action `require_classification` sets `classification_required=true` and `classification_status=pending`
+2. Admin clicks "Classify" → Go handler sets status to `classifying` and dispatches to Python service
+3. Python service reads DICOM files, applies heuristic classification
+4. Results returned: if confidence >= 0.5, study `modality` and `body_part` are updated
+5. `classification_status` set to `classified` or `failed`
+6. **Routing rules re-evaluated** — downstream rules (e.g. `require_defacing` for HEAD studies) now fire
+7. Audit log entries: `classification.triggered`, `classification.complete`/`classification.failed`
+
+**Admin dashboard:**
+- Classification column with status badge (pending/classifying/classified/failed)
+- "Classify" button for pending studies
+- `require_classification` option in routing rules action dropdown
 
 ### Batch Import CLI (`api/cmd/import/`)
 

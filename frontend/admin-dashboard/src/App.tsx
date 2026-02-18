@@ -31,6 +31,8 @@ type Study = {
   qc_status: string
   bids_required: boolean
   bids_status: string
+  classification_required: boolean
+  classification_status: string
   instance_count: number
   created_at: string
 }
@@ -152,11 +154,12 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' }) {
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' }) {
   const modifier =
     (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
     (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
     (prefix === 'bids' && label === 'complete') ? 'bids-complete' :
+    (prefix === 'classify' && label === 'classified') ? 'classify-classified' :
     label
   const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
@@ -539,6 +542,7 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   const canQcCheck = study.qc_required && study.qc_status === 'pending'
   const canBidsConvert = study.bids_required && study.bids_status === 'pending'
   const canBidsDownload = study.bids_status === 'complete'
+  const canClassify = study.classification_required && study.classification_status === 'pending'
 
   const handlePhiScan = async () => {
     await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
@@ -555,6 +559,11 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
     onAction()
   }
 
+  const handleClassify = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/classify`, { method: 'POST' })
+    onAction()
+  }
+
   return (
     <>
       <tr>
@@ -566,6 +575,7 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <td>{study.phi_scan_required ? <Badge label={study.phi_scan_status || 'n/a'} prefix="phi" /> : '—'}</td>
         <td>{study.qc_required ? <Badge label={study.qc_status || 'n/a'} prefix="qc" /> : '—'}</td>
         <td>{study.bids_required ? <Badge label={study.bids_status || 'n/a'} prefix="bids" /> : '—'}</td>
+        <td>{study.classification_required ? <Badge label={study.classification_status || 'n/a'} prefix="classify" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
@@ -593,6 +603,9 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
             {canBidsDownload && (
               <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>
             )}
+            {canClassify && (
+              <button type="button" className="btn btn--classify" onClick={handleClassify}>Classify</button>
+            )}
             {canReviewDeface && (
               <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
                 {defaceOpen ? 'Close review' : 'Review defacing'}
@@ -606,21 +619,21 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
       </tr>
       {shareOpen && (
         <tr>
-          <td colSpan={9}>
+          <td colSpan={12}>
             <SharePanel study={study} onClose={() => setShareOpen(false)} />
           </td>
         </tr>
       )}
       {defaceOpen && (
         <tr>
-          <td colSpan={9}>
+          <td colSpan={12}>
             <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />
           </td>
         </tr>
       )}
       {viewOpen && (
         <tr>
-          <td colSpan={9}>
+          <td colSpan={12}>
             <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
           </td>
         </tr>
@@ -928,6 +941,7 @@ function RoutingPanel() {
                 <option value="require_phi_scan">require_phi_scan — scan pixels for burned-in PHI</option>
                 <option value="require_qc_check">require_qc_check — automated image quality checks</option>
                 <option value="require_bids_conversion">require_bids_conversion — convert to NIfTI/BIDS</option>
+                <option value="require_classification">require_classification — classify modality/body part</option>
                 <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
                 <option value="reject">reject — auto-reject</option>
                 <option value="route_to">route_to — forward to external destination</option>
@@ -2288,6 +2302,7 @@ export function App() {
                     <th>PHI Scan</th>
                     <th>QC</th>
                     <th>BIDS</th>
+                    <th>Class.</th>
                     <th className="align-right">Files</th>
                     <th>Received</th>
                     <th>Actions</th>
