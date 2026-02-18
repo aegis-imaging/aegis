@@ -270,7 +270,11 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 - [ ] Verify remote is set: `git remote -v`
 - [ ] Push monorepo scaffold to `develop` branch
-- [ ] Set up branch protection on `main` (require PR reviews)
+- [ ] Set up branch protection on `main` and `develop` (require PR reviews, prevent deletion)
+  - **Requires GitHub Pro** ($4/month) for private repos, or make the repo public
+  - Go to Settings → Branches → Add branch protection rule
+  - Branch name patterns: `main` and `develop`
+  - Enable: "Require a pull request before merging", "Do not allow deletions"
 - [ ] (Optional) Set up GitHub Actions for CI (lint, typecheck, Go test)
 
 ## 10. Future — Before Proposing to Work
