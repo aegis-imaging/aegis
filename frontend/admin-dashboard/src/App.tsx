@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles'
+type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications'
 
 type AuditEntry = {
   id: string
@@ -112,6 +112,17 @@ type AnonProfile = {
   description: string
   retained_tags: string[]
   enabled: boolean
+  created_at: string
+}
+
+type DigestSubscription = {
+  id: string
+  email: string
+  project_id: string
+  project_name: string
+  frequency: 'weekly' | 'monthly'
+  enabled: boolean
+  last_sent_at?: string | null
   created_at: string
 }
 
@@ -1179,6 +1190,163 @@ function ProfilesPanel() {
   )
 }
 
+// ── Notifications Panel ───────────────────────────────────────────────────────
+
+function NotificationsPanel() {
+  const [projects, setProjects]   = useState<Project[]>([])
+  const [subs, setSubs]           = useState<DigestSubscription[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+
+  const [formEmail, setFormEmail]         = useState('')
+  const [formProject, setFormProject]     = useState('')
+  const [formFrequency, setFormFrequency] = useState<'weekly' | 'monthly'>('weekly')
+  const [showForm, setShowForm]           = useState(false)
+  const [saving, setSaving]               = useState(false)
+  const [formError, setFormError]         = useState<string | null>(null)
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [projRes, subRes] = await Promise.all([
+        fetch('/api/projects'),
+        fetch('/api/digest-subscriptions'),
+      ])
+      if (!projRes.ok || !subRes.ok) throw new Error('Failed to load data')
+      const [projs, subList] = await Promise.all([projRes.json(), subRes.json()])
+      setProjects(projs ?? [])
+      setSubs(subList ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  function openCreate() {
+    setFormEmail('')
+    setFormProject(projects[0]?.id ?? '')
+    setFormFrequency('weekly')
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!formEmail) { setFormError('Email is required'); return }
+    if (!formProject) { setFormError('Project is required'); return }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const res = await fetch(`/api/projects/${formProject}/digest-subscriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formEmail, frequency: formFrequency }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      fetchAll()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function del(id: string, email: string) {
+    if (!confirm(`Remove digest subscription for ${email}?`)) return
+    await fetch(`/api/digest-subscriptions/${id}`, { method: 'DELETE' })
+    fetchAll()
+  }
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Email Digest Subscriptions</div>
+            <div className="routing-section-sub">
+              Periodic study summary emails sent per project. Weekly digests send every 7 days;
+              monthly every 30 days. No PHI is included.
+            </div>
+          </div>
+          <button type="button" className="btn-primary" onClick={openCreate}>+ New subscription</button>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>New subscription</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" type="email" placeholder="Email address *"
+                value={formEmail}
+                onChange={e => setFormEmail(e.target.value)} />
+              <select className="form-select" aria-label="Project"
+                value={formProject}
+                onChange={e => setFormProject(e.target.value)}>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <select className="form-select" aria-label="Frequency"
+                value={formFrequency}
+                onChange={e => setFormFrequency(e.target.value as 'weekly' | 'monthly')}>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : 'Subscribe'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading && <div className="state-loading">Loading…</div>}
+        {error   && <div className="state-error">{error}</div>}
+        {!loading && !error && subs.length === 0 && (
+          <div className="state-empty">No subscriptions yet.</div>
+        )}
+        {!loading && !error && subs.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Project</th>
+                <th>Frequency</th>
+                <th>Last sent</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subs.map(sub => (
+                <tr key={sub.id}>
+                  <td>{sub.email}</td>
+                  <td>{sub.project_name}</td>
+                  <td className="text-capitalize">{sub.frequency}</td>
+                  <td>{sub.last_sent_at ? fmtDate(sub.last_sent_at) : <span className="routing-desc">never</span>}</td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--revoke"
+                        onClick={() => del(sub.id, sub.email)}>Remove</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Institutions Panel ────────────────────────────────────────────────────────
 
 const EMPTY_INSTITUTION: Omit<Institution, 'id' | 'created_at'> = {
@@ -1597,6 +1765,13 @@ export function App() {
         >
           Profiles
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'notifications' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('notifications')}
+        >
+          Notifications
+        </button>
       </nav>
 
       {/* Studies tab */}
@@ -1656,6 +1831,9 @@ export function App() {
 
       {/* Profiles tab */}
       {tab === 'profiles' && <ProfilesPanel />}
+
+      {/* Notifications tab */}
+      {tab === 'notifications' && <NotificationsPanel />}
     </div>
   )
 }
