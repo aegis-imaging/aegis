@@ -45,17 +45,17 @@ css: |
 
 Hospitals and research institutions need to share medical imaging data — MRI, CT, PET, ultrasound, X-ray — for multi-site clinical trials, research collaborations, and second opinions. Doing this safely is harder than it should be.
 
-**De-identification tools frequently fail.** A 2015 study in *European Radiology* tested 10 free DICOM de-identification tools against 50 required PHI data elements. With default settings, only 1 of 10 tools successfully removed all required elements; 4 tools achieved success rates of 26% or less.<sup>[1]</sup>
+**De-identification tools frequently fail.** A 2015 study in *European Radiology* tested 10 free DICOM de-identification tools against 50 required PHI data elements. With default settings, only 1 of 10 tools successfully removed all required elements; 4 tools achieved success rates of 26% or less.<sup><a href="#ref-1">[1]</a></sup>
 
-**Metadata removal alone is not enough for brain imaging.** A 2019 *New England Journal of Medicine* correspondence from Mayo Clinic showed that automated face-recognition software correctly matched de-identified brain MRI participants to their photographs in **83% of cases** — using only the scan geometry, no metadata at all.<sup>[2]</sup> This means head imaging requires an additional step: automated defacing (removal of facial surface features from the 3D volume).
+**Metadata removal alone is not enough for brain imaging.** A 2019 *New England Journal of Medicine* correspondence from Mayo Clinic showed that automated face-recognition software correctly matched de-identified brain MRI participants to their photographs in **83% of cases** — using only the scan geometry, no metadata at all.<sup><a href="#ref-2">[2]</a></sup> This means head imaging requires an additional step: automated defacing (removal of facial surface features from the 3D volume).
 
-**Burned-in PHI is invisible to tag-level tools.** Patient names, dates of birth, and accession numbers are routinely overlaid directly on image pixels — particularly in ultrasound, CT topograms, and fluoroscopy. Standard DICOM de-identification tools operate on metadata only and miss this entirely.<sup>[3]</sup>
+**Burned-in PHI is invisible to tag-level tools.** Patient names, dates of birth, and accession numbers are routinely overlaid directly on image pixels — particularly in ultrasound, CT topograms, and fluoroscopy. Standard DICOM de-identification tools operate on metadata only and miss this entirely.<sup><a href="#ref-3">[3]</a></sup>
 
 **Installing software at sending sites is a barrier.** Platforms like XNAT require a Java-based desktop client or server daemon installed and IT-approved at every participating hospital. MIRC CTP requires a standalone Java application. Each new site adds months of IT negotiation.
 
-**Data sharing is now federally mandated — but tooling lags.** The NIH Data Management and Sharing Policy (NOT-OD-21-013, effective January 25, 2023) requires all NIH-funded investigators to share scientific data as a condition of their grant award, no later than the time of first publication.<sup>[4]</sup> Institutions are now obligated to share data they have no reliable, low-friction way to de-identify and transmit.
+**Data sharing is now federally mandated — but tooling lags.** The NIH Data Management and Sharing Policy (NOT-OD-21-013, effective January 25, 2023) requires all NIH-funded investigators to share scientific data as a condition of their grant award, no later than the time of first publication.<sup><a href="#ref-4">[4]</a></sup> Institutions are now obligated to share data they have no reliable, low-friction way to de-identify and transmit.
 
-**Result:** Multi-site studies are delayed by months. In a 2021 study of global randomized trials, contract execution alone averaged 7.9 months per US site.<sup>[5]</sup> Software installation and IT approval add to this.
+**Result:** Multi-site studies are delayed by months. In a 2021 study of global randomized trials, contract execution alone averaged 7.9 months per US site.<sup><a href="#ref-5">[5]</a></sup> Software installation and IT approval add to this.
 
 ---
 
@@ -65,11 +65,11 @@ The medical image exchange market is growing, driven by federal data sharing man
 
 | Market | 2024 Estimate | 2034 Projection | CAGR |
 |--------|--------------|-----------------|------|
-| Medical Image Exchange Systems<sup>[6]</sup> | $3.9B | $9.9B | 9.7% |
+| Medical Image Exchange Systems<sup><a href="#ref-6">[6]</a></sup> | $3.9B | $9.9B | 9.7% |
 
 **Why now:**
 - The NIH DMS Policy (2023) creates a compliance obligation for tens of thousands of active grants that did not previously require a data sharing plan
-- A 2024 NCI-sponsored benchmark (MIDI-B, presented at MICCAI 2024) formally tested de-identification tools and found that burned-in pixel PHI and free-text fields remain the hardest unsolved problems — no existing tool handles all cases reliably<sup>[7]</sup>
+- A 2024 NCI-sponsored benchmark (MIDI-B, presented at MICCAI 2024) formally tested de-identification tools and found that burned-in pixel PHI and free-text fields remain the hardest unsolved problems — no existing tool handles all cases reliably<sup><a href="#ref-7">[7]</a></sup>
 - Growing multi-site trial volume in oncology (PSMA PET, amyloid PET, whole-body MRI) and neurology (tau PET, fMRI) is driving demand for scalable data collection from distributed hospital networks
 - Cloud-hosted DICOM storage (GCP Healthcare API, AWS HealthImaging) is now mature commodity infrastructure, reducing the barrier to building managed platforms
 
@@ -82,7 +82,7 @@ The medical image exchange market is growing, driven by federal data sharing man
 | Capability | What It Does |
 |-----------|-------------|
 | **No software to install** | Upload portal runs entirely in the web browser. Hospitals use their existing computers and internet connection — no desktop app, no IT approval for new software. |
-| **Tag-level anonymization in the browser** | Patient data is stripped from DICOM tags before it leaves the hospital network, following the DICOM PS3.15 Annex E Basic Confidentiality Profile — the established international standard covering all 18 HIPAA Safe Harbor identifier categories.<sup>[8]</sup> |
+| **Tag-level anonymization in the browser** | Patient data is stripped from DICOM tags before it leaves the hospital network, following the DICOM PS3.15 Annex E Basic Confidentiality Profile — the established international standard covering all 18 HIPAA Safe Harbor identifier categories.<sup><a href="#ref-8">[8]</a></sup> |
 | **Automated defacing for head scans** | MRI, CT, and PET studies of the head and brain undergo server-side defacing (removal of facial surface geometry) before entering the research archive. Non-head studies bypass this step automatically. |
 | **Burned-in PHI detection** | Automated OCR scans image pixels for overlaid text (patient names, dates, accession numbers) that tag-level tools miss. Studies with detected pixel PHI are flagged for review. |
 | **Supports all DICOM modalities** | MRI, CT, PET, PET/CT, ultrasound, X-ray, mammography, nuclear medicine, and more — using the same upload and anonymization workflow. |
@@ -95,19 +95,19 @@ The medical image exchange market is growing, driven by federal data sharing man
 
 AEGIS follows a two-phase approach that addresses the limitations documented in the literature:
 
-```
+<pre style="background: #f6f8fa; padding: 16px; border-radius: 6px; font-size: 13px; line-height: 1.8;">
 Phase 1 — In the browser (before upload):
-  ├── DICOM tags stripped per PS3.15 Annex E Basic Profile [8]
-  ├── 18 HIPAA Safe Harbor identifiers addressed [9]
+  ├── DICOM tags stripped per PS3.15 Annex E Basic Profile <a href="#ref-8">[8]</a>
+  ├── 18 HIPAA Safe Harbor identifiers addressed <a href="#ref-9">[9]</a>
   ├── Reviewer sees before/after tag comparison before confirming
   └── Only de-identified data is transmitted — PHI never leaves the hospital
 
 Phase 2 — On the server (after upload):
   ├── De-identification completeness check
-  ├── OCR scan of image pixels for burned-in text [3]
-  ├── Head imaging → automated defacing [2]
+  ├── OCR scan of image pixels for burned-in text <a href="#ref-3">[3]</a>
+  ├── Head imaging → automated defacing <a href="#ref-2">[2]</a>
   └── Administrator review and approval before data is shared
-```
+</pre>
 
 This two-phase design directly addresses the gaps identified in the Aryanto (2015) and Schwarz (2019) studies.
 
@@ -202,7 +202,7 @@ AEGIS does not create a new de-identification standard — it implements the one
 - Admin user management and access control
 
 ### Phase 4 — Advanced Validation (Next)
-- Burned-in PHI detection using OCR on image pixels (addresses gap identified in [3, 7])
+- Burned-in PHI detection using OCR on image pixels (addresses gap identified in <a href="#ref-3">[3]</a>, <a href="#ref-7">[7]</a>)
 - Automated image quality assessment (motion artifact detection, coverage completeness)
 - BIDS format conversion for neuroimaging research output
 - Batch import tools for historical data migration
@@ -230,23 +230,23 @@ Production costs scale with data volume. A 1,000-session multi-site study (~500 
 ## References
 
 <ol style="font-size: 13px; line-height: 1.7;">
-<li>Aryanto KYE, Oudkerk M, van Ooijen PMA. "Free DICOM de-identification tools in clinical research: functioning and safety of patient privacy." <em>European Radiology.</em> 2015;25(12):3685–3695. DOI: 10.1007/s00330-015-3794-0</li>
+<li id="ref-1">Aryanto KYE, Oudkerk M, van Ooijen PMA. "Free DICOM de-identification tools in clinical research: functioning and safety of patient privacy." <em>European Radiology.</em> 2015;25(12):3685–3695. DOI: 10.1007/s00330-015-3794-0</li>
 
-<li>Schwarz CG, et al. "Identification of Anonymous MRI Research Participants with Face-Recognition Software." <em>New England Journal of Medicine.</em> 2019;381(17):1684–1686. DOI: 10.1056/NEJMc1908881</li>
+<li id="ref-2">Schwarz CG, et al. "Identification of Anonymous MRI Research Participants with Face-Recognition Software." <em>New England Journal of Medicine.</em> 2019;381(17):1684–1686. DOI: 10.1056/NEJMc1908881</li>
 
-<li>Vcelak P, et al. "Identification and classification of DICOM files with burned-in text content." <em>International Journal of Medical Informatics.</em> 2019;126:128–137. DOI: 10.1016/j.ijmedinf.2019.02.011</li>
+<li id="ref-3">Vcelak P, et al. "Identification and classification of DICOM files with burned-in text content." <em>International Journal of Medical Informatics.</em> 2019;126:128–137. DOI: 10.1016/j.ijmedinf.2019.02.011</li>
 
-<li>National Institutes of Health. "Final NIH Policy for Data Management and Sharing." NOT-OD-21-013. Effective January 25, 2023. grants.nih.gov/grants/guide/notice-files/NOT-OD-21-013.html</li>
+<li id="ref-4">National Institutes of Health. "Final NIH Policy for Data Management and Sharing." NOT-OD-21-013. Effective January 25, 2023. grants.nih.gov/grants/guide/notice-files/NOT-OD-21-013.html</li>
 
-<li>Lai J, et al. "Drivers of Start-Up Delays in Global Randomized Clinical Trials." <em>Therapeutic Innovation &amp; Regulatory Science.</em> 2021;55(1):212–227. DOI: 10.1007/s43441-020-00207-2</li>
+<li id="ref-5">Lai J, et al. "Drivers of Start-Up Delays in Global Randomized Clinical Trials." <em>Therapeutic Innovation &amp; Regulatory Science.</em> 2021;55(1):212–227. DOI: 10.1007/s43441-020-00207-2</li>
 
-<li>Fact.MR. <em>Medical Image Exchange System Market.</em> February 2024. globenewswire.com/news-release/2024/02/08/2825768</li>
+<li id="ref-6">Fact.MR. <em>Medical Image Exchange System Market.</em> February 2024. globenewswire.com/news-release/2024/02/08/2825768</li>
 
-<li>Pei L, Farahani K, et al. "Medical Image De-Identification Benchmark Challenge." arXiv:2507.23608 (preprint, under review). NCI CBIIT, MICCAI 2024.</li>
+<li id="ref-7">Pei L, Farahani K, et al. "Medical Image De-Identification Benchmark Challenge." arXiv:2507.23608 (preprint, under review). NCI CBIIT, MICCAI 2024.</li>
 
-<li>National Electrical Manufacturers Association. <em>DICOM PS3.15: Security and System Management Profiles, Annex E.</em> dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_e.html</li>
+<li id="ref-8">National Electrical Manufacturers Association. <em>DICOM PS3.15: Security and System Management Profiles, Annex E.</em> dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_e.html</li>
 
-<li>U.S. Department of Health and Human Services. "Guidance Regarding Methods for De-identification of PHI in Accordance with the HIPAA Privacy Rule." 45 CFR § 164.514(b). hhs.gov/hipaa/for-professionals/special-topics/de-identification/</li>
+<li id="ref-9">U.S. Department of Health and Human Services. "Guidance Regarding Methods for De-identification of PHI in Accordance with the HIPAA Privacy Rule." 45 CFR § 164.514(b). hhs.gov/hipaa/for-professionals/special-topics/de-identification/</li>
 </ol>
 
 </div>
