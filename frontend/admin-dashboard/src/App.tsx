@@ -1,7 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
 import './App.css'
+import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
+
+type AppTab = 'studies' | 'audit'
+
+type AuditEntry = {
+  id: string
+  action: string
+  actor: string
+  resource_type: string
+  resource_id: string
+  detail?: Record<string, unknown>
+  ip_address: string
+  created_at: string
+}
 
 type Study = {
   id: string
@@ -43,6 +57,149 @@ function uidShort(uid: string) {
 function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' }) {
   const cls = `badge badge--${label}`
   return <span className={cls}>{label}</span>
+}
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+
+const ACTION_GROUPS: Record<string, string> = {
+  'upload.init':      'upload',
+  'upload.complete':  'upload',
+  'ingest.internal':  'upload',
+  'study.approved':   'study-ok',
+  'study.rejected':   'study-err',
+  'share.created':    'share',
+  'share.revoked':    'share-revoked',
+  'export.redeemed':  'share',
+  'deface.triggered': 'deface',
+  'deface.complete':  'deface',
+  'deface.failed':    'deface-err',
+}
+
+function AuditLog() {
+  const [entries, setEntries] = useState<AuditEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState('')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const fetchAudit = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/audit?limit=200')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setEntries(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load audit log')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchAudit() }, [fetchAudit])
+
+  const filtered = filter
+    ? entries.filter(e => e.action.startsWith(filter))
+    : entries
+
+  const uniqueActions = [...new Set(entries.map(e => e.action.split('.')[0]))].sort()
+
+  return (
+    <div>
+      <div className="audit-toolbar">
+        <div className="audit-filters">
+          <span className="audit-filter-label">Filter by category:</span>
+          <button
+            type="button"
+            className={`audit-filter-btn${filter === '' ? ' audit-filter-btn--active' : ''}`}
+            onClick={() => setFilter('')}
+          >
+            All ({entries.length})
+          </button>
+          {uniqueActions.map(prefix => {
+            const count = entries.filter(e => e.action.startsWith(prefix)).length
+            return (
+              <button
+                key={prefix}
+                type="button"
+                className={`audit-filter-btn${filter === prefix ? ' audit-filter-btn--active' : ''}`}
+                onClick={() => setFilter(prefix === filter.split('.')[0] && filter === prefix ? '' : prefix)}
+              >
+                {prefix} ({count})
+              </button>
+            )
+          })}
+        </div>
+        <button type="button" className="btn-refresh" onClick={fetchAudit}>Refresh</button>
+      </div>
+
+      {loading && <div className="state-loading">Loading audit log…</div>}
+      {error   && <div className="state-error">{error}</div>}
+
+      {!loading && !error && filtered.length === 0 && (
+        <div className="state-empty">No audit entries yet.</div>
+      )}
+
+      {!loading && !error && filtered.length > 0 && (
+        <div className="audit-table-wrap">
+          <table className="audit-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Actor</th>
+                <th>Resource</th>
+                <th>IP</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(e => {
+                const group = ACTION_GROUPS[e.action] ?? 'neutral'
+                const hasDetail = e.detail && Object.keys(e.detail).length > 0
+                const isExpanded = expandedId === e.id
+                return (
+                  <>
+                    <tr key={e.id} className="audit-row">
+                      <td className="audit-time">{fmtDate(e.created_at)}</td>
+                      <td><span className={`audit-action audit-action--${group}`}>{e.action}</span></td>
+                      <td className="audit-actor">{e.actor || '—'}</td>
+                      <td className="audit-resource">
+                        <span className="audit-resource-type">{e.resource_type}</span>
+                        <span className="audit-resource-id">{uidShort(e.resource_id)}</span>
+                      </td>
+                      <td className="audit-ip">{e.ip_address || '—'}</td>
+                      <td>
+                        {hasDetail ? (
+                          <button
+                            type="button"
+                            className="audit-detail-toggle"
+                            onClick={() => setExpandedId(isExpanded ? null : e.id)}
+                          >
+                            {isExpanded ? 'hide' : 'show'}
+                          </button>
+                        ) : (
+                          <span className="audit-no-detail">—</span>
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && hasDetail && (
+                      <tr key={`${e.id}-detail`} className="audit-detail-row">
+                        <td colSpan={6}>
+                          <pre className="audit-detail-pre">{JSON.stringify(e.detail, null, 2)}</pre>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Share Panel ───────────────────────────────────────────────────────────────
@@ -219,6 +376,7 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
 
 function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   const [shareOpen, setShareOpen] = useState(false)
+  const [viewOpen, setViewOpen] = useState(false)
 
   const handleApprove = async () => {
     await fetch(`/api/studies/${study.id}/approve`, { method: 'POST' })
@@ -258,6 +416,9 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
                 {shareOpen ? 'Close' : 'Share'}
               </button>
             )}
+            <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>
+              {viewOpen ? 'Close viewer' : 'View'}
+            </button>
           </div>
         </td>
       </tr>
@@ -268,18 +429,24 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
           </td>
         </tr>
       )}
+      {viewOpen && (
+        <tr>
+          <td colSpan={8}>
+            <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
+          </td>
+        </tr>
+      )}
     </>
   )
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-type AppState = 'loading' | 'loaded' | 'error'
-
-const STAT_VARIANT = ['warning', 'success', 'error', 'neutral'] as const
+type StudiesState = 'loading' | 'loaded' | 'error'
 
 export function App() {
-  const [state, setState] = useState<AppState>('loading')
+  const [tab, setTab] = useState<AppTab>('studies')
+  const [state, setState] = useState<StudiesState>('loading')
   const [studies, setStudies] = useState<Study[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -317,49 +484,77 @@ export function App() {
           <h1>AEGIS Admin Dashboard</h1>
           <p>Study review, QC, and export management</p>
         </div>
-        <button type="button" className="btn-refresh" onClick={fetchStudies}>Refresh</button>
+        {tab === 'studies' && (
+          <button type="button" className="btn-refresh" onClick={fetchStudies}>Refresh</button>
+        )}
       </header>
 
-      {state === 'loaded' && (
-        <div className="stats-bar">
-          {stats.map(({ label, count, variant }) => (
-            <div key={label} className="stat-card">
-              <div className={`stat-number stat-number--${variant}`}>{count}</div>
-              <div className="stat-label">{label}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Tab nav */}
+      <nav className="tab-nav">
+        <button
+          type="button"
+          className={`tab-btn${tab === 'studies' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('studies')}
+        >
+          Studies
+        </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'audit' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('audit')}
+        >
+          Audit Log
+        </button>
+      </nav>
 
-      {state === 'loading' && <div className="state-loading">Loading studies…</div>}
-      {state === 'error'   && <div className="state-error">{error}</div>}
-      {state === 'loaded' && studies.length === 0 && (
-        <div className="state-empty">No studies yet. Upload DICOM files via the Upload Portal.</div>
-      )}
-
-      {state === 'loaded' && studies.length > 0 && (
-        <div className="studies-table-wrap">
-          <table className="studies-table">
-            <thead>
-              <tr>
-                <th>Study UID</th>
-                <th>Modality</th>
-                <th>Body Part</th>
-                <th>Source</th>
-                <th>Status</th>
-                <th className="align-right">Files</th>
-                <th>Received</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {studies.map(study => (
-                <StudyRow key={study.id} study={study} onAction={fetchStudies} />
+      {/* Studies tab */}
+      {tab === 'studies' && (
+        <>
+          {state === 'loaded' && (
+            <div className="stats-bar">
+              {stats.map(({ label, count, variant }) => (
+                <div key={label} className="stat-card">
+                  <div className={`stat-number stat-number--${variant}`}>{count}</div>
+                  <div className="stat-label">{label}</div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          )}
+
+          {state === 'loading' && <div className="state-loading">Loading studies…</div>}
+          {state === 'error'   && <div className="state-error">{error}</div>}
+          {state === 'loaded' && studies.length === 0 && (
+            <div className="state-empty">No studies yet. Upload DICOM files via the Upload Portal.</div>
+          )}
+
+          {state === 'loaded' && studies.length > 0 && (
+            <div className="studies-table-wrap">
+              <table className="studies-table">
+                <thead>
+                  <tr>
+                    <th>Study UID</th>
+                    <th>Modality</th>
+                    <th>Body Part</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th className="align-right">Files</th>
+                    <th>Received</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studies.map(study => (
+                    <StudyRow key={study.id} study={study} onAction={fetchStudies} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
+
+      {/* Audit log tab */}
+      {tab === 'audit' && <AuditLog />}
     </div>
   )
 }
