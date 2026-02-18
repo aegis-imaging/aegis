@@ -180,6 +180,20 @@ func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.S
 			outcome = "classification_required already true (no-op)"
 		}
 
+	case "require_protocol_check":
+		if !s.ProtocolRequired {
+			s.ProtocolRequired = true
+			s.ProtocolStatus = "pending"
+			if err := model.SetProtocolRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set protocol_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "protocol_required set to true"
+			}
+		} else {
+			outcome = "protocol_required already true (no-op)"
+		}
+
 	case "route_to":
 		if r.DestinationID == nil {
 			outcome = "error: route_to rule has no destination_id"

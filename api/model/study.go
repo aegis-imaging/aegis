@@ -30,8 +30,10 @@ type Study struct {
 	BidsStatus             string    `json:"bids_status"`
 	ClassificationRequired bool      `json:"classification_required"`
 	ClassificationStatus   string    `json:"classification_status"`
+	ProtocolRequired       bool      `json:"protocol_required"`
+	ProtocolStatus         string    `json:"protocol_status"`
 	CreatedAt              time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 const studyColumns = `
@@ -39,6 +41,7 @@ const studyColumns = `
 	study_description, series_count, instance_count, status, defacing_required,
 	dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 	bids_required, bids_status, classification_required, classification_status,
+	protocol_required, protocol_status,
 	created_at, updated_at`
 
 type scannable interface {
@@ -53,6 +56,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.PhiScanRequired, &s.PhiScanStatus, &s.QcRequired, &s.QcStatus,
 		&s.BidsRequired, &s.BidsStatus,
 		&s.ClassificationRequired, &s.ClassificationStatus,
+		&s.ProtocolRequired, &s.ProtocolStatus,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -63,14 +67,16 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		                     study_description, series_count, instance_count, status, defacing_required,
 		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 		                     bids_required, bids_status,
-		                     classification_required, classification_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+		                     classification_required, classification_status,
+		                     protocol_required, protocol_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
 		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
 		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus,
 		s.BidsRequired, s.BidsStatus,
-		s.ClassificationRequired, s.ClassificationStatus).
+		s.ClassificationRequired, s.ClassificationStatus,
+		s.ProtocolRequired, s.ProtocolStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
@@ -295,6 +301,26 @@ func SetClassificationRequired(ctx context.Context, db *sql.DB, id string, requi
 func UpdateClassificationStatus(ctx context.Context, db *sql.DB, id, status string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET classification_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// SetProtocolRequired sets the protocol_required flag and initialises protocol_status to "pending".
+func SetProtocolRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET protocol_required = $1, protocol_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdateProtocolStatus sets the protocol_status field on a study.
+func UpdateProtocolStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET protocol_status = $1, updated_at = now()
 		WHERE id = $2`, status, id)
 	return err
 }

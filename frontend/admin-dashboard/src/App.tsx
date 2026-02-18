@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications' | 'projects' | 'users'
+type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
 
 type AuditEntry = {
   id: string
@@ -33,6 +33,8 @@ type Study = {
   bids_status: string
   classification_required: boolean
   classification_status: string
+  protocol_required: boolean
+  protocol_status: string
   instance_count: number
   created_at: string
 }
@@ -144,6 +146,20 @@ type AdminUser = {
   created_at: string
 }
 
+type ProtocolTemplate = {
+  id: string
+  project_id: string
+  name: string
+  description: string
+  manufacturer: string
+  model: string
+  software_version: string
+  sequence_type: string
+  rules: Record<string, unknown>
+  enabled: boolean
+  created_at: string
+}
+
 type AuthIdentity = {
   id: string
   email: string
@@ -161,12 +177,15 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' }) {
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' }) {
   const modifier =
     (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
     (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
     (prefix === 'bids' && label === 'complete') ? 'bids-complete' :
     (prefix === 'classify' && label === 'classified') ? 'classify-classified' :
+    (prefix === 'protocol' && label === 'compliant') ? 'protocol-compliant' :
+    (prefix === 'protocol' && label === 'minor_deviations') ? 'protocol-minor_deviations' :
+    (prefix === 'protocol' && label === 'non_compliant') ? 'protocol-non_compliant' :
     label
   const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
@@ -523,7 +542,7 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
 
 // ── Study Row ─────────────────────────────────────────────────────────────────
 
-function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
+function StudyRow({ study, onAction, isAdmin }: { study: Study; onAction: () => void; isAdmin: boolean }) {
   const [shareOpen,  setShareOpen]  = useState(false)
   const [viewOpen,   setViewOpen]   = useState(false)
   const [defaceOpen, setDefaceOpen] = useState(false)
@@ -550,6 +569,7 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   const canBidsConvert = study.bids_required && study.bids_status === 'pending'
   const canBidsDownload = study.bids_status === 'complete'
   const canClassify = study.classification_required && study.classification_status === 'pending'
+  const canProtocolCheck = study.protocol_required && study.protocol_status === 'pending'
 
   const handlePhiScan = async () => {
     await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
@@ -571,6 +591,11 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
     onAction()
   }
 
+  const handleProtocolCheck = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/protocol-check`, { method: 'POST' })
+    onAction()
+  }
+
   return (
     <>
       <tr>
@@ -583,35 +608,39 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <td>{study.qc_required ? <Badge label={study.qc_status || 'n/a'} prefix="qc" /> : '—'}</td>
         <td>{study.bids_required ? <Badge label={study.bids_status || 'n/a'} prefix="bids" /> : '—'}</td>
         <td>{study.classification_required ? <Badge label={study.classification_status || 'n/a'} prefix="classify" /> : '—'}</td>
+        <td>{study.protocol_required ? <Badge label={study.protocol_status || 'n/a'} prefix="protocol" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
           <div className="actions-cell">
-            {canApprove && (
+            {isAdmin && canApprove && (
               <button type="button" className="btn btn--approve" onClick={handleApprove}>Approve</button>
             )}
-            {canReject && (
+            {isAdmin && canReject && (
               <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>
             )}
-            {canShare && (
+            {isAdmin && canShare && (
               <button type="button" className="btn btn--share" onClick={() => setShareOpen(o => !o)}>
                 {shareOpen ? 'Close' : 'Share'}
               </button>
             )}
-            {canPhiScan && (
+            {isAdmin && canPhiScan && (
               <button type="button" className="btn btn--phi-scan" onClick={handlePhiScan}>Scan for PHI</button>
             )}
-            {canQcCheck && (
+            {isAdmin && canQcCheck && (
               <button type="button" className="btn btn--qc-check" onClick={handleQcCheck}>Run QC</button>
             )}
-            {canBidsConvert && (
+            {isAdmin && canBidsConvert && (
               <button type="button" className="btn btn--bids-convert" onClick={handleBidsConvert}>Convert to BIDS</button>
             )}
             {canBidsDownload && (
               <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>
             )}
-            {canClassify && (
+            {isAdmin && canClassify && (
               <button type="button" className="btn btn--classify" onClick={handleClassify}>Classify</button>
+            )}
+            {isAdmin && canProtocolCheck && (
+              <button type="button" className="btn btn--protocol-check" onClick={handleProtocolCheck}>Check Protocol</button>
             )}
             {canReviewDeface && (
               <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
@@ -626,21 +655,21 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
       </tr>
       {shareOpen && (
         <tr>
-          <td colSpan={12}>
+          <td colSpan={13}>
             <SharePanel study={study} onClose={() => setShareOpen(false)} />
           </td>
         </tr>
       )}
       {defaceOpen && (
         <tr>
-          <td colSpan={12}>
+          <td colSpan={13}>
             <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />
           </td>
         </tr>
       )}
       {viewOpen && (
         <tr>
-          <td colSpan={12}>
+          <td colSpan={13}>
             <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
           </td>
         </tr>
@@ -662,7 +691,7 @@ const EMPTY_RULE: Omit<RoutingRule, 'id' | 'created_at'> = {
   action: 'require_qa', destination_id: null,
 }
 
-function RoutingPanel() {
+function RoutingPanel({ isAdmin }: { isAdmin: boolean }) {
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [rules, setRules]               = useState<RoutingRule[]>([])
   const [loading, setLoading]           = useState(true)
@@ -817,11 +846,11 @@ function RoutingPanel() {
       <section className="routing-section">
         <div className="routing-section-header">
           <h2>Destinations</h2>
-          <button type="button" className="btn-primary" onClick={openNewDest}>+ Add destination</button>
+          {isAdmin && <button type="button" className="btn-primary" onClick={openNewDest}>+ Add destination</button>}
         </div>
         <p className="routing-hint">External DICOM endpoints that studies can be forwarded to via <code>route_to</code> rules.</p>
 
-        {showDestForm && (
+        {isAdmin && showDestForm && (
           <div className="routing-form">
             <h3>{editingDestId ? 'Edit destination' : 'New destination'}</h3>
             {destError && <div className="form-error">{destError}</div>}
@@ -891,10 +920,12 @@ function RoutingPanel() {
                     </span>
                   </td>
                   <td>
-                    <div className="actions-cell">
-                      <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
-                      <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
-                    </div>
+                    {isAdmin && (
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
+                        <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -907,14 +938,14 @@ function RoutingPanel() {
       <section className="routing-section">
         <div className="routing-section-header">
           <h2>Routing Rules</h2>
-          <button type="button" className="btn-primary" onClick={openNewRule}>+ Add rule</button>
+          {isAdmin && <button type="button" className="btn-primary" onClick={openNewRule}>+ Add rule</button>}
         </div>
         <p className="routing-hint">
           Rules are evaluated in <strong>priority order</strong> (lower = first) on every study ingest.
           All matching rules fire — not just the first.
         </p>
 
-        {showRuleForm && (
+        {isAdmin && showRuleForm && (
           <div className="routing-form">
             <h3>{editingRuleId ? 'Edit rule' : 'New rule'}</h3>
             {ruleError && <div className="form-error">{ruleError}</div>}
@@ -949,6 +980,7 @@ function RoutingPanel() {
                 <option value="require_qc_check">require_qc_check — automated image quality checks</option>
                 <option value="require_bids_conversion">require_bids_conversion — convert to NIfTI/BIDS</option>
                 <option value="require_classification">require_classification — classify modality/body part</option>
+                <option value="require_protocol_check">require_protocol_check — check protocol compliance</option>
                 <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
                 <option value="reject">reject — auto-reject</option>
                 <option value="route_to">route_to — forward to external destination</option>
@@ -1018,13 +1050,15 @@ function RoutingPanel() {
                       </span>
                     </td>
                     <td>
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEditRule(r)}>Edit</button>
-                        <button type="button" className="btn btn--secondary" onClick={() => toggleRule(r)}>
-                          {r.enabled ? 'Disable' : 'Enable'}
-                        </button>
-                        <button type="button" className="btn btn--revoke" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
-                      </div>
+                      {isAdmin && (
+                        <div className="actions-cell">
+                          <button type="button" className="btn btn--edit" onClick={() => openEditRule(r)}>Edit</button>
+                          <button type="button" className="btn btn--secondary" onClick={() => toggleRule(r)}>
+                            {r.enabled ? 'Disable' : 'Enable'}
+                          </button>
+                          <button type="button" className="btn btn--revoke" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )
@@ -1043,7 +1077,7 @@ const EMPTY_PROFILE: Omit<AnonProfile, 'id' | 'project_id' | 'created_at'> = {
   name: '', description: '', retained_tags: [], enabled: true,
 }
 
-function ProfilesPanel() {
+function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [projects, setProjects]   = useState<Project[]>([])
   const [profiles, setProfiles]   = useState<AnonProfile[]>([])
   const [loading, setLoading]     = useState(true)
@@ -1169,10 +1203,10 @@ function ProfilesPanel() {
               The project's default profile is automatically used by the upload portal.
             </div>
           </div>
-          <button type="button" className="btn-primary" onClick={openCreate}>+ New profile</button>
+          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New profile</button>}
         </div>
 
-        {showForm && (
+        {isAdmin && showForm && (
           <div className="routing-form">
             <h3>{editingId ? 'Edit profile' : 'New profile'}</h3>
             {formError && <div className="form-error">{formError}</div>}
@@ -1249,14 +1283,16 @@ function ProfilesPanel() {
                     </td>
                     <td>{p.enabled ? 'Yes' : 'No'}</td>
                     <td>
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
-                        <button type="button" className="btn btn--secondary"
-                          onClick={() => setDefault(p.project_id, p.id, p.name)}>
-                          {isDefault ? 'Clear default' : 'Set default'}
-                        </button>
-                        <button type="button" className="btn btn--revoke" onClick={() => del(p.id, p.name)}>Delete</button>
-                      </div>
+                      {isAdmin && (
+                        <div className="actions-cell">
+                          <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                          <button type="button" className="btn btn--secondary"
+                            onClick={() => setDefault(p.project_id, p.id, p.name)}>
+                            {isDefault ? 'Clear default' : 'Set default'}
+                          </button>
+                          <button type="button" className="btn btn--revoke" onClick={() => del(p.id, p.name)}>Delete</button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )
@@ -1269,9 +1305,253 @@ function ProfilesPanel() {
   )
 }
 
+// ── Protocol Templates Panel ─────────────────────────────────────────────────
+
+type ProtocolTemplateForm = {
+  name: string
+  description: string
+  manufacturer: string
+  model: string
+  software_version: string
+  sequence_type: string
+  rules: string
+  enabled: boolean
+}
+
+const EMPTY_TEMPLATE_FORM: ProtocolTemplateForm = {
+  name: '', description: '', manufacturer: '', model: '',
+  software_version: '', sequence_type: '', rules: '{}', enabled: true,
+}
+
+function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
+  const [projects, setProjects]     = useState<Project[]>([])
+  const [templates, setTemplates]   = useState<ProtocolTemplate[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
+
+  const [form, setForm]             = useState<ProtocolTemplateForm>(EMPTY_TEMPLATE_FORM)
+  const [formProject, setFormProject] = useState('')
+  const [editingId, setEditingId]   = useState<string | null>(null)
+  const [showForm, setShowForm]     = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [formError, setFormError]   = useState<string | null>(null)
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const projRes = await fetch('/api/projects')
+      if (!projRes.ok) throw new Error('Failed to load projects')
+      const projs: Project[] = await projRes.json()
+      setProjects(projs ?? [])
+
+      // Fetch templates for all projects in parallel
+      const allTemplates: ProtocolTemplate[] = []
+      await Promise.all((projs ?? []).map(async p => {
+        const res = await fetch(`/api/projects/${p.id}/protocol-templates`)
+        if (res.ok) {
+          const list: ProtocolTemplate[] = await res.json()
+          allTemplates.push(...list)
+        }
+      }))
+      setTemplates(allTemplates)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  function openCreate() {
+    setForm(EMPTY_TEMPLATE_FORM)
+    setFormProject(projects[0]?.id ?? '')
+    setEditingId(null)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  function openEdit(t: ProtocolTemplate) {
+    setForm({
+      name: t.name, description: t.description, manufacturer: t.manufacturer,
+      model: t.model, software_version: t.software_version, sequence_type: t.sequence_type,
+      rules: JSON.stringify(t.rules ?? {}, null, 2), enabled: t.enabled,
+    })
+    setFormProject(t.project_id)
+    setEditingId(t.id)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.name) { setFormError('Name is required'); return }
+    if (!formProject) { setFormError('Project is required'); return }
+    let parsedRules: Record<string, unknown>
+    try {
+      parsedRules = JSON.parse(form.rules)
+    } catch {
+      setFormError('Rules must be valid JSON'); return
+    }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const url = editingId ? `/api/protocol-templates/${editingId}` : `/api/projects/${formProject}/protocol-templates`
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name, description: form.description, manufacturer: form.manufacturer,
+          model: form.model, software_version: form.software_version, sequence_type: form.sequence_type,
+          rules: parsedRules, enabled: form.enabled,
+        }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      setEditingId(null)
+      fetchAll()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function del(id: string, name: string) {
+    if (!confirm(`Delete protocol template "${name}"?`)) return
+    await fetch(`/api/protocol-templates/${id}`, { method: 'DELETE' })
+    fetchAll()
+  }
+
+  const projectName = (id: string) => projects.find(p => p.id === id)?.name ?? id
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Protocol Templates</div>
+            <div className="routing-section-sub">
+              Define expected acquisition parameters per manufacturer/model/sequence.
+              Studies are checked against matching templates when protocol compliance is required.
+            </div>
+          </div>
+          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
+        </div>
+
+        {isAdmin && showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit template' : 'New template'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Template name *"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              {!editingId && (
+                <select className="form-select" aria-label="Project"
+                  value={formProject}
+                  onChange={e => setFormProject(e.target.value)}>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              )}
+              <input className="form-input form-input--wide" placeholder="Description"
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div className="routing-form-section-label">Scanner Match Criteria</div>
+            <div className="form-grid">
+              <input className="form-input" placeholder="Manufacturer (e.g. Siemens)"
+                value={form.manufacturer}
+                onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))} />
+              <input className="form-input" placeholder="Model (e.g. Prisma)"
+                value={form.model}
+                onChange={e => setForm(f => ({ ...f, model: e.target.value }))} />
+              <input className="form-input" placeholder="Software version (e.g. syngo MR E11)"
+                value={form.software_version}
+                onChange={e => setForm(f => ({ ...f, software_version: e.target.value }))} />
+              <input className="form-input" placeholder="Sequence type (e.g. T1w, FLAIR, DWI)"
+                value={form.sequence_type}
+                onChange={e => setForm(f => ({ ...f, sequence_type: e.target.value }))} />
+            </div>
+            <div className="routing-form-section-label">Compliance Rules (JSON)</div>
+            <div className="form-grid">
+              <textarea className="form-input form-input--wide" rows={6}
+                placeholder='{"SliceThickness":{"min":0.5,"max":1.5},"RepetitionTime":{"min":1900,"max":2200}}'
+                value={form.rules}
+                onChange={e => setForm(f => ({ ...f, rules: e.target.value }))} />
+            </div>
+            <label className="form-checkbox">
+              <input type="checkbox" checked={form.enabled}
+                onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
+              {' '}Enabled
+            </label>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading && <div className="state-loading">Loading…</div>}
+        {error   && <div className="state-error">{error}</div>}
+        {!loading && !error && templates.length === 0 && (
+          <div className="state-empty">No protocol templates yet. Create one to define expected acquisition parameters.</div>
+        )}
+        {!loading && !error && templates.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Project</th>
+                <th>Manufacturer</th>
+                <th>Model</th>
+                <th>Software</th>
+                <th>Sequence</th>
+                <th>Enabled</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {templates.map(t => (
+                <tr key={t.id} className={t.enabled ? '' : 'routing-row--disabled'}>
+                  <td>
+                    <div className="routing-name">{t.name}</div>
+                    {t.description && <div className="routing-desc">{t.description}</div>}
+                  </td>
+                  <td>{projectName(t.project_id)}</td>
+                  <td>{t.manufacturer || '—'}</td>
+                  <td>{t.model || '—'}</td>
+                  <td>{t.software_version || '—'}</td>
+                  <td>{t.sequence_type || '—'}</td>
+                  <td>{t.enabled ? 'Yes' : 'No'}</td>
+                  <td>
+                    {isAdmin && (
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEdit(t)}>Edit</button>
+                        <button type="button" className="btn btn--revoke" onClick={() => del(t.id, t.name)}>Delete</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Notifications Panel ───────────────────────────────────────────────────────
 
-function NotificationsPanel() {
+function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [projects, setProjects]   = useState<Project[]>([])
   const [subs, setSubs]           = useState<DigestSubscription[]>([])
   const [loading, setLoading]     = useState(true)
@@ -1351,10 +1631,10 @@ function NotificationsPanel() {
               monthly every 30 days. No PHI is included.
             </div>
           </div>
-          <button type="button" className="btn-primary" onClick={openCreate}>+ New subscription</button>
+          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New subscription</button>}
         </div>
 
-        {showForm && (
+        {isAdmin && showForm && (
           <div className="routing-form">
             <h3>New subscription</h3>
             {formError && <div className="form-error">{formError}</div>}
@@ -1411,10 +1691,12 @@ function NotificationsPanel() {
                   <td className="text-capitalize">{sub.frequency}</td>
                   <td>{sub.last_sent_at ? fmtDate(sub.last_sent_at) : <span className="routing-desc">never</span>}</td>
                   <td>
-                    <div className="actions-cell">
-                      <button type="button" className="btn btn--revoke"
-                        onClick={() => del(sub.id, sub.email)}>Remove</button>
-                    </div>
+                    {isAdmin && (
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--revoke"
+                          onClick={() => del(sub.id, sub.email)}>Remove</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1433,7 +1715,7 @@ const EMPTY_INSTITUTION: Omit<Institution, 'id' | 'created_at'> = {
   contact_name: '', contact_email: '', ip_ranges: '', ae_title: '', enabled: true,
 }
 
-function InstitutionsPanel() {
+function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState<string | null>(null)
@@ -1583,7 +1865,7 @@ function InstitutionsPanel() {
         <h2>Institutions</h2>
         <div className="actions-cell">
           <button type="button" className="btn-refresh" onClick={fetchInstitutions}>Refresh</button>
-          <button type="button" className="btn-primary" onClick={openNew}>+ Add institution</button>
+          {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ Add institution</button>}
         </div>
       </div>
       <p className="routing-hint">
@@ -1591,7 +1873,7 @@ function InstitutionsPanel() {
       </p>
 
       {/* Create / Edit form */}
-      {showForm && (
+      {isAdmin && showForm && (
         <div className="routing-form">
           <h3>{editingId ? 'Edit institution' : 'New institution'}</h3>
           {formError && <div className="form-error">{formError}</div>}
@@ -1685,11 +1967,13 @@ function InstitutionsPanel() {
                       onClick={() => selectedInst?.id === inst.id ? setSelectedInst(null) : selectInst(inst)}>
                       {selectedInst?.id === inst.id ? 'Close' : 'Projects'}
                     </button>
-                    <button type="button" className="btn btn--edit" onClick={() => openEdit(inst)}>Edit</button>
-                    <button type="button" className="btn btn--secondary" onClick={() => toggleInst(inst)}>
-                      {inst.enabled ? 'Disable' : 'Enable'}
-                    </button>
-                    <button type="button" className="btn btn--revoke" onClick={() => deleteInst(inst.id, inst.name)}>Delete</button>
+                    {isAdmin && <button type="button" className="btn btn--edit" onClick={() => openEdit(inst)}>Edit</button>}
+                    {isAdmin && (
+                      <button type="button" className="btn btn--secondary" onClick={() => toggleInst(inst)}>
+                        {inst.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                    )}
+                    {isAdmin && <button type="button" className="btn btn--revoke" onClick={() => deleteInst(inst.id, inst.name)}>Delete</button>}
                   </div>
                 </td>
               </tr>
@@ -1704,21 +1988,25 @@ function InstitutionsPanel() {
           <h3>Projects — {selectedInst.name}</h3>
 
           {/* Link form */}
-          <div className="routing-form-section-label">Link to project</div>
-          {linkError && <div className="form-error">{linkError}</div>}
-          <div className="form-row">
-            <input className="form-input" placeholder="Project ID (UUID)"
-              value={linkProjectID} onChange={e => setLinkProjectID(e.target.value)} />
-            <select className="form-select" aria-label="Role" value={linkRole}
-              onChange={e => setLinkRole(e.target.value as 'sender' | 'receiver' | 'admin')}>
-              <option value="sender">sender</option>
-              <option value="receiver">receiver</option>
-              <option value="admin">admin</option>
-            </select>
-            <button type="button" className="btn-primary" onClick={linkProject} disabled={linkSaving}>
-              {linkSaving ? 'Linking…' : 'Link'}
-            </button>
-          </div>
+          {isAdmin && (
+            <>
+              <div className="routing-form-section-label">Link to project</div>
+              {linkError && <div className="form-error">{linkError}</div>}
+              <div className="form-row">
+                <input className="form-input" placeholder="Project ID (UUID)"
+                  value={linkProjectID} onChange={e => setLinkProjectID(e.target.value)} />
+                <select className="form-select" aria-label="Role" value={linkRole}
+                  onChange={e => setLinkRole(e.target.value as 'sender' | 'receiver' | 'admin')}>
+                  <option value="sender">sender</option>
+                  <option value="receiver">receiver</option>
+                  <option value="admin">admin</option>
+                </select>
+                <button type="button" className="btn-primary" onClick={linkProject} disabled={linkSaving}>
+                  {linkSaving ? 'Linking…' : 'Link'}
+                </button>
+              </div>
+            </>
+          )}
 
           {projLoading ? (
             <div className="state-loading">Loading…</div>
@@ -1743,9 +2031,11 @@ function InstitutionsPanel() {
                     <td><code className={`routing-action routing-action--${ip.role}`}>{ip.role}</code></td>
                     <td className="td-date">{fmtDate(ip.created_at)}</td>
                     <td>
-                      <button type="button" className="btn btn--revoke" onClick={() => unlinkProject(ip.project_id)}>
-                        Unlink
-                      </button>
+                      {isAdmin && (
+                        <button type="button" className="btn btn--revoke" onClick={() => unlinkProject(ip.project_id)}>
+                          Unlink
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1764,7 +2054,7 @@ const EMPTY_PROJECT: Omit<Project, 'id' | 'default_anon_profile_id' | 'created_a
   name: '', slug: '', description: '',
 }
 
-function ProjectsPanel() {
+function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [projects, setProjects]   = useState<Project[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
@@ -1839,11 +2129,11 @@ function ProjectsPanel() {
           </div>
           <div className="actions-cell">
             <button type="button" className="btn-refresh" onClick={fetchProjects}>Refresh</button>
-            <button type="button" className="btn-primary" onClick={openNew}>+ New project</button>
+            {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ New project</button>}
           </div>
         </div>
 
-        {showForm && (
+        {isAdmin && showForm && (
           <div className="routing-form">
             <h3>{editingId ? 'Edit project' : 'New project'}</h3>
             {formError && <div className="form-error">{formError}</div>}
@@ -1895,9 +2185,11 @@ function ProjectsPanel() {
                   </td>
                   <td className="td-date">{fmtDate(p.created_at)}</td>
                   <td>
-                    <div className="actions-cell">
-                      <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
-                    </div>
+                    {isAdmin && (
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -2114,6 +2406,8 @@ export function App() {
       .catch(() => { /* non-fatal — dev mode may not have auth */ })
   }, [])
 
+  const isAdmin = currentUser?.role === 'admin'
+
   // Filters
   const [filterStatus,   setFilterStatus]   = useState('')
   const [filterModality, setFilterModality] = useState('')
@@ -2238,6 +2532,13 @@ export function App() {
         </button>
         <button
           type="button"
+          className={`tab-btn${tab === 'protocol_templates' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('protocol_templates')}
+        >
+          Protocol Templates
+        </button>
+        <button
+          type="button"
           className={`tab-btn${tab === 'notifications' ? ' tab-btn--active' : ''}`}
           onClick={() => setTab('notifications')}
         >
@@ -2250,13 +2551,15 @@ export function App() {
         >
           Projects
         </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'users' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('users')}
-        >
-          Users
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            className={`tab-btn${tab === 'users' ? ' tab-btn--active' : ''}`}
+            onClick={() => setTab('users')}
+          >
+            Users
+          </button>
+        )}
       </nav>
 
       {/* Studies tab */}
@@ -2338,6 +2641,7 @@ export function App() {
                     <th>QC</th>
                     <th>BIDS</th>
                     <th>Class.</th>
+                    <th>Protocol</th>
                     <th className="align-right">Files</th>
                     <th>Received</th>
                     <th>Actions</th>
@@ -2345,7 +2649,7 @@ export function App() {
                 </thead>
                 <tbody>
                   {studies.map(study => (
-                    <StudyRow key={study.id} study={study} onAction={() => setRefreshTick(t => t + 1)} />
+                    <StudyRow key={study.id} study={study} onAction={() => setRefreshTick(t => t + 1)} isAdmin={isAdmin} />
                   ))}
                 </tbody>
               </table>
@@ -2383,22 +2687,25 @@ export function App() {
       {tab === 'audit' && <AuditLog />}
 
       {/* Routing tab */}
-      {tab === 'routing' && <RoutingPanel />}
+      {tab === 'routing' && <RoutingPanel isAdmin={isAdmin} />}
 
       {/* Institutions tab */}
-      {tab === 'institutions' && <InstitutionsPanel />}
+      {tab === 'institutions' && <InstitutionsPanel isAdmin={isAdmin} />}
 
       {/* Profiles tab */}
-      {tab === 'profiles' && <ProfilesPanel />}
+      {tab === 'profiles' && <ProfilesPanel isAdmin={isAdmin} />}
+
+      {/* Protocol Templates tab */}
+      {tab === 'protocol_templates' && <ProtocolTemplatesPanel isAdmin={isAdmin} />}
 
       {/* Notifications tab */}
-      {tab === 'notifications' && <NotificationsPanel />}
+      {tab === 'notifications' && <NotificationsPanel isAdmin={isAdmin} />}
 
       {/* Projects tab */}
-      {tab === 'projects' && <ProjectsPanel />}
+      {tab === 'projects' && <ProjectsPanel isAdmin={isAdmin} />}
 
-      {/* Users tab */}
-      {tab === 'users' && <UsersPanel />}
+      {/* Users tab — admin only */}
+      {tab === 'users' && isAdmin && <UsersPanel />}
     </div>
   )
 }
