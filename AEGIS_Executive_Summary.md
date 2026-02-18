@@ -30,13 +30,15 @@ css: |
   a { color: #0969da; }
 ---
 
-<div style="text-align: center; padding: 60px 0 30px;">
-  <img src="logo-small.png" alt="AEGIS Logo" style="width: 220px; margin-bottom: 20px;" />
+<div style="text-align: center; padding: 40px 0 20px;">
+  <img src="logo-small.png" alt="AEGIS Logo" style="width: 200px; margin-bottom: 12px;" />
   <h1 style="font-size: 42px; margin: 0; color: #1a1a2e;">AEGIS</h1>
   <p style="font-size: 22px; color: #4a4a6a; margin: 8px 0 0;">Anonymization &amp; Exchange Gateway for Imaging Studies</p>
-  <hr style="width: 60%; margin: 30px auto; border: 1px solid #e0e0e0;" />
-  <p style="font-size: 16px; color: #6b7280;">A multi-cloud platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
-  <p style="font-size: 13px; color: #9ca3af; margin-top: 20px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
+  <hr style="width: 60%; margin: 20px auto; border: 1px solid #e0e0e0;" />
+  <p style="font-size: 16px; color: #6b7280; margin: 0.5em 0;">A multi-cloud platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
+  <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
+  <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
+  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 18, 2026</p>
 </div>
 
 ---
