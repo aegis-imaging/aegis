@@ -79,6 +79,7 @@ func main() {
 
 	srv := handler.NewServer(db, store, cfg)
 	auth := middleware.RequireAuth(db, cfg)
+	adminOnly := middleware.RequireRole("admin", db, cfg)
 
 	mux := http.NewServeMux()
 
@@ -120,79 +121,87 @@ func main() {
 	// Auth identity endpoint.
 	mux.HandleFunc("GET /api/auth/me", auth(srv.AuthMe))
 
-	// Projects — create/update require auth; list is public (upload portal).
-	mux.HandleFunc("POST /api/projects", auth(srv.CreateProject))
+	// Projects — create/update require admin; list is public (upload portal).
+	mux.HandleFunc("POST /api/projects", adminOnly(srv.CreateProject))
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
-	mux.HandleFunc("PUT /api/projects/{id}", auth(srv.UpdateProject))
+	mux.HandleFunc("PUT /api/projects/{id}", adminOnly(srv.UpdateProject))
 
 	// Anonymization profiles — per-project DICOM tag retention overrides.
 	mux.HandleFunc("GET /api/projects/{projectID}/anon-profiles", auth(srv.ListAnonProfiles))
-	mux.HandleFunc("POST /api/projects/{projectID}/anon-profiles", auth(srv.CreateAnonProfile))
-	mux.HandleFunc("PUT /api/projects/{projectID}/default-anon-profile", auth(srv.SetDefaultAnonProfile))
+	mux.HandleFunc("POST /api/projects/{projectID}/anon-profiles", adminOnly(srv.CreateAnonProfile))
+	mux.HandleFunc("PUT /api/projects/{projectID}/default-anon-profile", adminOnly(srv.SetDefaultAnonProfile))
 	mux.HandleFunc("GET /api/anon-profiles/{id}", auth(srv.GetAnonProfile))
-	mux.HandleFunc("PUT /api/anon-profiles/{id}", auth(srv.UpdateAnonProfile))
-	mux.HandleFunc("DELETE /api/anon-profiles/{id}", auth(srv.DeleteAnonProfile))
+	mux.HandleFunc("PUT /api/anon-profiles/{id}", adminOnly(srv.UpdateAnonProfile))
+	mux.HandleFunc("DELETE /api/anon-profiles/{id}", adminOnly(srv.DeleteAnonProfile))
 
-	// Studies — all admin operations.
+	// Studies — list and shares readable by all; mutations require admin.
 	mux.HandleFunc("GET /api/studies", auth(srv.ListStudies))
-	mux.HandleFunc("POST /api/studies/{id}/approve", auth(srv.ApproveStudy))
-	mux.HandleFunc("POST /api/studies/{id}/reject", auth(srv.RejectStudy))
-	mux.HandleFunc("POST /api/studies/{id}/share", auth(srv.CreateShare))
+	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
+	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
+	mux.HandleFunc("POST /api/studies/{id}/share", adminOnly(srv.CreateShare))
 	mux.HandleFunc("GET /api/studies/{id}/shares", auth(srv.ListShares))
 
-	mux.HandleFunc("DELETE /api/shares/{shareID}", auth(srv.RevokeShare))
+	mux.HandleFunc("DELETE /api/shares/{shareID}", adminOnly(srv.RevokeShare))
 
 	// Internal enterprise ingestion path.
-	mux.HandleFunc("POST /api/ingest", auth(srv.InternalIngest))
+	mux.HandleFunc("POST /api/ingest", adminOnly(srv.InternalIngest))
 
 	// Batch import — import DICOM files from a server-local directory.
-	mux.HandleFunc("POST /api/import/batch", auth(srv.BatchImport))
+	mux.HandleFunc("POST /api/import/batch", adminOnly(srv.BatchImport))
 
 	mux.HandleFunc("GET /api/audit", auth(srv.ListAudit))
 
 	// Institutions — organisations that send or receive studies.
 	mux.HandleFunc("GET /api/institutions", auth(srv.ListInstitutions))
-	mux.HandleFunc("POST /api/institutions", auth(srv.CreateInstitution))
+	mux.HandleFunc("POST /api/institutions", adminOnly(srv.CreateInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}", auth(srv.GetInstitution))
-	mux.HandleFunc("PUT /api/institutions/{id}", auth(srv.UpdateInstitution))
-	mux.HandleFunc("DELETE /api/institutions/{id}", auth(srv.DeleteInstitution))
+	mux.HandleFunc("PUT /api/institutions/{id}", adminOnly(srv.UpdateInstitution))
+	mux.HandleFunc("DELETE /api/institutions/{id}", adminOnly(srv.DeleteInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}/projects", auth(srv.ListInstitutionProjects))
-	mux.HandleFunc("POST /api/institutions/{id}/projects", auth(srv.AddInstitutionProject))
-	mux.HandleFunc("DELETE /api/institutions/{id}/projects/{projectID}", auth(srv.RemoveInstitutionProject))
+	mux.HandleFunc("POST /api/institutions/{id}/projects", adminOnly(srv.AddInstitutionProject))
+	mux.HandleFunc("DELETE /api/institutions/{id}/projects/{projectID}", adminOnly(srv.RemoveInstitutionProject))
 
 	// Destinations — external DICOM endpoints studies can be forwarded to.
 	mux.HandleFunc("GET /api/destinations", auth(srv.ListDestinations))
-	mux.HandleFunc("POST /api/destinations", auth(srv.CreateDestination))
-	mux.HandleFunc("PUT /api/destinations/{id}", auth(srv.UpdateDestination))
-	mux.HandleFunc("DELETE /api/destinations/{id}", auth(srv.DeleteDestination))
+	mux.HandleFunc("POST /api/destinations", adminOnly(srv.CreateDestination))
+	mux.HandleFunc("PUT /api/destinations/{id}", adminOnly(srv.UpdateDestination))
+	mux.HandleFunc("DELETE /api/destinations/{id}", adminOnly(srv.DeleteDestination))
 
 	// Routing rules — condition → action mappings evaluated on study ingest.
 	mux.HandleFunc("GET /api/routing-rules", auth(srv.ListRoutingRules))
-	mux.HandleFunc("POST /api/routing-rules", auth(srv.CreateRoutingRule))
-	mux.HandleFunc("PUT /api/routing-rules/{id}", auth(srv.UpdateRoutingRule))
-	mux.HandleFunc("DELETE /api/routing-rules/{id}", auth(srv.DeleteRoutingRule))
-	mux.HandleFunc("POST /api/routing-rules/evaluate/{studyID}", auth(srv.EvaluateRoutingRules))
+	mux.HandleFunc("POST /api/routing-rules", adminOnly(srv.CreateRoutingRule))
+	mux.HandleFunc("PUT /api/routing-rules/{id}", adminOnly(srv.UpdateRoutingRule))
+	mux.HandleFunc("DELETE /api/routing-rules/{id}", adminOnly(srv.DeleteRoutingRule))
+	mux.HandleFunc("POST /api/routing-rules/evaluate/{studyID}", adminOnly(srv.EvaluateRoutingRules))
 	mux.HandleFunc("GET /api/studies/{studyID}/routing-log", auth(srv.GetStudyRoutingLog))
 
 	// Email digest subscriptions — periodic summary emails per project.
 	mux.HandleFunc("GET /api/digest-subscriptions", auth(srv.ListDigestSubscriptions))
 	mux.HandleFunc("GET /api/projects/{projectID}/digest-subscriptions", auth(srv.ListDigestSubscriptions))
-	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", auth(srv.CreateDigestSubscription))
-	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", auth(srv.DeleteDigestSubscription))
+	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", adminOnly(srv.CreateDigestSubscription))
+	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", adminOnly(srv.DeleteDigestSubscription))
 
 	// Admin users — authorised dashboard users and their roles.
 	mux.HandleFunc("GET /api/admin-users", auth(srv.ListAdminUsers))
-	mux.HandleFunc("POST /api/admin-users", auth(srv.CreateAdminUser))
-	mux.HandleFunc("PUT /api/admin-users/{id}", auth(srv.UpdateAdminUser))
-	mux.HandleFunc("DELETE /api/admin-users/{id}", auth(srv.DeleteAdminUser))
+	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))
+	mux.HandleFunc("PUT /api/admin-users/{id}", adminOnly(srv.UpdateAdminUser))
+	mux.HandleFunc("DELETE /api/admin-users/{id}", adminOnly(srv.DeleteAdminUser))
+
+	// Protocol templates — per-project MRI acquisition parameter expectations.
+	mux.HandleFunc("GET /api/projects/{projectID}/protocol-templates", auth(srv.ListProtocolTemplates))
+	mux.HandleFunc("POST /api/projects/{projectID}/protocol-templates", adminOnly(srv.CreateProtocolTemplate))
+	mux.HandleFunc("GET /api/protocol-templates/{id}", auth(srv.GetProtocolTemplate))
+	mux.HandleFunc("PUT /api/protocol-templates/{id}", adminOnly(srv.UpdateProtocolTemplate))
+	mux.HandleFunc("DELETE /api/protocol-templates/{id}", adminOnly(srv.DeleteProtocolTemplate))
 
 	// Async processing triggers — admin-initiated pipeline actions.
-	mux.HandleFunc("POST /api/deface/{studyUID}", auth(srv.TriggerDeface))
-	mux.HandleFunc("POST /api/studies/{studyUID}/phi-scan", auth(srv.TriggerPhiScan))
-	mux.HandleFunc("POST /api/studies/{studyUID}/qc-check", auth(srv.TriggerQcCheck))
-	mux.HandleFunc("POST /api/studies/{studyUID}/bids-convert", auth(srv.TriggerBidsConversion))
+	mux.HandleFunc("POST /api/deface/{studyUID}", adminOnly(srv.TriggerDeface))
+	mux.HandleFunc("POST /api/studies/{studyUID}/phi-scan", adminOnly(srv.TriggerPhiScan))
+	mux.HandleFunc("POST /api/studies/{studyUID}/qc-check", adminOnly(srv.TriggerQcCheck))
+	mux.HandleFunc("POST /api/studies/{studyUID}/bids-convert", adminOnly(srv.TriggerBidsConversion))
 	mux.HandleFunc("GET /api/studies/{studyUID}/bids-download", auth(srv.ServeBidsDownload))
-	mux.HandleFunc("POST /api/studies/{studyUID}/classify", auth(srv.TriggerClassification))
+	mux.HandleFunc("POST /api/studies/{studyUID}/classify", adminOnly(srv.TriggerClassification))
+	mux.HandleFunc("POST /api/studies/{studyUID}/protocol-check", adminOnly(srv.TriggerProtocolCheck))
 
 	var h http.Handler = mux
 	h = middleware.Recover(h)

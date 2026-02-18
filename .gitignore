@@ -36,7 +36,8 @@ Thumbs.db
 # Test data (DICOM files — do not commit)
 test-data/
 
-# Python (defacing service)
-defacing/__pycache__/
-defacing/*.pyc
-defacing/.venv/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
