@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications' | 'projects' | 'users'
+type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
 
 type AuditEntry = {
   id: string
@@ -33,6 +33,8 @@ type Study = {
   bids_status: string
   classification_required: boolean
   classification_status: string
+  protocol_required: boolean
+  protocol_status: string
   instance_count: number
   created_at: string
 }
@@ -144,6 +146,20 @@ type AdminUser = {
   created_at: string
 }
 
+type ProtocolTemplate = {
+  id: string
+  project_id: string
+  name: string
+  description: string
+  manufacturer: string
+  model: string
+  software_version: string
+  sequence_type: string
+  rules: Record<string, unknown>
+  enabled: boolean
+  created_at: string
+}
+
 type AuthIdentity = {
   id: string
   email: string
@@ -161,12 +177,15 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' }) {
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' }) {
   const modifier =
     (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
     (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
     (prefix === 'bids' && label === 'complete') ? 'bids-complete' :
     (prefix === 'classify' && label === 'classified') ? 'classify-classified' :
+    (prefix === 'protocol' && label === 'compliant') ? 'protocol-compliant' :
+    (prefix === 'protocol' && label === 'minor_deviations') ? 'protocol-minor_deviations' :
+    (prefix === 'protocol' && label === 'non_compliant') ? 'protocol-non_compliant' :
     label
   const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
@@ -550,6 +569,7 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   const canBidsConvert = study.bids_required && study.bids_status === 'pending'
   const canBidsDownload = study.bids_status === 'complete'
   const canClassify = study.classification_required && study.classification_status === 'pending'
+  const canProtocolCheck = study.protocol_required && study.protocol_status === 'pending'
 
   const handlePhiScan = async () => {
     await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
@@ -571,6 +591,11 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
     onAction()
   }
 
+  const handleProtocolCheck = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/protocol-check`, { method: 'POST' })
+    onAction()
+  }
+
   return (
     <>
       <tr>
@@ -583,6 +608,7 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <td>{study.qc_required ? <Badge label={study.qc_status || 'n/a'} prefix="qc" /> : '—'}</td>
         <td>{study.bids_required ? <Badge label={study.bids_status || 'n/a'} prefix="bids" /> : '—'}</td>
         <td>{study.classification_required ? <Badge label={study.classification_status || 'n/a'} prefix="classify" /> : '—'}</td>
+        <td>{study.protocol_required ? <Badge label={study.protocol_status || 'n/a'} prefix="protocol" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
@@ -613,6 +639,9 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
             {canClassify && (
               <button type="button" className="btn btn--classify" onClick={handleClassify}>Classify</button>
             )}
+            {canProtocolCheck && (
+              <button type="button" className="btn btn--protocol-check" onClick={handleProtocolCheck}>Check Protocol</button>
+            )}
             {canReviewDeface && (
               <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
                 {defaceOpen ? 'Close review' : 'Review defacing'}
@@ -626,21 +655,21 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
       </tr>
       {shareOpen && (
         <tr>
-          <td colSpan={12}>
+          <td colSpan={13}>
             <SharePanel study={study} onClose={() => setShareOpen(false)} />
           </td>
         </tr>
       )}
       {defaceOpen && (
         <tr>
-          <td colSpan={12}>
+          <td colSpan={13}>
             <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />
           </td>
         </tr>
       )}
       {viewOpen && (
         <tr>
-          <td colSpan={12}>
+          <td colSpan={13}>
             <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
           </td>
         </tr>
@@ -949,6 +978,7 @@ function RoutingPanel() {
                 <option value="require_qc_check">require_qc_check — automated image quality checks</option>
                 <option value="require_bids_conversion">require_bids_conversion — convert to NIfTI/BIDS</option>
                 <option value="require_classification">require_classification — classify modality/body part</option>
+                <option value="require_protocol_check">require_protocol_check — check protocol compliance</option>
                 <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
                 <option value="reject">reject — auto-reject</option>
                 <option value="route_to">route_to — forward to external destination</option>
@@ -1261,6 +1291,248 @@ function ProfilesPanel() {
                   </tr>
                 )
               })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Protocol Templates Panel ─────────────────────────────────────────────────
+
+type ProtocolTemplateForm = {
+  name: string
+  description: string
+  manufacturer: string
+  model: string
+  software_version: string
+  sequence_type: string
+  rules: string
+  enabled: boolean
+}
+
+const EMPTY_TEMPLATE_FORM: ProtocolTemplateForm = {
+  name: '', description: '', manufacturer: '', model: '',
+  software_version: '', sequence_type: '', rules: '{}', enabled: true,
+}
+
+function ProtocolTemplatesPanel() {
+  const [projects, setProjects]     = useState<Project[]>([])
+  const [templates, setTemplates]   = useState<ProtocolTemplate[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
+
+  const [form, setForm]             = useState<ProtocolTemplateForm>(EMPTY_TEMPLATE_FORM)
+  const [formProject, setFormProject] = useState('')
+  const [editingId, setEditingId]   = useState<string | null>(null)
+  const [showForm, setShowForm]     = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [formError, setFormError]   = useState<string | null>(null)
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const projRes = await fetch('/api/projects')
+      if (!projRes.ok) throw new Error('Failed to load projects')
+      const projs: Project[] = await projRes.json()
+      setProjects(projs ?? [])
+
+      // Fetch templates for all projects in parallel
+      const allTemplates: ProtocolTemplate[] = []
+      await Promise.all((projs ?? []).map(async p => {
+        const res = await fetch(`/api/projects/${p.id}/protocol-templates`)
+        if (res.ok) {
+          const list: ProtocolTemplate[] = await res.json()
+          allTemplates.push(...list)
+        }
+      }))
+      setTemplates(allTemplates)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  function openCreate() {
+    setForm(EMPTY_TEMPLATE_FORM)
+    setFormProject(projects[0]?.id ?? '')
+    setEditingId(null)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  function openEdit(t: ProtocolTemplate) {
+    setForm({
+      name: t.name, description: t.description, manufacturer: t.manufacturer,
+      model: t.model, software_version: t.software_version, sequence_type: t.sequence_type,
+      rules: JSON.stringify(t.rules ?? {}, null, 2), enabled: t.enabled,
+    })
+    setFormProject(t.project_id)
+    setEditingId(t.id)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.name) { setFormError('Name is required'); return }
+    if (!formProject) { setFormError('Project is required'); return }
+    let parsedRules: Record<string, unknown>
+    try {
+      parsedRules = JSON.parse(form.rules)
+    } catch {
+      setFormError('Rules must be valid JSON'); return
+    }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const url = editingId ? `/api/protocol-templates/${editingId}` : `/api/projects/${formProject}/protocol-templates`
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name, description: form.description, manufacturer: form.manufacturer,
+          model: form.model, software_version: form.software_version, sequence_type: form.sequence_type,
+          rules: parsedRules, enabled: form.enabled,
+        }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      setEditingId(null)
+      fetchAll()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function del(id: string, name: string) {
+    if (!confirm(`Delete protocol template "${name}"?`)) return
+    await fetch(`/api/protocol-templates/${id}`, { method: 'DELETE' })
+    fetchAll()
+  }
+
+  const projectName = (id: string) => projects.find(p => p.id === id)?.name ?? id
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Protocol Templates</div>
+            <div className="routing-section-sub">
+              Define expected acquisition parameters per manufacturer/model/sequence.
+              Studies are checked against matching templates when protocol compliance is required.
+            </div>
+          </div>
+          <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit template' : 'New template'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Template name *"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              {!editingId && (
+                <select className="form-select" aria-label="Project"
+                  value={formProject}
+                  onChange={e => setFormProject(e.target.value)}>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              )}
+              <input className="form-input form-input--wide" placeholder="Description"
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div className="routing-form-section-label">Scanner Match Criteria</div>
+            <div className="form-grid">
+              <input className="form-input" placeholder="Manufacturer (e.g. Siemens)"
+                value={form.manufacturer}
+                onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))} />
+              <input className="form-input" placeholder="Model (e.g. Prisma)"
+                value={form.model}
+                onChange={e => setForm(f => ({ ...f, model: e.target.value }))} />
+              <input className="form-input" placeholder="Software version (e.g. syngo MR E11)"
+                value={form.software_version}
+                onChange={e => setForm(f => ({ ...f, software_version: e.target.value }))} />
+              <input className="form-input" placeholder="Sequence type (e.g. T1w, FLAIR, DWI)"
+                value={form.sequence_type}
+                onChange={e => setForm(f => ({ ...f, sequence_type: e.target.value }))} />
+            </div>
+            <div className="routing-form-section-label">Compliance Rules (JSON)</div>
+            <div className="form-grid">
+              <textarea className="form-input form-input--wide" rows={6}
+                placeholder='{"SliceThickness":{"min":0.5,"max":1.5},"RepetitionTime":{"min":1900,"max":2200}}'
+                value={form.rules}
+                onChange={e => setForm(f => ({ ...f, rules: e.target.value }))} />
+            </div>
+            <label className="form-checkbox">
+              <input type="checkbox" checked={form.enabled}
+                onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
+              {' '}Enabled
+            </label>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading && <div className="state-loading">Loading…</div>}
+        {error   && <div className="state-error">{error}</div>}
+        {!loading && !error && templates.length === 0 && (
+          <div className="state-empty">No protocol templates yet. Create one to define expected acquisition parameters.</div>
+        )}
+        {!loading && !error && templates.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Project</th>
+                <th>Manufacturer</th>
+                <th>Model</th>
+                <th>Software</th>
+                <th>Sequence</th>
+                <th>Enabled</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {templates.map(t => (
+                <tr key={t.id} className={t.enabled ? '' : 'routing-row--disabled'}>
+                  <td>
+                    <div className="routing-name">{t.name}</div>
+                    {t.description && <div className="routing-desc">{t.description}</div>}
+                  </td>
+                  <td>{projectName(t.project_id)}</td>
+                  <td>{t.manufacturer || '—'}</td>
+                  <td>{t.model || '—'}</td>
+                  <td>{t.software_version || '—'}</td>
+                  <td>{t.sequence_type || '—'}</td>
+                  <td>{t.enabled ? 'Yes' : 'No'}</td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--edit" onClick={() => openEdit(t)}>Edit</button>
+                      <button type="button" className="btn btn--revoke" onClick={() => del(t.id, t.name)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
@@ -2238,6 +2510,13 @@ export function App() {
         </button>
         <button
           type="button"
+          className={`tab-btn${tab === 'protocol_templates' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('protocol_templates')}
+        >
+          Protocol Templates
+        </button>
+        <button
+          type="button"
           className={`tab-btn${tab === 'notifications' ? ' tab-btn--active' : ''}`}
           onClick={() => setTab('notifications')}
         >
@@ -2338,6 +2617,7 @@ export function App() {
                     <th>QC</th>
                     <th>BIDS</th>
                     <th>Class.</th>
+                    <th>Protocol</th>
                     <th className="align-right">Files</th>
                     <th>Received</th>
                     <th>Actions</th>
@@ -2390,6 +2670,9 @@ export function App() {
 
       {/* Profiles tab */}
       {tab === 'profiles' && <ProfilesPanel />}
+
+      {/* Protocol Templates tab */}
+      {tab === 'protocol_templates' && <ProtocolTemplatesPanel />}
 
       {/* Notifications tab */}
       {tab === 'notifications' && <NotificationsPanel />}

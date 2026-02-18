@@ -54,6 +54,7 @@ services:
       QC_SERVICE_URL: "http://qc-service:8080"
       BIDS_SERVICE_URL: "http://bids-service:8080"
       CLASSIFICATION_SERVICE_URL: "http://classification-service:8080"
+      PROTOCOL_SERVICE_URL: "http://protocol-service:8080"
     volumes:
       - aegis-data:/app/data
     depends_on:
@@ -119,6 +120,18 @@ services:
   classification-service:
     build:
       context: ./classification-service
+    volumes:
+      - aegis-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  protocol-service:
+    build:
+      context: ./protocol-service
     volumes:
       - aegis-data:/app/data
     healthcheck:

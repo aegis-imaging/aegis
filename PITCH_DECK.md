@@ -86,6 +86,7 @@ The medical image exchange market is growing, driven by federal data sharing man
 | **Automated defacing for head scans** | MRI, CT, and PET studies of the head and brain undergo server-side defacing (removal of facial surface geometry) before entering the research archive. Non-head studies bypass this step automatically. |
 | **Burned-in PHI detection** | Automated OCR scans image pixels for overlaid text (patient names, dates, accession numbers) that tag-level tools miss. Studies with detected pixel PHI are flagged for review. |
 | **Supports all DICOM modalities** | MRI, CT, PET, PET/CT, ultrasound, X-ray, mammography, nuclear medicine, and more — using the same upload and anonymization workflow. |
+| **MRI protocol compliance** | Automated verification that acquisition parameters (TR, TE, flip angle, resolution) match site-specific templates per scanner manufacturer, model, and software version — catching the 0.19–64% non-compliance rates found across multi-site studies.<sup><a href="#ref-10">[10]</a></sup> |
 | **Centralized audit trail** | Every upload, approval, rejection, and data export is logged with a timestamp and actor. Institutions can demonstrate HIPAA compliance from a single dashboard. |
 | **Clinician review before release** | Administrators review anonymized images in a web-based DICOM viewer (OHIF) before approving studies for sharing. Nothing is shared automatically without human sign-off. |
 
@@ -204,6 +205,7 @@ AEGIS does not create a new de-identification standard — it implements the one
 ### Phase 4 — Advanced Validation (Next)
 - Burned-in PHI detection using OCR on image pixels (addresses gap identified in <a href="#ref-3">[3]</a>, <a href="#ref-7">[7]</a>)
 - Automated image quality assessment (motion artifact detection, coverage completeness)
+- MRI protocol compliance — per-scanner, per-sequence parameter validation against configurable templates with tolerances, following the approach used by ADNI<sup><a href="#ref-11">[11]</a></sup> and tools like mrQA<sup><a href="#ref-10">[10]</a></sup>
 - BIDS format conversion for neuroimaging research output
 - Batch import tools for historical data migration
 
@@ -247,6 +249,10 @@ Production costs scale with data volume. A 1,000-session multi-site study (~500 
 <li id="ref-8">National Electrical Manufacturers Association. <em>DICOM PS3.15: Security and System Management Profiles, Annex E.</em> dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_e.html</li>
 
 <li id="ref-9">U.S. Department of Health and Human Services. "Guidance Regarding Methods for De-identification of PHI in Accordance with the HIPAA Privacy Rule." 45 CFR § 164.514(b). hhs.gov/hipaa/for-professionals/special-topics/de-identification/</li>
+
+<li id="ref-10">Ravi H, et al. "mrQA: MR Quality Assurance framework for automated protocol compliance assessment across 20+ open neuroimaging datasets." <em>Neuroinformatics.</em> 2024;22:637–651. DOI: 10.1007/s12021-024-09679-3</li>
+
+<li id="ref-11">Arani A, et al. "Alzheimer's Disease Neuroimaging Initiative 4 (ADNI4): MRI Protocol Update with Rationale for Changes." <em>Alzheimer's &amp; Dementia.</em> 2024;20(S2):e088739. DOI: 10.1002/alz.088739</li>
 </ol>
 
 </div>
