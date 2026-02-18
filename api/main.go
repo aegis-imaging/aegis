@@ -60,6 +60,15 @@ func main() {
 	mux.HandleFunc("GET /api/projects", srv.ListProjects)
 	mux.HandleFunc("POST /api/projects", srv.CreateProject)
 
+	// Anonymization profiles — per-project DICOM tag retention overrides.
+	mux.HandleFunc("GET /api/projects/{projectID}/anon-profiles", srv.ListAnonProfiles)
+	mux.HandleFunc("POST /api/projects/{projectID}/anon-profiles", srv.CreateAnonProfile)
+	mux.HandleFunc("PUT /api/projects/{projectID}/default-anon-profile", srv.SetDefaultAnonProfile)
+	mux.HandleFunc("GET /api/projects/{slug}/active-anon-profile", srv.GetDefaultAnonProfile)
+	mux.HandleFunc("GET /api/anon-profiles/{id}", srv.GetAnonProfile)
+	mux.HandleFunc("PUT /api/anon-profiles/{id}", srv.UpdateAnonProfile)
+	mux.HandleFunc("DELETE /api/anon-profiles/{id}", srv.DeleteAnonProfile)
+
 	mux.HandleFunc("POST /api/upload/init", srv.UploadInit)
 	mux.HandleFunc("PUT /api/upload/file/{sessionID}/{index}", srv.UploadFile)
 	mux.HandleFunc("POST /api/upload/complete", srv.UploadComplete)
