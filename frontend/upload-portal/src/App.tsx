@@ -2,24 +2,12 @@ import { useState, useCallback } from 'react'
 import { FileDropZone } from './components/FileDropZone'
 import { StudySummary } from './components/StudySummary'
 import { TagDiffTable } from './components/TagDiffTable'
-import { parseDicomFile, buildStudySummary, isDicomFile } from './dicom/parser'
-import { deidentify } from './dicom/deid'
-import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag } from './types'
+import { parseDicomFile, buildStudySummary, isDicomFile } from '@aegis/client'
+import { deidentify } from '@aegis/client'
+import { uploadStudy } from '@aegis/client'
+import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag, UploadResult } from '@aegis/client'
 
 type Stage = 'select' | 'parsing' | 'preview' | 'uploading' | 'ready'
-
-type UploadInitResponse = {
-  session_id: string
-  upload_urls: string[]
-}
-
-type UploadCompleteResponse = {
-  session_id: string
-  status: string
-  study?: {
-    study_instance_uid: string
-  }
-}
 
 export function App() {
   const [stage, setStage] = useState<Stage>('select')
@@ -29,7 +17,7 @@ export function App() {
   const [privateTagsRemoved, setPrivateTagsRemoved] = useState(0)
   const [parseProgress, setParseProgress] = useState({ current: 0, total: 0 })
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
-  const [uploadResult, setUploadResult] = useState<UploadCompleteResponse | null>(null)
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleFilesSelected = useCallback(async (selectedFiles: File[]) => {
@@ -109,60 +97,10 @@ export function App() {
     setUploadProgress({ current: 0, total: files.length })
 
     try {
-      const initRes = await fetch('/api/upload/init', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_slug: 'default',
-          file_count: files.length,
-          study_metadata: {
-            study_instance_uid: summary.studyInstanceUid,
-            modality: summary.modality,
-            body_part: summary.bodyPart,
-            study_description: summary.studyDescription,
-            series_count: summary.seriesCount,
-            instance_count: summary.imageCount,
-          },
-        }),
+      const result = await uploadStudy(files, 'default', summary, {
+        onProgress: (uploaded, total) => setUploadProgress({ current: uploaded, total }),
       })
-
-      if (!initRes.ok) {
-        throw new Error(`Upload init failed (${initRes.status})`)
-      }
-
-      const initData = (await initRes.json()) as UploadInitResponse
-      if (!initData.upload_urls || initData.upload_urls.length !== files.length) {
-        throw new Error('Upload initialization returned unexpected URL count')
-      }
-
-      for (let i = 0; i < files.length; i++) {
-        const putRes = await fetch(initData.upload_urls[i], {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/dicom',
-          },
-          body: files[i].arrayBuffer,
-        })
-
-        if (!putRes.ok) {
-          throw new Error(`File upload failed at index ${i} (${putRes.status})`)
-        }
-
-        setUploadProgress({ current: i + 1, total: files.length })
-      }
-
-      const completeRes = await fetch('/api/upload/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: initData.session_id }),
-      })
-
-      if (!completeRes.ok) {
-        throw new Error(`Upload completion failed (${completeRes.status})`)
-      }
-
-      const completeData = (await completeRes.json()) as UploadCompleteResponse
-      setUploadResult(completeData)
+      setUploadResult(result)
       setStage('ready')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
@@ -277,7 +215,7 @@ export function App() {
       {stage === 'uploading' && (
         <div style={{ textAlign: 'center', padding: '48px 24px' }}>
           <p style={{ fontSize: '16px', marginBottom: '16px' }}>
-            Uploading files... {uploadProgress.current} / {uploadProgress.total}
+            Anonymizing & uploading... {uploadProgress.current} / {uploadProgress.total}
           </p>
           <div style={{
             height: '8px',
@@ -298,7 +236,7 @@ export function App() {
         </div>
       )}
 
-      {/* Step 3: Ready to upload (placeholder) */}
+      {/* Step 3: Complete */}
       {stage === 'ready' && (
         <div style={{
           textAlign: 'center',
@@ -312,12 +250,12 @@ export function App() {
             Upload complete
           </h2>
           <p style={{ color: '#6b7280', marginBottom: '24px' }}>
-            {files.length} files uploaded successfully.
+            {files.length} files anonymized and uploaded successfully.
           </p>
           {uploadResult && (
             <p style={{ color: '#4b5563', marginBottom: '24px', fontSize: '14px' }}>
-              Session: {uploadResult.session_id}
-              {uploadResult.study?.study_instance_uid ? ` · Study UID: ${uploadResult.study.study_instance_uid}` : ''}
+              Session: {uploadResult.sessionId}
+              {uploadResult.study?.studyInstanceUid ? ` · Study UID: ${uploadResult.study.studyInstanceUid}` : ''}
             </p>
           )}
           <button
