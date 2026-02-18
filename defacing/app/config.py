@@ -2,7 +2,8 @@ import os
 
 
 class Config:
-    # Which defacing tool to use. Options: "auto", "mri_reface", "mri_deface", "nibabel"
+    # Which defacing tool to use.
+    # Options: "auto", "mri_reface", "deepdefacer", "mri_deface", "nibabel"
     # "auto" tries each in priority order and uses the first available.
     deface_tool: str = os.environ.get("DEFACE_TOOL", "auto")
 
@@ -19,8 +20,11 @@ class Config:
     # Path to the mri_reface binary (MATLAB Runtime required)
     mri_reface_bin: str = os.environ.get("MRI_REFACE_BIN", "mri_reface")
 
-    # Path to dcm2niix binary (used by mri_deface and mri_reface backends)
+    # Path to dcm2niix binary (used by mri_deface, mri_reface, and deepdefacer backends)
     dcm2niix_bin: str = os.environ.get("DCM2NIIX_BIN", "dcm2niix")
+
+    # Whether to use GPU for DeepDefacer (requires deepdefacer[gpu] and CUDA)
+    deepdefacer_gpu: bool = os.environ.get("DEEPDEFACER_GPU", "false").lower() == "true"
 
 
 cfg = Config()
