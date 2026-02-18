@@ -470,6 +470,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 23. ✅ **NIfTI/BIDS conversion**: Python BIDS service (`bids-service/`) with dcm2niix backend; `require_bids_conversion` routing rule action; `bids_required`/`bids_status` study fields; DICOM→NIfTI conversion with BIDS-compliant directory structure + JSON sidecars; series-to-datatype classification; zip download endpoint; admin dashboard BIDS badge + Convert/Download buttons (PR #33)
 24. ✅ **Batch import tools**: `api/cmd/import/` CLI + `POST /api/import/batch` API; recursive DICOM directory scan with `suyashkumar/dicom` header parsing; groups files by StudyInstanceUID; creates upload sessions + study records; evaluates routing rules; `--dry-run` mode (PR #31)
 25. **Defacing tool upgrades**: DeepDefacer or afni_refacer for improved quality
+26. ✅ **Authentication middleware**: Per-route auth middleware (`api/middleware/auth.go`) supporting GCP IAP and Azure AD Easy Auth; `RequireAuth` wrapper for admin routes; `RequireRole` for future viewer enforcement; `GET /api/auth/me` identity endpoint; `admin_users` lookup with case-insensitive email; dev mode auto-auth via `DEV_USER_EMAIL`; all audit entries now record real user email; admin dashboard shows current user and handles 401/403 errors (PR #36)
 
 ### Future Ideas (not planned)
 - DIMSE adapter for sites that can run an edge connector

@@ -31,7 +31,7 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to update status")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "study.approved", "admin", "study", study.ID, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "study.approved", actorEmail(r), "study", study.ID, clientIP(r), nil)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
 		subject, body := email.StudyApproved(study.StudyInstanceUID)
@@ -59,7 +59,7 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to update status")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", "admin", "study", study.ID, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actorEmail(r), "study", study.ID, clientIP(r), nil)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
 		subject, body := email.StudyRejected(study.StudyInstanceUID)
@@ -118,7 +118,7 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 
 	expiresAt := time.Now().Add(time.Duration(req.ExpiryHours) * time.Hour)
 	share, err := model.CreateExportShare(r.Context(), s.db,
-		study.ID, tokenHash, req.RecipientEmail, req.Note, "admin", expiresAt)
+		study.ID, tokenHash, req.RecipientEmail, req.Note, actorEmail(r), expiresAt)
 	if err != nil {
 		log.Printf("create export share: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to create share")
@@ -127,7 +127,7 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 
 	share.Token = rawToken
 	exportURL := fmt.Sprintf("%s/api/export/%s", s.cfg.APIBaseURL, rawToken)
-	model.CreateAuditEntry(r.Context(), s.db, "share.created", "admin", "export_share", share.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "share.created", actorEmail(r), "export_share", share.ID, clientIP(r), map[string]any{
 		"recipient":  req.RecipientEmail,
 		"study_id":   study.ID,
 		"expires_at": expiresAt,
@@ -165,7 +165,7 @@ func (s *Server) RevokeShare(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to revoke share")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "share.revoked", "admin", "export_share", shareID, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "share.revoked", actorEmail(r), "export_share", shareID, clientIP(r), nil)
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
