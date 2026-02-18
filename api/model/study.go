@@ -120,3 +120,11 @@ func UpdateStudyStatus(ctx context.Context, db *sql.DB, id, status string) error
 		UPDATE studies SET status = $1, updated_at = now() WHERE id = $2`, status, id)
 	return err
 }
+
+// UpdateStudyDefaced marks a study as defacing-complete and moves it to the clean store.
+func UpdateStudyDefaced(ctx context.Context, db *sql.DB, id string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET status = 'defaced', dicom_store = 'clean', updated_at = now()
+		WHERE id = $1`, id)
+	return err
+}
