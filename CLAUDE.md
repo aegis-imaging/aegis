@@ -1,6 +1,6 @@
 # AEGIS — Project Guide
 
-Anonymization & Exchange Gateway for Imaging Studies. GCP-hosted platform for HIPAA-compliant sharing of medical imaging data across all DICOM modalities. MVP focus: brain MRI, PET, and CT.
+Anonymization & Exchange Gateway for Imaging Studies. Cloud-hosted (GCP, AWS, or Azure) platform for HIPAA-compliant sharing of medical imaging data across all DICOM modalities. MVP focus: brain MRI, PET, and CT.
 
 ## PDF Generation Rules
 
@@ -34,7 +34,8 @@ Current research files:
 ```
 aegis/
 ├── terraform/project/    # GCP project bootstrap (IAM, KMS, VPC-SC)
-├── terraform/infra/      # Infrastructure (Cloud Run, Healthcare API, Cloud Armor)
+├── terraform/infra/      # GCP infrastructure (Cloud Run, Healthcare API, Cloud Armor)
+├── terraform/aws/        # AWS infrastructure (ECS Fargate, S3, RDS, ALB)
 ├── api/                  # Go backend — upload orchestration, DICOMweb proxy
 ├── frontend/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
@@ -54,17 +55,30 @@ Planned to split into 5 separate repos once interfaces stabilize:
 
 ## Tech Stack
 
-- **Backend**: Go 1.23 on Cloud Run (distroless containers)
-- **Database**: Cloud SQL (PostgreSQL 15) — users, projects, routing, audit
+- **Backend**: Go 1.24 on Cloud Run / ECS Fargate (distroless containers)
+- **Database**: PostgreSQL 15 (Cloud SQL on GCP, RDS on AWS) — users, projects, routing, audit
 - **Frontend**: React 19 + TypeScript + Vite
-- **DICOM**: GCP Healthcare API (DICOMweb), dcmjs, dicomParser
+- **DICOM Storage**: Cloud-neutral file storage (local, GCS, or S3) with DICOMweb proxy
 - **Defacing**: Python — mri_deface, dcm2niix, pydicom
 - **Viewer**: OHIF Viewer (embedded in admin dashboard)
-- **Analytics**: BigQuery — DICOM metadata export, audit dashboards
-- **AI/ML**: Vertex AI — burned-in PHI detection, image QC, smart routing
-- **Email**: On-prem SMTP via PSC (internal), SendGrid (external). Dev: standard SMTP.
-- **Infrastructure**: Terraform, Cloud Build
-- **Auth**: Google Identity / OAuth 2.0 (upload portal), IAP (admin dashboard)
+- **AI/ML**: Pluggable — local backends (Tesseract, pydicom heuristics) or cloud AI (Vertex AI, SageMaker)
+- **Email**: Standard SMTP (works with any provider). Dev: Mailpit.
+- **Infrastructure**: Terraform (GCP and AWS modules), Docker Compose for local dev
+- **Auth**: Multi-provider — GCP IAP, Azure AD Easy Auth, AWS ALB + Cognito; dev mode auto-auth
+
+### Multi-Cloud Support
+
+AEGIS is cloud-agnostic at the application layer. The same Go API, Python sidecars, and React frontends run on any cloud or on-premises.
+
+| Component | GCP | AWS | Azure | Local Dev |
+|-----------|-----|-----|-------|-----------|
+| **File storage** | GCS (`STORAGE_MODE=gcs`) | S3 (`STORAGE_MODE=s3`) | — | Filesystem (`STORAGE_MODE=local`) |
+| **Database** | Cloud SQL | RDS | Azure Database | Docker postgres |
+| **Containers** | Cloud Run | ECS Fargate | Container Apps | Docker Compose |
+| **Auth** | IAP (`AUTH_PROVIDER=iap`) | ALB + Cognito (`AUTH_PROVIDER=aws`) | Easy Auth (`AUTH_PROVIDER=azure`) | Auto-auth (`AUTH_ENABLED=false`) |
+| **Terraform** | `terraform/project/` + `terraform/infra/` | `terraform/aws/` | — (planned) | N/A |
+
+S3-compatible stores (MinIO, LocalStack) are supported via the `S3_ENDPOINT` env var.
 
 ## Development
 
@@ -284,7 +298,7 @@ Per-route authentication middleware that protects all admin endpoints. Supports 
 | Var | Default | Notes |
 |-----|---------|-------|
 | `AUTH_ENABLED` | `false` | Enable authentication middleware; `false` = dev mode (auto-auth) |
-| `AUTH_PROVIDER` | `auto` | Identity provider: `auto` (try both), `iap` (GCP), or `azure` (Azure AD) |
+| `AUTH_PROVIDER` | `auto` | Identity provider: `auto` (try all), `iap` (GCP), `azure` (Azure AD), or `aws` (ALB + Cognito) |
 | `DEV_USER_EMAIL` | `dev@aegis.local` | Auto-authenticated email when `AUTH_ENABLED=false` |
 
 **How it works:**
@@ -292,6 +306,7 @@ Per-route authentication middleware that protects all admin endpoints. Supports 
 - `AUTH_ENABLED=true` (production): reads identity headers from the reverse proxy:
   - **GCP IAP**: `X-Goog-Authenticated-User-Email` (format: `accounts.google.com:user@example.com`)
   - **Azure AD Easy Auth**: `X-MS-CLIENT-PRINCIPAL-NAME` (user's email)
+  - **AWS ALB + Cognito**: `X-Amzn-Oidc-Data` (JWT — email extracted from payload, no signature verification needed since ALB guarantees integrity)
 - Looks up the email in `admin_users` table; rejects unknown or disabled users.
 - Injects `AuthUser` into request context; all audit entries now record the real user email.
 
