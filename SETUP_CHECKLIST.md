@@ -392,6 +392,45 @@ The viewer role is read-only — viewers can browse all data but cannot create, 
 - [ ] Verify Profiles, Protocol Templates, Notifications, Projects tabs: data visible; create/edit/delete buttons hidden
 - [ ] Switch back to admin: restart API with `DEV_USER_EMAIL=dev@aegis.local` (or default) — all buttons return
 
+## 7p. Defacing Service Backends
+
+The defacing service supports multiple pluggable backends selected via the `DEFACE_TOOL` env var. DeepDefacer (3D U-Net) is the recommended production default for speed.
+
+### Local verification (without Docker)
+
+- [ ] Install dependencies:
+  ```bash
+  cd defacing
+  pip install -r requirements.txt
+  pip install deepdefacer
+  ```
+- [ ] Start with DeepDefacer:
+  ```bash
+  DEFACE_TOOL=deepdefacer uvicorn app.main:app --port 8081
+  ```
+- [ ] Verify health endpoint:
+  ```bash
+  curl http://localhost:8081/healthz | python3 -m json.tool
+  # → {"status":"ok","backend":"deepdefacer","available":true}
+  ```
+- [ ] Test explicit backend selection:
+  - `DEFACE_TOOL=nibabel` → health shows `nibabel-fallback`
+  - `DEFACE_TOOL=mri_deface` → falls back to `nibabel-fallback` (unless mri_deface installed)
+  - `DEFACE_TOOL=auto` → uses first available (deepdefacer if installed)
+
+### Docker verification
+
+- [ ] Build with DeepDefacer:
+  ```bash
+  docker compose build defacing
+  # docker-compose.yml sets INCLUDE_DEEPDEFACER=true by default
+  ```
+- [ ] Start defacing service:
+  ```bash
+  docker compose up defacing
+  ```
+- [ ] Verify via API health: `curl http://localhost:8080/healthz | python3 -m json.tool` → services.defacing shows healthy
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
