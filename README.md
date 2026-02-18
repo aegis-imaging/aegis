@@ -6,10 +6,7 @@
 
 A GCP-hosted platform for secure, HIPAA-compliant sharing of medical imaging data (all DICOM modalities) between hospitals, universities, and research institutions.
 
-## Naming Quick Check
-
-- First mention: **Anonymization & Exchange Gateway for Imaging Studies**
-- After first mention: **AEGIS**
+The name carries a double meaning. As an acronym it describes exactly what the system does — an **A**nonymization & **E**xchange **G**ateway for **I**maging **S**tudies. As a word it comes from Greek mythology: the *aegis* was the divine shield of Zeus and Athena, a symbol of protection. That duality captures the platform's core mission — shielding patient identity while enabling the free flow of medical imaging data for research.
 
 ## What It Does
 
