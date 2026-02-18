@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  go:
+    name: Go build & vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Build
+        working-directory: api
+        run: go build ./...
+      - name: Vet
+        working-directory: api
+        run: go vet ./...
+
+  python:
+    name: "Python check (${{ matrix.service }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax check
+        run: find ${{ matrix.service }} -name '*.py' -exec python -m py_compile {} +
+
+  frontend:
+    name: "TypeScript check (${{ matrix.app.name }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app:
+          - { dir: client, name: "@aegis/client", needs_client: false }
+          - { dir: frontend/upload-portal, name: upload-portal, needs_client: true }
+          - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: false }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build @aegis/client (dependency)
+        if: matrix.app.needs_client
+        run: cd client && npm install && npm run build
+      - name: Install dependencies
+        run: cd ${{ matrix.app.dir }} && npm install
+      - name: Type check
+        run: cd ${{ matrix.app.dir }} && npx tsc --noEmit
+
+  docker:
+    name: "Docker build (${{ matrix.service.name }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - { context: api, name: api }
+          - { context: defacing, name: defacing }
+          - { context: phi-detection, name: phi-detection }
+          - { context: qc-service, name: qc-service }
+          - { context: bids-service, name: bids-service }
+          - { context: classification-service, name: classification-service }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t aegis-${{ matrix.service.name }}:ci ${{ matrix.service.context }}

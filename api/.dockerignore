@@ -1,0 +1,8 @@
+data/
+test-data/
+.git/
+.gitignore
+.DS_Store
+.vscode/
+.idea/
+*.md

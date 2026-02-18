@@ -117,8 +117,7 @@ func (s *Server) runQcCheck(study *model.Study) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := client.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Printf("qc_check: call service for %s: %v", studyUID, err)
 		model.UpdateQcStatus(ctx, s.db, study.ID, "failed")
