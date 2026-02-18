@@ -26,6 +26,8 @@ type Study struct {
 	PhiScanStatus    string    `json:"phi_scan_status"`
 	QcRequired       bool      `json:"qc_required"`
 	QcStatus         string    `json:"qc_status"`
+	BidsRequired     bool      `json:"bids_required"`
+	BidsStatus       string    `json:"bids_status"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -33,7 +35,8 @@ type Study struct {
 const studyColumns = `
 	id, project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
 	study_description, series_count, instance_count, status, defacing_required,
-	dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status, created_at, updated_at`
+	dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
+	bids_required, bids_status, created_at, updated_at`
 
 type scannable interface {
 	Scan(...any) error
@@ -44,7 +47,8 @@ func scanStudy(row scannable, s *Study) error {
 		&s.ID, &s.ProjectID, &s.UploadSessionID, &s.InstitutionID, &s.StudyInstanceUID,
 		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.SeriesCount, &s.InstanceCount,
 		&s.Status, &s.DefacingRequired, &s.DicomStore, &s.Source,
-		&s.PhiScanRequired, &s.PhiScanStatus, &s.QcRequired, &s.QcStatus, &s.CreatedAt, &s.UpdatedAt,
+		&s.PhiScanRequired, &s.PhiScanStatus, &s.QcRequired, &s.QcStatus,
+		&s.BidsRequired, &s.BidsStatus, &s.CreatedAt, &s.UpdatedAt,
 	)
 }
 
@@ -52,12 +56,14 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 	return db.QueryRowContext(ctx, `
 		INSERT INTO studies (project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
 		                     study_description, series_count, instance_count, status, defacing_required,
-		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
+		                     bids_required, bids_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
 		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
-		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus).
+		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus,
+		s.BidsRequired, s.BidsStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
@@ -242,6 +248,26 @@ func SetQcRequired(ctx context.Context, db *sql.DB, id string, required bool) er
 func UpdateQcStatus(ctx context.Context, db *sql.DB, id, status string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET qc_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// SetBidsRequired sets the bids_required flag and initialises bids_status to "pending".
+func SetBidsRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET bids_required = $1, bids_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdateBidsStatus sets the bids_status field on a study.
+func UpdateBidsStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET bids_status = $1, updated_at = now()
 		WHERE id = $2`, status, id)
 	return err
 }

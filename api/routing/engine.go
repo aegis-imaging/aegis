@@ -152,6 +152,20 @@ func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.S
 			outcome = "qc_required already true (no-op)"
 		}
 
+	case "require_bids_conversion":
+		if !s.BidsRequired {
+			s.BidsRequired = true
+			s.BidsStatus = "pending"
+			if err := model.SetBidsRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set bids_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "bids_required set to true"
+			}
+		} else {
+			outcome = "bids_required already true (no-op)"
+		}
+
 	case "route_to":
 		if r.DestinationID == nil {
 			outcome = "error: route_to rule has no destination_id"

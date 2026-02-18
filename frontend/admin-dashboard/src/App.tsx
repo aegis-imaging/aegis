@@ -29,6 +29,8 @@ type Study = {
   phi_scan_status: string
   qc_required: boolean
   qc_status: string
+  bids_required: boolean
+  bids_status: string
   instance_count: number
   created_at: string
 }
@@ -150,10 +152,11 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' }) {
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' }) {
   const modifier =
     (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
     (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
+    (prefix === 'bids' && label === 'complete') ? 'bids-complete' :
     label
   const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
@@ -534,6 +537,8 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
     ['defaced', 'approved'].includes(study.status)
   const canPhiScan = study.phi_scan_required && study.phi_scan_status === 'pending'
   const canQcCheck = study.qc_required && study.qc_status === 'pending'
+  const canBidsConvert = study.bids_required && study.bids_status === 'pending'
+  const canBidsDownload = study.bids_status === 'complete'
 
   const handlePhiScan = async () => {
     await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
@@ -542,6 +547,11 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
 
   const handleQcCheck = async () => {
     await fetch(`/api/studies/${study.study_instance_uid}/qc-check`, { method: 'POST' })
+    onAction()
+  }
+
+  const handleBidsConvert = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/bids-convert`, { method: 'POST' })
     onAction()
   }
 
@@ -555,6 +565,7 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <td><Badge label={study.status} prefix="status" /></td>
         <td>{study.phi_scan_required ? <Badge label={study.phi_scan_status || 'n/a'} prefix="phi" /> : '—'}</td>
         <td>{study.qc_required ? <Badge label={study.qc_status || 'n/a'} prefix="qc" /> : '—'}</td>
+        <td>{study.bids_required ? <Badge label={study.bids_status || 'n/a'} prefix="bids" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
@@ -575,6 +586,12 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
             )}
             {canQcCheck && (
               <button type="button" className="btn btn--qc-check" onClick={handleQcCheck}>Run QC</button>
+            )}
+            {canBidsConvert && (
+              <button type="button" className="btn btn--bids-convert" onClick={handleBidsConvert}>Convert to BIDS</button>
+            )}
+            {canBidsDownload && (
+              <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>
             )}
             {canReviewDeface && (
               <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
@@ -910,6 +927,7 @@ function RoutingPanel() {
                 <option value="require_defacing">require_defacing — force defacing even if not head</option>
                 <option value="require_phi_scan">require_phi_scan — scan pixels for burned-in PHI</option>
                 <option value="require_qc_check">require_qc_check — automated image quality checks</option>
+                <option value="require_bids_conversion">require_bids_conversion — convert to NIfTI/BIDS</option>
                 <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
                 <option value="reject">reject — auto-reject</option>
                 <option value="route_to">route_to — forward to external destination</option>
@@ -2269,6 +2287,7 @@ export function App() {
                     <th>Status</th>
                     <th>PHI Scan</th>
                     <th>QC</th>
+                    <th>BIDS</th>
                     <th className="align-right">Files</th>
                     <th>Received</th>
                     <th>Actions</th>
