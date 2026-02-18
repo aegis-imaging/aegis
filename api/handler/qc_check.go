@@ -67,7 +67,7 @@ func (s *Server) TriggerQcCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	model.CreateAuditEntry(r.Context(), s.db, "qc_check.triggered", "anonymous", "study", study.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "qc_check.triggered", actorEmail(r), "study", study.ID, clientIP(r), map[string]any{
 		"study_uid": studyUID,
 	})
 

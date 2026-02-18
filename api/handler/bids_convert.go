@@ -65,7 +65,7 @@ func (s *Server) TriggerBidsConversion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	model.CreateAuditEntry(r.Context(), s.db, "bids_conversion.triggered", "anonymous", "study", study.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "bids_conversion.triggered", actorEmail(r), "study", study.ID, clientIP(r), map[string]any{
 		"study_uid": studyUID,
 	})
 

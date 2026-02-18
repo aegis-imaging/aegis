@@ -43,7 +43,9 @@ type Config struct {
 	AllowedOrigins []string
 
 	// Auth
-	AuthEnabled bool
+	AuthEnabled  bool
+	AuthProvider string // AUTH_PROVIDER — "auto" (default), "iap" (GCP), or "azure" (Azure AD)
+	DevUserEmail string // DEV_USER_EMAIL — auto-authenticated email when AUTH_ENABLED=false
 
 	// Email (SMTP)
 	// EmailEnabled is derived: true when SMTPHost is non-empty.
@@ -78,7 +80,9 @@ func Load() *Config {
 
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002"), ","),
 
-		AuthEnabled: os.Getenv("AUTH_ENABLED") == "true",
+		AuthEnabled:  os.Getenv("AUTH_ENABLED") == "true",
+		AuthProvider: envOr("AUTH_PROVIDER", "auto"),
+		DevUserEmail: envOr("DEV_USER_EMAIL", "dev@aegis.local"),
 
 		SMTPHost:     smtpHost,
 		SMTPPort:     envOr("SMTP_PORT", "587"),
