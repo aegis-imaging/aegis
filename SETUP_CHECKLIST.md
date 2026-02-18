@@ -103,6 +103,31 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Verify subject: `AEGIS Weekly Summary — default — <date range>`, body has study counts, no PHI/UIDs
 - [ ] Delete the subscription from the Notifications tab
 
+## 7e. Admin Users
+
+- [ ] Open admin dashboard → **Users** tab
+- [ ] Create a user: email `admin@example.com`, name `Test Admin`, role `admin` → appears in table
+- [ ] Edit → change role to `viewer`, add notes → save
+- [ ] Disable the user → row greys out; re-enable
+- [ ] Delete with confirm prompt
+- [ ] Verify `admin_user.created`, `admin_user.updated`, `admin_user.deleted` appear in Audit Log tab
+
+## 7f. Project Settings
+
+- [ ] Open admin dashboard → **Projects** tab
+- [ ] Click **+ New project** → enter name only (slug auto-generated) → create → appears in table
+- [ ] Click **Edit** on the row → change description → save → description updates
+- [ ] Try editing slug → warning hint is shown
+- [ ] Verify `project.created` and `project.updated` in Audit Log tab
+- [ ] `GET http://localhost:8080/api/projects/{id}` returns the updated project
+
+## 7g. Upload Portal QoL
+
+- [ ] Upload a folder of DICOMs via the Upload Portal
+- [ ] During the uploading stage, verify the current filename appears below the progress bar
+- [ ] Long filenames are truncated with `…` prefix (>48 chars)
+- [ ] (Optional) Throttle network in DevTools mid-upload → verify retries up to 3× before error
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz

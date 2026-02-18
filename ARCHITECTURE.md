@@ -459,9 +459,12 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 14. ✅ **Per-project anonymization profiles**: Multiple named profiles per project; `retained_tags` JSONB list overrides Basic Profile strip/zero actions client-side; `default_anon_profile_id` on projects; upload portal fetches active profile at upload time; admin Profiles tab (PR #15)
 15. ✅ **Audit log viewer**: Full trail from PostgreSQL + filterable UI in admin dashboard (PR #7)
 16. ✅ **Email digests**: `digest_subscriptions` table; per-project weekly/monthly subscriptions; hourly scheduler goroutine sends plain-text summaries (study counts, share activity, no PHI); admin Notifications tab (PR #17)
+17. ✅ **Admin user management**: `admin_users` table (migration 011); CRUD API; admin Users tab with role (admin|viewer), enable/disable, audit logging (PR #20)
+18. ✅ **Project settings UI**: `GET/PUT /api/projects/{id}`; slug auto-generation on create; admin Projects tab with create/edit; `project.created`/`project.updated` audit entries (PR #21)
+19. ✅ **Upload portal QoL**: `onFileStart` callback in `@aegis/client`; per-file filename display below progress bar; per-file PUT auto-retry (3× with exponential backoff) (PR #22)
 
 ### Phase 4: Advanced Processing (Vertex AI)
-17. **Burned-in PHI detection**: Vertex AI Document AI / Vision OCR on pixel data
+20. **Burned-in PHI detection**: Vertex AI Document AI / Vision OCR on pixel data
 18. **QC automation**: Vertex AI custom models for image quality assessment
 19. **Smart routing**: ML-based modality/anatomy classification for studies with poor metadata
 20. **BIDS conversion**: dcm2niix-based pipeline for research output format
