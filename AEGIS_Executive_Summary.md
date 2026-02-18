@@ -35,7 +35,7 @@ css: |
   <h1 style="font-size: 42px; margin: 0; color: #1a1a2e;">AEGIS</h1>
   <p style="font-size: 22px; color: #4a4a6a; margin: 8px 0 0;">Anonymization &amp; Exchange Gateway for Imaging Studies</p>
   <hr style="width: 60%; margin: 30px auto; border: 1px solid #e0e0e0;" />
-  <p style="font-size: 16px; color: #6b7280;">A cloud-hosted platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
+  <p style="font-size: 16px; color: #6b7280;">A multi-cloud platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
   <p style="font-size: 13px; color: #9ca3af; margin-top: 20px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
 </div>
 
@@ -153,15 +153,15 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| **Backend** | Go on Google Cloud Run | Compiled binary, minimal dependencies, fast cold starts |
+| **Backend** | Go on Cloud Run (GCP) or ECS Fargate (AWS) | Compiled binary, minimal dependencies, fast cold starts |
 | **Frontend** | React + TypeScript | Runs in any modern browser, no installation required |
-| **Database** | PostgreSQL 15 (Cloud SQL) | Audit trail, project/user management, routing rules |
-| **DICOM Storage** | GCP Healthcare API | Managed DICOMweb storage, no servers to maintain |
-| **Analytics** | BigQuery | DICOM metadata export, compliance reporting |
-| **OCR / PHI Detection** | Google Cloud Document AI | Detects burned-in text in image pixels |
+| **Database** | PostgreSQL 15 (Cloud SQL / RDS) | Audit trail, project/user management, routing rules |
+| **DICOM Storage** | Cloud-neutral (GCS, S3, or local filesystem) | Abstracted behind a pluggable storage interface |
+| **OCR / PHI Detection** | Tesseract OCR (local) / Document AI (cloud) | Detects burned-in text in image pixels |
 | **Defacing** | mri_deface (FreeSurfer) | Established tool, used in neuroimaging research |
 | **DICOM Viewer** | OHIF Viewer (v3) | Open-source, browser-based, supports all modalities |
-| **Infrastructure** | Terraform | Reproducible, version-controlled infrastructure |
+| **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
+| **Infrastructure** | Terraform (GCP + AWS modules) | Reproducible, version-controlled, multi-cloud |
 
 **On the use of automated tools:** AEGIS uses automated tools to assist with — not replace — human review. Automated de-identification flags potential issues; a trained administrator reviews and approves every study before it is shared. Automated defacing quality is reviewed side-by-side against the original in the admin interface.
 
@@ -186,7 +186,7 @@ AEGIS does not create a new de-identification standard — it implements the one
 
 | | AEGIS | ENCOG (Enlitic) | XNAT | Flywheel | MIRC CTP |
 |--|-------|-----------------|------|----------|----------|
-| **Hosting** | Cloud-hosted (GCP) | On-premises / hybrid | Self-hosted | Commercial SaaS | On-premises |
+| **Hosting** | Multi-cloud (GCP, AWS, Azure) | On-premises / hybrid | Self-hosted | Commercial SaaS | On-premises |
 | **Install at sending site** | None — browser only | PACS/VNA integration | Desktop Java client | CLI tool | Java application |
 | **Burned-in PHI** | OCR detection | AI CV detection | None | Built-in | None |
 | **Defacing** | Automated, reviewable | None | Manual or plugin | Built-in | None |
@@ -194,7 +194,7 @@ AEGIS does not create a new de-identification standard — it implements the one
 | **Open source** | Yes | No (commercial) | Yes | No | Yes |
 | **Audit trail** | Centralized, per-study | Chain of custody | Per-instance | Built-in | Limited |
 
-Existing platforms tend to serve either research (XNAT, Flywheel) or enterprise radiology (ENCOG/Enlitic, MIRC CTP) — but not both. AEGIS is designed for both audiences from a shared platform.
+Existing platforms tend to serve either research (XNAT, Flywheel) or enterprise radiology (ENCOG/Enlitic, MIRC CTP) — but not both. AEGIS is designed for both audiences from a shared platform, and is the only option that runs on any major cloud provider without re-architecture.
 
 Enlitic's ENCOG is the closest commercial analogue to AEGIS's de-identification pipeline.<sup><a href="#ref-12">[12]</a></sup> It uses AI-driven computer vision to detect burned-in text overlays and claims to protect over 4,000 DICOM fields. However, ENCOG requires PACS/VNA integration at each sending site, does not offer volumetric defacing for head imaging, and publicly documents only four modalities (MR, CT, XR, ultrasound). ENCOG is part of a broader commercial suite (Ensight) that includes data standardization (ENDEX, FDA 510(k) cleared) and migration tools — but lacks the research pipeline features (protocol compliance, QC, BIDS) that multi-site studies require.
 
@@ -212,30 +212,39 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Phased Roadmap
 
-### Phase 1 — Foundation (Complete)
-- Cloud infrastructure (Terraform, GCP)
+> **Development status note:** Phases 1–4 are **code-complete** — all features are implemented, compile, and pass CI. The platform has not yet been deployed to a cloud environment or tested with real clinical data. A test deployment on GCP or AWS is planned as the next milestone.
+
+### Phase 1 — Foundation (Code Complete)
+- Cloud infrastructure (Terraform for GCP and AWS)
 - Browser-based upload portal with DICOM tag anonymization and before/after preview
 - Go API with DICOM ingest and PostgreSQL audit trail
 - Admin dashboard with OHIF viewer for QC, approve/reject workflow
 
-### Phase 2 — Defacing + Notifications (Complete)
-- Automated mri_deface pipeline on Cloud Run for head imaging
+### Phase 2 — Defacing + Notifications (Code Complete)
+- Automated mri_deface pipeline for head imaging
 - Side-by-side before/after defacing review in admin interface
 - Email notifications for upload confirmation, approval, and rejection
 
-### Phase 3 — Operations (Complete)
+### Phase 3 — Operations (Code Complete)
 - Multi-project routing engine with configurable rules by modality, source, and anatomy
 - Institution management with project-scoped roles
 - Configurable anonymization profiles per project (which tags to retain for research)
 - Audit log viewer with filtering
-- Admin user management and access control
+- Admin user management, RBAC enforcement (admin/viewer roles), authentication middleware
 
-### Phase 4 — Advanced Validation (Next)
+### Phase 4 — Advanced Processing (Code Complete)
 - Burned-in PHI detection using OCR on image pixels (addresses gap identified in <a href="#ref-3">[3]</a>, <a href="#ref-7">[7]</a>)
 - Automated image quality assessment (motion artifact detection, coverage completeness)
 - MRI protocol compliance — per-scanner, per-sequence parameter validation against configurable templates with tolerances, following the approach used by ADNI<sup><a href="#ref-11">[11]</a></sup> and tools like mrQA<sup><a href="#ref-10">[10]</a></sup>
 - BIDS format conversion for neuroimaging research output
 - Batch import tools for historical data migration
+- Multi-cloud support — AWS S3 storage backend, ALB + Cognito auth, Terraform AWS module
+
+### Next Milestone — Test Deployment
+- Deploy to GCP or AWS using Terraform modules
+- End-to-end testing with sample DICOM datasets (TCIA public data)
+- Validate full pipeline: upload → de-identify → deface → QC → approve → export
+- Performance benchmarking and cost validation
 
 ### Phase 5 — Enterprise Radiology
 - DIMSE receive endpoint — hospitals push studies directly from PACS/VNA without browser upload
@@ -249,17 +258,15 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Cost Estimate (Development / Proof of Concept)
 
-| Resource | Monthly |
-|----------|---------|
-| Cloud Run (API + dashboard) | ~$5–15 (covered by free tier in dev) |
-| Cloud SQL (PostgreSQL, small instance) | ~$10 |
-| Healthcare API (DICOM store) | ~$0.50/GB stored |
-| Cloud Storage (staging) | ~$0.02/GB |
-| BigQuery | Free tier (1 TB queries/month) |
-| Document AI (OCR for burned-in PHI) | Pay per page (minimal during dev) |
-| **Total (development)** | **~$20–40/month** |
+| Resource | GCP Monthly | AWS Monthly |
+|----------|------------|------------|
+| Containers (Cloud Run / ECS Fargate) | ~$5–15 | ~$5–15 |
+| PostgreSQL (Cloud SQL / RDS) | ~$10 | ~$15 |
+| Object Storage (GCS / S3) | ~$0.02/GB | ~$0.02/GB |
+| Load Balancer | Included | ~$16 (ALB) |
+| **Total (development)** | **~$20–40/month** | **~$40–60/month** |
 
-Production costs scale with data volume. A 1,000-session multi-site study (~500 GB) would cost approximately $50–100/month in storage.
+Production costs scale with data volume. A 1,000-session multi-site study (~500 GB) would cost approximately $50–100/month in storage on either cloud.
 
 ---
 
@@ -301,6 +308,6 @@ Production costs scale with data volume. A 1,000-session multi-site study (~500 
   <img src="logo-small.png" alt="AEGIS Logo" style="width: 120px; margin-bottom: 16px;" />
   <h2 style="color: #1a1a2e;">AEGIS</h2>
   <p style="font-size: 16px; color: #6b7280; max-width: 600px; margin: 0 auto;">
-    Secure, browser-based medical image de-identification and sharing for any DICOM modality — serving both multi-site research teams and hospital radiology departments from a single platform, with automated defacing, pixel-level PHI detection, and administrator review before any data is released.
+    Secure, browser-based medical image de-identification and sharing for any DICOM modality — serving both multi-site research teams and hospital radiology departments from a single multi-cloud platform, with automated defacing, pixel-level PHI detection, and administrator review before any data is released. Runs on GCP, AWS, or Azure.
   </p>
 </div>
