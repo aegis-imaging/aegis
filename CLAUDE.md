@@ -300,7 +300,8 @@ Per-route authentication middleware that protects all admin endpoints. Supports 
 | Category | Auth | Examples |
 |----------|------|---------|
 | Public | None | `/healthz`, `GET /api/projects`, upload portal routes, export token, DICOMweb proxy |
-| Admin | Required | All study management, CRUD, processing triggers, audit log, ingest, import |
+| Admin (read) | `RequireAuth` | `GET /api/studies`, `GET /api/institutions`, `GET /api/audit`, all read-only admin endpoints |
+| Admin (write) | `RequireRole("admin")` | All POST/PUT/DELETE endpoints — create, update, delete, processing triggers, ingest, import |
 
 **Endpoints:**
 - `GET /api/auth/me` — returns the current authenticated user's `{id, email, name, role}`
@@ -309,6 +310,27 @@ Per-route authentication middleware that protects all admin endpoints. Supports 
 - `401 {"error":"missing authentication header"}` — no identity header in production mode
 - `403 {"error":"user not registered: user@example.com"}` — email not in `admin_users`
 - `403 {"error":"account is disabled"}` — user exists but `enabled=false`
+- `403 {"error":"insufficient permissions: requires admin role"}` — viewer attempting a write operation
+
+### RBAC Enforcement (`api/main.go`)
+
+The viewer role is read-only. All write endpoints (POST, PUT, DELETE) use `RequireRole("admin")`, which rejects viewer-role users with HTTP 403. GET endpoints use `RequireAuth` and are accessible to both admin and viewer roles.
+
+**Backend** (`api/main.go`):
+- `auth` = `RequireAuth(db, cfg)` — used on 19 read-only admin routes
+- `adminOnly` = `RequireRole("admin", db, cfg)` — used on 33 write routes
+
+**Frontend** (`frontend/admin-dashboard/src/App.tsx`):
+- `isAdmin` derived from `currentUser?.role === 'admin'` and passed as prop to all panel components
+- Viewers see all data across all tabs (studies, audit, routing, institutions, profiles, protocol templates, notifications, projects) but write-action buttons are hidden
+- The **Users tab** is completely hidden for viewers (privilege escalation prevention)
+- View, Download BIDS, and Review Defacing buttons remain visible for viewers (read-only actions)
+
+**Testing RBAC locally:**
+1. Create a viewer user: `curl -X POST http://localhost:8080/api/admin-users -H 'Content-Type: application/json' -d '{"email":"viewer@aegis.local","name":"Test Viewer","role":"viewer","enabled":true}'`
+2. Set `DEV_USER_EMAIL=viewer@aegis.local` when running the Go API
+3. Verify: GET endpoints return 200; POST/PUT/DELETE return 403
+4. Open admin dashboard: write buttons hidden, Users tab hidden
 
 ### Project Settings (`api/handler/project.go`)
 
