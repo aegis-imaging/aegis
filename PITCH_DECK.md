@@ -28,14 +28,32 @@ body_class: markdown-body
 
 Hospitals and research institutions need to share medical imaging data — MRI, CT, PET, ultrasound, X-ray, mammography, nuclear medicine, and more — for multi-site clinical trials, research collaborations, and second opinions. Today this requires:
 
-- **Installing desktop software** (Java apps, Electron clients, CLI tools) at every sending site
-- **Manual de-identification** prone to human error, leaving PHI exposed
-- **No automated defacing** — facial features in 3D head scans enable re-identification
-- **Self-hosted DICOM servers** (XNAT, Orthanc) with high maintenance burden
-- **Fragmented compliance** — each site manages its own HIPAA controls
-- **Modality limitations** — many platforms are built for a single specialty (neuroimaging, cardiology) and don't generalize
+- **Installing site software** — platforms like XNAT require a Java-based desktop client or server daemon installed and IT-approved at every participating hospital. MIRC CTP requires a standalone Java application. Even simpler tools need command-line setup by hospital technical staff.
+- **Manual de-identification** prone to human error, leaving PHI exposed. A 2024 NCI benchmark challenge (MIDI-B) confirmed that inconsistencies in DICOM metadata and burned-in PHI remain unsolved problems even for specialized tools.
+- **No automated defacing** — facial features in 3D head scans (MRI, CT) enable re-identification via facial reconstruction software, yet most platforms offer no defacing pipeline.
+- **Self-hosted infrastructure burden** — XNAT and Orthanc require dedicated servers, database maintenance, and ongoing IT support at the receiving institution.
+- **Fragmented compliance** — each site manages its own HIPAA controls, audit trails, and BAAs, with no centralized visibility.
+- **Modality limitations** — most platforms were built for a single specialty (XNAT for neuroimaging, commercial tools for cardiology) and don't generalize cleanly to other DICOM data.
 
-**Result**: Data sharing is slow, risky, and expensive. Studies are delayed by months.
+**Result**: Data sharing is slow, risky, and expensive. Multi-site studies are delayed by months waiting for IT approvals and software installations at each new site.
+
+---
+
+## Market Opportunity
+
+Medical imaging data sharing sits at the intersection of two fast-growing markets:
+
+| Market | 2024 Size | Projected | CAGR |
+|--------|-----------|-----------|------|
+| Medical Image Exchange Systems | $4.3B | $8.7B (2034) | 8.1% |
+| Enterprise Imaging IT | — | — | 12.2% (2025–2030) |
+| Medical Digital Imaging Systems (total) | $36.1B | $38.3B (2025) | — |
+
+**Why now:**
+- NIH, NSF, and FDA are all mandating data sharing for publicly funded research — but tooling lags far behind policy.
+- A 2024 NCI/MICCAI challenge (MIDI-B) formally benchmarked de-identification tools against HIPAA Safe Harbor + DICOM Confidentiality Profiles — confirming that no existing open-source tool handles all cases reliably.
+- Cloud-native healthcare platforms (GCP Healthcare API, AWS HealthImaging) have matured to the point where managed DICOM storage is now commodity infrastructure — reducing build risk.
+- Growing multi-site clinical trial volume (particularly in oncology and neurology) is driving demand for scalable, zero-friction data collection from distributed hospital networks.
 
 ---
 
