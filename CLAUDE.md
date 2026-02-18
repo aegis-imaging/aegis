@@ -96,6 +96,58 @@ SOPInstanceUID format: `{studyUID}.1.{fileIndex}` (index maps to `dicom/{store}/
 In the admin dashboard:
 - Each study row has a **View** button (inline iframe) and an **Open in new tab ↗** link.
 - Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side before/after OHIF panel. OHIF selects the data source via `?dataSource=dicomweb-raw` (before) or `?dataSource=dicomweb` (after).
+- **Routing tab** — manage Destinations and Routing Rules (see below).
+- **Institutions tab** — manage institutions and their project memberships.
+
+### Routing Rules Engine (`api/routing/`, `api/handler/routing.go`)
+
+Routing rules are evaluated on every study ingest (upload complete + internal ingest). Rules are ordered by `priority` (lower = first); all matching rules fire.
+
+**Destinations** (`/api/destinations`) — external DICOMweb endpoints:
+
+| Field | Notes |
+|-------|-------|
+| `type` | `dicomweb` or `dimse` (DIMSE is placeholder) |
+| `dicomweb_url` | Base URL for STOW-RS; auth via `dicomweb_auth_header` |
+
+**Routing Rules** (`/api/routing-rules`):
+
+| Condition field | Meaning |
+|----------------|---------|
+| `project_id` | Match a specific project (null = any) |
+| `modality` | e.g. `MRI`, `CT`, `PET` (null = any) |
+| `body_part` | e.g. `HEAD`, `CHEST` (null = any) |
+| `source` | `external` or `internal` (null = any) |
+
+| Action | Effect |
+|--------|--------|
+| `require_defacing` | Forces `defacing_required=true` |
+| `auto_approve` | Skips manual QC, sets `status=approved` |
+| `require_qa` | No-op — holds for manual review (default) |
+| `reject` | Auto-rejects the study |
+| `route_to` | Async forward to a Destination via DICOMweb |
+
+Other endpoints:
+- `POST /api/routing-rules/evaluate/{studyID}` — re-evaluate rules for an existing study
+- `GET /api/studies/{studyID}/routing-log` — per-study rule execution log
+
+### Institution Management (`api/handler/institution.go`)
+
+Institutions represent organisations that send or receive studies.
+
+**REST API** (`/api/institutions`): CRUD + project linking.
+
+| Field | Notes |
+|-------|-------|
+| `institution_type` | `sender`, `receiver`, or `both` |
+| `ip_ranges` | Comma-separated CIDR blocks (future: auto-attribute uploads) |
+| `ae_title` | DICOM AE title (future: DIMSE sender identification) |
+
+**Institution-Project links** (`/api/institutions/{id}/projects`):
+- `POST` — link with role (`sender`, `receiver`, `admin`)
+- `DELETE /api/institutions/{id}/projects/{projectID}` — unlink
+
+Studies carry an `institution_id` FK (nullable) for full traceability.
 
 ### Terraform
 ```bash

@@ -454,10 +454,10 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 11. **Email notifications**: PSC to on-prem SMTP, upload confirmations, defacing alerts
 
 ### Phase 3: Operations & Routing
-12. **Routing rules engine**: Forward studies to external DICOM endpoints (config in PostgreSQL)
-13. **Institution management**: Onboarding, project-scoped credentials, RBAC
+12. ✅ **Routing rules engine**: Destinations table + RoutingRules table; priority-ordered evaluation on every ingest; actions: `require_defacing`, `auto_approve`, `require_qa`, `reject`, `route_to` (async DICOMweb forward); routing log per study; admin UI in Routing tab (PR #12)
+13. ✅ **Institution management**: Institutions table + institution_projects join table; institution_id on studies/sessions; CRUD API + admin UI in Institutions tab; project-scoped roles (sender/receiver/admin) (PR #13)
 14. **Per-project anonymization profiles**: Configurable tag retention lists
-15. **Audit log viewer**: Full trail from PostgreSQL + BigQuery analytics
+15. ✅ **Audit log viewer**: Full trail from PostgreSQL + filterable UI in admin dashboard (PR #7)
 16. **Email digests**: Weekly/monthly summary reports via SMTP/PSC
 
 ### Phase 4: Advanced Processing (Vertex AI)

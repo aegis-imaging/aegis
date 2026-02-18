@@ -83,6 +83,30 @@ func main() {
 
 	mux.HandleFunc("GET /api/audit", srv.ListAudit)
 
+	// Institutions — organisations that send or receive studies.
+	mux.HandleFunc("GET /api/institutions", srv.ListInstitutions)
+	mux.HandleFunc("POST /api/institutions", srv.CreateInstitution)
+	mux.HandleFunc("GET /api/institutions/{id}", srv.GetInstitution)
+	mux.HandleFunc("PUT /api/institutions/{id}", srv.UpdateInstitution)
+	mux.HandleFunc("DELETE /api/institutions/{id}", srv.DeleteInstitution)
+	mux.HandleFunc("GET /api/institutions/{id}/projects", srv.ListInstitutionProjects)
+	mux.HandleFunc("POST /api/institutions/{id}/projects", srv.AddInstitutionProject)
+	mux.HandleFunc("DELETE /api/institutions/{id}/projects/{projectID}", srv.RemoveInstitutionProject)
+
+	// Destinations — external DICOM endpoints studies can be forwarded to.
+	mux.HandleFunc("GET /api/destinations", srv.ListDestinations)
+	mux.HandleFunc("POST /api/destinations", srv.CreateDestination)
+	mux.HandleFunc("PUT /api/destinations/{id}", srv.UpdateDestination)
+	mux.HandleFunc("DELETE /api/destinations/{id}", srv.DeleteDestination)
+
+	// Routing rules — condition → action mappings evaluated on study ingest.
+	mux.HandleFunc("GET /api/routing-rules", srv.ListRoutingRules)
+	mux.HandleFunc("POST /api/routing-rules", srv.CreateRoutingRule)
+	mux.HandleFunc("PUT /api/routing-rules/{id}", srv.UpdateRoutingRule)
+	mux.HandleFunc("DELETE /api/routing-rules/{id}", srv.DeleteRoutingRule)
+	mux.HandleFunc("POST /api/routing-rules/evaluate/{studyID}", srv.EvaluateRoutingRules)
+	mux.HandleFunc("GET /api/studies/{studyID}/routing-log", srv.GetStudyRoutingLog)
+
 	mux.HandleFunc("POST /api/deface/{studyUID}", srv.TriggerDeface)
 
 	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by OHIF Viewer.
