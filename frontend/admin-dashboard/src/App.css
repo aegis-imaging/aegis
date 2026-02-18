@@ -153,12 +153,14 @@
   white-space: nowrap;
 }
 
-.btn--approve { background: #dcfce7; border: 1px solid #bbf7d0; color: #15803d; }
-.btn--reject  { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; }
-.btn--share   { background: #dbeafe; border: 1px solid #bfdbfe; color: #1d4ed8; }
-.btn--revoke  { background: #fff;    border: 1px solid #fecaca; color: #dc2626; }
-.btn--view    { background: #f3e8ff; border: 1px solid #d8b4fe; color: #6b21a8; }
-.btn--deface  { background: #fef9c3; border: 1px solid #fde68a; color: #92400e; }
+.btn--approve    { background: #dcfce7; border: 1px solid #bbf7d0; color: #15803d; }
+.btn--reject     { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; }
+.btn--share      { background: #dbeafe; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.btn--revoke     { background: #fff;    border: 1px solid #fecaca; color: #dc2626; }
+.btn--view       { background: #f3e8ff; border: 1px solid #d8b4fe; color: #6b21a8; }
+.btn--deface     { background: #fef9c3; border: 1px solid #fde68a; color: #92400e; }
+.btn--edit       { background: #f8fafc; border: 1px solid #d1d5db; color: #374151; }
+.btn--secondary  { background: #f3f4f6; border: 1px solid #d1d5db; color: #4b5563; }
 
 .btn-icon {
   background: none;
@@ -651,4 +653,199 @@
   font-size: 12px;
   color: #374151;
   overflow-x: auto;
+}
+
+/* ── Routing Panel ───────────────────────────────────────────────────────── */
+.routing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  margin-top: 8px;
+}
+
+.routing-section {}
+
+.routing-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.routing-section-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.routing-hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.routing-hint code {
+  background: #f3f4f6;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.routing-form {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.routing-form h3 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.routing-form-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+  margin: 16px 0 8px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.form-input--wide {
+  grid-column: 1 / -1;
+}
+
+.form-row--actions {
+  margin-top: 16px;
+  gap: 8px;
+}
+
+.routing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.routing-table th {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid #e5e7eb;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+
+.routing-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.routing-row--disabled td {
+  opacity: 0.5;
+}
+
+.routing-priority {
+  font-family: monospace;
+  font-weight: 700;
+  color: #374151;
+  width: 60px;
+}
+
+.routing-name {
+  font-weight: 600;
+  color: #111827;
+}
+
+.routing-desc {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.routing-target {
+  font-family: monospace;
+  font-size: 11px;
+  color: #4b5563;
+  word-break: break-all;
+  max-width: 280px;
+}
+
+.routing-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.routing-condition-tag {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.routing-action {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.routing-action--route_to          { background: #dbeafe; color: #1d4ed8; }
+.routing-action--require_defacing  { background: #fef9c3; color: #854d0e; }
+.routing-action--auto_approve      { background: #dcfce7; color: #15803d; }
+.routing-action--require_qa        { background: #f3f4f6; color: #374151; }
+.routing-action--reject            { background: #fee2e2; color: #b91c1c; }
+
+.badge--enabled  { background: #dcfce7; color: #15803d; }
+.badge--disabled { background: #f3f4f6; color: #9ca3af; }
+
+/* Institution type action colours */
+.routing-action--sender   { background: #dbeafe; color: #1d4ed8; }
+.routing-action--receiver { background: #f3e8ff; color: #6b21a8; }
+.routing-action--both     { background: #fef9c3; color: #854d0e; }
+.routing-action--admin    { background: #fee2e2; color: #b91c1c; }
+
+/* ── Institutions Panel ───────────────────────────────────────────────────── */
+.institutions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 8px;
+}
+
+.inst-row--selected {
+  background: #eff6ff;
+}
+
+.inst-slug {
+  font-size: 10px;
+  color: #9ca3af;
+  background: transparent;
+}
+
+.inst-projects-panel {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.inst-projects-panel h3 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
 }

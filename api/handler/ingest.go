@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/msenjem/aegis/api/model"
+	"github.com/msenjem/aegis/api/routing"
 )
 
 type ingestRequest struct {
@@ -65,6 +66,9 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to create study record")
 		return
 	}
+
+	// Evaluate routing rules — may mutate study (e.g. auto_approve, require_defacing).
+	routing.EvaluateRules(r.Context(), s.db, study)
 
 	model.CreateAuditEntry(r.Context(), s.db, "ingest.internal", "internal", "study", study.ID, clientIP(r), map[string]any{
 		"study_uid": studyUID,

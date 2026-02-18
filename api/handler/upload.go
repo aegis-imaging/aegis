@@ -14,6 +14,7 @@ import (
 
 	"github.com/msenjem/aegis/api/email"
 	"github.com/msenjem/aegis/api/model"
+	"github.com/msenjem/aegis/api/routing"
 )
 
 type uploadInitRequest struct {
@@ -242,6 +243,9 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 	if err := model.CreateStudy(ctx, s.db, study); err != nil {
 		return nil, fmt.Errorf("create study: %w", err)
 	}
+
+	// Evaluate routing rules — may mutate study (e.g. auto_approve, require_defacing).
+	routing.EvaluateRules(ctx, s.db, study)
 
 	// Update session
 	model.UpdateUploadSessionComplete(ctx, s.db, session.ID, studyUID, study.Modality, study.BodyPart)
