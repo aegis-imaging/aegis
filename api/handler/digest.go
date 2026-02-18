@@ -63,7 +63,7 @@ func (s *Server) CreateDigestSubscription(w http.ResponseWriter, r *http.Request
 		s.writeError(w, http.StatusInternalServerError, "failed to create subscription")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "digest_subscription.created", "admin",
+	model.CreateAuditEntry(r.Context(), s.db, "digest_subscription.created", actorEmail(r),
 		"digest_subscription", sub.ID, clientIP(r), map[string]any{
 			"email":      sub.Email,
 			"project_id": projectID,
@@ -85,7 +85,7 @@ func (s *Server) DeleteDigestSubscription(w http.ResponseWriter, r *http.Request
 		s.writeError(w, http.StatusInternalServerError, "failed to delete subscription")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "digest_subscription.deleted", "admin",
+	model.CreateAuditEntry(r.Context(), s.db, "digest_subscription.deleted", actorEmail(r),
 		"digest_subscription", id, clientIP(r), nil)
 	w.WriteHeader(http.StatusNoContent)
 }

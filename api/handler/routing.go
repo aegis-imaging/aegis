@@ -49,7 +49,7 @@ func (s *Server) CreateDestination(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to create destination")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "destination.created", "admin", "destination", d.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "destination.created", actorEmail(r), "destination", d.ID, clientIP(r), map[string]any{
 		"name": d.Name,
 		"type": d.Type,
 	})
@@ -86,7 +86,7 @@ func (s *Server) UpdateDestination(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to update destination")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "destination.updated", "admin", "destination", id, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "destination.updated", actorEmail(r), "destination", id, clientIP(r), nil)
 	s.writeJSON(w, http.StatusOK, existing)
 }
 
@@ -101,7 +101,7 @@ func (s *Server) DeleteDestination(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to delete destination")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "destination.deleted", "admin", "destination", id, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "destination.deleted", actorEmail(r), "destination", id, clientIP(r), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -152,7 +152,7 @@ func (s *Server) CreateRoutingRule(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to create routing rule")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "routing_rule.created", "admin", "routing_rule", rule.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "routing_rule.created", actorEmail(r), "routing_rule", rule.ID, clientIP(r), map[string]any{
 		"name":   rule.Name,
 		"action": rule.Action,
 	})
@@ -189,7 +189,7 @@ func (s *Server) UpdateRoutingRule(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to update routing rule")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "routing_rule.updated", "admin", "routing_rule", id, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "routing_rule.updated", actorEmail(r), "routing_rule", id, clientIP(r), nil)
 	s.writeJSON(w, http.StatusOK, existing)
 }
 
@@ -204,7 +204,7 @@ func (s *Server) DeleteRoutingRule(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to delete routing rule")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "routing_rule.deleted", "admin", "routing_rule", id, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "routing_rule.deleted", actorEmail(r), "routing_rule", id, clientIP(r), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

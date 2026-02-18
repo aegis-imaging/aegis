@@ -220,6 +220,90 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Verify routing rules re-evaluated (e.g. a `require_defacing` rule for HEAD now fires)
 - [ ] Check Audit Log tab → `classification.triggered` and `classification.complete` entries appear
 
+## 7m. Authentication Middleware
+
+Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-authenticate as `dev@aegis.local`.
+
+### Dev mode (default)
+
+- [ ] Start the API: `cd api && go run .`
+- [ ] Verify auth identity: `curl -s http://localhost:8080/api/auth/me | jq .` → shows `dev@aegis.local`, role `admin`
+- [ ] Verify public routes work without auth: `curl -s http://localhost:8080/healthz` → `ok`
+- [ ] Verify admin routes work without auth headers: `curl -s http://localhost:8080/api/studies | jq .total`
+- [ ] Check Audit Log tab → audit entries show `dev@aegis.local` as the actor (not `admin`)
+
+### Production mode (GCP IAP)
+
+- [ ] Start API with auth enabled:
+  ```bash
+  cd api && AUTH_ENABLED=true AUTH_PROVIDER=iap go run .
+  ```
+- [ ] Verify unauthenticated request is blocked:
+  ```bash
+  curl -s http://localhost:8080/api/studies | jq .
+  # → {"error":"missing GCP IAP authentication header"}
+  ```
+- [ ] Verify unknown user is rejected:
+  ```bash
+  curl -s -H "X-Goog-Authenticated-User-Email: accounts.google.com:unknown@test.com" \
+    http://localhost:8080/api/studies | jq .
+  # → {"error":"user not registered: unknown@test.com"}
+  ```
+- [ ] Register a user and verify access:
+  ```bash
+  # First disable auth temporarily to create user
+  cd api && go run .
+  curl -s -X POST http://localhost:8080/api/admin-users \
+    -H "Content-Type: application/json" \
+    -d '{"email":"admin@test.com","name":"Test Admin","role":"admin"}'
+  # Restart with auth enabled
+  AUTH_ENABLED=true AUTH_PROVIDER=iap go run .
+  curl -s -H "X-Goog-Authenticated-User-Email: accounts.google.com:admin@test.com" \
+    http://localhost:8080/api/studies | jq .total
+  # → 0 (or study count)
+  ```
+
+### Production mode (Azure AD)
+
+- [ ] Start API with Azure AD auth:
+  ```bash
+  cd api && AUTH_ENABLED=true AUTH_PROVIDER=azure go run .
+  ```
+- [ ] Verify Azure header auth works:
+  ```bash
+  curl -s -H "X-MS-CLIENT-PRINCIPAL-NAME: admin@test.com" \
+    http://localhost:8080/api/studies | jq .total
+  ```
+
+### Azure AD App Registration Setup (for production Azure deployments)
+
+1. **Register the application in Azure Portal:**
+   - Go to Azure Portal → Microsoft Entra ID → App registrations → New registration
+   - Name: `AEGIS Admin Dashboard`
+   - Supported account types: "Accounts in this organizational directory only" (Single tenant)
+   - Redirect URI: `https://<your-app-url>/.auth/login/aad/callback`
+   - Click Register
+2. **Configure authentication:**
+   - Go to the app registration → Authentication
+   - Add platform: Web
+   - Redirect URIs: `https://<your-app-url>/.auth/login/aad/callback`
+   - Check "ID tokens" under Implicit grant
+3. **API permissions:**
+   - Microsoft Graph → `User.Read` (delegated) — to read user email
+   - Grant admin consent for the directory
+4. **Configure the hosting platform:**
+   - **Azure App Service**: Go to Settings → Authentication → Add identity provider → Microsoft → Select the app registration
+   - **Azure Application Gateway + AAD**: Configure AAD authentication on the gateway; it injects `X-MS-CLIENT-PRINCIPAL-NAME`
+   - **Self-hosted with MSAL.js**: Add MSAL.js to the frontend; backend validates JWT Bearer tokens (future enhancement)
+5. **Add authorized users:**
+   - In the AEGIS admin dashboard Users tab, add each Azure AD user's email as an admin user
+   - Their Azure AD login email must match the `admin_users.email` field (case-insensitive)
+6. **Environment variables:**
+   ```bash
+   AUTH_ENABLED=true
+   AUTH_PROVIDER=azure   # or "auto" to support both IAP and Azure
+   ```
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
@@ -287,4 +371,4 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 ---
 
-*Generated 2026-02-18. See ARCHITECTURE.md for the full system design.*
+*Generated 2026-02-18. Updated 2026-02-18. See ARCHITECTURE.md for the full system design.*

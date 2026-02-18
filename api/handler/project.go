@@ -50,7 +50,7 @@ func (s *Server) CreateProject(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusConflict, "project slug already exists")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "project.created", "admin",
+	model.CreateAuditEntry(r.Context(), s.db, "project.created", actorEmail(r),
 		"project", project.ID, clientIP(r), map[string]any{"name": project.Name, "slug": project.Slug})
 	s.writeJSON(w, http.StatusCreated, project)
 }
@@ -96,7 +96,7 @@ func (s *Server) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusConflict, "slug already exists or update failed")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "project.updated", "admin",
+	model.CreateAuditEntry(r.Context(), s.db, "project.updated", actorEmail(r),
 		"project", id, clientIP(r), map[string]any{"name": project.Name, "slug": project.Slug})
 	s.writeJSON(w, http.StatusOK, project)
 }

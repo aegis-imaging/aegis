@@ -45,7 +45,7 @@ func (s *Server) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to create user")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "admin_user.created", "admin",
+	model.CreateAuditEntry(r.Context(), s.db, "admin_user.created", actorEmail(r),
 		"admin_user", u.ID, clientIP(r), map[string]any{
 			"email": u.Email,
 			"role":  u.Role,
@@ -83,7 +83,7 @@ func (s *Server) UpdateAdminUser(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to update user")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "admin_user.updated", "admin",
+	model.CreateAuditEntry(r.Context(), s.db, "admin_user.updated", actorEmail(r),
 		"admin_user", id, clientIP(r), map[string]any{
 			"email":   u.Email,
 			"role":    u.Role,
@@ -106,7 +106,7 @@ func (s *Server) DeleteAdminUser(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to delete user")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "admin_user.deleted", "admin",
+	model.CreateAuditEntry(r.Context(), s.db, "admin_user.deleted", actorEmail(r),
 		"admin_user", id, clientIP(r), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
