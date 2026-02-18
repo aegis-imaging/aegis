@@ -27,6 +27,8 @@ type Study = {
   defacing_required: boolean
   phi_scan_required: boolean
   phi_scan_status: string
+  qc_required: boolean
+  qc_status: string
   instance_count: number
   created_at: string
 }
@@ -148,8 +150,11 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' }) {
-  const modifier = prefix === 'phi' && label === 'clean' ? 'phi-clean' : label
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' }) {
+  const modifier =
+    (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
+    (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
+    label
   const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
 }
@@ -528,9 +533,15 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   const canReviewDeface = study.defacing_required &&
     ['defaced', 'approved'].includes(study.status)
   const canPhiScan = study.phi_scan_required && study.phi_scan_status === 'pending'
+  const canQcCheck = study.qc_required && study.qc_status === 'pending'
 
   const handlePhiScan = async () => {
     await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
+    onAction()
+  }
+
+  const handleQcCheck = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/qc-check`, { method: 'POST' })
     onAction()
   }
 
@@ -543,6 +554,7 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <td><Badge label={study.source} prefix="source" /></td>
         <td><Badge label={study.status} prefix="status" /></td>
         <td>{study.phi_scan_required ? <Badge label={study.phi_scan_status || 'n/a'} prefix="phi" /> : '—'}</td>
+        <td>{study.qc_required ? <Badge label={study.qc_status || 'n/a'} prefix="qc" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
@@ -560,6 +572,9 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
             )}
             {canPhiScan && (
               <button type="button" className="btn btn--phi-scan" onClick={handlePhiScan}>Scan for PHI</button>
+            )}
+            {canQcCheck && (
+              <button type="button" className="btn btn--qc-check" onClick={handleQcCheck}>Run QC</button>
             )}
             {canReviewDeface && (
               <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
@@ -894,6 +909,7 @@ function RoutingPanel() {
                 <option value="require_qa">require_qa — hold for manual review (default)</option>
                 <option value="require_defacing">require_defacing — force defacing even if not head</option>
                 <option value="require_phi_scan">require_phi_scan — scan pixels for burned-in PHI</option>
+                <option value="require_qc_check">require_qc_check — automated image quality checks</option>
                 <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
                 <option value="reject">reject — auto-reject</option>
                 <option value="route_to">route_to — forward to external destination</option>
@@ -2252,6 +2268,7 @@ export function App() {
                     <th>Source</th>
                     <th>Status</th>
                     <th>PHI Scan</th>
+                    <th>QC</th>
                     <th className="align-right">Files</th>
                     <th>Received</th>
                     <th>Actions</th>

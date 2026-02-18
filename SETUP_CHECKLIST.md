@@ -163,6 +163,24 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
     -d '{"dir":"/absolute/path/to/test-data/brain-mri","project_slug":"default","dry_run":true}'
   ```
 
+## 7j. QC Automation Service
+
+- [ ] Start the QC service:
+  ```bash
+  cd qc-service && pip install -r requirements.txt
+  uvicorn app.main:app --port 8083
+  ```
+- [ ] Verify health: `curl http://localhost:8083/healthz` → should show `{"status":"ok","backend":"basic"}`
+- [ ] Start the Go API with QC enabled:
+  ```bash
+  cd api && QC_SERVICE_URL=http://localhost:8083 go run .
+  ```
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_qc_check` (any modality)
+- [ ] Upload a study via the Upload Portal → study row shows QC badge: **pending**
+- [ ] Click **Run QC** → badge changes to **checking** → then **pass**, **warn**, or **fail**
+- [ ] Check Audit Log tab → `qc_check.triggered` and `qc_check.complete` entries appear
+- [ ] Verify admin can still Approve a study with warn/fail QC status (status is informational)
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
