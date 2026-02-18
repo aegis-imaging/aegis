@@ -456,9 +456,9 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 ### Phase 3: Operations & Routing
 12. ✅ **Routing rules engine**: Destinations table + RoutingRules table; priority-ordered evaluation on every ingest; actions: `require_defacing`, `auto_approve`, `require_qa`, `reject`, `route_to` (async DICOMweb forward); routing log per study; admin UI in Routing tab (PR #12)
 13. ✅ **Institution management**: Institutions table + institution_projects join table; institution_id on studies/sessions; CRUD API + admin UI in Institutions tab; project-scoped roles (sender/receiver/admin) (PR #13)
-14. **Per-project anonymization profiles**: Configurable tag retention lists
+14. ✅ **Per-project anonymization profiles**: Multiple named profiles per project; `retained_tags` JSONB list overrides Basic Profile strip/zero actions client-side; `default_anon_profile_id` on projects; upload portal fetches active profile at upload time; admin Profiles tab (PR #15)
 15. ✅ **Audit log viewer**: Full trail from PostgreSQL + filterable UI in admin dashboard (PR #7)
-16. **Email digests**: Weekly/monthly summary reports via SMTP/PSC
+16. ✅ **Email digests**: `digest_subscriptions` table; per-project weekly/monthly subscriptions; hourly scheduler goroutine sends plain-text summaries (study counts, share activity, no PHI); admin Notifications tab (PR #17)
 
 ### Phase 4: Advanced Processing (Vertex AI)
 17. **Burned-in PHI detection**: Vertex AI Document AI / Vision OCR on pixel data
