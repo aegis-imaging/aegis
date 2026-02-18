@@ -120,8 +120,7 @@ func (s *Server) runBidsConversion(study *model.Study) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Minute}
-	resp, err := client.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Printf("bids_conversion: call service for %s: %v", studyUID, err)
 		model.UpdateBidsStatus(ctx, s.db, study.ID, "failed")
