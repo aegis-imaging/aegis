@@ -61,6 +61,8 @@ func main() {
 
 	mux.HandleFunc("GET /api/projects", srv.ListProjects)
 	mux.HandleFunc("POST /api/projects", srv.CreateProject)
+	mux.HandleFunc("GET /api/projects/{id}", srv.GetProject)
+	mux.HandleFunc("PUT /api/projects/{id}", srv.UpdateProject)
 
 	// Anonymization profiles — per-project DICOM tag retention overrides.
 	mux.HandleFunc("GET /api/projects/{projectID}/anon-profiles", srv.ListAnonProfiles)
