@@ -186,6 +186,13 @@ func main() {
 	mux.HandleFunc("PUT /api/admin-users/{id}", auth(srv.UpdateAdminUser))
 	mux.HandleFunc("DELETE /api/admin-users/{id}", auth(srv.DeleteAdminUser))
 
+	// Protocol templates — per-project MRI acquisition parameter expectations.
+	mux.HandleFunc("GET /api/projects/{projectID}/protocol-templates", auth(srv.ListProtocolTemplates))
+	mux.HandleFunc("POST /api/projects/{projectID}/protocol-templates", auth(srv.CreateProtocolTemplate))
+	mux.HandleFunc("GET /api/protocol-templates/{id}", auth(srv.GetProtocolTemplate))
+	mux.HandleFunc("PUT /api/protocol-templates/{id}", auth(srv.UpdateProtocolTemplate))
+	mux.HandleFunc("DELETE /api/protocol-templates/{id}", auth(srv.DeleteProtocolTemplate))
+
 	// Async processing triggers — admin-initiated pipeline actions.
 	mux.HandleFunc("POST /api/deface/{studyUID}", auth(srv.TriggerDeface))
 	mux.HandleFunc("POST /api/studies/{studyUID}/phi-scan", auth(srv.TriggerPhiScan))
@@ -193,6 +200,7 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{studyUID}/bids-convert", auth(srv.TriggerBidsConversion))
 	mux.HandleFunc("GET /api/studies/{studyUID}/bids-download", auth(srv.ServeBidsDownload))
 	mux.HandleFunc("POST /api/studies/{studyUID}/classify", auth(srv.TriggerClassification))
+	mux.HandleFunc("POST /api/studies/{studyUID}/protocol-check", auth(srv.TriggerProtocolCheck))
 
 	var h http.Handler = mux
 	h = middleware.Recover(h)

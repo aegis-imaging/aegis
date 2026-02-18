@@ -220,7 +220,28 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Verify routing rules re-evaluated (e.g. a `require_defacing` rule for HEAD now fires)
 - [ ] Check Audit Log tab → `classification.triggered` and `classification.complete` entries appear
 
-## 7m. Authentication Middleware
+## 7m. MRI Protocol Compliance Service
+
+- [ ] Start the protocol service:
+  ```bash
+  cd protocol-service && pip install -r requirements.txt
+  uvicorn app.main:app --port 8086
+  ```
+- [ ] Verify health: `curl http://localhost:8086/healthz` → should show `{"status":"ok","backend":"basic"}`
+- [ ] Start the Go API with protocol service enabled:
+  ```bash
+  cd api && PROTOCOL_SERVICE_URL=http://localhost:8086 go run .
+  ```
+- [ ] Open admin dashboard → **Protocol Templates** tab
+- [ ] Create a template: name `ADNI4 T1w`, project `default`, manufacturer `SIEMENS`, sequence type `T1w_MPRAGE`, add rules (e.g. RepetitionTime target 2300, tolerance 5%, severity warning)
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_protocol_check` (any modality)
+- [ ] Upload a study via the Upload Portal → study row shows Protocol badge: **pending**
+- [ ] Click **Check Protocol** → badge changes to **checking** → then **compliant**, **minor_deviations**, or **non_compliant**
+- [ ] Check Audit Log tab → `protocol_check.triggered` and `protocol_check.complete` entries appear with per-parameter findings
+- [ ] Verify admin can still Approve a non-compliant study (status is informational)
+- [ ] Edit/delete the template from the Protocol Templates tab
+
+## 7n. Authentication Middleware
 
 Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-authenticate as `dev@aegis.local`.
 
@@ -315,9 +336,9 @@ Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-
 
 `docker-compose.yml` starts the **full platform stack** — database, email, viewer, Go API, and all Python sidecar services:
 
-- [ ] `docker compose up -d` — builds and starts all 9 services
+- [ ] `docker compose up -d` — builds and starts all 10 services
 - [ ] Verify API health: `curl http://localhost:8080/healthz | python3 -m json.tool`
-  - Should show `"status":"ok"`, `"database":"healthy"`, `"storage":"healthy"`, and all 5 sidecar services as `"healthy"`
+  - Should show `"status":"ok"`, `"database":"healthy"`, `"storage":"healthy"`, and all 6 sidecar services as `"healthy"`
 - [ ] Verify OHIF loads at http://localhost:3002 (shows the AEGIS data source)
 - [ ] Verify Mailpit web UI at http://localhost:8025
 
@@ -334,6 +355,7 @@ Services started by `docker compose up`:
 | qc-service | (internal) | QC automation |
 | bids-service | (internal) | NIfTI/BIDS conversion |
 | classification-service | (internal) | Metadata classification |
+| protocol-service | (internal) | MRI protocol compliance |
 
 Start individual services:
 ```bash
@@ -379,7 +401,7 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
   - Branch name patterns: `main` and `develop`
   - Enable: "Require a pull request before merging", "Do not allow deletions"
 - [ ] CI is configured: `.github/workflows/ci.yml` runs automatically on PRs to `develop` and `main`
-  - Go build + vet, Python syntax check (5 services), TypeScript type check (3 apps), Docker build (6 images)
+  - Go build + vet, Python syntax check (6 services), TypeScript type check (3 apps), Docker build (7 images)
 - [ ] Verify CI passes: open a test PR and check the Actions tab
 - [ ] Run `make lint` locally to validate before pushing
 
