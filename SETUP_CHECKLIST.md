@@ -378,7 +378,10 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
   - Go to Settings → Branches → Add branch protection rule
   - Branch name patterns: `main` and `develop`
   - Enable: "Require a pull request before merging", "Do not allow deletions"
-- [ ] (Optional) Set up GitHub Actions for CI (lint, typecheck, Go test)
+- [ ] CI is configured: `.github/workflows/ci.yml` runs automatically on PRs to `develop` and `main`
+  - Go build + vet, Python syntax check (5 services), TypeScript type check (3 apps), Docker build (6 images)
+- [ ] Verify CI passes: open a test PR and check the Actions tab
+- [ ] Run `make lint` locally to validate before pushing
 
 ## 10. Future — Before Proposing to Work
 
