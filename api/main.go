@@ -91,6 +91,9 @@ func main() {
 	// Internal enterprise ingestion path.
 	mux.HandleFunc("POST /api/ingest", srv.InternalIngest)
 
+	// Batch import — import DICOM files from a server-local directory.
+	mux.HandleFunc("POST /api/import/batch", srv.BatchImport)
+
 	// Local dev only: serve stored files over HTTP (in GCS mode, signed URLs are used instead).
 	mux.HandleFunc("GET /api/storage/{key...}", srv.ServeStorageFile)
 

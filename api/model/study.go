@@ -48,12 +48,12 @@ func scanStudy(row scannable, s *Study) error {
 
 func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 	return db.QueryRowContext(ctx, `
-		INSERT INTO studies (project_id, upload_session_id, study_instance_uid, modality, body_part,
+		INSERT INTO studies (project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
 		                     study_description, series_count, instance_count, status, defacing_required,
 		                     dicom_store, source, phi_scan_required, phi_scan_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at`,
-		s.ProjectID, s.UploadSessionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
+		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
 		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
 		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)

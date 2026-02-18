@@ -147,6 +147,22 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Check Audit Log tab → `phi_scan.triggered` and `phi_scan.complete` entries appear
 - [ ] Verify admin can still Approve a flagged study (flag is informational, not blocking)
 
+## 7i. Batch Import CLI
+
+- [ ] Build the CLI: `cd api && go build -o aegis-import ./cmd/import`
+- [ ] Dry run: `./aegis-import --dir ../test-data/brain-mri --project default --dry-run`
+- [ ] Verify dry run output shows study count, modality, body part for each study
+- [ ] Full import: `./aegis-import --dir ../test-data/brain-mri --project default`
+- [ ] Verify studies appear in admin dashboard with `source=internal`
+- [ ] Verify `import.batch` entries in Audit Log tab
+- [ ] Re-run the same import → should report duplicate errors (StudyInstanceUID unique constraint)
+- [ ] Test API endpoint:
+  ```bash
+  curl -X POST http://localhost:8080/api/import/batch \
+    -H "Content-Type: application/json" \
+    -d '{"dir":"/absolute/path/to/test-data/brain-mri","project_slug":"default","dry_run":true}'
+  ```
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
