@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications' | 'users'
+type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications' | 'projects' | 'users'
 
 type AuditEntry = {
   id: string
@@ -1689,6 +1689,157 @@ function InstitutionsPanel() {
   )
 }
 
+// ── Projects Panel ────────────────────────────────────────────────────────────
+
+const EMPTY_PROJECT: Omit<Project, 'id' | 'default_anon_profile_id' | 'created_at'> = {
+  name: '', slug: '', description: '',
+}
+
+function ProjectsPanel() {
+  const [projects, setProjects]   = useState<Project[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+
+  const [form, setForm]           = useState<Omit<Project, 'id' | 'default_anon_profile_id' | 'created_at'>>(EMPTY_PROJECT)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const fetchProjects = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/projects')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setProjects(await res.json())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchProjects() }, [fetchProjects])
+
+  function openNew() {
+    setForm(EMPTY_PROJECT)
+    setEditingId(null)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  function openEdit(p: Project) {
+    setForm({ name: p.name, slug: p.slug, description: p.description })
+    setEditingId(p.id)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.name) { setFormError('Name is required'); return }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const url = editingId ? `/api/projects/${editingId}` : '/api/projects'
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      setEditingId(null)
+      fetchProjects()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="state-loading">Loading projects…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Projects</div>
+            <div className="routing-section-sub">
+              Projects group studies and control anonymization profiles. Each upload is associated with one project.
+            </div>
+          </div>
+          <div className="actions-cell">
+            <button type="button" className="btn-refresh" onClick={fetchProjects}>Refresh</button>
+            <button type="button" className="btn-primary" onClick={openNew}>+ New project</button>
+          </div>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit project' : 'New project'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Name *"
+                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <input className="form-input" placeholder="Slug (auto-generated if blank)"
+                value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
+              <input className="form-input form-input--wide" placeholder="Description"
+                value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            {editingId && (
+              <div className="routing-hint">Note: changing the slug will break existing upload portal URLs for this project.</div>
+            )}
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {projects.length === 0 && !showForm ? (
+          <div className="state-empty">No projects yet.</div>
+        ) : projects.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Slug</th>
+                <th>Default profile</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map(p => (
+                <tr key={p.id}>
+                  <td>
+                    <div className="routing-name">{p.name}</div>
+                    {p.description && <div className="routing-desc">{p.description}</div>}
+                  </td>
+                  <td><code className="inst-slug">{p.slug}</code></td>
+                  <td>
+                    {p.default_anon_profile_id
+                      ? <span className="badge badge--enabled">profile set</span>
+                      : <span className="routing-desc">none</span>}
+                  </td>
+                  <td className="td-date">{fmtDate(p.created_at)}</td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Users Panel ───────────────────────────────────────────────────────────────
 
 const EMPTY_USER: Omit<AdminUser, 'id' | 'created_at'> = {
@@ -1961,6 +2112,13 @@ export function App() {
         </button>
         <button
           type="button"
+          className={`tab-btn${tab === 'projects' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('projects')}
+        >
+          Projects
+        </button>
+        <button
+          type="button"
           className={`tab-btn${tab === 'users' ? ' tab-btn--active' : ''}`}
           onClick={() => setTab('users')}
         >
@@ -2028,6 +2186,9 @@ export function App() {
 
       {/* Notifications tab */}
       {tab === 'notifications' && <NotificationsPanel />}
+
+      {/* Projects tab */}
+      {tab === 'projects' && <ProjectsPanel />}
 
       {/* Users tab */}
       {tab === 'users' && <UsersPanel />}
