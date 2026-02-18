@@ -96,12 +96,27 @@ SOPInstanceUID format: `{studyUID}.1.{fileIndex}` (index maps to `dicom/{store}/
 In the admin dashboard:
 - Each study row has a **View** button (inline iframe) and an **Open in new tab ↗** link.
 - Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side before/after OHIF panel. OHIF selects the data source via `?dataSource=dicomweb-raw` (before) or `?dataSource=dicomweb` (after).
+- **Studies tab** — filter by status, modality, source, project; search by UID or description; paginated 50 per page.
 - **Routing tab** — manage Destinations and Routing Rules (see below).
 - **Institutions tab** — manage institutions and their project memberships.
 - **Profiles tab** — manage per-project anonymization profiles (see below).
 - **Notifications tab** — manage email digest subscriptions (see below).
 - **Projects tab** — create and edit projects (name, slug, description); shows default anon profile badge.
 - **Users tab** — manage authorised admin users and their roles (admin|viewer).
+
+### Studies List (`GET /api/studies`)
+
+Returns a paginated envelope `{ studies, total, limit, offset }`.
+
+| Query param | Notes |
+|-------------|-------|
+| `limit` | Page size (default 50, max 200) |
+| `offset` | Row offset for pagination |
+| `project_id` | Filter by project UUID |
+| `status` | `received\|defacing\|clean\|defaced\|approved\|rejected` |
+| `modality` | Case-insensitive exact match (e.g. `MRI`, `CT`) |
+| `source` | `external\|internal` |
+| `search` | Substring match on `study_instance_uid` or `study_description` |
 
 ### Routing Rules Engine (`api/routing/`, `api/handler/routing.go`)
 
