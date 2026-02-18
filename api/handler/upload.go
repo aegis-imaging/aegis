@@ -17,9 +17,10 @@ import (
 )
 
 type uploadInitRequest struct {
-	ProjectSlug string        `json:"project_slug"`
-	FileCount   int           `json:"file_count"`
-	Metadata    studyMetadata `json:"study_metadata"`
+	ProjectSlug   string        `json:"project_slug"`
+	FileCount     int           `json:"file_count"`
+	UploaderEmail string        `json:"uploader_email"`
+	Metadata      studyMetadata `json:"study_metadata"`
 }
 
 type studyMetadata struct {
@@ -61,7 +62,7 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create upload session
-	session, err := model.CreateUploadSession(r.Context(), s.db, project.ID, req.FileCount, "", clientIP(r))
+	session, err := model.CreateUploadSession(r.Context(), s.db, project.ID, req.FileCount, "", clientIP(r), req.UploaderEmail)
 	if err != nil {
 		log.Printf("create upload session: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to create upload session")
