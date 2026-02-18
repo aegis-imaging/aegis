@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/msenjem/aegis/api/config"
+	"github.com/msenjem/aegis/api/digest"
+	"github.com/msenjem/aegis/api/email"
 	"github.com/msenjem/aegis/api/handler"
 	"github.com/msenjem/aegis/api/middleware"
 	"github.com/msenjem/aegis/api/migrate"
@@ -116,6 +118,12 @@ func main() {
 	mux.HandleFunc("POST /api/routing-rules/evaluate/{studyID}", srv.EvaluateRoutingRules)
 	mux.HandleFunc("GET /api/studies/{studyID}/routing-log", srv.GetStudyRoutingLog)
 
+	// Email digest subscriptions — periodic summary emails per project.
+	mux.HandleFunc("GET /api/digest-subscriptions", srv.ListDigestSubscriptions)
+	mux.HandleFunc("GET /api/projects/{projectID}/digest-subscriptions", srv.ListDigestSubscriptions)
+	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", srv.CreateDigestSubscription)
+	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", srv.DeleteDigestSubscription)
+
 	mux.HandleFunc("POST /api/deface/{studyUID}", srv.TriggerDeface)
 
 	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by OHIF Viewer.
@@ -144,6 +152,11 @@ func main() {
 		WriteTimeout: 5 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	}
+
+	// Start the email digest scheduler (hourly check, no-op when SMTP is disabled).
+	digestCtx, digestCancel := context.WithCancel(context.Background())
+	defer digestCancel()
+	digest.Start(digestCtx, db, email.New(cfg))
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
