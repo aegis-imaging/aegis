@@ -84,6 +84,25 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Verify link appears in table; unlink removes it
 - [ ] Edit institution details; disable/enable toggle works
 
+## 7c. Anonymization Profiles
+
+- [ ] Open admin dashboard → **Profiles** tab
+- [ ] Create a profile: name `Research`, project `default`, retained tags `PatientAge, StudyDate` → appears in table
+- [ ] Click **Set default** → badge "default" appears on the row
+- [ ] Upload a DICOM via the Upload Portal → check the de-identified tag diff: `PatientAge` and `StudyDate` should show action `K` (kept)
+- [ ] Clear the default; re-upload → those tags are stripped again (normal Basic Profile)
+- [ ] Edit / delete the profile
+
+## 7d. Email Digest Subscriptions
+
+- [ ] Start API with Mailpit enabled (`SMTP_HOST=localhost SMTP_PORT=1025 go run .`)
+- [ ] Open admin dashboard → **Notifications** tab
+- [ ] Create a subscription: email `test@example.com`, project `default`, frequency `weekly`
+- [ ] In the DB, force a digest due: `UPDATE digest_subscriptions SET last_sent_at = now() - interval '8 days'`
+- [ ] Restart the API → scheduler fires on startup → check Mailpit at http://localhost:8025 for the digest email
+- [ ] Verify subject: `AEGIS Weekly Summary — default — <date range>`, body has study counts, no PHI/UIDs
+- [ ] Delete the subscription from the Notifications tab
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
@@ -147,4 +166,4 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 ---
 
-*Generated 2026-02-17. See ARCHITECTURE.md for the full system design.*
+*Generated 2026-02-18. See ARCHITECTURE.md for the full system design.*

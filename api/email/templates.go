@@ -2,6 +2,7 @@ package email
 
 import (
 	"bytes"
+	"strings"
 	"text/template"
 	"time"
 )
@@ -94,5 +95,38 @@ func StudyRejected(studyUID string) (subject, body string) {
 	subject = "AEGIS — Study Rejected"
 	var buf bytes.Buffer
 	studyRejectedTmpl.Execute(&buf, struct{ StudyUID string }{studyUID})
+	return subject, buf.String()
+}
+
+var digestSummaryTmpl = template.Must(template.New("digest_summary").Parse(
+	`AEGIS {{ .FrequencyTitle }} Summary — {{ .ProjectName }} — {{ .PeriodLabel }}
+
+Studies
+  Received this period:  {{ .Received }}
+  Approved:              {{ .Approved }}
+  Rejected:              {{ .Rejected }}
+  Pending review:        {{ .Pending }}
+
+Export shares created:   {{ .SharesCreated }}
+
+--
+This is an automated message from AEGIS. To unsubscribe, contact your administrator.
+`))
+
+// DigestSummary renders a periodic digest email for a project.
+func DigestSummary(projectName, frequency, periodLabel string, received, approved, rejected, pending, sharesCreated int) (subject, body string) {
+	freqTitle := strings.ToUpper(frequency[:1]) + frequency[1:]
+	subject = "AEGIS " + freqTitle + " Summary — " + projectName
+	var buf bytes.Buffer
+	digestSummaryTmpl.Execute(&buf, struct {
+		FrequencyTitle string
+		ProjectName    string
+		PeriodLabel    string
+		Received       int
+		Approved       int
+		Rejected       int
+		Pending        int
+		SharesCreated  int
+	}{freqTitle, projectName, periodLabel, received, approved, rejected, pending, sharesCreated})
 	return subject, buf.String()
 }
