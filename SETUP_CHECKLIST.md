@@ -63,6 +63,26 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Click **Open in new tab ↗** → viewer opens in a new browser tab
 - [ ] Click **Audit Log** tab → shows event table (empty until actions are taken)
 - [ ] For a defaced head study: click **Review defacing** → side-by-side OHIF panel (Before/After)
+- [ ] Click **Routing** tab → Destinations and Rules sections load (empty state)
+- [ ] Click **Institutions** tab → Institutions table loads (empty state)
+
+## 7a. Routing Rules Engine
+
+- [ ] Open admin dashboard → **Routing** tab
+- [ ] Create a Destination (type: `dicomweb`, any URL)
+- [ ] Create a Routing Rule (e.g. `modality=MRI` → `auto_approve`) → appears in priority-ordered table
+- [ ] Upload an MRI study via Upload Portal → study status auto-set to `approved`
+- [ ] Verify routing log: `GET http://localhost:8080/api/studies/{id}/routing-log`
+- [ ] Disable/enable rule toggle works; delete cleans up
+
+## 7b. Institution Management
+
+- [ ] Open admin dashboard → **Institutions** tab
+- [ ] Create an institution (type: `sender`)
+- [ ] Click **Projects** button on the row → inline project-link panel expands
+- [ ] Link institution to a project: enter project UUID from `GET /api/projects`, choose role
+- [ ] Verify link appears in table; unlink removes it
+- [ ] Edit institution details; disable/enable toggle works
 
 ## 8. Go API
 
