@@ -1,0 +1,3 @@
+project_id      = "aegis-prod"
+region          = "us-central1"
+billing_account = "XXXXXX-XXXXXX-XXXXXX"

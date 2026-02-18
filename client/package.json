@@ -1,0 +1,31 @@
+{
+  "name": "@aegis/client",
+  "version": "0.1.0",
+  "description": "DICOM anonymization and upload library for AEGIS",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "prepare": "tsc",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "dcmjs": "^0.50.1",
+    "dicom-parser": "^1.8.21"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.0"
+  }
+}

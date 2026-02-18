@@ -99,17 +99,17 @@ if os.path.exists(logo_path):
     draw = ImageDraw.Draw(img)
     text_x = logo_x + logo_w + 15
     draw.text((text_x, 15), "AEGIS Architecture", fill=TEXT_DARK, font=TITLE)
-    draw.text((text_x, 55), "Anonymized Exchange Gateway for Imaging Studies", fill=TEXT_LIGHT, font=HEADING)
+    draw.text((text_x, 55), "Anonymization & Exchange Gateway for Imaging Studies", fill=TEXT_LIGHT, font=HEADING)
 else:
     draw.text((W // 2 - 200, 20), "AEGIS Architecture", fill=TEXT_DARK, font=TITLE)
-    draw.text((W // 2 - 260, 60), "Anonymized Exchange Gateway for Imaging Studies", fill=TEXT_LIGHT, font=HEADING)
+    draw.text((W // 2 - 260, 60), "Anonymization & Exchange Gateway for Imaging Studies", fill=TEXT_LIGHT, font=HEADING)
 
 # ══════════════════════════════════════════════════════
 # SENDING SITE (Hospital)
 # ══════════════════════════════════════════════════════
 hosp_xy = (60, 110, 2340, 380)
 rounded_rect(hosp_xy, fill=BG_HOSPITAL, outline=BORDER_HOSPITAL, width=3)
-draw.text((80, 120), "SENDING SITE  (Hospital Browser — Zero Install)", fill=BORDER_HOSPITAL, font=HEADING)
+draw.text((80, 120), "SENDING SOURCES  (External Browser + Internal Enterprise)", fill=BORDER_HOSPITAL, font=HEADING)
 
 # Upload Portal
 service_box(
@@ -124,6 +124,10 @@ service_box(
     ],
     ACCENT_REACT,
 )
+
+# Internal ingress lane callout
+rounded_rect((720, 116, 1360, 152), fill="#E3F2FD", outline=BORDER_HOSPITAL, width=1)
+draw.text((736, 126), "Internal-enterprise studies can ingest directly into the same GCP pipeline.", fill=BORDER_HOSPITAL, font=SMALL)
 
 # De-id Engine
 service_box(
