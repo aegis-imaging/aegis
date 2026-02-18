@@ -109,7 +109,7 @@ Phase 2 — On the server (after upload):
   └── Administrator review and approval before data is shared
 </pre>
 
-This two-phase design directly addresses the gaps identified in the Aryanto (2015) and Schwarz (2019) studies.
+This two-phase design directly addresses the gaps identified in the Aryanto (2015) <a href="#ref-1">[1]</a> and Schwarz (2019) <a href="#ref-2">[2]</a> studies.
 
 ---
 
