@@ -20,7 +20,7 @@ The name carries a double meaning. As an acronym it describes exactly what the s
 
 ## Architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design.
+See [AEGIS_Architecture.md](AEGIS_Architecture.md) for the full system design.
 
 For signed upload setup details, see [GCP_UPLOAD_NOTES.md](GCP_UPLOAD_NOTES.md).
 

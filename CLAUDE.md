@@ -7,8 +7,8 @@ Anonymization & Exchange Gateway for Imaging Studies. GCP-hosted platform for HI
 Whenever any of these markdown files are edited, regenerate the corresponding PDF and commit both files in the same PR:
 
 ```bash
-npx md-to-pdf PITCH_DECK.md         # generates PITCH_DECK.pdf
-npx md-to-pdf SETUP_CHECKLIST.md     # generates SETUP_CHECKLIST.pdf
+npx md-to-pdf AEGIS_Executive_Summary.md   # generates AEGIS_Executive_Summary.pdf
+npx md-to-pdf SETUP_CHECKLIST.md           # generates SETUP_CHECKLIST.pdf
 ```
 
 Never update the markdown without updating the PDF.
@@ -718,4 +718,4 @@ Common dev commands available via `make`:
 ## Current Phase
 
 Phase 1 (MVP): Foundation — Terraform, Go API, Upload Portal, Admin Dashboard
-See ARCHITECTURE.md for full phased plan.
+See AEGIS_Architecture.md for full phased plan.
