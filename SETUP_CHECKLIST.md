@@ -325,6 +325,43 @@ Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-
    AUTH_PROVIDER=azure   # or "auto" to support both IAP and Azure
    ```
 
+## 7o. RBAC Enforcement (Viewer Role)
+
+The viewer role is read-only — viewers can browse all data but cannot create, update, delete, or trigger processing.
+
+### Backend verification
+
+- [ ] Create a viewer user (with API running in default dev mode):
+  ```bash
+  curl -s -X POST http://localhost:8080/api/admin-users \
+    -H "Content-Type: application/json" \
+    -d '{"email":"viewer@aegis.local","name":"Test Viewer","role":"viewer","enabled":true}'
+  ```
+- [ ] Restart API as viewer: `cd api && DEV_USER_EMAIL=viewer@aegis.local go run .`
+- [ ] Verify read endpoints work:
+  ```bash
+  curl -s http://localhost:8080/api/studies | jq .total   # → 200 OK
+  curl -s http://localhost:8080/api/institutions | jq .    # → 200 OK
+  curl -s http://localhost:8080/api/auth/me | jq .role     # → "viewer"
+  ```
+- [ ] Verify write endpoints are blocked:
+  ```bash
+  curl -s -X POST http://localhost:8080/api/projects \
+    -H "Content-Type: application/json" \
+    -d '{"name":"test"}' | jq .
+  # → {"error":"insufficient permissions: requires admin role"}
+  ```
+
+### Frontend verification
+
+- [ ] Open admin dashboard at http://localhost:3001 as viewer
+- [ ] Verify Users tab is NOT visible in navigation
+- [ ] Verify Studies tab: View + Download BIDS visible; Approve/Reject/Share/processing buttons hidden
+- [ ] Verify Routing tab: data visible; Add/Edit/Delete/Toggle buttons hidden
+- [ ] Verify Institutions tab: data visible; Add/Edit/Delete/Toggle/Link/Unlink hidden; Projects view button visible
+- [ ] Verify Profiles, Protocol Templates, Notifications, Projects tabs: data visible; create/edit/delete buttons hidden
+- [ ] Switch back to admin: restart API with `DEV_USER_EMAIL=dev@aegis.local` (or default) — all buttons return
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
