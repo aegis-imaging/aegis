@@ -164,21 +164,25 @@ AEGIS does not create a new de-identification standard — it implements the one
 
 ## Competitive Landscape
 
-| | AEGIS | XNAT | Flywheel | MIRC CTP |
-|--|-------|------|----------|----------|
-| **Hosting** | Cloud-hosted (GCP) | Self-hosted | Commercial SaaS | On-premises |
-| **Install at sending site** | None — browser only | Desktop Java client | CLI tool | Java application |
-| **Modalities** | All DICOM | Neuroimaging focus | All imaging | All imaging |
-| **Defacing** | Automated, reviewable | Manual or plugin | Built-in | None |
-| **Open source** | Yes | Yes | No | Yes |
-| **Audit trail** | Centralized, per-study | Per-instance | Built-in | Limited |
+| | AEGIS | ENCOG (Enlitic) | XNAT | Flywheel | MIRC CTP |
+|--|-------|-----------------|------|----------|----------|
+| **Hosting** | Cloud-hosted (GCP) | On-premises / hybrid | Self-hosted | Commercial SaaS | On-premises |
+| **Install at sending site** | None — browser only | PACS/VNA integration | Desktop Java client | CLI tool | Java application |
+| **Burned-in PHI** | OCR detection | AI CV detection | None | Built-in | None |
+| **Defacing** | Automated, reviewable | None | Manual or plugin | Built-in | None |
+| **Modalities** | All DICOM | MR, CT, XR, US | Neuroimaging focus | All imaging | All imaging |
+| **Open source** | Yes | No (commercial) | Yes | No | Yes |
+| **Audit trail** | Centralized, per-study | Chain of custody | Per-instance | Built-in | Limited |
+
+Enlitic's ENCOG is the closest commercial analogue to AEGIS's de-identification pipeline.<sup><a href="#ref-12">[12]</a></sup> It uses AI-driven computer vision to detect burned-in text overlays and claims to protect over 4,000 DICOM fields. However, ENCOG requires PACS/VNA integration at each sending site, does not offer volumetric defacing for head imaging, and publicly documents only four modalities (MR, CT, XR, ultrasound). ENCOG is also part of a broader commercial suite (Ensight) that includes data standardization (ENDEX, FDA 510(k) cleared) and migration tools — positioning it as an enterprise radiology product rather than a cross-institution research sharing platform.
 
 **Key differences from existing platforms:**
 
-1. **No software installation at sending sites** — the full anonymization workflow runs in the browser
-2. **Two-phase de-identification** — both tag-level and pixel-level (burned-in PHI) are addressed
-3. **Defacing is automated and reviewable** — not optional or manual
-4. **Not specialty-specific** — designed for all DICOM modalities from the start
+1. **No software installation at sending sites** — the full anonymization workflow runs in the browser. ENCOG, XNAT, and MIRC CTP all require software deployed at the sending institution.
+2. **Two-phase de-identification** — both tag-level (browser) and pixel-level (server-side OCR) are addressed in a unified pipeline
+3. **Defacing is automated and reviewable** — not optional, manual, or absent. Neither ENCOG nor MIRC CTP offer volumetric defacing.
+4. **Not specialty-specific** — designed for all DICOM modalities from the start, unlike XNAT (neuroimaging focus) or ENCOG (4 listed modalities)
+5. **Research-oriented pipeline** — protocol compliance, automated QC, and BIDS conversion are built in. Commercial platforms like ENCOG and Flywheel focus on enterprise radiology workflows rather than multi-site research data management.
 
 ---
 
@@ -253,6 +257,8 @@ Production costs scale with data volume. A 1,000-session multi-site study (~500 
 <li id="ref-10">Ravi H, et al. "mrQA: MR Quality Assurance framework for automated protocol compliance assessment across 20+ open neuroimaging datasets." <em>Neuroinformatics.</em> 2024;22:637–651. DOI: 10.1007/s12021-024-09679-3</li>
 
 <li id="ref-11">Arani A, et al. "Alzheimer's Disease Neuroimaging Initiative 4 (ADNI4): MRI Protocol Update with Rationale for Changes." <em>Alzheimer's &amp; Dementia.</em> 2024;20(S2):e088739. DOI: 10.1002/alz.088739</li>
+
+<li id="ref-12">Enlitic, Inc. "ENCOG — Healthcare Data Anonymization Tools." enlitic.com/encog/ (accessed February 2026). Product page describing AI-driven de-identification of DICOM metadata, burned-in pixel data, and private tags across MR, CT, XR, and ultrasound modalities.</li>
 </ol>
 
 </div>
