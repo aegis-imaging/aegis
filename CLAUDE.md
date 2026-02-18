@@ -2,6 +2,21 @@
 
 Anonymization & Exchange Gateway for Imaging Studies. GCP-hosted platform for HIPAA-compliant sharing of medical imaging data across all DICOM modalities. MVP focus: brain MRI, PET, and CT.
 
+## Shared Knowledge: `docs/` Folder
+
+All research, analysis, and reference material lives in `docs/` and is shared among agents, developers, and collaborators.
+
+**Before doing a web search**, check `docs/research/` — the answer may already be there.
+**After completing research**, save findings to `docs/research/<topic>.md` with full citations.
+
+Rules:
+- Always include full citations (author, journal, year, DOI/URL) and note source type (peer-reviewed, preprint, market report, government primary source)
+- **Never save PHI (Protected Health Information) or CBI (Confidential Business Information)** to `docs/` or anywhere in the repository
+- See `docs/README.md` for the full convention
+
+Current research files:
+- `docs/research/medical-imaging-deidentification.md` — citations for de-identification failures, face reconstruction from MRI, burned-in PHI, NIH DMS policy, HIPAA Safe Harbor, DICOM PS3.15, MIDI-B challenge, market sizing
+
 ## Repository Structure (Monorepo)
 
 ```
@@ -13,7 +28,8 @@ aegis/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
 │   └── admin-dashboard/  # React — internal QC, OHIF viewer, study management
 ├── client/               # TypeScript DICOM anonymization library (npm package)
-└── defacing/             # Python defacing service (mri_deface, dcm2niix)
+├── defacing/             # Python defacing service (mri_deface, dcm2niix)
+└── docs/                 # Shared research, references, and analysis (see docs/README.md)
 ```
 
 Planned to split into 5 separate repos once interfaces stabilize:
