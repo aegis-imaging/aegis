@@ -2,12 +2,13 @@
 
 Anonymization & Exchange Gateway for Imaging Studies. GCP-hosted platform for HIPAA-compliant sharing of medical imaging data across all DICOM modalities. MVP focus: brain MRI, PET, and CT.
 
-## Pitch Deck PDF
+## PDF Generation Rules
 
-Whenever `PITCH_DECK.md` is edited, regenerate the PDF and commit both files in the same PR:
+Whenever any of these markdown files are edited, regenerate the corresponding PDF and commit both files in the same PR:
 
 ```bash
-npx md-to-pdf PITCH_DECK.md   # generates PITCH_DECK.pdf in repo root
+npx md-to-pdf PITCH_DECK.md         # generates PITCH_DECK.pdf
+npx md-to-pdf SETUP_CHECKLIST.md     # generates SETUP_CHECKLIST.pdf
 ```
 
 Never update the markdown without updating the PDF.
