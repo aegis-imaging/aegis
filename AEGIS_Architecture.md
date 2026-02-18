@@ -357,7 +357,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 | **afni_refacer** | ~3-5 GB | ~30 min | Best overall (89%) | Public domain | Quality-critical cases |
 | **MiDeFace** (FreeSurfer) | ~4-8 GB | ~30 min | Very good | FreeSurfer license | When accuracy is paramount |
 
-**Recommendation for MVP**: Start with **mri_deface** (standalone, ~0.5 GB Docker image, no license required, 2-10 min/volume). Upgrade to **DeepDefacer** if faster processing is needed, or **afni_refacer** if quality is paramount.
+**Current default**: **DeepDefacer** (pip-installable, ~500 MB with TensorFlow, ~1-2 min/volume, no external binary dependencies beyond dcm2niix). Falls back to **mri_deface** if TensorFlow is unavailable. See `docs/research/mri-defacing-tools-comparison.md` for detailed analysis.
 
 **Modality-specific defacing needs:**
 - **Brain MRI**: All defacing tools work well. Primary use case.
@@ -366,7 +366,8 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 **Key dependencies for defacing service container:**
 - `dcm2niix` (static binary, ~2 MB) — DICOM to NIfTI conversion
-- `mri_deface` + atlas files (~0.5 GB) — defacing
+- `deepdefacer` (pip, ~500 MB with TensorFlow) — 3D U-Net defacing (default)
+- `mri_deface` + atlas files (~0.5 GB) — FreeSurfer atlas-based defacing (fallback)
 - `pydicom` + `nibabel` — pixel data injection back into DICOM
 - `FastAPI` / `uvicorn` — lightweight HTTP server
 - Base image: `python:3.12-slim` or Alpine-based for minimal CVE surface
@@ -474,7 +475,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 23. ✅ **NIfTI/BIDS conversion**: Python BIDS service (`bids-service/`) with dcm2niix backend; `require_bids_conversion` routing rule action; `bids_required`/`bids_status` study fields; DICOM→NIfTI conversion with BIDS-compliant directory structure + JSON sidecars; series-to-datatype classification; zip download endpoint; admin dashboard BIDS badge + Convert/Download buttons (PR #33)
 24. ✅ **Batch import tools**: `api/cmd/import/` CLI + `POST /api/import/batch` API; recursive DICOM directory scan with `suyashkumar/dicom` header parsing; groups files by StudyInstanceUID; creates upload sessions + study records; evaluates routing rules; `--dry-run` mode (PR #31)
 25. ✅ **MRI protocol compliance**: Python protocol service (`protocol-service/`) with pydicom-based parameter extraction for both Classic and Enhanced DICOM; `protocol_templates` table for per-project, per-manufacturer/model/software-version/sequence-type parameter rules with configurable tolerances and severity levels (critical/warning/info); `require_protocol_check` routing rule action; `protocol_required`/`protocol_status` study fields; async dispatch from Go API; admin dashboard Protocol badge + Check Protocol button + Protocol Templates CRUD tab (PR #41)
-26. **Defacing tool upgrades**: DeepDefacer or afni_refacer for improved quality
+26. ✅ **Defacing tool upgrades**: DeepDefacer added as pluggable backend (`defacing/app/backends/deepdefacer_backend.py`); 3D U-Net deep learning defacing ~90% faster than registration-based tools; pip-installable with no external binaries beyond dcm2niix; `INCLUDE_DEEPDEFACER` Dockerfile build arg; auto-selection priority updated: mri_reface > deepdefacer > mri_deface > nibabel; `DEEPDEFACER_GPU` env var for CUDA support; `docs/research/mri-defacing-tools-comparison.md` with 5 peer-reviewed citations (PR #54)
 26. ✅ **Authentication middleware**: Per-route auth middleware (`api/middleware/auth.go`) supporting GCP IAP and Azure AD Easy Auth; `RequireAuth` wrapper for admin routes; `RequireRole` for future viewer enforcement; `GET /api/auth/me` identity endpoint; `admin_users` lookup with case-insensitive email; dev mode auto-auth via `DEV_USER_EMAIL`; all audit entries now record real user email; admin dashboard shows current user and handles 401/403 errors (PR #36)
 27. ✅ **Multi-cloud AWS support**: S3 storage backend (`api/storage/s3.go`) implementing the Storage interface with presigned URLs, copy-based move, and S3-compatible endpoint support (MinIO/LocalStack); AWS ALB + Cognito auth provider in middleware (JWT email extraction from `X-Amzn-Oidc-Data` header); `S3_BUCKET`/`S3_REGION`/`S3_ENDPOINT` config; `terraform/aws/main.tf` with VPC, RDS PostgreSQL 15, S3, ECS Fargate cluster, ALB, ECR, KMS, SNS/SQS, CloudWatch (PR #50)
 
@@ -496,7 +497,8 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 | Browser DICOM parsing | [dicomParser](https://github.com/cornerstonejs/dicomParser) | MIT | Robust Part 10 parsing |
 | Viewer | [OHIF Viewer](https://github.com/OHIF/Viewers) | MIT | DICOMweb viewer in admin |
 | DICOM→NIfTI | [dcm2niix](https://github.com/rordenlab/dcm2niix) | BSD | Format conversion for defacing |
-| Defacing | [mri_deface](https://surfer.nmr.mgh.harvard.edu/fswiki/mri_deface) | Free | Facial feature removal |
+| Defacing (default) | [DeepDefacer](https://pypi.org/project/deepdefacer/) | Research-friendly | 3D U-Net facial feature removal |
+| Defacing (fallback) | [mri_deface](https://surfer.nmr.mgh.harvard.edu/fswiki/mri_deface) | Free | Atlas-based facial feature removal |
 | Python DICOM | [pydicom](https://github.com/pydicom/pydicom) | MIT | Pixel data injection in defacing svc |
 | NIfTI I/O | [nibabel](https://github.com/nipy/nibabel) | MIT | NIfTI reading in defacing svc |
 | IaC | [Terraform Google Provider](https://registry.terraform.io/providers/hashicorp/google/) | MPL-2.0 | GCP infrastructure |
