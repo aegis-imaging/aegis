@@ -2021,38 +2021,74 @@ function UsersPanel() {
 
 type StudiesState = 'loading' | 'loaded' | 'error'
 
+const PAGE_SIZE = 50
+
 export function App() {
   const [tab, setTab] = useState<AppTab>('studies')
   const [state, setState] = useState<StudiesState>('loading')
   const [studies, setStudies] = useState<Study[]>([])
+  const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchStudies = useCallback(async () => {
-    setState('loading')
-    try {
-      const res = await fetch('/api/studies?limit=100')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setStudies(data)
-      setState('loaded')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load studies')
-      setState('error')
-    }
+  // Filters
+  const [filterStatus,   setFilterStatus]   = useState('')
+  const [filterModality, setFilterModality] = useState('')
+  const [filterSource,   setFilterSource]   = useState('')
+  const [filterProject,  setFilterProject]  = useState('')
+  const [filterSearch,   setFilterSearch]   = useState('')
+  const [page, setPage] = useState(0)
+  const [refreshTick, setRefreshTick] = useState(0)
+
+  // Projects for filter dropdown
+  const [projects, setProjects] = useState<Project[]>([])
+  useEffect(() => {
+    fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
   }, [])
 
-  useEffect(() => { fetchStudies() }, [fetchStudies])
+  // Fetch studies whenever filters, page, or refresh tick change
+  useEffect(() => {
+    let cancelled = false
+    setState('loading')
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) })
+    if (filterStatus)   params.set('status',     filterStatus)
+    if (filterModality) params.set('modality',   filterModality)
+    if (filterSource)   params.set('source',     filterSource)
+    if (filterProject)  params.set('project_id', filterProject)
+    if (filterSearch)   params.set('search',     filterSearch)
 
-  const pending  = studies.filter(s => ['received', 'defacing', 'clean'].includes(s.status))
-  const approved = studies.filter(s => s.status === 'approved')
-  const rejected = studies.filter(s => s.status === 'rejected')
+    fetch(`/api/studies?${params}`)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then(data => {
+        if (cancelled) return
+        setStudies(data.studies ?? [])
+        setStudiesTotal(data.total ?? 0)
+        setState('loaded')
+      })
+      .catch(err => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'Failed to load studies')
+        setState('error')
+      })
+    return () => { cancelled = true }
+  }, [page, filterStatus, filterModality, filterSource, filterProject, filterSearch, refreshTick])
 
-  const stats = [
-    { label: 'Pending review', count: pending.length,  variant: 'warning'  },
-    { label: 'Approved',       count: approved.length, variant: 'success'  },
-    { label: 'Rejected',       count: rejected.length, variant: 'error'    },
-    { label: 'Total',          count: studies.length,  variant: 'neutral'  },
-  ] as const
+  // Filter change helpers — also reset page to 0
+  function setStatusF(v: string)   { setFilterStatus(v);   setPage(0) }
+  function setModalityF(v: string) { setFilterModality(v); setPage(0) }
+  function setSourceF(v: string)   { setFilterSource(v);   setPage(0) }
+  function setProjectF(v: string)  { setFilterProject(v);  setPage(0) }
+  function setSearchF(v: string)   { setFilterSearch(v);   setPage(0) }
+
+  const hasFilters = !!(filterStatus || filterModality || filterSource || filterProject || filterSearch)
+
+  function clearFilters() {
+    setFilterStatus(''); setFilterModality(''); setFilterSource('')
+    setFilterProject(''); setFilterSearch(''); setPage(0)
+  }
+
+  const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
+  const pageStart  = studiesTotal === 0 ? 0 : page * PAGE_SIZE + 1
+  const pageEnd    = Math.min((page + 1) * PAGE_SIZE, studiesTotal)
 
   return (
     <div className="admin-root">
@@ -2062,7 +2098,7 @@ export function App() {
           <p>Study review, QC, and export management</p>
         </div>
         {tab === 'studies' && (
-          <button type="button" className="btn-refresh" onClick={fetchStudies}>Refresh</button>
+          <button type="button" className="btn-refresh" onClick={() => setRefreshTick(t => t + 1)}>Refresh</button>
         )}
       </header>
 
@@ -2129,21 +2165,66 @@ export function App() {
       {/* Studies tab */}
       {tab === 'studies' && (
         <>
-          {state === 'loaded' && (
-            <div className="stats-bar">
-              {stats.map(({ label, count, variant }) => (
-                <div key={label} className="stat-card">
-                  <div className={`stat-number stat-number--${variant}`}>{count}</div>
-                  <div className="stat-label">{label}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Filter bar */}
+          <div className="filter-bar">
+            <input
+              className="filter-input filter-input--search"
+              type="search"
+              placeholder="Search UID or description…"
+              value={filterSearch}
+              onChange={e => setSearchF(e.target.value)}
+            />
+            <select className="filter-select" title="Filter by status" value={filterStatus} onChange={e => setStatusF(e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="received">Received</option>
+              <option value="defacing">Defacing</option>
+              <option value="clean">Clean</option>
+              <option value="defaced">Defaced</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <select className="filter-select" title="Filter by modality" value={filterModality} onChange={e => setModalityF(e.target.value)}>
+              <option value="">All modalities</option>
+              <option value="MRI">MRI</option>
+              <option value="CT">CT</option>
+              <option value="PET">PET</option>
+              <option value="US">US</option>
+              <option value="CR">CR</option>
+              <option value="DX">DX</option>
+              <option value="NM">NM</option>
+              <option value="PT">PT</option>
+            </select>
+            <select className="filter-select" title="Filter by source" value={filterSource} onChange={e => setSourceF(e.target.value)}>
+              <option value="">All sources</option>
+              <option value="external">External</option>
+              <option value="internal">Internal</option>
+            </select>
+            <select className="filter-select" title="Filter by project" value={filterProject} onChange={e => setProjectF(e.target.value)}>
+              <option value="">All projects</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {hasFilters && (
+              <button type="button" className="btn btn--secondary" onClick={clearFilters}>Clear</button>
+            )}
+            {state === 'loaded' && (
+              <span className="filter-count">
+                {studiesTotal === 0
+                  ? 'No results'
+                  : hasFilters
+                    ? `${studiesTotal} matching`
+                    : `${studiesTotal} total`}
+              </span>
+            )}
+          </div>
 
           {state === 'loading' && <div className="state-loading">Loading studies…</div>}
           {state === 'error'   && <div className="state-error">{error}</div>}
-          {state === 'loaded' && studies.length === 0 && (
-            <div className="state-empty">No studies yet. Upload DICOM files via the Upload Portal.</div>
+          {state === 'loaded' && studiesTotal === 0 && (
+            <div className="state-empty">
+              {hasFilters
+                ? 'No studies match your filters.'
+                : 'No studies yet. Upload DICOM files via the Upload Portal.'}
+            </div>
           )}
 
           {state === 'loaded' && studies.length > 0 && (
@@ -2163,10 +2244,35 @@ export function App() {
                 </thead>
                 <tbody>
                   {studies.map(study => (
-                    <StudyRow key={study.id} study={study} onAction={fetchStudies} />
+                    <StudyRow key={study.id} study={study} onAction={() => setRefreshTick(t => t + 1)} />
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {state === 'loaded' && studiesTotal > PAGE_SIZE && (
+            <div className="pagination">
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={page === 0}
+                onClick={() => setPage(p => p - 1)}
+              >
+                ← Previous
+              </button>
+              <span className="pagination-info">
+                {pageStart}–{pageEnd} of {studiesTotal}
+              </span>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage(p => p + 1)}
+              >
+                Next →
+              </button>
             </div>
           )}
         </>
