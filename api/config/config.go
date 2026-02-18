@@ -19,6 +19,10 @@ type Config struct {
 	DicomStoreRaw   string
 	DicomStoreClean string
 
+	// Defacing service (Python Cloud Run sidecar)
+	// Empty string disables the defacing service call (pipeline still records status).
+	DefacingServiceURL string
+
 	// CORS
 	AllowedOrigins []string
 
@@ -39,6 +43,8 @@ func Load() *Config {
 		DicomDataset:    os.Getenv("DICOM_DATASET"),
 		DicomStoreRaw:   envOr("DICOM_STORE_RAW", "raw"),
 		DicomStoreClean: envOr("DICOM_STORE_CLEAN", "clean"),
+
+		DefacingServiceURL: os.Getenv("DEFACING_SERVICE_URL"), // e.g. http://localhost:8081
 
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"), ","),
 
