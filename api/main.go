@@ -83,6 +83,16 @@ func main() {
 
 	mux.HandleFunc("GET /api/audit", srv.ListAudit)
 
+	// Institutions — organisations that send or receive studies.
+	mux.HandleFunc("GET /api/institutions", srv.ListInstitutions)
+	mux.HandleFunc("POST /api/institutions", srv.CreateInstitution)
+	mux.HandleFunc("GET /api/institutions/{id}", srv.GetInstitution)
+	mux.HandleFunc("PUT /api/institutions/{id}", srv.UpdateInstitution)
+	mux.HandleFunc("DELETE /api/institutions/{id}", srv.DeleteInstitution)
+	mux.HandleFunc("GET /api/institutions/{id}/projects", srv.ListInstitutionProjects)
+	mux.HandleFunc("POST /api/institutions/{id}/projects", srv.AddInstitutionProject)
+	mux.HandleFunc("DELETE /api/institutions/{id}/projects/{projectID}", srv.RemoveInstitutionProject)
+
 	// Destinations — external DICOM endpoints studies can be forwarded to.
 	mux.HandleFunc("GET /api/destinations", srv.ListDestinations)
 	mux.HandleFunc("POST /api/destinations", srv.CreateDestination)
