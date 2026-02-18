@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'institutions'
+type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles'
 
 type AuditEntry = {
   id: string
@@ -93,6 +93,25 @@ type InstitutionProject = {
   role: 'sender' | 'receiver' | 'admin'
   institution_name?: string
   project_name?: string
+  created_at: string
+}
+
+type Project = {
+  id: string
+  name: string
+  slug: string
+  description: string
+  default_anon_profile_id?: string | null
+  created_at: string
+}
+
+type AnonProfile = {
+  id: string
+  project_id: string
+  name: string
+  description: string
+  retained_tags: string[]
+  enabled: boolean
   created_at: string
 }
 
@@ -928,6 +947,238 @@ function RoutingPanel() {
   )
 }
 
+// ── Profiles Panel ────────────────────────────────────────────────────────────
+
+const EMPTY_PROFILE: Omit<AnonProfile, 'id' | 'project_id' | 'created_at'> = {
+  name: '', description: '', retained_tags: [], enabled: true,
+}
+
+function ProfilesPanel() {
+  const [projects, setProjects]   = useState<Project[]>([])
+  const [profiles, setProfiles]   = useState<AnonProfile[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+
+  const [form, setForm]           = useState<Omit<AnonProfile, 'id' | 'project_id' | 'created_at'>>(EMPTY_PROFILE)
+  const [formProject, setFormProject] = useState('')
+  const [tagsInput, setTagsInput] = useState('')  // comma-separated tags string in form
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const projRes = await fetch('/api/projects')
+      if (!projRes.ok) throw new Error('Failed to load projects')
+      const projs: Project[] = await projRes.json()
+      setProjects(projs ?? [])
+
+      // Fetch profiles for all projects in parallel
+      const allProfiles: AnonProfile[] = []
+      await Promise.all((projs ?? []).map(async p => {
+        const res = await fetch(`/api/projects/${p.id}/anon-profiles`)
+        if (res.ok) {
+          const list: AnonProfile[] = await res.json()
+          allProfiles.push(...list)
+        }
+      }))
+      setProfiles(allProfiles)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  function openCreate() {
+    setForm(EMPTY_PROFILE)
+    setFormProject(projects[0]?.id ?? '')
+    setTagsInput('')
+    setEditingId(null)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  function openEdit(p: AnonProfile) {
+    setForm({ name: p.name, description: p.description, retained_tags: p.retained_tags, enabled: p.enabled })
+    setFormProject(p.project_id)
+    setTagsInput((p.retained_tags ?? []).join(', '))
+    setEditingId(p.id)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.name) { setFormError('Name is required'); return }
+    if (!formProject) { setFormError('Project is required'); return }
+    const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean)
+    setSaving(true)
+    setFormError(null)
+    try {
+      const url = editingId ? `/api/anon-profiles/${editingId}` : `/api/projects/${formProject}/anon-profiles`
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, retained_tags: tags }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      setEditingId(null)
+      fetchAll()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function del(id: string, name: string) {
+    if (!confirm(`Delete profile "${name}"?`)) return
+    await fetch(`/api/anon-profiles/${id}`, { method: 'DELETE' })
+    fetchAll()
+  }
+
+  async function setDefault(projectID: string, profileID: string, profileName: string) {
+    const proj = projects.find(p => p.id === projectID)
+    const isAlready = proj?.default_anon_profile_id === profileID
+    if (isAlready) {
+      // Clear default
+      if (!confirm(`Clear default profile for this project?`)) return
+      await fetch(`/api/projects/${projectID}/default-anon-profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: '' }),
+      })
+    } else {
+      if (!confirm(`Set "${profileName}" as the default profile for this project?`)) return
+      await fetch(`/api/projects/${projectID}/default-anon-profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: profileID }),
+      })
+    }
+    fetchAll()
+  }
+
+  const projectName = (id: string) => projects.find(p => p.id === id)?.name ?? id
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Anonymization Profiles</div>
+            <div className="routing-section-sub">
+              Named DICOM tag retention overrides applied during upload de-identification.
+              The project's default profile is automatically used by the upload portal.
+            </div>
+          </div>
+          <button type="button" className="btn-primary" onClick={openCreate}>+ New profile</button>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit profile' : 'New profile'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Profile name *"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              {!editingId && (
+                <select className="form-select" aria-label="Project"
+                  value={formProject}
+                  onChange={e => setFormProject(e.target.value)}>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              )}
+              <input className="form-input form-input--wide" placeholder="Description"
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+              <input className="form-input form-input--wide"
+                placeholder="Retained tags — comma-separated DICOM keywords (e.g. PatientAge, StudyDate)"
+                value={tagsInput}
+                onChange={e => setTagsInput(e.target.value)} />
+              <label className="form-checkbox">
+                <input type="checkbox" checked={form.enabled}
+                  onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
+                {' '}Enabled
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading && <div className="state-loading">Loading…</div>}
+        {error   && <div className="state-error">{error}</div>}
+        {!loading && !error && profiles.length === 0 && (
+          <div className="state-empty">No profiles yet. Create one to override tag retention per project.</div>
+        )}
+        {!loading && !error && profiles.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Project</th>
+                <th>Tags retained</th>
+                <th>Enabled</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.map(p => {
+                const proj = projects.find(pr => pr.id === p.project_id)
+                const isDefault = proj?.default_anon_profile_id === p.id
+                return (
+                  <tr key={p.id} className={p.enabled ? '' : 'routing-row--disabled'}>
+                    <td>
+                      <div className="routing-name">{p.name}</div>
+                      {p.description && <div className="routing-desc">{p.description}</div>}
+                      {isDefault && <span className="badge badge--status-approved">default</span>}
+                    </td>
+                    <td>{projectName(p.project_id)}</td>
+                    <td>
+                      {p.retained_tags?.length > 0
+                        ? <span title={p.retained_tags.join(', ')}>{p.retained_tags.length} tag{p.retained_tags.length !== 1 ? 's' : ''}</span>
+                        : <span className="routing-desc">none (full strip)</span>
+                      }
+                    </td>
+                    <td>{p.enabled ? 'Yes' : 'No'}</td>
+                    <td>
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="btn btn--secondary"
+                          onClick={() => setDefault(p.project_id, p.id, p.name)}>
+                          {isDefault ? 'Clear default' : 'Set default'}
+                        </button>
+                        <button type="button" className="btn btn--revoke" onClick={() => del(p.id, p.name)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Institutions Panel ────────────────────────────────────────────────────────
 
 const EMPTY_INSTITUTION: Omit<Institution, 'id' | 'created_at'> = {
@@ -1339,6 +1590,13 @@ export function App() {
         >
           Institutions
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'profiles' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('profiles')}
+        >
+          Profiles
+        </button>
       </nav>
 
       {/* Studies tab */}
@@ -1395,6 +1653,9 @@ export function App() {
 
       {/* Institutions tab */}
       {tab === 'institutions' && <InstitutionsPanel />}
+
+      {/* Profiles tab */}
+      {tab === 'profiles' && <ProfilesPanel />}
     </div>
   )
 }

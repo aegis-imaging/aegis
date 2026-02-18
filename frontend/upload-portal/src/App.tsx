@@ -99,9 +99,26 @@ export function App() {
     setUploadProgress({ current: 0, total: files.length })
 
     try {
+      // Fetch the project's active anonymization profile (if any) so that any
+      // project-specific tag retention overrides are applied during de-id.
+      let retainedTags: string[] | undefined
+      try {
+        const profileRes = await fetch('/api/projects/default/active-anon-profile')
+        if (profileRes.ok) {
+          const profile = await profileRes.json() as { retained_tags: string[] }
+          if (Array.isArray(profile.retained_tags) && profile.retained_tags.length > 0) {
+            retainedTags = profile.retained_tags
+          }
+        }
+        // 204 = no default profile configured — proceed with full Basic Profile strip
+      } catch {
+        // Non-fatal: if profile fetch fails, fall back to full strip
+      }
+
       const result = await uploadStudy(files, 'default', summary, {
         onProgress: (uploaded, total) => setUploadProgress({ current: uploaded, total }),
         uploaderEmail: uploaderEmail.trim() || undefined,
+        deid: retainedTags ? { retainedTags } : undefined,
       })
       setUploadResult(result)
       setStage('ready')
