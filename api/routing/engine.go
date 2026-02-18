@@ -138,6 +138,20 @@ func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.S
 			outcome = "phi_scan_required already true (no-op)"
 		}
 
+	case "require_qc_check":
+		if !s.QcRequired {
+			s.QcRequired = true
+			s.QcStatus = "pending"
+			if err := model.SetQcRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set qc_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "qc_required set to true"
+			}
+		} else {
+			outcome = "qc_required already true (no-op)"
+		}
+
 	case "route_to":
 		if r.DestinationID == nil {
 			outcome = "error: route_to rule has no destination_id"
