@@ -468,7 +468,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 21. **QC automation**: Vertex AI custom models for image quality assessment
 19. **Smart routing**: ML-based modality/anatomy classification for studies with poor metadata
 20. **BIDS conversion**: dcm2niix-based pipeline for research output format
-21. **Batch import tools**: CLI / API for bulk historical data migration
+21. ✅ **Batch import tools**: `api/cmd/import/` CLI + `POST /api/import/batch` API; recursive DICOM directory scan with `suyashkumar/dicom` header parsing; groups files by StudyInstanceUID; creates upload sessions + study records; evaluates routing rules; `--dry-run` mode (PR #31)
 22. **Defacing tool upgrades**: DeepDefacer or afni_refacer for improved quality
 
 ### Future Ideas (not planned)
