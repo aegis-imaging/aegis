@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit'
+type AppTab = 'studies' | 'audit' | 'routing'
 
 type AuditEntry = {
   id: string
@@ -42,6 +42,35 @@ type Share = {
 type NewShareResult = Share & {
   token: string
   export_url: string
+}
+
+type Destination = {
+  id: string
+  name: string
+  slug: string
+  description: string
+  type: 'dicomweb' | 'dimse'
+  dicomweb_url: string
+  ae_title: string
+  host: string
+  port: number
+  enabled: boolean
+  created_at: string
+}
+
+type RoutingRule = {
+  id: string
+  name: string
+  description: string
+  priority: number
+  enabled: boolean
+  project_id: string | null
+  modality: string | null
+  body_part: string | null
+  source: string | null
+  action: string
+  destination_id: string | null
+  created_at: string
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -492,6 +521,390 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   )
 }
 
+// ── Routing Panel ─────────────────────────────────────────────────────────────
+
+const EMPTY_DEST: Omit<Destination, 'id' | 'created_at'> = {
+  name: '', slug: '', description: '', type: 'dicomweb',
+  dicomweb_url: '', ae_title: '', host: '', port: 0, enabled: true,
+}
+
+const EMPTY_RULE: Omit<RoutingRule, 'id' | 'created_at'> = {
+  name: '', description: '', priority: 100, enabled: true,
+  project_id: null, modality: null, body_part: null, source: null,
+  action: 'require_qa', destination_id: null,
+}
+
+function RoutingPanel() {
+  const [destinations, setDestinations] = useState<Destination[]>([])
+  const [rules, setRules]               = useState<RoutingRule[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState<string | null>(null)
+
+  // Destination form
+  const [destForm, setDestForm]         = useState<Omit<Destination, 'id' | 'created_at'>>(EMPTY_DEST)
+  const [editingDestId, setEditingDestId] = useState<string | null>(null)
+  const [showDestForm, setShowDestForm] = useState(false)
+  const [destSaving, setDestSaving]     = useState(false)
+  const [destError, setDestError]       = useState<string | null>(null)
+
+  // Rule form
+  const [ruleForm, setRuleForm]         = useState<Omit<RoutingRule, 'id' | 'created_at'>>(EMPTY_RULE)
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
+  const [showRuleForm, setShowRuleForm] = useState(false)
+  const [ruleSaving, setRuleSaving]     = useState(false)
+  const [ruleError, setRuleError]       = useState<string | null>(null)
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [destRes, ruleRes] = await Promise.all([
+        fetch('/api/destinations'),
+        fetch('/api/routing-rules'),
+      ])
+      if (!destRes.ok || !ruleRes.ok) throw new Error('Failed to load routing data')
+      const [dests, ruleList] = await Promise.all([destRes.json(), ruleRes.json()])
+      setDestinations(dests)
+      setRules(ruleList)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  // ── Destination CRUD ────────────────────────────────────────────────────────
+
+  function openNewDest() {
+    setDestForm(EMPTY_DEST)
+    setEditingDestId(null)
+    setDestError(null)
+    setShowDestForm(true)
+  }
+
+  function openEditDest(d: Destination) {
+    setDestForm({ name: d.name, slug: d.slug, description: d.description, type: d.type,
+      dicomweb_url: d.dicomweb_url, ae_title: d.ae_title, host: d.host, port: d.port, enabled: d.enabled })
+    setEditingDestId(d.id)
+    setDestError(null)
+    setShowDestForm(true)
+  }
+
+  async function saveDest() {
+    if (!destForm.name || !destForm.type) { setDestError('Name and type are required'); return }
+    setDestSaving(true)
+    setDestError(null)
+    try {
+      const url = editingDestId ? `/api/destinations/${editingDestId}` : '/api/destinations'
+      const method = editingDestId ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(destForm) })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowDestForm(false)
+      setEditingDestId(null)
+      fetchAll()
+    } catch (err) {
+      setDestError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setDestSaving(false)
+    }
+  }
+
+  async function deleteDest(id: string, name: string) {
+    if (!confirm(`Delete destination "${name}"? Rules using it will lose their target.`)) return
+    await fetch(`/api/destinations/${id}`, { method: 'DELETE' })
+    fetchAll()
+  }
+
+  // ── Routing Rule CRUD ───────────────────────────────────────────────────────
+
+  function openNewRule() {
+    setRuleForm(EMPTY_RULE)
+    setEditingRuleId(null)
+    setRuleError(null)
+    setShowRuleForm(true)
+  }
+
+  function openEditRule(r: RoutingRule) {
+    setRuleForm({ name: r.name, description: r.description, priority: r.priority, enabled: r.enabled,
+      project_id: r.project_id, modality: r.modality, body_part: r.body_part, source: r.source,
+      action: r.action, destination_id: r.destination_id })
+    setEditingRuleId(r.id)
+    setRuleError(null)
+    setShowRuleForm(true)
+  }
+
+  async function saveRule() {
+    if (!ruleForm.name) { setRuleError('Name is required'); return }
+    if (ruleForm.action === 'route_to' && !ruleForm.destination_id) { setRuleError('Destination required for route_to action'); return }
+    setRuleSaving(true)
+    setRuleError(null)
+    const body = {
+      ...ruleForm,
+      modality:   ruleForm.modality  || null,
+      body_part:  ruleForm.body_part || null,
+      source:     ruleForm.source    || null,
+      destination_id: ruleForm.action === 'route_to' ? ruleForm.destination_id : null,
+    }
+    try {
+      const url = editingRuleId ? `/api/routing-rules/${editingRuleId}` : '/api/routing-rules'
+      const method = editingRuleId ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowRuleForm(false)
+      setEditingRuleId(null)
+      fetchAll()
+    } catch (err) {
+      setRuleError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setRuleSaving(false)
+    }
+  }
+
+  async function deleteRule(id: string, name: string) {
+    if (!confirm(`Delete rule "${name}"?`)) return
+    await fetch(`/api/routing-rules/${id}`, { method: 'DELETE' })
+    fetchAll()
+  }
+
+  async function toggleRule(r: RoutingRule) {
+    await fetch(`/api/routing-rules/${r.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...r, enabled: !r.enabled }),
+    })
+    fetchAll()
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  if (loading) return <div className="state-loading">Loading routing configuration…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+
+      {/* ── Destinations ── */}
+      <section className="routing-section">
+        <div className="routing-section-header">
+          <h2>Destinations</h2>
+          <button type="button" className="btn-primary" onClick={openNewDest}>+ Add destination</button>
+        </div>
+        <p className="routing-hint">External DICOM endpoints that studies can be forwarded to via <code>route_to</code> rules.</p>
+
+        {showDestForm && (
+          <div className="routing-form">
+            <h3>{editingDestId ? 'Edit destination' : 'New destination'}</h3>
+            {destError && <div className="form-error">{destError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Name *" value={destForm.name}
+                onChange={e => setDestForm(f => ({ ...f, name: e.target.value }))} />
+              <input className="form-input" placeholder="Slug (auto-generated if blank)" value={destForm.slug}
+                onChange={e => setDestForm(f => ({ ...f, slug: e.target.value }))} />
+              <select className="form-select" aria-label="Type" value={destForm.type}
+                onChange={e => setDestForm(f => ({ ...f, type: e.target.value as 'dicomweb' | 'dimse' }))}>
+                <option value="dicomweb">DICOMweb (STOW-RS)</option>
+                <option value="dimse">DIMSE (future)</option>
+              </select>
+              <input className="form-input" placeholder="Description" value={destForm.description}
+                onChange={e => setDestForm(f => ({ ...f, description: e.target.value }))} />
+              {destForm.type === 'dicomweb' && (
+                <input className="form-input form-input--wide" placeholder="DICOMweb base URL *" value={destForm.dicomweb_url}
+                  onChange={e => setDestForm(f => ({ ...f, dicomweb_url: e.target.value }))} />
+              )}
+              {destForm.type === 'dimse' && (
+                <>
+                  <input className="form-input" placeholder="AE Title" value={destForm.ae_title}
+                    onChange={e => setDestForm(f => ({ ...f, ae_title: e.target.value }))} />
+                  <input className="form-input" placeholder="Host" value={destForm.host}
+                    onChange={e => setDestForm(f => ({ ...f, host: e.target.value }))} />
+                  <input className="form-input" placeholder="Port" type="number" value={destForm.port || ''}
+                    onChange={e => setDestForm(f => ({ ...f, port: Number(e.target.value) }))} />
+                </>
+              )}
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveDest} disabled={destSaving}>
+                {destSaving ? 'Saving…' : editingDestId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowDestForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {destinations.length === 0 && !showDestForm ? (
+          <div className="state-empty">No destinations yet.</div>
+        ) : destinations.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Target</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {destinations.map(d => (
+                <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
+                  <td>
+                    <div className="routing-name">{d.name}</div>
+                    {d.description && <div className="routing-desc">{d.description}</div>}
+                  </td>
+                  <td><code>{d.type}</code></td>
+                  <td className="routing-target">
+                    {d.type === 'dicomweb' ? (d.dicomweb_url || '—') : `${d.ae_title}@${d.host}:${d.port}`}
+                  </td>
+                  <td>
+                    <span className={`badge badge--${d.enabled ? 'enabled' : 'disabled'}`}>
+                      {d.enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
+                      <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {/* ── Routing Rules ── */}
+      <section className="routing-section">
+        <div className="routing-section-header">
+          <h2>Routing Rules</h2>
+          <button type="button" className="btn-primary" onClick={openNewRule}>+ Add rule</button>
+        </div>
+        <p className="routing-hint">
+          Rules are evaluated in <strong>priority order</strong> (lower = first) on every study ingest.
+          All matching rules fire — not just the first.
+        </p>
+
+        {showRuleForm && (
+          <div className="routing-form">
+            <h3>{editingRuleId ? 'Edit rule' : 'New rule'}</h3>
+            {ruleError && <div className="form-error">{ruleError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Rule name *" value={ruleForm.name}
+                onChange={e => setRuleForm(f => ({ ...f, name: e.target.value }))} />
+              <input className="form-input" placeholder="Description" value={ruleForm.description}
+                onChange={e => setRuleForm(f => ({ ...f, description: e.target.value }))} />
+              <input className="form-input" placeholder="Priority (default 100)" type="number" value={ruleForm.priority}
+                onChange={e => setRuleForm(f => ({ ...f, priority: Number(e.target.value) }))} />
+            </div>
+            <div className="routing-form-section-label">Conditions (leave blank = match any)</div>
+            <div className="form-grid">
+              <input className="form-input" placeholder="Modality (e.g. MRI, CT, PET)" value={ruleForm.modality ?? ''}
+                onChange={e => setRuleForm(f => ({ ...f, modality: e.target.value || null }))} />
+              <input className="form-input" placeholder="Body part (e.g. HEAD, CHEST)" value={ruleForm.body_part ?? ''}
+                onChange={e => setRuleForm(f => ({ ...f, body_part: e.target.value || null }))} />
+              <select className="form-select" aria-label="Source filter" value={ruleForm.source ?? ''}
+                onChange={e => setRuleForm(f => ({ ...f, source: e.target.value || null }))}>
+                <option value="">Any source</option>
+                <option value="external">external</option>
+                <option value="internal">internal</option>
+              </select>
+            </div>
+            <div className="routing-form-section-label">Action</div>
+            <div className="form-grid">
+              <select className="form-select" aria-label="Action" value={ruleForm.action}
+                onChange={e => setRuleForm(f => ({ ...f, action: e.target.value, destination_id: null }))}>
+                <option value="require_qa">require_qa — hold for manual review (default)</option>
+                <option value="require_defacing">require_defacing — force defacing even if not head</option>
+                <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
+                <option value="reject">reject — auto-reject</option>
+                <option value="route_to">route_to — forward to external destination</option>
+              </select>
+              {ruleForm.action === 'route_to' && (
+                <select className="form-select" aria-label="Destination" value={ruleForm.destination_id ?? ''}
+                  onChange={e => setRuleForm(f => ({ ...f, destination_id: e.target.value || null }))}>
+                  <option value="">Select destination…</option>
+                  {destinations.map(d => (
+                    <option key={d.id} value={d.id}>{d.name} ({d.type})</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveRule} disabled={ruleSaving}>
+                {ruleSaving ? 'Saving…' : editingRuleId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowRuleForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {rules.length === 0 && !showRuleForm ? (
+          <div className="state-empty">No routing rules yet. Studies follow the default pipeline.</div>
+        ) : rules.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Priority</th>
+                <th>Rule</th>
+                <th>Conditions</th>
+                <th>Action</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map(r => {
+                const destName = r.destination_id
+                  ? (destinations.find(d => d.id === r.destination_id)?.name ?? r.destination_id)
+                  : null
+                const conditions = [
+                  r.modality  ? `modality=${r.modality}`   : null,
+                  r.body_part ? `body_part=${r.body_part}` : null,
+                  r.source    ? `source=${r.source}`       : null,
+                ].filter(Boolean)
+                return (
+                  <tr key={r.id} className={r.enabled ? '' : 'routing-row--disabled'}>
+                    <td className="routing-priority">{r.priority}</td>
+                    <td>
+                      <div className="routing-name">{r.name}</div>
+                      {r.description && <div className="routing-desc">{r.description}</div>}
+                    </td>
+                    <td className="routing-conditions">
+                      {conditions.length > 0
+                        ? conditions.map(c => <code key={c} className="routing-condition-tag">{c}</code>)
+                        : <span className="td-muted">any</span>}
+                    </td>
+                    <td>
+                      <code className={`routing-action routing-action--${r.action}`}>{r.action}</code>
+                      {destName && <div className="routing-desc">→ {destName}</div>}
+                    </td>
+                    <td>
+                      <span className={`badge badge--${r.enabled ? 'enabled' : 'disabled'}`}>
+                        {r.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEditRule(r)}>Edit</button>
+                        <button type="button" className="btn btn--secondary" onClick={() => toggleRule(r)}>
+                          {r.enabled ? 'Disable' : 'Enable'}
+                        </button>
+                        <button type="button" className="btn btn--revoke" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 type StudiesState = 'loading' | 'loaded' | 'error'
@@ -557,6 +970,13 @@ export function App() {
         >
           Audit Log
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'routing' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('routing')}
+        >
+          Routing
+        </button>
       </nav>
 
       {/* Studies tab */}
@@ -607,6 +1027,9 @@ export function App() {
 
       {/* Audit log tab */}
       {tab === 'audit' && <AuditLog />}
+
+      {/* Routing tab */}
+      {tab === 'routing' && <RoutingPanel />}
     </div>
   )
 }

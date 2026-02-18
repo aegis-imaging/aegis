@@ -133,6 +133,13 @@ func GetUploaderEmail(ctx context.Context, db *sql.DB, studyID string) (string, 
 	return uploaderEmail, err
 }
 
+// SetDefacingRequired overrides the defacing_required flag on a study.
+func SetDefacingRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET defacing_required = $1, updated_at = now() WHERE id = $2`, required, id)
+	return err
+}
+
 // UpdateStudyDefaced marks a study as defacing-complete and moves it to the clean store.
 func UpdateStudyDefaced(ctx context.Context, db *sql.DB, id string) error {
 	_, err := db.ExecContext(ctx, `
