@@ -58,6 +58,8 @@ export interface DeidOptions {
   salt?: string
   /** Keep private tags instead of removing them */
   keepPrivateTags?: boolean
+  /** DICOM keyword names to retain as-is (override Basic Profile strip/zero actions) */
+  retainedTags?: string[]
 }
 
 /**
@@ -79,6 +81,17 @@ export async function deidentify(
     if (originalValue === undefined && rule.action !== 'K') continue
 
     const originalStr = formatValue(originalValue)
+
+    // If the tag is in the project's retained list, treat it as Keep regardless
+    // of the Basic Profile action.
+    if (options.retainedTags?.includes(keyword)) {
+      tagChanges.push({
+        tag, keyword, vr: '', action: 'K',
+        originalValue: originalStr,
+        anonymizedValue: originalStr,
+      })
+      continue
+    }
 
     switch (rule.action) {
       case 'K':

@@ -302,6 +302,16 @@
   align-items: center;
 }
 
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.text-capitalize { text-transform: capitalize; }
+
 /* ── Shares list ─────────────────────────────────────────────────────────── */
 .shares-table {
   width: 100%;

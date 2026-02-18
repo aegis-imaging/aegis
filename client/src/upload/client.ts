@@ -83,6 +83,7 @@ export async function uploadStudy(
     const { dataset: deidDataset } = await deidentify(dataset, {
       salt,
       keepPrivateTags: options.deid?.keepPrivateTags,
+      retainedTags: options.deid?.retainedTags,
     })
 
     // Re-serialize to DICOM bytes preserving the original transfer syntax
