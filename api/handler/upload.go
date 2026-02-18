@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/msenjem/aegis/api/email"
 	"github.com/msenjem/aegis/api/model"
 )
 
@@ -173,6 +174,13 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		model.UpdateUploadSessionFailed(r.Context(), s.db, session.ID, err.Error())
 		s.writeError(w, http.StatusInternalServerError, "ingest failed: "+err.Error())
 		return
+	}
+
+	if session.UploaderEmail != "" {
+		subject, body := email.UploadConfirmed(study.StudyInstanceUID, study.Modality, len(files), study.CreatedAt)
+		if err := s.mailer.Send(r.Context(), session.UploaderEmail, subject, body); err != nil {
+			log.Printf("upload confirm email to %s: %v", session.UploaderEmail, err)
+		}
 	}
 
 	// Audit
