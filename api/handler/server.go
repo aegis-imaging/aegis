@@ -6,17 +6,19 @@ import (
 	"net/http"
 
 	"github.com/msenjem/aegis/api/config"
+	"github.com/msenjem/aegis/api/email"
 	"github.com/msenjem/aegis/api/storage"
 )
 
 type Server struct {
-	db    *sql.DB
-	store storage.Storage
-	cfg   *config.Config
+	db     *sql.DB
+	store  storage.Storage
+	cfg    *config.Config
+	mailer *email.Client
 }
 
 func NewServer(db *sql.DB, store storage.Storage, cfg *config.Config) *Server {
-	return &Server{db: db, store: store, cfg: cfg}
+	return &Server{db: db, store: store, cfg: cfg, mailer: email.New(cfg)}
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {

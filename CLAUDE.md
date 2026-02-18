@@ -40,6 +40,25 @@ Planned to split into 5 separate repos once interfaces stabilize:
 cd api && go run .          # runs on :8080
 ```
 
+Email is disabled by default (silent no-op). To enable locally, run [Mailpit](https://github.com/axllent/mailpit) and set `SMTP_HOST`:
+```bash
+docker run -p 1025:1025 -p 8025:8025 axllent/mailpit
+SMTP_HOST=localhost SMTP_PORT=1025 go run .
+# View captured emails at http://localhost:8025
+```
+
+Email env vars (`api/email/client.go`, `api/config/config.go`):
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `SMTP_HOST` | *(empty — disabled)* | Set to enable; empty = silent no-op |
+| `SMTP_PORT` | `587` | Use `1025` with Mailpit |
+| `SMTP_FROM` | `noreply@aegis.local` | Envelope sender address |
+| `SMTP_USERNAME` | *(empty)* | Omit for unauthenticated relays |
+| `SMTP_PASSWORD` | *(empty)* | |
+
+Triggers: share created → recipient email; upload complete → uploader (if provided); study approved/rejected → uploader. No PHI in any email body.
+
 ### Upload Portal (React)
 ```bash
 cd frontend/upload-portal && npm install && npm run dev   # runs on :3000, proxies /api to :8080
@@ -69,6 +88,16 @@ cd terraform/infra && terraform init && terraform plan
 - Vertex AI for burned-in PHI detection and image QC (Phase 4)
 - Dual-path email: PSC→on-prem SMTP for internal, SendGrid for external (dev: standard SMTP)
 - Modality-agnostic de-identification; defacing only for head imaging
+
+## Git Branching Strategy
+
+- **Never commit directly to `develop` or `main`.**
+- Always create a feature branch from `origin/develop`:
+  ```bash
+  git checkout -b feature/your-feature-name origin/develop
+  ```
+- Build and commit on the feature branch, then push it and open a PR to `develop`.
+- This avoids merge conflicts when multiple agents work in parallel.
 
 ## Conventions
 

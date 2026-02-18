@@ -28,9 +28,19 @@ type Config struct {
 
 	// Auth
 	AuthEnabled bool
+
+	// Email (SMTP)
+	// EmailEnabled is derived: true when SMTPHost is non-empty.
+	SMTPHost     string // SMTP_HOST — e.g. localhost; leave empty to disable email
+	SMTPPort     string // SMTP_PORT — default 587; use 1025 with Mailpit
+	SMTPFrom     string // SMTP_FROM — envelope sender address
+	SMTPUsername string // SMTP_USERNAME — omit for unauthenticated relays
+	SMTPPassword string // SMTP_PASSWORD
+	EmailEnabled bool   // true when SMTPHost != ""
 }
 
 func Load() *Config {
+	smtpHost := os.Getenv("SMTP_HOST")
 	return &Config{
 		Port:            envOr("PORT", "8080"),
 		DatabaseURL:     envOr("DATABASE_URL", "postgres://aegis:aegis@localhost:5432/aegis?sslmode=disable"),
@@ -49,6 +59,13 @@ func Load() *Config {
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"), ","),
 
 		AuthEnabled: os.Getenv("AUTH_ENABLED") == "true",
+
+		SMTPHost:     smtpHost,
+		SMTPPort:     envOr("SMTP_PORT", "587"),
+		SMTPFrom:     envOr("SMTP_FROM", "noreply@aegis.local"),
+		SMTPUsername: os.Getenv("SMTP_USERNAME"),
+		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
+		EmailEnabled: smtpHost != "",
 	}
 }
 
