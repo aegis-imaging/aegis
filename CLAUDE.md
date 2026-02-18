@@ -297,6 +297,54 @@ uvicorn app.main:app --port 8082
 - "Scan for PHI" button for pending studies
 - `require_phi_scan` option in routing rules action dropdown
 
+### QC Automation Service (`qc-service/`, `api/handler/qc_check.go`)
+
+Automated image quality checks on DICOM studies — detects inconsistent slice dimensions, low SNR, missing slices, and incomplete coverage. Runs as a separate Python FastAPI service, called asynchronously from the Go API — same pattern as the defacing and PHI detection services.
+
+**Running locally:**
+```bash
+cd qc-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8083
+# Then set QC_SERVICE_URL=http://localhost:8083 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `QC_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `QC_TOOL` | `auto` | Backend selection: `auto` or `basic` |
+| `QC_SNR_THRESHOLD` | `10.0` | Minimum SNR before warning (signal mean / noise stddev) |
+| `QC_GAP_RATIO` | `2.0` | Gap-to-median-spacing ratio that triggers missing slice warning |
+
+**Study fields:**
+- `qc_required` — boolean flag, set by `require_qc_check` routing rule action
+- `qc_status` — `''` (not required), `pending`, `checking`, `pass`, `warn`, `fail`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/qc-check` — trigger QC check (returns 202 Accepted, runs async)
+
+**5 QC checks** (basic backend, pydicom + numpy):
+1. **File integrity** — all files parse, required DICOM tags present
+2. **Slice consistency** — uniform Rows/Columns/PixelSpacing across all slices
+3. **SNR estimation** — signal mean / corner noise stddev, warn if below threshold
+4. **Coverage completeness** — slice count vs expected minimum for body part
+5. **Missing slices** — gaps in slice position (>2× median spacing)
+
+**Pipeline:**
+1. Routing rule with action `require_qc_check` sets `qc_required=true` and `qc_status=pending`
+2. Admin clicks "Run QC" → Go handler sets status to `checking` and dispatches to Python service
+3. Python service reads each DICOM file, runs all 5 checks
+4. Results returned: `qc_status` set to `pass`, `warn` (non-critical issues), or `fail` (critical issues)
+5. Findings stored as JSONB in audit trail (`qc_check.complete` entries with `quality_issues` array)
+6. Admin can still approve warn/fail studies (the status is informational)
+
+**Admin dashboard:**
+- QC column with status badge (pending/checking/pass/warn/fail/failed)
+- "Run QC" button for pending studies
+- `require_qc_check` option in routing rules action dropdown
+
 ### Batch Import CLI (`api/cmd/import/`)
 
 CLI tool for importing DICOM files from a local directory into AEGIS. Used for bulk historical data migration. Files are assumed already de-identified — the import tool does NOT apply de-identification.

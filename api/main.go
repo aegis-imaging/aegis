@@ -137,6 +137,7 @@ func main() {
 
 	mux.HandleFunc("POST /api/deface/{studyUID}", srv.TriggerDeface)
 	mux.HandleFunc("POST /api/studies/{studyUID}/phi-scan", srv.TriggerPhiScan)
+	mux.HandleFunc("POST /api/studies/{studyUID}/qc-check", srv.TriggerQcCheck)
 
 	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by OHIF Viewer.
 	mux.HandleFunc("GET /dicomweb/studies", srv.DicomwebStudies)

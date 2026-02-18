@@ -465,9 +465,9 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 ### Phase 4: Advanced Processing (Vertex AI)
 20. ✅ **Burned-in PHI detection**: Python OCR service (`phi-detection/`) with Tesseract backend (local dev) and Vertex AI Document AI (production); `require_phi_scan` routing rule action; `phi_scan_required`/`phi_scan_status` study fields; async dispatch from Go API; admin dashboard PHI scan badge + scan button (PR #29)
-21. **QC automation**: Vertex AI custom models for image quality assessment
-19. **Smart routing**: ML-based modality/anatomy classification for studies with poor metadata
-20. **BIDS conversion**: dcm2niix-based pipeline for research output format
+21. ✅ **QC automation**: Python QC service (`qc-service/`) with pydicom+numpy backend (local dev) and Vertex AI (production); `require_qc_check` routing rule action; `qc_required`/`qc_status` study fields; 5 automated checks (file integrity, slice consistency, SNR, coverage, missing slices); async dispatch from Go API; admin dashboard QC badge + Run QC button (PR #32)
+22. **Smart routing**: ML-based modality/anatomy classification for studies with poor metadata
+23. **NIfTI/BIDS conversion**: dcm2niix-based pipeline for DICOM→NIfTI conversion with BIDS-compliant directory structure and sidecar JSON metadata for research output
 21. ✅ **Batch import tools**: `api/cmd/import/` CLI + `POST /api/import/batch` API; recursive DICOM directory scan with `suyashkumar/dicom` header parsing; groups files by StudyInstanceUID; creates upload sessions + study records; evaluates routing rules; `--dry-run` mode (PR #31)
 22. **Defacing tool upgrades**: DeepDefacer or afni_refacer for improved quality
 
