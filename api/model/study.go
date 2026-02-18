@@ -22,6 +22,8 @@ type Study struct {
 	DefacingRequired bool      `json:"defacing_required"`
 	DicomStore       string    `json:"dicom_store"`
 	Source           string    `json:"source"`
+	PhiScanRequired  bool      `json:"phi_scan_required"`
+	PhiScanStatus    string    `json:"phi_scan_status"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -29,7 +31,7 @@ type Study struct {
 const studyColumns = `
 	id, project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
 	study_description, series_count, instance_count, status, defacing_required,
-	dicom_store, source, created_at, updated_at`
+	dicom_store, source, phi_scan_required, phi_scan_status, created_at, updated_at`
 
 type scannable interface {
 	Scan(...any) error
@@ -39,7 +41,8 @@ func scanStudy(row scannable, s *Study) error {
 	return row.Scan(
 		&s.ID, &s.ProjectID, &s.UploadSessionID, &s.InstitutionID, &s.StudyInstanceUID,
 		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.SeriesCount, &s.InstanceCount,
-		&s.Status, &s.DefacingRequired, &s.DicomStore, &s.Source, &s.CreatedAt, &s.UpdatedAt,
+		&s.Status, &s.DefacingRequired, &s.DicomStore, &s.Source,
+		&s.PhiScanRequired, &s.PhiScanStatus, &s.CreatedAt, &s.UpdatedAt,
 	)
 }
 
@@ -47,12 +50,12 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 	return db.QueryRowContext(ctx, `
 		INSERT INTO studies (project_id, upload_session_id, study_instance_uid, modality, body_part,
 		                     study_description, series_count, instance_count, status, defacing_required,
-		                     dicom_store, source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		                     dicom_store, source, phi_scan_required, phi_scan_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
 		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
-		s.DicomStore, s.Source).
+		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
@@ -198,5 +201,25 @@ func UpdateStudyDefaced(ctx context.Context, db *sql.DB, id string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET status = 'defaced', dicom_store = 'clean', updated_at = now()
 		WHERE id = $1`, id)
+	return err
+}
+
+// SetPhiScanRequired sets the phi_scan_required flag and initialises phi_scan_status to "pending".
+func SetPhiScanRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET phi_scan_required = $1, phi_scan_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdatePhiScanStatus sets the phi_scan_status field on a study.
+func UpdatePhiScanStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET phi_scan_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
 	return err
 }

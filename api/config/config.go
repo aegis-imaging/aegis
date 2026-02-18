@@ -23,6 +23,10 @@ type Config struct {
 	// Empty string disables the defacing service call (pipeline still records status).
 	DefacingServiceURL string
 
+	// Burned-in PHI detection service (Python Cloud Run sidecar)
+	// Empty string disables the service call (studies stay in "pending" until service is configured).
+	PhiDetectionServiceURL string
+
 	// CORS
 	AllowedOrigins []string
 
@@ -54,7 +58,8 @@ func Load() *Config {
 		DicomStoreRaw:   envOr("DICOM_STORE_RAW", "raw"),
 		DicomStoreClean: envOr("DICOM_STORE_CLEAN", "clean"),
 
-		DefacingServiceURL: os.Getenv("DEFACING_SERVICE_URL"), // e.g. http://localhost:8081
+		DefacingServiceURL:     os.Getenv("DEFACING_SERVICE_URL"),     // e.g. http://localhost:8081
+		PhiDetectionServiceURL: os.Getenv("PHI_DETECTION_SERVICE_URL"), // e.g. http://localhost:8082
 
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002"), ","),
 
