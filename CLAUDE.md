@@ -40,6 +40,8 @@ aegis/
 ├── client/               # TypeScript DICOM anonymization library (npm package)
 ├── defacing/             # Python defacing service (mri_deface, dcm2niix)
 ├── phi-detection/        # Python burned-in PHI detection service (Tesseract OCR)
+├── qc-service/           # Python QC automation service (pydicom + numpy)
+├── bids-service/         # Python NIfTI/BIDS conversion service (dcm2niix)
 └── docs/                 # Shared research, references, and analysis (see docs/README.md)
 ```
 
@@ -169,6 +171,8 @@ Routing rules are evaluated on every study ingest (upload complete + internal in
 |--------|--------|
 | `require_defacing` | Forces `defacing_required=true` |
 | `require_phi_scan` | Forces `phi_scan_required=true`, sets `phi_scan_status=pending` |
+| `require_qc_check` | Forces `qc_required=true`, sets `qc_status=pending` |
+| `require_bids_conversion` | Forces `bids_required=true`, sets `bids_status=pending` |
 | `auto_approve` | Skips manual QC, sets `status=approved` |
 | `require_qa` | No-op — holds for manual review (default) |
 | `reject` | Auto-rejects the study |
@@ -344,6 +348,62 @@ uvicorn app.main:app --port 8083
 - QC column with status badge (pending/checking/pass/warn/fail/failed)
 - "Run QC" button for pending studies
 - `require_qc_check` option in routing rules action dropdown
+
+### NIfTI/BIDS Conversion Service (`bids-service/`, `api/handler/bids_convert.go`)
+
+Converts DICOM studies to NIfTI format with BIDS-compliant directory structure and JSON sidecar metadata. Uses dcm2niix for the conversion. Runs as a separate Python FastAPI service, called asynchronously from the Go API — same pattern as the defacing, PHI detection, and QC services.
+
+**Running locally:**
+```bash
+cd bids-service
+pip install -r requirements.txt
+# Requires dcm2niix installed: brew install dcm2niix (macOS) or apt-get install dcm2niix (Linux)
+uvicorn app.main:app --port 8084
+# Then set BIDS_SERVICE_URL=http://localhost:8084 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `BIDS_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `BIDS_TOOL` | `auto` | Backend selection: `auto` or `dcm2niix` |
+| `DCM2NIIX_BIN` | `dcm2niix` | Path to dcm2niix binary |
+
+**Study fields:**
+- `bids_required` — boolean flag, set by `require_bids_conversion` routing rule action
+- `bids_status` — `''` (not required), `pending`, `converting`, `complete`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/bids-convert` — trigger BIDS conversion (returns 202 Accepted, runs async)
+- `GET /api/studies/{studyUID}/bids-download` — download BIDS output as zip archive
+
+**BIDS output structure:**
+```
+bids/{studyUID}/
+├── dataset_description.json
+├── participants.tsv
+└── sub-<hash8>/
+    └── anat/  (or func/, dwi/, perf/, ct/, pet/)
+        ├── sub-<hash8>_T1w.nii.gz
+        └── sub-<hash8>_T1w.json
+```
+
+Subject label = first 8 chars of SHA-256 hash of StudyInstanceUID (privacy-preserving). Series are classified to BIDS datatypes/suffixes by matching ProtocolName and SeriesDescription against known patterns.
+
+**Pipeline:**
+1. Routing rule with action `require_bids_conversion` sets `bids_required=true` and `bids_status=pending`
+2. Admin clicks "Convert to BIDS" → Go handler sets status to `converting` and dispatches to Python service
+3. Python service groups DICOM files by series, runs dcm2niix per series with BIDS flags
+4. Output organized into BIDS directory structure with sidecar JSON metadata
+5. Results returned: `bids_status` set to `complete` or `failed`
+6. Admin clicks "Download BIDS" → browser downloads zip archive of the BIDS output
+
+**Admin dashboard:**
+- BIDS column with status badge (pending/converting/complete/failed)
+- "Convert to BIDS" button for pending studies
+- "Download BIDS" link for completed studies
+- `require_bids_conversion` option in routing rules action dropdown
 
 ### Batch Import CLI (`api/cmd/import/`)
 
