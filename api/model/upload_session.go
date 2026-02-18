@@ -22,14 +22,14 @@ type UploadSession struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-func CreateUploadSession(ctx context.Context, db *sql.DB, projectID string, fileCount int, storagePrefix, uploaderIP string) (*UploadSession, error) {
+func CreateUploadSession(ctx context.Context, db *sql.DB, projectID string, fileCount int, storagePrefix, uploaderIP, uploaderEmail string) (*UploadSession, error) {
 	var s UploadSession
 	err := db.QueryRowContext(ctx, `
-		INSERT INTO upload_sessions (project_id, file_count, storage_prefix, uploader_ip)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO upload_sessions (project_id, file_count, storage_prefix, uploader_ip, uploader_email)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, project_id, status, file_count, storage_prefix, uploader_ip, uploader_email,
 		          study_instance_uid, modality, body_part, error_message, created_at, updated_at`,
-		projectID, fileCount, storagePrefix, uploaderIP).
+		projectID, fileCount, storagePrefix, uploaderIP, uploaderEmail).
 		Scan(&s.ID, &s.ProjectID, &s.Status, &s.FileCount, &s.StoragePrefix, &s.UploaderIP, &s.UploaderEmail,
 			&s.StudyInstanceUID, &s.Modality, &s.BodyPart, &s.ErrorMessage, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {

@@ -5,12 +5,22 @@
 - Keep wording consistent across user-facing UI copy and documentation.
 - Prefer concise, implementation-focused responses when editing this repository.
 
-## Git Branching Strategy
+## Git Workflow — Full Feature Lifecycle
 
-- **Never commit directly to `develop` or `main`.**
-- Always create a feature branch from `origin/develop`:
-  ```bash
-  git checkout -b feature/your-feature-name origin/develop
-  ```
-- Build and commit on the feature branch, then push it and open a PR to `develop`.
-- This avoids merge conflicts when multiple agents work in parallel.
+Never commit directly to `develop` or `main`.
+
+**Start a feature:**
+```bash
+git checkout -b feature/your-feature-name origin/develop
+```
+
+**Closing process (run after every feature):**
+```bash
+git add <files>
+git commit -m "..."
+git push -u origin feature/your-feature-name
+gh pr create --base develop --head feature/your-feature-name --title "..." --body "..."
+gh pr merge <number> --merge --delete-branch
+git checkout develop && git pull
+# then branch again for the next feature
+```

@@ -18,6 +18,7 @@ export function App() {
   const [parseProgress, setParseProgress] = useState({ current: 0, total: 0 })
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
+  const [uploaderEmail, setUploaderEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const handleFilesSelected = useCallback(async (selectedFiles: File[]) => {
@@ -83,6 +84,7 @@ export function App() {
     setPrivateTagsRemoved(0)
     setUploadProgress({ current: 0, total: 0 })
     setUploadResult(null)
+    setUploaderEmail('')
     setError(null)
   }, [])
 
@@ -99,6 +101,7 @@ export function App() {
     try {
       const result = await uploadStudy(files, 'default', summary, {
         onProgress: (uploaded, total) => setUploadProgress({ current: uploaded, total }),
+        uploaderEmail: uploaderEmail.trim() || undefined,
       })
       setUploadResult(result)
       setStage('ready')
@@ -176,6 +179,35 @@ export function App() {
           <StudySummary summary={summary} />
 
           <TagDiffTable tags={tagChanges} privateTagsRemoved={privateTagsRemoved} />
+
+          {/* Optional email for upload confirmation */}
+          <div style={{
+            padding: '16px',
+            backgroundColor: '#f9fafb',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+          }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '6px' }}>
+              Your email <span style={{ color: '#6b7280', fontWeight: 400 }}>(optional)</span>
+            </label>
+            <input
+              type="email"
+              value={uploaderEmail}
+              onChange={e => setUploaderEmail(e.target.value)}
+              placeholder="you@institution.edu"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px',
+                boxSizing: 'border-box',
+              }}
+            />
+            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#6b7280' }}>
+              Receive a notification when your study has been reviewed.
+            </p>
+          </div>
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

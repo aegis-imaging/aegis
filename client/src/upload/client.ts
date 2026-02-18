@@ -9,6 +9,8 @@ export interface UploadOptions {
   onProgress?: (uploaded: number, total: number) => void
   /** De-identification options (salt, keepPrivateTags). */
   deid?: DeidOptions
+  /** Optional email address — uploader receives a confirmation when the study is processed. */
+  uploaderEmail?: string
 }
 
 export interface UploadResult {
@@ -47,6 +49,7 @@ export async function uploadStudy(
     body: JSON.stringify({
       project_slug: projectSlug,
       file_count: files.length,
+      uploader_email: options.uploaderEmail ?? '',
       study_metadata: {
         study_instance_uid: summary.studyInstanceUid,
         modality: summary.modality,
