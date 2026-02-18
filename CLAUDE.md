@@ -2,6 +2,32 @@
 
 Anonymization & Exchange Gateway for Imaging Studies. GCP-hosted platform for HIPAA-compliant sharing of medical imaging data across all DICOM modalities. MVP focus: brain MRI, PET, and CT.
 
+## PDF Generation Rules
+
+Whenever any of these markdown files are edited, regenerate the corresponding PDF and commit both files in the same PR:
+
+```bash
+npx md-to-pdf PITCH_DECK.md         # generates PITCH_DECK.pdf
+npx md-to-pdf SETUP_CHECKLIST.md     # generates SETUP_CHECKLIST.pdf
+```
+
+Never update the markdown without updating the PDF.
+
+## Shared Knowledge: `docs/` Folder
+
+All research, analysis, and reference material lives in `docs/` and is shared among agents, developers, and collaborators.
+
+**Before doing a web search**, check `docs/research/` — the answer may already be there.
+**After completing research**, save findings to `docs/research/<topic>.md` with full citations.
+
+Rules:
+- Always include full citations (author, journal, year, DOI/URL) and note source type (peer-reviewed, preprint, market report, government primary source)
+- **Never save PHI (Protected Health Information) or CBI (Confidential Business Information)** to `docs/` or anywhere in the repository
+- See `docs/README.md` for the full convention
+
+Current research files:
+- `docs/research/medical-imaging-deidentification.md` — citations for de-identification failures, face reconstruction from MRI, burned-in PHI, NIH DMS policy, HIPAA Safe Harbor, DICOM PS3.15, MIDI-B challenge, market sizing
+
 ## Repository Structure (Monorepo)
 
 ```
@@ -13,7 +39,12 @@ aegis/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
 │   └── admin-dashboard/  # React — internal QC, OHIF viewer, study management
 ├── client/               # TypeScript DICOM anonymization library (npm package)
-└── defacing/             # Python defacing service (mri_deface, dcm2niix)
+├── defacing/             # Python defacing service (mri_deface, dcm2niix)
+├── phi-detection/        # Python burned-in PHI detection service (Tesseract OCR)
+├── qc-service/           # Python QC automation service (pydicom + numpy)
+├── bids-service/            # Python NIfTI/BIDS conversion service (dcm2niix)
+├── classification-service/  # Python metadata classification service (DICOM heuristics)
+└── docs/                    # Shared research, references, and analysis (see docs/README.md)
 ```
 
 Planned to split into 5 separate repos once interfaces stabilize:
@@ -96,10 +127,27 @@ SOPInstanceUID format: `{studyUID}.1.{fileIndex}` (index maps to `dicom/{store}/
 In the admin dashboard:
 - Each study row has a **View** button (inline iframe) and an **Open in new tab ↗** link.
 - Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side before/after OHIF panel. OHIF selects the data source via `?dataSource=dicomweb-raw` (before) or `?dataSource=dicomweb` (after).
+- **Studies tab** — filter by status, modality, source, project; search by UID or description; paginated 50 per page.
 - **Routing tab** — manage Destinations and Routing Rules (see below).
 - **Institutions tab** — manage institutions and their project memberships.
 - **Profiles tab** — manage per-project anonymization profiles (see below).
 - **Notifications tab** — manage email digest subscriptions (see below).
+- **Projects tab** — create and edit projects (name, slug, description); shows default anon profile badge.
+- **Users tab** — manage authorised admin users and their roles (admin|viewer).
+
+### Studies List (`GET /api/studies`)
+
+Returns a paginated envelope `{ studies, total, limit, offset }`.
+
+| Query param | Notes |
+|-------------|-------|
+| `limit` | Page size (default 50, max 200) |
+| `offset` | Row offset for pagination |
+| `project_id` | Filter by project UUID |
+| `status` | `received\|defacing\|clean\|defaced\|approved\|rejected` |
+| `modality` | Case-insensitive exact match (e.g. `MRI`, `CT`) |
+| `source` | `external\|internal` |
+| `search` | Substring match on `study_instance_uid` or `study_description` |
 
 ### Routing Rules Engine (`api/routing/`, `api/handler/routing.go`)
 
@@ -124,6 +172,10 @@ Routing rules are evaluated on every study ingest (upload complete + internal in
 | Action | Effect |
 |--------|--------|
 | `require_defacing` | Forces `defacing_required=true` |
+| `require_phi_scan` | Forces `phi_scan_required=true`, sets `phi_scan_status=pending` |
+| `require_qc_check` | Forces `qc_required=true`, sets `qc_status=pending` |
+| `require_bids_conversion` | Forces `bids_required=true`, sets `bids_status=pending` |
+| `require_classification` | Forces `classification_required=true`, sets `classification_status=pending` |
 | `auto_approve` | Skips manual QC, sets `status=approved` |
 | `require_qa` | No-op — holds for manual review (default) |
 | `reject` | Auto-rejects the study |
@@ -180,6 +232,265 @@ Weekly or monthly plain-text summary emails per project. No PHI — only study c
 **Scheduler**: goroutine started from `main.go` on startup; `time.Ticker` fires every hour; queries `digest_subscriptions` where digest is due (7 days for weekly, 30 for monthly since `last_sent_at`); sends email; updates `last_sent_at`. Silent no-op when `SMTP_HOST` is unset.
 
 **Digest content**: project name, period label, received/approved/rejected/pending study counts, export shares created. No study UIDs or identifiers.
+
+### Admin Users (`api/handler/admin_user.go`, `api/model/admin_user.go`)
+
+Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production; this table is a registry for access control and auditing.
+
+**REST API** (`/api/admin-users`): CRUD.
+
+| Field | Notes |
+|-------|-------|
+| `role` | `admin` (full access) or `viewer` (read-only — future enforcement) |
+| `enabled` | Soft-disable without deleting |
+| `notes` | Free-text notes for the admin record |
+
+All mutations emit audit entries (`admin_user.created`, `admin_user.updated`, `admin_user.deleted`).
+
+### Project Settings (`api/handler/project.go`)
+
+Projects now support full CRUD via the API and a dedicated admin dashboard tab.
+
+**New endpoints:**
+- `GET /api/projects/{id}` — fetch a single project by ID
+- `PUT /api/projects/{id}` — update name, slug, description; emits `project.updated` audit entry
+
+`POST /api/projects` now auto-generates slug from name if `slug` is omitted.
+
+### Upload Portal QoL (`client/src/upload/client.ts`)
+
+- **`onFileStart` callback** — `UploadOptions.onFileStart?(filename, index, total)` fires before each file's upload begins; upload portal uses it to display the current filename below the progress bar.
+- **Auto-retry** — each file PUT is retried up to 3× with 1 s / 2 s / 4 s exponential backoff before failing. Transparent to callers.
+
+### Burned-in PHI Detection (`phi-detection/`, `api/handler/phi_scan.go`)
+
+Server-side OCR on DICOM pixel data to detect burned-in text (patient names, dates, accession numbers) that tag-level de-identification misses. Runs as a separate Python FastAPI service, called asynchronously from the Go API — same pattern as the defacing service.
+
+**Running locally:**
+```bash
+cd phi-detection
+pip install -r requirements.txt
+# Requires tesseract-ocr installed: brew install tesseract (macOS) or apt-get install tesseract-ocr (Linux)
+uvicorn app.main:app --port 8082
+# Then set PHI_DETECTION_SERVICE_URL=http://localhost:8082 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `PHI_DETECTION_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `PHI_TOOL` | `auto` | Backend selection: `auto` or `tesseract` |
+| `PHI_CONFIDENCE_THRESHOLD` | `0.4` | Minimum OCR confidence (0.0–1.0) |
+| `PHI_MIN_TEXT_LENGTH` | `3` | Minimum text length to report |
+
+**Study fields:**
+- `phi_scan_required` — boolean flag, set by `require_phi_scan` routing rule action
+- `phi_scan_status` — `''` (not required), `pending`, `scanning`, `clean`, `flagged`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/phi-scan` — trigger PHI scan (returns 202 Accepted, runs async)
+
+**Pipeline:**
+1. Routing rule with action `require_phi_scan` sets `phi_scan_required=true` and `phi_scan_status=pending`
+2. Admin clicks "Scan for PHI" → Go handler sets status to `scanning` and dispatches to Python service
+3. Python service reads each DICOM file, extracts pixel data, runs Tesseract OCR
+4. Results returned: `phi_scan_status` set to `clean` (no text found) or `flagged` (text detected)
+5. Findings stored as JSONB in audit trail (`phi_scan.complete` entries)
+6. Admin can still approve flagged studies (the flag is informational)
+
+**Admin dashboard:**
+- PHI Scan column with status badge (pending/scanning/clean/flagged/failed)
+- "Scan for PHI" button for pending studies
+- `require_phi_scan` option in routing rules action dropdown
+
+### QC Automation Service (`qc-service/`, `api/handler/qc_check.go`)
+
+Automated image quality checks on DICOM studies — detects inconsistent slice dimensions, low SNR, missing slices, and incomplete coverage. Runs as a separate Python FastAPI service, called asynchronously from the Go API — same pattern as the defacing and PHI detection services.
+
+**Running locally:**
+```bash
+cd qc-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8083
+# Then set QC_SERVICE_URL=http://localhost:8083 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `QC_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `QC_TOOL` | `auto` | Backend selection: `auto` or `basic` |
+| `QC_SNR_THRESHOLD` | `10.0` | Minimum SNR before warning (signal mean / noise stddev) |
+| `QC_GAP_RATIO` | `2.0` | Gap-to-median-spacing ratio that triggers missing slice warning |
+
+**Study fields:**
+- `qc_required` — boolean flag, set by `require_qc_check` routing rule action
+- `qc_status` — `''` (not required), `pending`, `checking`, `pass`, `warn`, `fail`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/qc-check` — trigger QC check (returns 202 Accepted, runs async)
+
+**5 QC checks** (basic backend, pydicom + numpy):
+1. **File integrity** — all files parse, required DICOM tags present
+2. **Slice consistency** — uniform Rows/Columns/PixelSpacing across all slices
+3. **SNR estimation** — signal mean / corner noise stddev, warn if below threshold
+4. **Coverage completeness** — slice count vs expected minimum for body part
+5. **Missing slices** — gaps in slice position (>2× median spacing)
+
+**Pipeline:**
+1. Routing rule with action `require_qc_check` sets `qc_required=true` and `qc_status=pending`
+2. Admin clicks "Run QC" → Go handler sets status to `checking` and dispatches to Python service
+3. Python service reads each DICOM file, runs all 5 checks
+4. Results returned: `qc_status` set to `pass`, `warn` (non-critical issues), or `fail` (critical issues)
+5. Findings stored as JSONB in audit trail (`qc_check.complete` entries with `quality_issues` array)
+6. Admin can still approve warn/fail studies (the status is informational)
+
+**Admin dashboard:**
+- QC column with status badge (pending/checking/pass/warn/fail/failed)
+- "Run QC" button for pending studies
+- `require_qc_check` option in routing rules action dropdown
+
+### NIfTI/BIDS Conversion Service (`bids-service/`, `api/handler/bids_convert.go`)
+
+Converts DICOM studies to NIfTI format with BIDS-compliant directory structure and JSON sidecar metadata. Uses dcm2niix for the conversion. Runs as a separate Python FastAPI service, called asynchronously from the Go API — same pattern as the defacing, PHI detection, and QC services.
+
+**Running locally:**
+```bash
+cd bids-service
+pip install -r requirements.txt
+# Requires dcm2niix installed: brew install dcm2niix (macOS) or apt-get install dcm2niix (Linux)
+uvicorn app.main:app --port 8084
+# Then set BIDS_SERVICE_URL=http://localhost:8084 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `BIDS_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `BIDS_TOOL` | `auto` | Backend selection: `auto` or `dcm2niix` |
+| `DCM2NIIX_BIN` | `dcm2niix` | Path to dcm2niix binary |
+
+**Study fields:**
+- `bids_required` — boolean flag, set by `require_bids_conversion` routing rule action
+- `bids_status` — `''` (not required), `pending`, `converting`, `complete`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/bids-convert` — trigger BIDS conversion (returns 202 Accepted, runs async)
+- `GET /api/studies/{studyUID}/bids-download` — download BIDS output as zip archive
+
+**BIDS output structure:**
+```
+bids/{studyUID}/
+├── dataset_description.json
+├── participants.tsv
+└── sub-<hash8>/
+    └── anat/  (or func/, dwi/, perf/, ct/, pet/)
+        ├── sub-<hash8>_T1w.nii.gz
+        └── sub-<hash8>_T1w.json
+```
+
+Subject label = first 8 chars of SHA-256 hash of StudyInstanceUID (privacy-preserving). Series are classified to BIDS datatypes/suffixes by matching ProtocolName and SeriesDescription against known patterns.
+
+**Pipeline:**
+1. Routing rule with action `require_bids_conversion` sets `bids_required=true` and `bids_status=pending`
+2. Admin clicks "Convert to BIDS" → Go handler sets status to `converting` and dispatches to Python service
+3. Python service groups DICOM files by series, runs dcm2niix per series with BIDS flags
+4. Output organized into BIDS directory structure with sidecar JSON metadata
+5. Results returned: `bids_status` set to `complete` or `failed`
+6. Admin clicks "Download BIDS" → browser downloads zip archive of the BIDS output
+
+**Admin dashboard:**
+- BIDS column with status badge (pending/converting/complete/failed)
+- "Convert to BIDS" button for pending studies
+- "Download BIDS" link for completed studies
+- `require_bids_conversion` option in routing rules action dropdown
+
+### Metadata Classification Service (`classification-service/`, `api/handler/classification.go`)
+
+Classifies study modality and body part by reading DICOM headers. Studies can arrive with empty `modality` and `body_part` when DICOM tags are missing — this service fills them in using heuristic analysis (local dev) or Vertex AI (production), then **re-evaluates routing rules** so modality/body_part-dependent rules fire correctly.
+
+**Running locally:**
+```bash
+cd classification-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8085
+# Then set CLASSIFICATION_SERVICE_URL=http://localhost:8085 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `CLASSIFICATION_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `CLASSIFY_TOOL` | `auto` | Backend selection: `auto` or `heuristic` |
+| `CLASSIFY_CONFIDENCE_THRESHOLD` | `0.5` | Minimum confidence (0.0–1.0) to update metadata |
+
+**Study fields:**
+- `classification_required` — boolean flag, set by `require_classification` routing rule action
+- `classification_status` — `''` (not required), `pending`, `classifying`, `classified`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/classify` — trigger classification (returns 202 Accepted, runs async)
+
+**Heuristic backend classification strategy** (priority order):
+1. **Direct DICOM tags** — `Modality` (0008,0060) + `BodyPartExamined` (0018,0015) → confidence 0.95
+2. **SOP Class UID** (0008,0016) → modality mapping (CT, MR, PT, US, CR, etc.) → confidence 0.90
+3. **SeriesDescription / ProtocolName** → body part regex (HEAD, CHEST, ABDOMEN, SPINE, EXTREMITY, NECK) → confidence 0.75
+4. **StudyDescription** → same patterns → confidence 0.65
+5. **Fallback** → empty (inconclusive)
+
+**Pipeline:**
+1. Routing rule with action `require_classification` sets `classification_required=true` and `classification_status=pending`
+2. Admin clicks "Classify" → Go handler sets status to `classifying` and dispatches to Python service
+3. Python service reads DICOM files, applies heuristic classification
+4. Results returned: if confidence >= 0.5, study `modality` and `body_part` are updated
+5. `classification_status` set to `classified` or `failed`
+6. **Routing rules re-evaluated** — downstream rules (e.g. `require_defacing` for HEAD studies) now fire
+7. Audit log entries: `classification.triggered`, `classification.complete`/`classification.failed`
+
+**Admin dashboard:**
+- Classification column with status badge (pending/classifying/classified/failed)
+- "Classify" button for pending studies
+- `require_classification` option in routing rules action dropdown
+
+### Batch Import CLI (`api/cmd/import/`)
+
+CLI tool for importing DICOM files from a local directory into AEGIS. Used for bulk historical data migration. Files are assumed already de-identified — the import tool does NOT apply de-identification.
+
+**Running:**
+```bash
+cd api && go run ./cmd/import --dir /path/to/dicom --project default
+```
+
+**Building:**
+```bash
+cd api && go build -o aegis-import ./cmd/import
+./aegis-import --dir /path/to/dicom --project default
+```
+
+**CLI Flags:**
+
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--dir` | *(required)* | Directory containing DICOM files to import |
+| `--project` | `default` | Project slug |
+| `--institution` | *(empty)* | Institution UUID (optional) |
+| `--source` | `internal` | `internal` or `external` |
+| `--dry-run` | `false` | Scan and report without importing |
+
+Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DIR`).
+
+**How it works:**
+1. Recursively scans `--dir` for `.dcm` files
+2. Parses DICOM headers (StudyInstanceUID, Modality, BodyPart, StudyDescription, SeriesInstanceUID) using `suyashkumar/dicom` with `SkipPixelData()` for performance
+3. Groups files by StudyInstanceUID
+4. For each study: creates upload session + study record, copies files to `dicom/raw/{studyUID}/`, evaluates routing rules
+5. Duplicate StudyInstanceUIDs are rejected (unique constraint) — safe to re-run
+
+**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors}`.
 
 ### Terraform
 ```bash

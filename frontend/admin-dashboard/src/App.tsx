@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications'
+type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications' | 'projects' | 'users'
 
 type AuditEntry = {
   id: string
@@ -25,6 +25,14 @@ type Study = {
   source: string
   status: string
   defacing_required: boolean
+  phi_scan_required: boolean
+  phi_scan_status: string
+  qc_required: boolean
+  qc_status: string
+  bids_required: boolean
+  bids_status: string
+  classification_required: boolean
+  classification_status: string
   instance_count: number
   created_at: string
 }
@@ -126,6 +134,16 @@ type DigestSubscription = {
   created_at: string
 }
 
+type AdminUser = {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'viewer'
+  enabled: boolean
+  notes: string
+  created_at: string
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string) {
@@ -136,8 +154,14 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' }) {
-  const cls = `badge badge--${label}`
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' }) {
+  const modifier =
+    (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
+    (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
+    (prefix === 'bids' && label === 'complete') ? 'bids-complete' :
+    (prefix === 'classify' && label === 'classified') ? 'classify-classified' :
+    label
+  const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
 }
 
@@ -514,6 +538,31 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   // Show "Review defacing" for head studies that have been defaced (raw files preserved).
   const canReviewDeface = study.defacing_required &&
     ['defaced', 'approved'].includes(study.status)
+  const canPhiScan = study.phi_scan_required && study.phi_scan_status === 'pending'
+  const canQcCheck = study.qc_required && study.qc_status === 'pending'
+  const canBidsConvert = study.bids_required && study.bids_status === 'pending'
+  const canBidsDownload = study.bids_status === 'complete'
+  const canClassify = study.classification_required && study.classification_status === 'pending'
+
+  const handlePhiScan = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
+    onAction()
+  }
+
+  const handleQcCheck = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/qc-check`, { method: 'POST' })
+    onAction()
+  }
+
+  const handleBidsConvert = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/bids-convert`, { method: 'POST' })
+    onAction()
+  }
+
+  const handleClassify = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/classify`, { method: 'POST' })
+    onAction()
+  }
 
   return (
     <>
@@ -523,6 +572,10 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <td>{study.body_part || '—'}</td>
         <td><Badge label={study.source} prefix="source" /></td>
         <td><Badge label={study.status} prefix="status" /></td>
+        <td>{study.phi_scan_required ? <Badge label={study.phi_scan_status || 'n/a'} prefix="phi" /> : '—'}</td>
+        <td>{study.qc_required ? <Badge label={study.qc_status || 'n/a'} prefix="qc" /> : '—'}</td>
+        <td>{study.bids_required ? <Badge label={study.bids_status || 'n/a'} prefix="bids" /> : '—'}</td>
+        <td>{study.classification_required ? <Badge label={study.classification_status || 'n/a'} prefix="classify" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
@@ -538,6 +591,21 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
                 {shareOpen ? 'Close' : 'Share'}
               </button>
             )}
+            {canPhiScan && (
+              <button type="button" className="btn btn--phi-scan" onClick={handlePhiScan}>Scan for PHI</button>
+            )}
+            {canQcCheck && (
+              <button type="button" className="btn btn--qc-check" onClick={handleQcCheck}>Run QC</button>
+            )}
+            {canBidsConvert && (
+              <button type="button" className="btn btn--bids-convert" onClick={handleBidsConvert}>Convert to BIDS</button>
+            )}
+            {canBidsDownload && (
+              <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>
+            )}
+            {canClassify && (
+              <button type="button" className="btn btn--classify" onClick={handleClassify}>Classify</button>
+            )}
             {canReviewDeface && (
               <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
                 {defaceOpen ? 'Close review' : 'Review defacing'}
@@ -551,21 +619,21 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
       </tr>
       {shareOpen && (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={12}>
             <SharePanel study={study} onClose={() => setShareOpen(false)} />
           </td>
         </tr>
       )}
       {defaceOpen && (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={12}>
             <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />
           </td>
         </tr>
       )}
       {viewOpen && (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={12}>
             <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
           </td>
         </tr>
@@ -870,6 +938,10 @@ function RoutingPanel() {
                 onChange={e => setRuleForm(f => ({ ...f, action: e.target.value, destination_id: null }))}>
                 <option value="require_qa">require_qa — hold for manual review (default)</option>
                 <option value="require_defacing">require_defacing — force defacing even if not head</option>
+                <option value="require_phi_scan">require_phi_scan — scan pixels for burned-in PHI</option>
+                <option value="require_qc_check">require_qc_check — automated image quality checks</option>
+                <option value="require_bids_conversion">require_bids_conversion — convert to NIfTI/BIDS</option>
+                <option value="require_classification">require_classification — classify modality/body part</option>
                 <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
                 <option value="reject">reject — auto-reject</option>
                 <option value="route_to">route_to — forward to external destination</option>
@@ -1679,42 +1751,406 @@ function InstitutionsPanel() {
   )
 }
 
+// ── Projects Panel ────────────────────────────────────────────────────────────
+
+const EMPTY_PROJECT: Omit<Project, 'id' | 'default_anon_profile_id' | 'created_at'> = {
+  name: '', slug: '', description: '',
+}
+
+function ProjectsPanel() {
+  const [projects, setProjects]   = useState<Project[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+
+  const [form, setForm]           = useState<Omit<Project, 'id' | 'default_anon_profile_id' | 'created_at'>>(EMPTY_PROJECT)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const fetchProjects = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/projects')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setProjects(await res.json())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchProjects() }, [fetchProjects])
+
+  function openNew() {
+    setForm(EMPTY_PROJECT)
+    setEditingId(null)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  function openEdit(p: Project) {
+    setForm({ name: p.name, slug: p.slug, description: p.description })
+    setEditingId(p.id)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.name) { setFormError('Name is required'); return }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const url = editingId ? `/api/projects/${editingId}` : '/api/projects'
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      setEditingId(null)
+      fetchProjects()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="state-loading">Loading projects…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Projects</div>
+            <div className="routing-section-sub">
+              Projects group studies and control anonymization profiles. Each upload is associated with one project.
+            </div>
+          </div>
+          <div className="actions-cell">
+            <button type="button" className="btn-refresh" onClick={fetchProjects}>Refresh</button>
+            <button type="button" className="btn-primary" onClick={openNew}>+ New project</button>
+          </div>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit project' : 'New project'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Name *"
+                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <input className="form-input" placeholder="Slug (auto-generated if blank)"
+                value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
+              <input className="form-input form-input--wide" placeholder="Description"
+                value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            {editingId && (
+              <div className="routing-hint">Note: changing the slug will break existing upload portal URLs for this project.</div>
+            )}
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {projects.length === 0 && !showForm ? (
+          <div className="state-empty">No projects yet.</div>
+        ) : projects.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Slug</th>
+                <th>Default profile</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map(p => (
+                <tr key={p.id}>
+                  <td>
+                    <div className="routing-name">{p.name}</div>
+                    {p.description && <div className="routing-desc">{p.description}</div>}
+                  </td>
+                  <td><code className="inst-slug">{p.slug}</code></td>
+                  <td>
+                    {p.default_anon_profile_id
+                      ? <span className="badge badge--enabled">profile set</span>
+                      : <span className="routing-desc">none</span>}
+                  </td>
+                  <td className="td-date">{fmtDate(p.created_at)}</td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Users Panel ───────────────────────────────────────────────────────────────
+
+const EMPTY_USER: Omit<AdminUser, 'id' | 'created_at'> = {
+  email: '', name: '', role: 'admin', enabled: true, notes: '',
+}
+
+function UsersPanel() {
+  const [users, setUsers]         = useState<AdminUser[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+
+  const [form, setForm]           = useState<Omit<AdminUser, 'id' | 'created_at'>>(EMPTY_USER)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin-users')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setUsers(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchUsers() }, [fetchUsers])
+
+  function openNew() {
+    setForm(EMPTY_USER)
+    setEditingId(null)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  function openEdit(u: AdminUser) {
+    setForm({ email: u.email, name: u.name, role: u.role, enabled: u.enabled, notes: u.notes })
+    setEditingId(u.id)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.email) { setFormError('Email is required'); return }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const url = editingId ? `/api/admin-users/${editingId}` : '/api/admin-users'
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      setEditingId(null)
+      fetchUsers()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteUser(id: string, email: string) {
+    if (!confirm(`Delete user "${email}"? This cannot be undone.`)) return
+    await fetch(`/api/admin-users/${id}`, { method: 'DELETE' })
+    fetchUsers()
+  }
+
+  async function toggleUser(u: AdminUser) {
+    await fetch(`/api/admin-users/${u.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...u, enabled: !u.enabled }),
+    })
+    fetchUsers()
+  }
+
+  if (loading) return <div className="state-loading">Loading users…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Admin Users</div>
+            <div className="routing-section-sub">
+              Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production.
+            </div>
+          </div>
+          <div className="actions-cell">
+            <button type="button" className="btn-refresh" onClick={fetchUsers}>Refresh</button>
+            <button type="button" className="btn-primary" onClick={openNew}>+ Add user</button>
+          </div>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit user' : 'New user'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" type="email" placeholder="Email address *"
+                value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+              <input className="form-input" placeholder="Display name"
+                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <select className="form-select" aria-label="Role" value={form.role}
+                onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'viewer' }))}>
+                <option value="admin">admin — full access</option>
+                <option value="viewer">viewer — read-only</option>
+              </select>
+              <input className="form-input form-input--wide" placeholder="Notes (optional)"
+                value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {users.length === 0 && !showForm ? (
+          <div className="state-empty">No users yet.</div>
+        ) : users.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Notes</th>
+                <th>Added</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} className={u.enabled ? '' : 'routing-row--disabled'}>
+                  <td>
+                    <div className="routing-name">{u.name || u.email}</div>
+                    {u.name && <div className="routing-desc">{u.email}</div>}
+                  </td>
+                  <td>
+                    <span className={`routing-action routing-action--${u.role}`}>{u.role}</span>
+                  </td>
+                  <td>
+                    <span className={`badge badge--${u.enabled ? 'enabled' : 'disabled'}`}>
+                      {u.enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </td>
+                  <td className="routing-desc">{u.notes || '—'}</td>
+                  <td className="td-date">{fmtDate(u.created_at)}</td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--edit" onClick={() => openEdit(u)}>Edit</button>
+                      <button type="button" className="btn btn--secondary" onClick={() => toggleUser(u)}>
+                        {u.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      <button type="button" className="btn btn--revoke" onClick={() => deleteUser(u.id, u.email)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 type StudiesState = 'loading' | 'loaded' | 'error'
+
+const PAGE_SIZE = 50
 
 export function App() {
   const [tab, setTab] = useState<AppTab>('studies')
   const [state, setState] = useState<StudiesState>('loading')
   const [studies, setStudies] = useState<Study[]>([])
+  const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchStudies = useCallback(async () => {
-    setState('loading')
-    try {
-      const res = await fetch('/api/studies?limit=100')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setStudies(data)
-      setState('loaded')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load studies')
-      setState('error')
-    }
+  // Filters
+  const [filterStatus,   setFilterStatus]   = useState('')
+  const [filterModality, setFilterModality] = useState('')
+  const [filterSource,   setFilterSource]   = useState('')
+  const [filterProject,  setFilterProject]  = useState('')
+  const [filterSearch,   setFilterSearch]   = useState('')
+  const [page, setPage] = useState(0)
+  const [refreshTick, setRefreshTick] = useState(0)
+
+  // Projects for filter dropdown
+  const [projects, setProjects] = useState<Project[]>([])
+  useEffect(() => {
+    fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
   }, [])
 
-  useEffect(() => { fetchStudies() }, [fetchStudies])
+  // Fetch studies whenever filters, page, or refresh tick change
+  useEffect(() => {
+    let cancelled = false
+    setState('loading')
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) })
+    if (filterStatus)   params.set('status',     filterStatus)
+    if (filterModality) params.set('modality',   filterModality)
+    if (filterSource)   params.set('source',     filterSource)
+    if (filterProject)  params.set('project_id', filterProject)
+    if (filterSearch)   params.set('search',     filterSearch)
 
-  const pending  = studies.filter(s => ['received', 'defacing', 'clean'].includes(s.status))
-  const approved = studies.filter(s => s.status === 'approved')
-  const rejected = studies.filter(s => s.status === 'rejected')
+    fetch(`/api/studies?${params}`)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then(data => {
+        if (cancelled) return
+        setStudies(data.studies ?? [])
+        setStudiesTotal(data.total ?? 0)
+        setState('loaded')
+      })
+      .catch(err => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'Failed to load studies')
+        setState('error')
+      })
+    return () => { cancelled = true }
+  }, [page, filterStatus, filterModality, filterSource, filterProject, filterSearch, refreshTick])
 
-  const stats = [
-    { label: 'Pending review', count: pending.length,  variant: 'warning'  },
-    { label: 'Approved',       count: approved.length, variant: 'success'  },
-    { label: 'Rejected',       count: rejected.length, variant: 'error'    },
-    { label: 'Total',          count: studies.length,  variant: 'neutral'  },
-  ] as const
+  // Filter change helpers — also reset page to 0
+  function setStatusF(v: string)   { setFilterStatus(v);   setPage(0) }
+  function setModalityF(v: string) { setFilterModality(v); setPage(0) }
+  function setSourceF(v: string)   { setFilterSource(v);   setPage(0) }
+  function setProjectF(v: string)  { setFilterProject(v);  setPage(0) }
+  function setSearchF(v: string)   { setFilterSearch(v);   setPage(0) }
+
+  const hasFilters = !!(filterStatus || filterModality || filterSource || filterProject || filterSearch)
+
+  function clearFilters() {
+    setFilterStatus(''); setFilterModality(''); setFilterSource('')
+    setFilterProject(''); setFilterSearch(''); setPage(0)
+  }
+
+  const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
+  const pageStart  = studiesTotal === 0 ? 0 : page * PAGE_SIZE + 1
+  const pageEnd    = Math.min((page + 1) * PAGE_SIZE, studiesTotal)
 
   return (
     <div className="admin-root">
@@ -1724,7 +2160,7 @@ export function App() {
           <p>Study review, QC, and export management</p>
         </div>
         {tab === 'studies' && (
-          <button type="button" className="btn-refresh" onClick={fetchStudies}>Refresh</button>
+          <button type="button" className="btn-refresh" onClick={() => setRefreshTick(t => t + 1)}>Refresh</button>
         )}
       </header>
 
@@ -1772,26 +2208,85 @@ export function App() {
         >
           Notifications
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'projects' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('projects')}
+        >
+          Projects
+        </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'users' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('users')}
+        >
+          Users
+        </button>
       </nav>
 
       {/* Studies tab */}
       {tab === 'studies' && (
         <>
-          {state === 'loaded' && (
-            <div className="stats-bar">
-              {stats.map(({ label, count, variant }) => (
-                <div key={label} className="stat-card">
-                  <div className={`stat-number stat-number--${variant}`}>{count}</div>
-                  <div className="stat-label">{label}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Filter bar */}
+          <div className="filter-bar">
+            <input
+              className="filter-input filter-input--search"
+              type="search"
+              placeholder="Search UID or description…"
+              value={filterSearch}
+              onChange={e => setSearchF(e.target.value)}
+            />
+            <select className="filter-select" title="Filter by status" value={filterStatus} onChange={e => setStatusF(e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="received">Received</option>
+              <option value="defacing">Defacing</option>
+              <option value="clean">Clean</option>
+              <option value="defaced">Defaced</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <select className="filter-select" title="Filter by modality" value={filterModality} onChange={e => setModalityF(e.target.value)}>
+              <option value="">All modalities</option>
+              <option value="MRI">MRI</option>
+              <option value="CT">CT</option>
+              <option value="PET">PET</option>
+              <option value="US">US</option>
+              <option value="CR">CR</option>
+              <option value="DX">DX</option>
+              <option value="NM">NM</option>
+              <option value="PT">PT</option>
+            </select>
+            <select className="filter-select" title="Filter by source" value={filterSource} onChange={e => setSourceF(e.target.value)}>
+              <option value="">All sources</option>
+              <option value="external">External</option>
+              <option value="internal">Internal</option>
+            </select>
+            <select className="filter-select" title="Filter by project" value={filterProject} onChange={e => setProjectF(e.target.value)}>
+              <option value="">All projects</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {hasFilters && (
+              <button type="button" className="btn btn--secondary" onClick={clearFilters}>Clear</button>
+            )}
+            {state === 'loaded' && (
+              <span className="filter-count">
+                {studiesTotal === 0
+                  ? 'No results'
+                  : hasFilters
+                    ? `${studiesTotal} matching`
+                    : `${studiesTotal} total`}
+              </span>
+            )}
+          </div>
 
           {state === 'loading' && <div className="state-loading">Loading studies…</div>}
           {state === 'error'   && <div className="state-error">{error}</div>}
-          {state === 'loaded' && studies.length === 0 && (
-            <div className="state-empty">No studies yet. Upload DICOM files via the Upload Portal.</div>
+          {state === 'loaded' && studiesTotal === 0 && (
+            <div className="state-empty">
+              {hasFilters
+                ? 'No studies match your filters.'
+                : 'No studies yet. Upload DICOM files via the Upload Portal.'}
+            </div>
           )}
 
           {state === 'loaded' && studies.length > 0 && (
@@ -1804,6 +2299,10 @@ export function App() {
                     <th>Body Part</th>
                     <th>Source</th>
                     <th>Status</th>
+                    <th>PHI Scan</th>
+                    <th>QC</th>
+                    <th>BIDS</th>
+                    <th>Class.</th>
                     <th className="align-right">Files</th>
                     <th>Received</th>
                     <th>Actions</th>
@@ -1811,10 +2310,35 @@ export function App() {
                 </thead>
                 <tbody>
                   {studies.map(study => (
-                    <StudyRow key={study.id} study={study} onAction={fetchStudies} />
+                    <StudyRow key={study.id} study={study} onAction={() => setRefreshTick(t => t + 1)} />
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {state === 'loaded' && studiesTotal > PAGE_SIZE && (
+            <div className="pagination">
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={page === 0}
+                onClick={() => setPage(p => p - 1)}
+              >
+                ← Previous
+              </button>
+              <span className="pagination-info">
+                {pageStart}–{pageEnd} of {studiesTotal}
+              </span>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage(p => p + 1)}
+              >
+                Next →
+              </button>
             </div>
           )}
         </>
@@ -1834,6 +2358,12 @@ export function App() {
 
       {/* Notifications tab */}
       {tab === 'notifications' && <NotificationsPanel />}
+
+      {/* Projects tab */}
+      {tab === 'projects' && <ProjectsPanel />}
+
+      {/* Users tab */}
+      {tab === 'users' && <UsersPanel />}
     </div>
   )
 }
