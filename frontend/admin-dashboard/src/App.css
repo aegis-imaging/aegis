@@ -157,6 +157,7 @@
 .btn--reject  { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; }
 .btn--share   { background: #dbeafe; border: 1px solid #bfdbfe; color: #1d4ed8; }
 .btn--revoke  { background: #fff;    border: 1px solid #fecaca; color: #dc2626; }
+.btn--view    { background: #f3e8ff; border: 1px solid #d8b4fe; color: #6b21a8; }
 
 .btn-icon {
   background: none;
@@ -329,4 +330,50 @@
 .shares-empty {
   color: #9ca3af;
   font-size: 13px;
+}
+
+/* ── Viewer panel ─────────────────────────────────────────────────────────── */
+.viewer-panel {
+  border: 1px solid #d8b4fe;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1a2e;
+  margin-top: 8px;
+}
+
+.viewer-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #16213e;
+}
+
+.viewer-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
+.viewer-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.viewer-open-tab {
+  font-size: 12px;
+  color: #a78bfa;
+  text-decoration: none;
+}
+
+.viewer-open-tab:hover {
+  text-decoration: underline;
+}
+
+.viewer-iframe {
+  display: block;
+  width: 100%;
+  height: 640px;
+  border: none;
 }

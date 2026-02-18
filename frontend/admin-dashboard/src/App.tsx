@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import './App.css'
+import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,6 +220,7 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
 
 function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
   const [shareOpen, setShareOpen] = useState(false)
+  const [viewOpen, setViewOpen] = useState(false)
 
   const handleApprove = async () => {
     await fetch(`/api/studies/${study.id}/approve`, { method: 'POST' })
@@ -258,6 +260,9 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
                 {shareOpen ? 'Close' : 'Share'}
               </button>
             )}
+            <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>
+              {viewOpen ? 'Close viewer' : 'View'}
+            </button>
           </div>
         </td>
       </tr>
@@ -265,6 +270,13 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <tr>
           <td colSpan={8}>
             <SharePanel study={study} onClose={() => setShareOpen(false)} />
+          </td>
+        </tr>
+      )}
+      {viewOpen && (
+        <tr>
+          <td colSpan={8}>
+            <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
           </td>
         </tr>
       )}
