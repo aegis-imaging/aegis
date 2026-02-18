@@ -87,11 +87,15 @@ docker compose up            # start postgres + mailpit + ohif
 - `GET /dicomweb/studies` — list studies from DB
 - `GET /dicomweb/studies/{studyUID}/series` — single fake series per study
 - `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances` — enumerate instances by file count
-- `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}` — stream raw DICOM bytes
+- `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}` — stream DICOM bytes from `dicom_store`
+
+**Raw DICOMweb proxy** — same routes under `/dicomweb-raw/*`, but WADO-RS always reads from `dicom/raw/` regardless of `dicom_store`. Used by OHIF's `dicomweb-raw` data source for defacing review.
 
 SOPInstanceUID format: `{studyUID}.1.{fileIndex}` (index maps to `dicom/{store}/{studyUID}/{index}.dcm`).
 
-In the admin dashboard, each study row has a **View** button (inline iframe) and an **Open in new tab ↗** link.
+In the admin dashboard:
+- Each study row has a **View** button (inline iframe) and an **Open in new tab ↗** link.
+- Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side before/after OHIF panel. OHIF selects the data source via `?dataSource=dicomweb-raw` (before) or `?dataSource=dicomweb` (after).
 
 ### Terraform
 ```bash

@@ -61,6 +61,8 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] `npm run dev` — verify it runs on http://localhost:3001
 - [ ] Click **View** on any study row → OHIF Viewer iframe appears inline
 - [ ] Click **Open in new tab ↗** → viewer opens in a new browser tab
+- [ ] Click **Audit Log** tab → shows event table (empty until actions are taken)
+- [ ] For a defaced head study: click **Review defacing** → side-by-side OHIF panel (Before/After)
 
 ## 8. Go API
 
