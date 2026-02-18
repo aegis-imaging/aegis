@@ -1,6 +1,8 @@
 # AEGIS — Architecture Plan
 *Anonymization & Exchange Gateway for Imaging Studies*
 
+**Matthew L. Senjem, M.S.** | February 18, 2026
+
 ### Why "AEGIS"?
 The name **AEGIS** serves double duty. As an acronym, it describes exactly what the system does: an **A**nonymization & **E**xchange **G**ateway for **I**maging **S**tudies. The word itself comes from Greek mythology — the aegis was the shield of Zeus and Athena, a symbol of protection. This captures the platform's core mission: shielding patient identity while enabling the free flow of medical imaging data for research and clinical care.
 
