@@ -39,6 +39,10 @@ type Config struct {
 	// Empty string disables the service call (studies stay in "pending" until service is configured).
 	ClassificationServiceURL string
 
+	// Protocol compliance service (Python Cloud Run sidecar) — checks MRI acquisition parameters.
+	// Empty string disables the service call (studies stay in "pending" until service is configured).
+	ProtocolServiceURL string
+
 	// CORS
 	AllowedOrigins []string
 
@@ -77,6 +81,7 @@ func Load() *Config {
 		QcServiceURL:           os.Getenv("QC_SERVICE_URL"),            // e.g. http://localhost:8083
 		BidsServiceURL:             os.Getenv("BIDS_SERVICE_URL"),              // e.g. http://localhost:8084
 		ClassificationServiceURL:   os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
+		ProtocolServiceURL:         os.Getenv("PROTOCOL_SERVICE_URL"),      // e.g. http://localhost:8086
 
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002"), ","),
 

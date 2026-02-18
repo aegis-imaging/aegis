@@ -27,6 +27,7 @@ Rules:
 
 Current research files:
 - `docs/research/medical-imaging-deidentification.md` — citations for de-identification failures, face reconstruction from MRI, burned-in PHI, NIH DMS policy, HIPAA Safe Harbor, DICOM PS3.15, MIDI-B challenge, market sizing
+- `docs/research/mri-protocol-compliance.md` — MRI acquisition parameter ranges, consortia protocols (ADNI4, HCP, ABCD, UK Biobank, ENIGMA), tolerance recommendations, mrQA tool, Enhanced vs Classic DICOM
 
 ## Repository Structure (Monorepo)
 
@@ -44,6 +45,7 @@ aegis/
 ├── qc-service/           # Python QC automation service (pydicom + numpy)
 ├── bids-service/            # Python NIfTI/BIDS conversion service (dcm2niix)
 ├── classification-service/  # Python metadata classification service (DICOM heuristics)
+├── protocol-service/        # Python MRI protocol compliance service (pydicom)
 └── docs/                    # Shared research, references, and analysis (see docs/README.md)
 ```
 
@@ -105,7 +107,7 @@ cd frontend/admin-dashboard && npm install && npm run dev  # runs on :3001, prox
 
 ### Full-Stack Docker Compose
 
-`docker compose up` starts the entire platform: PostgreSQL, Mailpit, OHIF, Go API, and all 5 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
+`docker compose up` starts the entire platform: PostgreSQL, Mailpit, OHIF, Go API, and all 6 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
 
 ```bash
 docker compose up -d          # start everything (background)
@@ -125,6 +127,7 @@ docker compose down -v        # stop all + destroy volumes
 | qc-service | (internal) | Automated QC checks |
 | bids-service | (internal) | NIfTI/BIDS conversion (dcm2niix) |
 | classification-service | (internal) | Metadata classification |
+| protocol-service | (internal) | MRI protocol compliance |
 
 Sidecar services have no host port mapping — the Go API reaches them via Docker internal DNS (e.g., `http://defacing:8080`). The API's `LOCAL_STORAGE_DIR=/app/data` and all sidecars mount the same volume at `/app/data`.
 
@@ -200,6 +203,7 @@ Routing rules are evaluated on every study ingest (upload complete + internal in
 | `require_qc_check` | Forces `qc_required=true`, sets `qc_status=pending` |
 | `require_bids_conversion` | Forces `bids_required=true`, sets `bids_status=pending` |
 | `require_classification` | Forces `classification_required=true`, sets `classification_status=pending` |
+| `require_protocol_check` | Forces `protocol_required=true`, sets `protocol_status=pending` |
 | `auto_approve` | Skips manual QC, sets `status=approved` |
 | `require_qa` | No-op — holds for manual review (default) |
 | `reject` | Auto-rejects the study |
@@ -515,6 +519,69 @@ uvicorn app.main:app --port 8085
 - "Classify" button for pending studies
 - `require_classification` option in routing rules action dropdown
 
+### MRI Protocol Compliance Service (`protocol-service/`, `api/handler/protocol_check.go`)
+
+Verifies that DICOM acquisition parameters (TR, TE, flip angle, slice thickness, resolution, etc.) match expected values defined in per-project protocol templates. Templates are keyed by scanner manufacturer, model, software version, and sequence type. Supports both Classic (single-frame, flat tags) and Enhanced DICOM (multi-frame, nested functional group sequences). Runs as a separate Python FastAPI service, called asynchronously from the Go API.
+
+**Running locally:**
+```bash
+cd protocol-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8086
+# Then set PROTOCOL_SERVICE_URL=http://localhost:8086 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `PROTOCOL_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `PROTOCOL_TOOL` | `auto` | Backend selection: `auto` or `basic` |
+| `PROTOCOL_DEFAULT_TOLERANCE` | `5.0` | Default percentage tolerance for numeric parameter comparison |
+
+**Study fields:**
+- `protocol_required` — boolean flag, set by `require_protocol_check` routing rule action
+- `protocol_status` — `''` (not required), `pending`, `checking`, `compliant`, `minor_deviations`, `non_compliant`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/protocol-check` — trigger protocol check (returns 202 Accepted, runs async)
+
+**Protocol Templates** (`/api/projects/{projectID}/protocol-templates`):
+
+| Field | Notes |
+|-------|-------|
+| `manufacturer` | Scanner manufacturer, e.g. `SIEMENS` (empty = any) |
+| `model` | Scanner model, e.g. `MAGNETOM Prisma` (empty = any) |
+| `software_version` | Software version, e.g. `VE11C` (empty = any) |
+| `sequence_type` | Pulse sequence identifier, e.g. `T1w_MPRAGE`, `FLAIR`, `DWI` |
+| `rules` | JSONB array of parameter rules (tag keyword, target, tolerance, match type, severity) |
+
+**Parameter rule match types:**
+- `numeric` — percentage tolerance (default 5%), optional absolute tolerance override
+- `exact` — string equality
+- `contains_all` — all expected values present in actual list
+- `range` — value within [min, max]
+
+**Severity levels:** `critical` (→ non_compliant), `warning` (→ minor_deviations), `info` (→ compliant)
+
+**DICOM format support:**
+- **Classic DICOM** — parameters read from top-level tags (RepetitionTime, EchoTime, FlipAngle, etc.)
+- **Enhanced DICOM** — detected via SOPClassUID `1.2.840.10008.5.1.4.1.1.4.1`; parameters extracted from `SharedFunctionalGroupsSequence` and `PerFrameFunctionalGroupsSequence` nested sequences
+
+**Pipeline:**
+1. Routing rule with action `require_protocol_check` sets `protocol_required=true` and `protocol_status=pending`
+2. Admin clicks "Check Protocol" → Go handler loads matching templates for study's project, sets status to `checking`, dispatches to Python service with aggregated rules
+3. Python service reads DICOM files, extracts parameters (Classic or Enhanced), compares against rules
+4. Results returned: `protocol_status` set to `compliant`, `minor_deviations`, `non_compliant`, or `failed`
+5. Findings stored as JSONB in audit trail (`protocol_check.complete` entries with per-parameter findings)
+6. Admin can still approve non-compliant studies (the status is informational)
+
+**Admin dashboard:**
+- Protocol column with status badge (pending/checking/compliant/minor_deviations/non_compliant/failed)
+- "Check Protocol" button for pending studies
+- `require_protocol_check` option in routing rules action dropdown
+- **Protocol Templates tab** — full CRUD for per-project templates with rules editor
+
 ### Batch Import CLI (`api/cmd/import/`)
 
 CLI tool for importing DICOM files from a local directory into AEGIS. Used for bulk historical data migration. Files are assumed already de-identified — the import tool does NOT apply de-identification.
@@ -598,9 +665,9 @@ git checkout develop && git pull
 | Job | What it checks |
 |-----|---------------|
 | `go` | `go build ./...` + `go vet ./...` |
-| `python` (5× matrix) | `py_compile` on all `.py` files per service |
+| `python` (6× matrix) | `py_compile` on all `.py` files per service |
 | `frontend` (3× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard) |
-| `docker` (6× matrix) | `docker build` for all service images |
+| `docker` (7× matrix) | `docker build` for all service images |
 
 ## Makefile
 
