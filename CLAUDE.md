@@ -57,7 +57,10 @@ Email env vars (`api/email/client.go`, `api/config/config.go`):
 | `SMTP_USERNAME` | *(empty)* | Omit for unauthenticated relays |
 | `SMTP_PASSWORD` | *(empty)* | |
 
-Triggers: share created → recipient email; upload complete → uploader (if provided); study approved/rejected → uploader. No PHI in any email body.
+Triggers: share created → recipient email; upload complete → uploader (if provided at upload time); study approved/rejected → uploader. No PHI in any email body.
+
+### Upload Portal — Email field
+The preview step shows an optional "Your email" input. The address is sent with `POST /api/upload/init` as `uploader_email` and stored in `upload_sessions`. If blank, no notification is sent. The `@aegis/client` `UploadOptions.uploaderEmail` field carries it through.
 
 ### Upload Portal (React)
 ```bash
@@ -89,15 +92,25 @@ cd terraform/infra && terraform init && terraform plan
 - Dual-path email: PSC→on-prem SMTP for internal, SendGrid for external (dev: standard SMTP)
 - Modality-agnostic de-identification; defacing only for head imaging
 
-## Git Branching Strategy
+## Git Workflow — Full Feature Lifecycle
 
-- **Never commit directly to `develop` or `main`.**
-- Always create a feature branch from `origin/develop`:
-  ```bash
-  git checkout -b feature/your-feature-name origin/develop
-  ```
-- Build and commit on the feature branch, then push it and open a PR to `develop`.
-- This avoids merge conflicts when multiple agents work in parallel.
+Never commit directly to `develop` or `main`.
+
+**Start a feature:**
+```bash
+git checkout -b feature/your-feature-name origin/develop
+```
+
+**Closing process (run after every feature):**
+```bash
+git add <files>
+git commit -m "..."
+git push -u origin feature/your-feature-name
+gh pr create --base develop --head feature/your-feature-name --title "..." --body "..."
+gh pr merge <number> --merge --delete-branch
+git checkout develop && git pull
+# then branch again for the next feature
+```
 
 ## Conventions
 
