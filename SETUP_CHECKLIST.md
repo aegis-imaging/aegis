@@ -128,6 +128,25 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Long filenames are truncated with `…` prefix (>48 chars)
 - [ ] (Optional) Throttle network in DevTools mid-upload → verify retries up to 3× before error
 
+## 7h. Burned-in PHI Detection
+
+- [ ] Install Tesseract OCR: `brew install tesseract` (macOS) or `apt-get install tesseract-ocr` (Linux)
+- [ ] Start the PHI detection service:
+  ```bash
+  cd phi-detection && pip install -r requirements.txt
+  uvicorn app.main:app --port 8082
+  ```
+- [ ] Verify health: `curl http://localhost:8082/healthz` → should show `{"status":"ok","backend":"tesseract"}`
+- [ ] Start the Go API with PHI detection enabled:
+  ```bash
+  cd api && PHI_DETECTION_SERVICE_URL=http://localhost:8082 go run .
+  ```
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_phi_scan` (any modality)
+- [ ] Upload a study via the Upload Portal → study row shows PHI Scan badge: **pending**
+- [ ] Click **Scan for PHI** → badge changes to **scanning** → then **clean** or **flagged**
+- [ ] Check Audit Log tab → `phi_scan.triggered` and `phi_scan.complete` entries appear
+- [ ] Verify admin can still Approve a flagged study (flag is informational, not blocking)
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
