@@ -48,7 +48,7 @@ func (s *Server) CreateInstitution(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to create institution")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "institution.created", "admin", "institution", inst.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "institution.created", actorEmail(r), "institution", inst.ID, clientIP(r), map[string]any{
 		"name": inst.Name,
 		"type": inst.Type,
 	})
@@ -104,7 +104,7 @@ func (s *Server) UpdateInstitution(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to update institution")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "institution.updated", "admin", "institution", id, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "institution.updated", actorEmail(r), "institution", id, clientIP(r), nil)
 	s.writeJSON(w, http.StatusOK, existing)
 }
 
@@ -119,7 +119,7 @@ func (s *Server) DeleteInstitution(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to delete institution")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "institution.deleted", "admin", "institution", id, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "institution.deleted", actorEmail(r), "institution", id, clientIP(r), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -158,7 +158,7 @@ func (s *Server) AddInstitutionProject(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to link institution to project")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "institution.project_linked", "admin", "institution", id, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "institution.project_linked", actorEmail(r), "institution", id, clientIP(r), map[string]any{
 		"project_id": req.ProjectID,
 		"role":       req.Role,
 	})
@@ -174,7 +174,7 @@ func (s *Server) RemoveInstitutionProject(w http.ResponseWriter, r *http.Request
 		s.writeError(w, http.StatusInternalServerError, "failed to unlink institution from project")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "institution.project_unlinked", "admin", "institution", id, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "institution.project_unlinked", actorEmail(r), "institution", id, clientIP(r), map[string]any{
 		"project_id": projectID,
 	})
 	w.WriteHeader(http.StatusNoContent)

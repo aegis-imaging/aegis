@@ -50,7 +50,7 @@ func (s *Server) CreateAnonProfile(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to create profile")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "anon_profile.created", "admin", "anon_profile", p.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "anon_profile.created", actorEmail(r), "anon_profile", p.ID, clientIP(r), map[string]any{
 		"name":       p.Name,
 		"project_id": projectID,
 	})
@@ -95,7 +95,7 @@ func (s *Server) UpdateAnonProfile(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to update profile")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "anon_profile.updated", "admin", "anon_profile", id, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "anon_profile.updated", actorEmail(r), "anon_profile", id, clientIP(r), nil)
 	s.writeJSON(w, http.StatusOK, existing)
 }
 
@@ -112,7 +112,7 @@ func (s *Server) DeleteAnonProfile(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to delete profile")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "anon_profile.deleted", "admin", "anon_profile", id, clientIP(r), nil)
+	model.CreateAuditEntry(r.Context(), s.db, "anon_profile.deleted", actorEmail(r), "anon_profile", id, clientIP(r), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -148,7 +148,7 @@ func (s *Server) SetDefaultAnonProfile(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to update project")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "project.default_anon_profile_set", "admin", "project", projectID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "project.default_anon_profile_set", actorEmail(r), "project", projectID, clientIP(r), map[string]any{
 		"profile_id": body.ProfileID,
 	})
 	w.WriteHeader(http.StatusNoContent)

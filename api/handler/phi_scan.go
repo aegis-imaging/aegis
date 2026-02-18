@@ -72,7 +72,7 @@ func (s *Server) TriggerPhiScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	model.CreateAuditEntry(r.Context(), s.db, "phi_scan.triggered", "anonymous", "study", study.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "phi_scan.triggered", actorEmail(r), "study", study.ID, clientIP(r), map[string]any{
 		"study_uid": studyUID,
 	})
 

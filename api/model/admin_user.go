@@ -53,6 +53,16 @@ func GetAdminUserByID(ctx context.Context, db *sql.DB, id string) (*AdminUser, e
 	return &u, nil
 }
 
+func GetAdminUserByEmail(ctx context.Context, db *sql.DB, email string) (*AdminUser, error) {
+	var u AdminUser
+	err := scanAdminUser(db.QueryRowContext(ctx,
+		`SELECT `+adminUserColumns+` FROM admin_users WHERE LOWER(email) = LOWER($1)`, email), &u)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 func CreateAdminUser(ctx context.Context, db *sql.DB, u *AdminUser) error {
 	return db.QueryRowContext(ctx, `
 		INSERT INTO admin_users (email, name, role, enabled, notes)

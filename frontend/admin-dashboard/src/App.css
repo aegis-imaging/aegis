@@ -25,6 +25,33 @@
   font-size: 14px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Auth ────────────────────────────────────────────────────────────────── */
+.auth-error-banner {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.auth-user-badge {
+  font-size: 13px;
+  color: #374151;
+  background: #f3f4f6;
+  padding: 4px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 /* ── Stats bar ───────────────────────────────────────────────────────────── */
 .stats-bar {
   display: flex;
