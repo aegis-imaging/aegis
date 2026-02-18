@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/msenjem/aegis/api/email"
 	"github.com/msenjem/aegis/api/model"
 )
 
@@ -31,6 +32,14 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.approved", "admin", "study", study.ID, clientIP(r), nil)
+
+	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
+		subject, body := email.StudyApproved(study.StudyInstanceUID)
+		if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
+			log.Printf("approve email to %s: %v", uploaderEmail, err)
+		}
+	}
+
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
 }
 
@@ -51,6 +60,14 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", "admin", "study", study.ID, clientIP(r), nil)
+
+	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
+		subject, body := email.StudyRejected(study.StudyInstanceUID)
+		if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
+			log.Printf("reject email to %s: %v", uploaderEmail, err)
+		}
+	}
+
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
 }
 
@@ -109,15 +126,21 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	share.Token = rawToken
+	exportURL := fmt.Sprintf("%s/api/export/%s", s.cfg.APIBaseURL, rawToken)
 	model.CreateAuditEntry(r.Context(), s.db, "share.created", "admin", "export_share", share.ID, clientIP(r), map[string]any{
 		"recipient":  req.RecipientEmail,
 		"study_id":   study.ID,
 		"expires_at": expiresAt,
 	})
 
+	subject, body := email.ShareCreated(exportURL, share.ExpiresAt, share.Note)
+	if err := s.mailer.Send(r.Context(), share.RecipientEmail, subject, body); err != nil {
+		log.Printf("share email to %s: %v", share.RecipientEmail, err)
+	}
+
 	s.writeJSON(w, http.StatusCreated, createShareResponse{
 		ExportShare: share,
-		ExportURL:   fmt.Sprintf("%s/api/export/%s", s.cfg.APIBaseURL, rawToken),
+		ExportURL:   exportURL,
 	})
 }
 

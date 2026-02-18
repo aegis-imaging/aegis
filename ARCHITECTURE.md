@@ -262,24 +262,26 @@ Cloud SQL with Private IP inside the VPC. CMEK encryption via Cloud KMS.
 - **Smart routing** — classify studies by modality/anatomy when DICOM metadata is unreliable or missing
 - **Future**: defacing quality scoring, automated QC pass/fail
 
-### Email Notifications (Dual-Path)
+### Email Notifications
 
-**Internal recipients (admins, reviewers) — On-prem SMTP via Private Service Connect:**
-- PSC endpoint from GCP VPC to on-prem SMTP relay server
-- QC review notifications to admin reviewers
-- Defacing completion alerts
-- Weekly/monthly digest reports
-- Routing failure alerts
-- Go API sends via standard SMTP (`net/smtp`) through the PSC endpoint
+**Current implementation (`api/email/`):**
+- Single SMTP client using Go stdlib `net/smtp` — zero external dependencies
+- Disabled by default; enabled by setting `SMTP_HOST` env var (silent no-op when unset)
+- Triggers implemented: share created → recipient; upload confirmed → uploader; study approved/rejected → uploader
+- No PHI in email bodies — only anonymized Study UIDs, file counts, and export URLs
+- Dev: use [Mailpit](https://github.com/axllent/mailpit) (`docker run -p 1025:1025 -p 8025:8025 axllent/mailpit`)
 
-**External recipients (uploaders, sending sites) — SendGrid:**
+**Planned dual-path (production):**
+
+*Internal recipients (admins, reviewers) — On-prem SMTP via Private Service Connect:*
+- PSC endpoint from GCP VPC to on-prem SMTP relay
+- Already compatible: `net/smtp` client routes through the PSC endpoint with no code changes
+- Additional triggers: defacing alerts, routing failure alerts, weekly/monthly digests
+
+*External recipients (uploaders, sending sites) — SendGrid:*
 - External users cannot receive email through the on-prem relay
-- **SendGrid** (GCP Marketplace partner, likely required) for external delivery
-- SendGrid provides: delivery tracking, bounce handling, spam compliance, analytics
-- Upload confirmation emails
-- Processing status updates
-- Account/credential notifications
-- Go API integrates via SendGrid REST API or SMTP relay
+- **SendGrid** for external delivery (bounce handling, spam compliance, analytics)
+- SendGrid exposes an SMTP interface — no code changes required, just point `SMTP_HOST` at the SendGrid relay
 
 ### Viewing: OHIF Viewer
 - Web-based, React, MIT license

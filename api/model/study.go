@@ -121,6 +121,18 @@ func UpdateStudyStatus(ctx context.Context, db *sql.DB, id, status string) error
 	return err
 }
 
+// GetUploaderEmail returns the uploader_email from the upload session linked to a study.
+// Returns an empty string (no error) if the study has no associated upload session.
+func GetUploaderEmail(ctx context.Context, db *sql.DB, studyID string) (string, error) {
+	var uploaderEmail string
+	err := db.QueryRowContext(ctx, `
+		SELECT COALESCE(us.uploader_email, '')
+		FROM studies s
+		LEFT JOIN upload_sessions us ON us.id = s.upload_session_id
+		WHERE s.id = $1`, studyID).Scan(&uploaderEmail)
+	return uploaderEmail, err
+}
+
 // UpdateStudyDefaced marks a study as defacing-complete and moves it to the clean store.
 func UpdateStudyDefaced(ctx context.Context, db *sql.DB, id string) error {
 	_, err := db.ExecContext(ctx, `

@@ -68,6 +68,25 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Implement signed URL generation endpoint
 - [ ] Test upload flow: browser → signed URL → GCS staging bucket
 
+## 8a. Email (Local Dev with Mailpit)
+
+Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is unset.
+
+- [ ] Run Mailpit (local SMTP + web UI, requires Docker):
+  ```bash
+  docker run -p 1025:1025 -p 8025:8025 axllent/mailpit
+  ```
+- [ ] Start the API with SMTP env vars:
+  ```bash
+  cd api && SMTP_HOST=localhost SMTP_PORT=1025 go run .
+  ```
+- [ ] Open Mailpit web UI at http://localhost:8025
+- [ ] Trigger each notification to verify:
+  - Create a share for an approved study → recipient gets share email with download link
+  - Approve a study → uploader (if email was provided at upload) gets approval email
+  - Reject a study → uploader gets rejection email
+- [ ] Verify no crash when `SMTP_HOST` is unset (email silently skipped, no error returned)
+
 ## 9. GitHub Repository
 
 - [ ] Verify remote is set: `git remote -v`
