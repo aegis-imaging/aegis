@@ -144,6 +144,13 @@ type AdminUser = {
   created_at: string
 }
 
+type AuthIdentity = {
+  id: string
+  email: string
+  name: string
+  role: string
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string) {
@@ -2092,6 +2099,21 @@ export function App() {
   const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
+  // Auth state
+  const [currentUser, setCurrentUser] = useState<AuthIdentity | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => {
+        if (r.status === 401 || r.status === 403) {
+          return r.json().then(body => { setAuthError(body.error || 'Unauthorized') })
+        }
+        if (r.ok) return r.json().then(setCurrentUser)
+      })
+      .catch(() => { /* non-fatal — dev mode may not have auth */ })
+  }, [])
+
   // Filters
   const [filterStatus,   setFilterStatus]   = useState('')
   const [filterModality, setFilterModality] = useState('')
@@ -2154,14 +2176,27 @@ export function App() {
 
   return (
     <div className="admin-root">
+      {authError && (
+        <div className="auth-error-banner">
+          Access denied: {authError}
+        </div>
+      )}
+
       <header className="header">
         <div>
           <h1>AEGIS Admin Dashboard</h1>
           <p>Study review, QC, and export management</p>
         </div>
-        {tab === 'studies' && (
-          <button type="button" className="btn-refresh" onClick={() => setRefreshTick(t => t + 1)}>Refresh</button>
-        )}
+        <div className="header-actions">
+          {currentUser && (
+            <span className="auth-user-badge">
+              {currentUser.name || currentUser.email} ({currentUser.role})
+            </span>
+          )}
+          {tab === 'studies' && (
+            <button type="button" className="btn-refresh" onClick={() => setRefreshTick(t => t + 1)}>Refresh</button>
+          )}
+        </div>
       </header>
 
       {/* Tab nav */}
