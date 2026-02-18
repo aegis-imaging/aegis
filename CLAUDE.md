@@ -247,6 +247,41 @@ Authorised dashboard users and their roles. Authentication is handled by GCP IAP
 
 All mutations emit audit entries (`admin_user.created`, `admin_user.updated`, `admin_user.deleted`).
 
+### Authentication Middleware (`api/middleware/auth.go`)
+
+Per-route authentication middleware that protects all admin endpoints. Supports GCP Identity-Aware Proxy (IAP) and Microsoft Azure AD (Easy Auth) as identity providers.
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `AUTH_ENABLED` | `false` | Enable authentication middleware; `false` = dev mode (auto-auth) |
+| `AUTH_PROVIDER` | `auto` | Identity provider: `auto` (try both), `iap` (GCP), or `azure` (Azure AD) |
+| `DEV_USER_EMAIL` | `dev@aegis.local` | Auto-authenticated email when `AUTH_ENABLED=false` |
+
+**How it works:**
+- `AUTH_ENABLED=false` (default, local dev): every request is auto-authenticated as `DEV_USER_EMAIL`. If that email exists in `admin_users`, uses that record; otherwise uses a synthetic admin user. Zero config needed to start developing.
+- `AUTH_ENABLED=true` (production): reads identity headers from the reverse proxy:
+  - **GCP IAP**: `X-Goog-Authenticated-User-Email` (format: `accounts.google.com:user@example.com`)
+  - **Azure AD Easy Auth**: `X-MS-CLIENT-PRINCIPAL-NAME` (user's email)
+- Looks up the email in `admin_users` table; rejects unknown or disabled users.
+- Injects `AuthUser` into request context; all audit entries now record the real user email.
+
+**Route categories:**
+
+| Category | Auth | Examples |
+|----------|------|---------|
+| Public | None | `/healthz`, `GET /api/projects`, upload portal routes, export token, DICOMweb proxy |
+| Admin | Required | All study management, CRUD, processing triggers, audit log, ingest, import |
+
+**Endpoints:**
+- `GET /api/auth/me` — returns the current authenticated user's `{id, email, name, role}`
+
+**Error responses:**
+- `401 {"error":"missing authentication header"}` — no identity header in production mode
+- `403 {"error":"user not registered: user@example.com"}` — email not in `admin_users`
+- `403 {"error":"account is disabled"}` — user exists but `enabled=false`
+
 ### Project Settings (`api/handler/project.go`)
 
 Projects now support full CRUD via the API and a dedicated admin dashboard tab.
