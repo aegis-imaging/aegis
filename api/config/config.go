@@ -35,6 +35,10 @@ type Config struct {
 	// Empty string disables the service call (studies stay in "pending" until service is configured).
 	BidsServiceURL string
 
+	// Classification service (Python Cloud Run sidecar) — fills in missing modality/body_part.
+	// Empty string disables the service call (studies stay in "pending" until service is configured).
+	ClassificationServiceURL string
+
 	// CORS
 	AllowedOrigins []string
 
@@ -69,7 +73,8 @@ func Load() *Config {
 		DefacingServiceURL:     os.Getenv("DEFACING_SERVICE_URL"),     // e.g. http://localhost:8081
 		PhiDetectionServiceURL: os.Getenv("PHI_DETECTION_SERVICE_URL"), // e.g. http://localhost:8082
 		QcServiceURL:           os.Getenv("QC_SERVICE_URL"),            // e.g. http://localhost:8083
-		BidsServiceURL:         os.Getenv("BIDS_SERVICE_URL"),          // e.g. http://localhost:8084
+		BidsServiceURL:             os.Getenv("BIDS_SERVICE_URL"),              // e.g. http://localhost:8084
+		ClassificationServiceURL:   os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
 
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002"), ","),
 

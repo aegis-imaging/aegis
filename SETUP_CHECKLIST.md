@@ -201,6 +201,25 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Unzip and verify BIDS structure: `dataset_description.json`, `participants.tsv`, `sub-*/anat/*.nii.gz` + `*.json`
 - [ ] Check Audit Log tab → `bids_conversion.triggered` and `bids_conversion.complete` entries appear
 
+## 7l. Metadata Classification Service
+
+- [ ] Start the classification service:
+  ```bash
+  cd classification-service && pip install -r requirements.txt
+  uvicorn app.main:app --port 8085
+  ```
+- [ ] Verify health: `curl http://localhost:8085/healthz` → should show `{"status":"ok","backend":"heuristic"}`
+- [ ] Start the Go API with classification service enabled:
+  ```bash
+  cd api && CLASSIFICATION_SERVICE_URL=http://localhost:8085 go run .
+  ```
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_classification` (any modality)
+- [ ] Upload a study with missing modality → study row shows Classification badge: **pending**
+- [ ] Click **Classify** → badge changes to **classifying** → then **classified**
+- [ ] Verify study modality and body_part updated from "—" to classified values
+- [ ] Verify routing rules re-evaluated (e.g. a `require_defacing` rule for HEAD now fires)
+- [ ] Check Audit Log tab → `classification.triggered` and `classification.complete` entries appear
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
