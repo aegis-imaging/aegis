@@ -103,14 +103,38 @@ cd frontend/upload-portal && npm install && npm run dev   # runs on :3000, proxi
 cd frontend/admin-dashboard && npm install && npm run dev  # runs on :3001, proxies /api to :8080
 ```
 
-### OHIF Viewer
-OHIF Viewer runs as a Docker container on `:3002`, configured to load DICOM images via the Go API's DICOMweb proxy.
+### Full-Stack Docker Compose
+
+`docker compose up` starts the entire platform: PostgreSQL, Mailpit, OHIF, Go API, and all 5 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
 
 ```bash
-docker compose up ohif       # start OHIF only
-docker compose up            # start postgres + mailpit + ohif
-# OHIF available at http://localhost:3002
+docker compose up -d          # start everything (background)
+docker compose up ohif        # start OHIF only
+docker compose down           # stop all (data persists)
+docker compose down -v        # stop all + destroy volumes
 ```
+
+| Service | Port | Notes |
+|---------|------|-------|
+| postgres | 5432 | PostgreSQL 15, data in `pgdata` volume |
+| mailpit | 1025 (SMTP) / 8025 (UI) | Email capture for dev |
+| ohif | 3002 | OHIF Viewer, waits for API health |
+| api | 8080 | Go API, runs migrations on startup |
+| defacing | (internal) | Python defacing service |
+| phi-detection | (internal) | Burned-in PHI detection (Tesseract) |
+| qc-service | (internal) | Automated QC checks |
+| bids-service | (internal) | NIfTI/BIDS conversion (dcm2niix) |
+| classification-service | (internal) | Metadata classification |
+
+Sidecar services have no host port mapping — the Go API reaches them via Docker internal DNS (e.g., `http://defacing:8080`). The API's `LOCAL_STORAGE_DIR=/app/data` and all sidecars mount the same volume at `/app/data`.
+
+**Health check** (`GET /healthz`) returns JSON with database, storage, and per-sidecar status:
+```json
+{"status":"ok","database":"healthy","storage":"healthy","services":{"defacing":"healthy",...}}
+```
+
+### OHIF Viewer
+OHIF Viewer runs as a Docker container on `:3002`, configured to load DICOM images via the Go API's DICOMweb proxy.
 
 `ohif-config.js` (repo root) configures the OHIF data source pointing at `http://localhost:8080/dicomweb`.
 

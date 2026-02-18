@@ -22,6 +22,24 @@ import (
 )
 
 func main() {
+	// Docker HEALTHCHECK support: the distroless container has no shell or curl,
+	// so the binary itself can ping /healthz when invoked with --healthcheck.
+	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
+		port := "8080"
+		if p := os.Getenv("PORT"); p != "" {
+			port = p
+		}
+		resp, err := http.Get("http://localhost:" + port + "/healthz")
+		if err != nil {
+			os.Exit(1)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	cfg := config.Load()
 
 	db, err := sql.Open("pgx", cfg.DatabaseURL)
@@ -35,6 +53,12 @@ func main() {
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatalf("database ping: %v", err)
 	}
+
+	// Production connection pool tuning.
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(1 * time.Minute)
 
 	if err := migrate.Run(db); err != nil {
 		log.Fatalf("migrations: %v", err)
