@@ -313,18 +313,37 @@ Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-
 
 ## 8a. Local Services (Docker Compose)
 
-`docker-compose.yml` in the repo root starts all local dev dependencies in one command:
+`docker-compose.yml` starts the **full platform stack** — database, email, viewer, Go API, and all Python sidecar services:
 
-- [ ] `docker compose up -d` — starts postgres (5432), mailpit (1025/8025), OHIF (3002)
+- [ ] `docker compose up -d` — builds and starts all 9 services
+- [ ] Verify API health: `curl http://localhost:8080/healthz | python3 -m json.tool`
+  - Should show `"status":"ok"`, `"database":"healthy"`, `"storage":"healthy"`, and all 5 sidecar services as `"healthy"`
 - [ ] Verify OHIF loads at http://localhost:3002 (shows the AEGIS data source)
 - [ ] Verify Mailpit web UI at http://localhost:8025
 
-Or start services individually:
+Services started by `docker compose up`:
+
+| Service | Port | Notes |
+|---------|------|-------|
+| postgres | 5432 | Data in `pgdata` named volume (persists across restarts) |
+| mailpit | 1025 / 8025 | SMTP capture + web UI |
+| ohif | 3002 | OHIF Viewer (waits for API health) |
+| api | 8080 | Go API (runs migrations on startup) |
+| defacing | (internal) | Defacing service |
+| phi-detection | (internal) | Burned-in PHI detection |
+| qc-service | (internal) | QC automation |
+| bids-service | (internal) | NIfTI/BIDS conversion |
+| classification-service | (internal) | Metadata classification |
+
+Start individual services:
 ```bash
-docker compose up -d postgres
-docker compose up -d mailpit
-docker compose up -d ohif
+docker compose up -d postgres    # just database
+docker compose up -d api         # API + postgres (auto-dependency)
+docker compose build             # rebuild all images after code changes
+docker compose down -v           # stop + destroy volumes (fresh start)
 ```
+
+**Note:** The frontends (upload-portal on :3000, admin-dashboard on :3001) still run via `npm run dev` outside Docker, proxying `/api` to `localhost:8080`.
 
 ## 8b. Email (Local Dev with Mailpit)
 

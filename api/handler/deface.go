@@ -125,8 +125,7 @@ func (s *Server) runDefacing(study *model.Study) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Minute}
-	resp, err := client.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Printf("deface: call service for %s: %v", studyUID, err)
 		model.UpdateStudyStatus(ctx, s.db, study.ID, "received")
