@@ -59,7 +59,8 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 
 - [ ] `cd frontend/admin-dashboard && npm install`
 - [ ] `npm run dev` — verify it runs on http://localhost:3001
-- [ ] (Later) Add OHIF Viewer dependency once DICOM stores are populated
+- [ ] Click **View** on any study row → OHIF Viewer iframe appears inline
+- [ ] Click **Open in new tab ↗** → viewer opens in a new browser tab
 
 ## 8. Go API
 
@@ -68,11 +69,29 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Implement signed URL generation endpoint
 - [ ] Test upload flow: browser → signed URL → GCS staging bucket
 
-## 8a. Email (Local Dev with Mailpit)
+## 8a. Local Services (Docker Compose)
+
+`docker-compose.yml` in the repo root starts all local dev dependencies in one command:
+
+- [ ] `docker compose up -d` — starts postgres (5432), mailpit (1025/8025), OHIF (3002)
+- [ ] Verify OHIF loads at http://localhost:3002 (shows the AEGIS data source)
+- [ ] Verify Mailpit web UI at http://localhost:8025
+
+Or start services individually:
+```bash
+docker compose up -d postgres
+docker compose up -d mailpit
+docker compose up -d ohif
+```
+
+## 8b. Email (Local Dev with Mailpit)
+
+Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is unset.
+Mailpit is included in `docker-compose.yml` (step 8a). To run standalone:
 
 Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is unset.
 
-- [ ] Run Mailpit (local SMTP + web UI, requires Docker):
+- [ ] Run Mailpit (or use `docker compose up -d mailpit`):
   ```bash
   docker run -p 1025:1025 -p 8025:8025 axllent/mailpit
   ```

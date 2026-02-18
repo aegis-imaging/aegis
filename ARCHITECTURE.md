@@ -284,9 +284,16 @@ Cloud SQL with Private IP inside the VPC. CMEK encryption via Cloud KMS.
 - SendGrid exposes an SMTP interface — no code changes required, just point `SMTP_HOST` at the SendGrid relay
 
 ### Viewing: OHIF Viewer
+
+**Local dev**: OHIF v3 runs as a Docker container on `:3002` via `docker compose up ohif`. Configured via `ohif-config.js` (repo root) to use the Go API's DICOMweb proxy at `http://localhost:8080/dicomweb`.
+
+**DICOMweb proxy** (`api/handler/dicomweb.go`): minimal QIDO-RS + WADO-RS implemented in Go without a DICOM library. Serves study/series/instance metadata from PostgreSQL and streams raw DICOM bytes from local storage. Uses fake deterministic UIDs (`{studyUID}.1.{fileIndex}`) that map directly to file paths (`dicom/{store}/{studyUID}/{index}.dcm`).
+
+Admin dashboard **View button**: each study row shows an inline iframe panel (OHIF embedded in the dashboard) and an "Open in new tab ↗" link. Both modes open `http://localhost:3002/viewer?StudyInstanceUIDs={uid}`.
+
+**Production**: OHIF served from Cloud Run behind IAP, configured to connect directly to the GCP Healthcare API DICOMweb endpoint. The Go DICOMweb proxy is replaced by the Healthcare API's native DICOMweb support.
+
 - Web-based, React, MIT license
-- Native DICOMweb connection to Healthcare API
-- Embedded in admin dashboard for QC review
 - Supports all standard DICOM modalities (MRI, CT, PET, US, X-Ray, NM, etc.)
 
 ---
