@@ -140,6 +140,7 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{studyUID}/qc-check", srv.TriggerQcCheck)
 	mux.HandleFunc("POST /api/studies/{studyUID}/bids-convert", srv.TriggerBidsConversion)
 	mux.HandleFunc("GET /api/studies/{studyUID}/bids-download", srv.ServeBidsDownload)
+	mux.HandleFunc("POST /api/studies/{studyUID}/classify", srv.TriggerClassification)
 
 	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by OHIF Viewer.
 	mux.HandleFunc("GET /dicomweb/studies", srv.DicomwebStudies)

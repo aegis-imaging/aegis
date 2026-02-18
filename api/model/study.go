@@ -26,9 +26,11 @@ type Study struct {
 	PhiScanStatus    string    `json:"phi_scan_status"`
 	QcRequired       bool      `json:"qc_required"`
 	QcStatus         string    `json:"qc_status"`
-	BidsRequired     bool      `json:"bids_required"`
-	BidsStatus       string    `json:"bids_status"`
-	CreatedAt        time.Time `json:"created_at"`
+	BidsRequired           bool      `json:"bids_required"`
+	BidsStatus             string    `json:"bids_status"`
+	ClassificationRequired bool      `json:"classification_required"`
+	ClassificationStatus   string    `json:"classification_status"`
+	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
@@ -36,7 +38,8 @@ const studyColumns = `
 	id, project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
 	study_description, series_count, instance_count, status, defacing_required,
 	dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
-	bids_required, bids_status, created_at, updated_at`
+	bids_required, bids_status, classification_required, classification_status,
+	created_at, updated_at`
 
 type scannable interface {
 	Scan(...any) error
@@ -48,7 +51,9 @@ func scanStudy(row scannable, s *Study) error {
 		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.SeriesCount, &s.InstanceCount,
 		&s.Status, &s.DefacingRequired, &s.DicomStore, &s.Source,
 		&s.PhiScanRequired, &s.PhiScanStatus, &s.QcRequired, &s.QcStatus,
-		&s.BidsRequired, &s.BidsStatus, &s.CreatedAt, &s.UpdatedAt,
+		&s.BidsRequired, &s.BidsStatus,
+		&s.ClassificationRequired, &s.ClassificationStatus,
+		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
 
@@ -57,13 +62,15 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		INSERT INTO studies (project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
 		                     study_description, series_count, instance_count, status, defacing_required,
 		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
-		                     bids_required, bids_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		                     bids_required, bids_status,
+		                     classification_required, classification_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
 		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
 		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus,
-		s.BidsRequired, s.BidsStatus).
+		s.BidsRequired, s.BidsStatus,
+		s.ClassificationRequired, s.ClassificationStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
@@ -269,5 +276,34 @@ func UpdateBidsStatus(ctx context.Context, db *sql.DB, id, status string) error 
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET bids_status = $1, updated_at = now()
 		WHERE id = $2`, status, id)
+	return err
+}
+
+// SetClassificationRequired sets the classification_required flag and initialises classification_status to "pending".
+func SetClassificationRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET classification_required = $1, classification_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdateClassificationStatus sets the classification_status field on a study.
+func UpdateClassificationStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET classification_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// UpdateStudyMetadata updates the modality and body_part fields on a study.
+// Used by the classification service to fill in missing metadata after DICOM header analysis.
+func UpdateStudyMetadata(ctx context.Context, db *sql.DB, id, modality, bodyPart string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET modality = $1, body_part = $2, updated_at = now()
+		WHERE id = $3`, modality, bodyPart, id)
 	return err
 }

@@ -109,6 +109,10 @@
 .badge--converting    { background: #dbeafe; color: #1e40af; }
 .badge--bids-complete { background: #dcfce7; color: #15803d; }
 
+/* Classification badges */
+.badge--classifying         { background: #fef9c3; color: #854d0e; }
+.badge--classify-classified { background: #dcfce7; color: #15803d; }
+
 /* ── Filter bar ──────────────────────────────────────────────────────────── */
 .filter-bar {
   display: flex;
@@ -234,6 +238,7 @@
 .btn--qc-check      { background: #818cf8; border: 1px solid #6366f1; color: #fff; }
 .btn--bids-convert  { background: #8b5cf6; border: 1px solid #7c3aed; color: #fff; }
 .btn--bids-download { background: #059669; border: 1px solid #047857; color: #fff; font-size: 0.75rem; text-decoration: none; }
+.btn--classify      { background: #f59e0b; border: 1px solid #d97706; color: #fff; }
 .btn--edit       { background: #f8fafc; border: 1px solid #d1d5db; color: #374151; }
 .btn--secondary  { background: #f3f4f6; border: 1px solid #d1d5db; color: #4b5563; }
 
@@ -894,7 +899,8 @@
 .routing-action--auto_approve      { background: #dcfce7; color: #15803d; }
 .routing-action--require_qa        { background: #f3f4f6; color: #374151; }
 .routing-action--require_qc_check  { background: #e0e7ff; color: #3730a3; }
-.routing-action--require_bids_conversion { background: #f5f3ff; color: #6d28d9; }
+.routing-action--require_bids_conversion   { background: #f5f3ff; color: #6d28d9; }
+.routing-action--require_classification   { background: #fef3c7; color: #92400e; }
 .routing-action--reject            { background: #fee2e2; color: #b91c1c; }
 
 .badge--enabled  { background: #dcfce7; color: #15803d; }
