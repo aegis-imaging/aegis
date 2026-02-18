@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/storage v1.60.0
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/pressly/goose/v3 v3.24.1
+	github.com/suyashkumar/dicom v1.1.0
 	google.golang.org/api v0.267.0
 )
 
@@ -50,6 +51,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.39.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.47.0 // indirect
+	golang.org/x/exp v0.0.0-20240525044651-4c93da0ed11d // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect

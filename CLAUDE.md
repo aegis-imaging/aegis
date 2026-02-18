@@ -297,6 +297,42 @@ uvicorn app.main:app --port 8082
 - "Scan for PHI" button for pending studies
 - `require_phi_scan` option in routing rules action dropdown
 
+### Batch Import CLI (`api/cmd/import/`)
+
+CLI tool for importing DICOM files from a local directory into AEGIS. Used for bulk historical data migration. Files are assumed already de-identified — the import tool does NOT apply de-identification.
+
+**Running:**
+```bash
+cd api && go run ./cmd/import --dir /path/to/dicom --project default
+```
+
+**Building:**
+```bash
+cd api && go build -o aegis-import ./cmd/import
+./aegis-import --dir /path/to/dicom --project default
+```
+
+**CLI Flags:**
+
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--dir` | *(required)* | Directory containing DICOM files to import |
+| `--project` | `default` | Project slug |
+| `--institution` | *(empty)* | Institution UUID (optional) |
+| `--source` | `internal` | `internal` or `external` |
+| `--dry-run` | `false` | Scan and report without importing |
+
+Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DIR`).
+
+**How it works:**
+1. Recursively scans `--dir` for `.dcm` files
+2. Parses DICOM headers (StudyInstanceUID, Modality, BodyPart, StudyDescription, SeriesInstanceUID) using `suyashkumar/dicom` with `SkipPixelData()` for performance
+3. Groups files by StudyInstanceUID
+4. For each study: creates upload session + study record, copies files to `dicom/raw/{studyUID}/`, evaluates routing rules
+5. Duplicate StudyInstanceUIDs are rejected (unique constraint) — safe to re-run
+
+**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors}`.
+
 ### Terraform
 ```bash
 cd terraform/project && terraform init && terraform plan
