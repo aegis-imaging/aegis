@@ -202,6 +202,42 @@ function AuditLog() {
   )
 }
 
+// ── Defacing Review Panel ─────────────────────────────────────────────────────
+
+const OHIF_BASE = 'http://localhost:3002'
+
+function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
+  const beforeUrl = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${study.study_instance_uid}&dataSource=dicomweb-raw`
+  const afterUrl  = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${study.study_instance_uid}&dataSource=dicomweb`
+
+  return (
+    <div className="deface-panel">
+      <div className="deface-panel-header">
+        <div>
+          <span className="deface-panel-title">Defacing Review</span>
+          <span className="deface-panel-uid">{uidShort(study.study_instance_uid)}</span>
+        </div>
+        <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">×</button>
+      </div>
+      <p className="deface-panel-hint">
+        Verify that facial features have been removed. Approve only if the right panel (defaced) shows no identifiable face.
+      </p>
+      <div className="deface-viewers">
+        <div className="deface-viewer-col">
+          <div className="deface-viewer-label deface-viewer-label--before">Before (raw)</div>
+          <a href={beforeUrl} target="_blank" rel="noreferrer" className="viewer-open-tab deface-open-tab">Open ↗</a>
+          <iframe src={beforeUrl} className="deface-iframe" title="Pre-defacing DICOM" allow="fullscreen" />
+        </div>
+        <div className="deface-viewer-col">
+          <div className="deface-viewer-label deface-viewer-label--after">After (defaced)</div>
+          <a href={afterUrl} target="_blank" rel="noreferrer" className="viewer-open-tab deface-open-tab">Open ↗</a>
+          <iframe src={afterUrl} className="deface-iframe" title="Defaced DICOM" allow="fullscreen" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Share Panel ───────────────────────────────────────────────────────────────
 
 function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
@@ -375,8 +411,9 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
 // ── Study Row ─────────────────────────────────────────────────────────────────
 
 function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
-  const [shareOpen, setShareOpen] = useState(false)
-  const [viewOpen, setViewOpen] = useState(false)
+  const [shareOpen,  setShareOpen]  = useState(false)
+  const [viewOpen,   setViewOpen]   = useState(false)
+  const [defaceOpen, setDefaceOpen] = useState(false)
 
   const handleApprove = async () => {
     await fetch(`/api/studies/${study.id}/approve`, { method: 'POST' })
@@ -389,9 +426,12 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
     onAction()
   }
 
-  const canApprove = !['approved', 'rejected'].includes(study.status)
-  const canReject  = study.status !== 'rejected'
-  const canShare   = study.status === 'approved'
+  const canApprove    = !['approved', 'rejected'].includes(study.status)
+  const canReject     = study.status !== 'rejected'
+  const canShare      = study.status === 'approved'
+  // Show "Review defacing" for head studies that have been defaced (raw files preserved).
+  const canReviewDeface = study.defacing_required &&
+    ['defaced', 'approved'].includes(study.status)
 
   return (
     <>
@@ -416,6 +456,11 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
                 {shareOpen ? 'Close' : 'Share'}
               </button>
             )}
+            {canReviewDeface && (
+              <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
+                {defaceOpen ? 'Close review' : 'Review defacing'}
+              </button>
+            )}
             <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>
               {viewOpen ? 'Close viewer' : 'View'}
             </button>
@@ -426,6 +471,13 @@ function StudyRow({ study, onAction }: { study: Study; onAction: () => void }) {
         <tr>
           <td colSpan={8}>
             <SharePanel study={study} onClose={() => setShareOpen(false)} />
+          </td>
+        </tr>
+      )}
+      {defaceOpen && (
+        <tr>
+          <td colSpan={8}>
+            <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />
           </td>
         </tr>
       )}

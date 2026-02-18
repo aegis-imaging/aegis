@@ -91,6 +91,14 @@ func main() {
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances", srv.DicomwebInstances)
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}", srv.DicomwebRetrieveInstance)
 
+	// Raw DICOMweb proxy — identical to /dicomweb but WADO-RS always reads from the
+	// pre-defacing "raw" store. Used by OHIF's "dicomweb-raw" data source for
+	// side-by-side defacing review in the admin dashboard.
+	mux.HandleFunc("GET /dicomweb-raw/studies", srv.DicomwebStudies)
+	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series", srv.DicomwebSeries)
+	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series/{seriesUID}/instances", srv.DicomwebInstances)
+	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}", srv.DicomwebRawRetrieveInstance)
+
 	var h http.Handler = mux
 	h = middleware.Recover(h)
 	h = middleware.Logging(h)
