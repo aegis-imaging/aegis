@@ -83,6 +83,20 @@ func main() {
 
 	mux.HandleFunc("GET /api/audit", srv.ListAudit)
 
+	// Destinations — external DICOM endpoints studies can be forwarded to.
+	mux.HandleFunc("GET /api/destinations", srv.ListDestinations)
+	mux.HandleFunc("POST /api/destinations", srv.CreateDestination)
+	mux.HandleFunc("PUT /api/destinations/{id}", srv.UpdateDestination)
+	mux.HandleFunc("DELETE /api/destinations/{id}", srv.DeleteDestination)
+
+	// Routing rules — condition → action mappings evaluated on study ingest.
+	mux.HandleFunc("GET /api/routing-rules", srv.ListRoutingRules)
+	mux.HandleFunc("POST /api/routing-rules", srv.CreateRoutingRule)
+	mux.HandleFunc("PUT /api/routing-rules/{id}", srv.UpdateRoutingRule)
+	mux.HandleFunc("DELETE /api/routing-rules/{id}", srv.DeleteRoutingRule)
+	mux.HandleFunc("POST /api/routing-rules/evaluate/{studyID}", srv.EvaluateRoutingRules)
+	mux.HandleFunc("GET /api/studies/{studyID}/routing-log", srv.GetStudyRoutingLog)
+
 	mux.HandleFunc("POST /api/deface/{studyUID}", srv.TriggerDeface)
 
 	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by OHIF Viewer.
