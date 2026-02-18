@@ -149,6 +149,19 @@ func (s *Server) DicomwebInstances(w http.ResponseWriter, r *http.Request) {
 // SOPInstanceUID format: {studyUID}.1.{fileIndex}
 // Files are stored as: dicom/{dicomStore}/{studyUID}/{fileIndex}.dcm
 func (s *Server) DicomwebRetrieveInstance(w http.ResponseWriter, r *http.Request) {
+	s.dicomwebRetrieve(w, r, "")
+}
+
+// DicomwebRawRetrieveInstance is identical to DicomwebRetrieveInstance but
+// always reads from the "raw" store regardless of the study's current dicom_store.
+// Used by the /dicomweb-raw/* routes to display pre-defacing images for review.
+func (s *Server) DicomwebRawRetrieveInstance(w http.ResponseWriter, r *http.Request) {
+	s.dicomwebRetrieve(w, r, "raw")
+}
+
+// dicomwebRetrieve is the shared WADO-RS implementation.
+// storeOverride, when non-empty, reads from that store instead of st.DicomStore.
+func (s *Server) dicomwebRetrieve(w http.ResponseWriter, r *http.Request, storeOverride string) {
 	studyUID := r.PathValue("studyUID")
 	sopUID := r.PathValue("sopUID")
 
@@ -166,7 +179,12 @@ func (s *Server) DicomwebRetrieveInstance(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	key := fmt.Sprintf("dicom/%s/%s/%d.dcm", st.DicomStore, studyUID, index)
+	dicomStore := st.DicomStore
+	if storeOverride != "" {
+		dicomStore = storeOverride
+	}
+
+	key := fmt.Sprintf("dicom/%s/%s/%d.dcm", dicomStore, studyUID, index)
 	rc, err := s.store.Retrieve(r.Context(), key)
 	if err != nil {
 		log.Printf("dicomweb wado-rs retrieve %s: %v", key, err)
