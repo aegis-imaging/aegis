@@ -296,6 +296,36 @@ Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-
     http://localhost:8080/api/studies | jq .total
   ```
 
+### Production mode (AWS ALB + Cognito)
+
+- [ ] Start API with AWS ALB auth:
+  ```bash
+  cd api && AUTH_ENABLED=true AUTH_PROVIDER=aws go run .
+  ```
+- [ ] Verify AWS ALB header auth works (simulate ALB-injected JWT):
+  ```bash
+  # Create a base64url-encoded JWT payload with email claim
+  PAYLOAD=$(echo -n '{"email":"admin@test.com"}' | base64 | tr '+/' '-_' | tr -d '=')
+  JWT="header.${PAYLOAD}.signature"
+  curl -s -H "X-Amzn-Oidc-Data: ${JWT}" \
+    http://localhost:8080/api/studies | jq .total
+  ```
+
+### AWS S3 Storage
+
+- [ ] Start API with S3 storage (LocalStack for dev):
+  ```bash
+  # Start LocalStack (S3-compatible)
+  docker run -p 4566:4566 localstack/localstack
+  # Create bucket
+  aws --endpoint-url=http://localhost:4566 s3 mb s3://aegis-dev
+  # Run API with S3 backend
+  cd api && STORAGE_MODE=s3 S3_BUCKET=aegis-dev S3_REGION=us-east-1 S3_ENDPOINT=http://localhost:4566 go run .
+  ```
+- [ ] Upload a study via the Upload Portal → verify files stored in S3 bucket
+- [ ] View study in OHIF → verify DICOMweb proxy retrieves from S3
+- [ ] Verify signed URLs work: upload + download flows complete without error
+
 ### Azure AD App Registration Setup (for production Azure deployments)
 
 1. **Register the application in Azure Portal:**

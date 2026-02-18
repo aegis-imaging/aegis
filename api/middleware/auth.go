@@ -3,7 +3,10 @@ package middleware
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -84,19 +87,24 @@ type authError struct {
 func (e *authError) Error() string { return e.Message }
 
 // extractUser determines the authenticated user based on the configured provider.
-// Supported providers: "iap" (GCP), "azure" (Azure AD Easy Auth), "auto" (try both).
+// Supported providers: "iap" (GCP), "azure" (Azure AD Easy Auth), "aws" (ALB + Cognito), "auto" (try all).
 func extractUser(ctx context.Context, db *sql.DB, r *http.Request, provider string) (*AuthUser, error) {
 	switch provider {
 	case "iap":
 		return iapUser(ctx, db, r)
 	case "azure":
 		return azureUser(ctx, db, r)
-	default: // "auto" — try IAP first, then Azure
+	case "aws":
+		return awsUser(ctx, db, r)
+	default: // "auto" — try IAP, then Azure, then AWS
 		if r.Header.Get("X-Goog-Authenticated-User-Email") != "" {
 			return iapUser(ctx, db, r)
 		}
 		if r.Header.Get("X-MS-CLIENT-PRINCIPAL-NAME") != "" {
 			return azureUser(ctx, db, r)
+		}
+		if r.Header.Get("X-Amzn-Oidc-Data") != "" {
+			return awsUser(ctx, db, r)
 		}
 		return nil, &authError{http.StatusUnauthorized, "missing authentication header"}
 	}
@@ -156,6 +164,61 @@ func azureUser(ctx context.Context, db *sql.DB, r *http.Request) (*AuthUser, err
 	}
 
 	return lookupUser(ctx, db, email)
+}
+
+// awsUser extracts user identity from AWS ALB + Cognito headers.
+// AWS ALB sets X-Amzn-Oidc-Data (JWT) and X-Amzn-Oidc-Identity (sub claim).
+// The JWT payload contains an "email" claim. We decode the payload without
+// signature verification because ALB has already validated the token — the
+// header is injected by the load balancer and cannot be spoofed by the client.
+func awsUser(ctx context.Context, db *sql.DB, r *http.Request) (*AuthUser, error) {
+	jwt := r.Header.Get("X-Amzn-Oidc-Data")
+	if jwt == "" {
+		return nil, &authError{http.StatusUnauthorized, "missing AWS ALB authentication header"}
+	}
+
+	email, err := extractEmailFromALBJWT(jwt)
+	if err != nil {
+		return nil, &authError{http.StatusUnauthorized, "invalid AWS ALB authentication token: " + err.Error()}
+	}
+
+	return lookupUser(ctx, db, email)
+}
+
+// extractEmailFromALBJWT pulls the "email" claim from the ALB-injected JWT payload.
+// No signature verification — ALB guarantees the header's integrity.
+func extractEmailFromALBJWT(token string) (string, error) {
+	parts := strings.SplitN(token, ".", 4)
+	if len(parts) < 3 {
+		return "", errors.New("malformed JWT")
+	}
+
+	// Base64url-decode the payload (second segment).
+	payload := parts[1]
+	// Pad to a multiple of 4.
+	switch len(payload) % 4 {
+	case 2:
+		payload += "=="
+	case 3:
+		payload += "="
+	}
+	decoded, err := base64.URLEncoding.DecodeString(payload)
+	if err != nil {
+		return "", fmt.Errorf("decode JWT payload: %w", err)
+	}
+
+	var claims struct {
+		Email string `json:"email"`
+	}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return "", fmt.Errorf("parse JWT claims: %w", err)
+	}
+
+	email := strings.TrimSpace(strings.ToLower(claims.Email))
+	if email == "" {
+		return "", errors.New("no email claim in JWT")
+	}
+	return email, nil
 }
 
 // lookupUser finds a user by email in admin_users and checks they are enabled.
