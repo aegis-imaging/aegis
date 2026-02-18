@@ -180,14 +180,14 @@ else:
     img_trimmed = img
 
 # PNG (transparent)
-png_path = os.path.join(out_dir, "logo.png")
+png_path = os.path.join(out_dir, "AEGIS_Logo.png")
 img_trimmed.save(png_path, "PNG")
 print(f"PNG saved to {png_path}")
 
 # PDF (white background)
 bg = Image.new("RGB", img_trimmed.size, (255, 255, 255))
 bg.paste(img_trimmed, mask=img_trimmed.split()[3])
-pdf_path = os.path.join(out_dir, "logo.pdf")
+pdf_path = os.path.join(out_dir, "AEGIS_Logo.pdf")
 bg.save(pdf_path, "PDF", resolution=300)
 print(f"PDF saved to {pdf_path}")
 

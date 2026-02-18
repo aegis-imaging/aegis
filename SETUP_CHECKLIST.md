@@ -452,4 +452,4 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-18. See ARCHITECTURE.md for the full system design.*
+*Generated 2026-02-18. Updated 2026-02-18. See AEGIS_Architecture.md for the full system design.*
