@@ -36,7 +36,7 @@ css: |
   <p style="font-size: 22px; color: #4a4a6a; margin: 8px 0 0;">Anonymization &amp; Exchange Gateway for Imaging Studies</p>
   <hr style="width: 60%; margin: 30px auto; border: 1px solid #e0e0e0;" />
   <p style="font-size: 16px; color: #6b7280;">A cloud-hosted platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
-  <p style="font-size: 13px; color: #9ca3af; margin-top: 20px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research.</p>
+  <p style="font-size: 13px; color: #9ca3af; margin-top: 20px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
 </div>
 
 ---
