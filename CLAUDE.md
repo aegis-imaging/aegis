@@ -28,6 +28,7 @@ Rules:
 Current research files:
 - `docs/research/medical-imaging-deidentification.md` — citations for de-identification failures, face reconstruction from MRI, burned-in PHI, NIH DMS policy, HIPAA Safe Harbor, DICOM PS3.15, MIDI-B challenge, market sizing
 - `docs/research/mri-protocol-compliance.md` — MRI acquisition parameter ranges, consortia protocols (ADNI4, HCP, ABCD, UK Biobank, ENIGMA), tolerance recommendations, mrQA tool, Enhanced vs Classic DICOM
+- `docs/research/mri-defacing-tools-comparison.md` — tool comparison (afni_refacer, DeepDefacer, PyDeface, mri_deface, Quickshear), success rates, speed benchmarks, Docker size, licensing
 
 ## Repository Structure (Monorepo)
 
@@ -41,7 +42,7 @@ aegis/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
 │   └── admin-dashboard/  # React — internal QC, OHIF viewer, study management
 ├── client/               # TypeScript DICOM anonymization library (npm package)
-├── defacing/             # Python defacing service (mri_deface, dcm2niix)
+├── defacing/             # Python defacing service (DeepDefacer, mri_deface, dcm2niix)
 ├── phi-detection/        # Python burned-in PHI detection service (Tesseract OCR)
 ├── qc-service/           # Python QC automation service (pydicom + numpy)
 ├── bids-service/            # Python NIfTI/BIDS conversion service (dcm2niix)
@@ -361,6 +362,58 @@ Projects now support full CRUD via the API and a dedicated admin dashboard tab.
 
 - **`onFileStart` callback** — `UploadOptions.onFileStart?(filename, index, total)` fires before each file's upload begins; upload portal uses it to display the current filename below the progress bar.
 - **Auto-retry** — each file PUT is retried up to 3× with 1 s / 2 s / 4 s exponential backoff before failing. Transparent to callers.
+
+### Defacing Service (`defacing/`, `api/handler/deface.go`)
+
+Server-side facial feature removal from head/brain DICOM imaging. Multiple pluggable backends with automatic fallback. Runs as a separate Python FastAPI service, called asynchronously from the Go API.
+
+**Running locally:**
+```bash
+cd defacing
+pip install -r requirements.txt
+pip install deepdefacer          # optional: enables DeepDefacer backend
+uvicorn app.main:app --port 8081
+# Then set DEFACING_SERVICE_URL=http://localhost:8081 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `DEFACING_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay queued |
+| `DEFACE_TOOL` | `auto` | `auto\|mri_reface\|deepdefacer\|mri_deface\|nibabel` |
+| `DEEPDEFACER_GPU` | `false` | Enable GPU for DeepDefacer (requires `deepdefacer[gpu]` + CUDA) |
+| `MRI_DEFACE_BIN` | `mri_deface` | Path to mri_deface binary |
+| `MRI_DEFACE_BRAIN` | `/opt/mri_deface/talairach_mixed_with_skull.gca` | Brain atlas |
+| `MRI_DEFACE_FACE` | `/opt/mri_deface/face.gca` | Face atlas |
+| `MRI_REFACE_BIN` | `mri_reface` | Path to mri_reface binary |
+| `DCM2NIIX_BIN` | `dcm2niix` | Path to dcm2niix binary |
+
+**Auto-selection priority:** mri_reface > deepdefacer > mri_deface > nibabel (first available wins)
+
+**Backends:**
+
+| Backend | Docker Size | Speed | Quality | License | Notes |
+|---------|------------|-------|---------|---------|-------|
+| `mri_reface` | ~2-4 GB | >1 min | Best | Non-commercial | MRI + PET + CT; requires MATLAB Runtime |
+| `deepdefacer` | ~500 MB | ~1-2 min | Good | Research-friendly | 3D U-Net, fastest DL approach; pip-installable |
+| `mri_deface` | ~500 MB | 2-10 min | Good | Free | FreeSurfer standalone, MRI only |
+| `nibabel` | 0 | <1 min | Crude | MIT | Dev/testing only (zeros anterior 30%) |
+
+**Dockerfile build args:**
+- `INCLUDE_DEEPDEFACER=true` — installs DeepDefacer + TensorFlow (~500 MB)
+- `INCLUDE_MRI_DEFACE=true` — downloads FreeSurfer mri_deface + atlas (~500 MB)
+- `INCLUDE_MRI_REFACE=true` — commented out; requires MATLAB Runtime (~3 GB)
+
+**Study fields:**
+- `defacing_required` — boolean flag, set by `require_defacing` routing rule action
+- Study `status` transitions: `received` > `defacing` > `defaced` (or back to `received` on failure)
+- `dicom_store` — switches from `raw` to `clean` after successful defacing
+
+**API:**
+- `POST /api/studies/{studyUID}/trigger-deface` — trigger defacing (returns 202 Accepted, runs async)
+
+See `docs/research/mri-defacing-tools-comparison.md` for detailed tool comparison with citations.
 
 ### Burned-in PHI Detection (`phi-detection/`, `api/handler/phi_scan.go`)
 

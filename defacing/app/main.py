@@ -10,7 +10,7 @@ Endpoints:
   POST /deface          — deface a study (synchronous)
 
 Environment variables:
-  DEFACE_TOOL           — "auto" | "mri_reface" | "mri_deface" | "nibabel"
+  DEFACE_TOOL           — "auto" | "mri_reface" | "deepdefacer" | "mri_deface" | "nibabel"
   MRI_DEFACE_BIN        — path to mri_deface binary
   MRI_DEFACE_BRAIN      — path to talairach_mixed_with_skull.gca atlas
   MRI_DEFACE_FACE       — path to face.gca atlas
@@ -31,6 +31,7 @@ from .backends.base import DefacingBackend
 from .backends.nibabel_fallback import NibabelFallbackBackend
 from .backends.mri_deface import MriDefaceBackend
 from .backends.mri_reface import MriRefaceBackend
+from .backends.deepdefacer_backend import DeepDefacerBackend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,6 +49,7 @@ def _select_backend() -> DefacingBackend:
     candidates: list[DefacingBackend]
 
     mri_reface = MriRefaceBackend(cfg.mri_reface_bin, cfg.dcm2niix_bin)
+    deepdefacer = DeepDefacerBackend(cfg.dcm2niix_bin)
     mri_deface = MriDefaceBackend(
         cfg.mri_deface_bin, cfg.mri_deface_brain, cfg.mri_deface_face, cfg.dcm2niix_bin
     )
@@ -55,20 +57,22 @@ def _select_backend() -> DefacingBackend:
 
     if cfg.deface_tool == "mri_reface":
         candidates = [mri_reface, nibabel]
+    elif cfg.deface_tool == "deepdefacer":
+        candidates = [deepdefacer, nibabel]
     elif cfg.deface_tool == "mri_deface":
         candidates = [mri_deface, nibabel]
     elif cfg.deface_tool == "nibabel":
         candidates = [nibabel]
     else:  # "auto"
-        # Priority: mri_reface (best coverage) → mri_deface → nibabel fallback
-        candidates = [mri_reface, mri_deface, nibabel]
+        # Priority: mri_reface (best coverage) → deepdefacer (fast DL) → mri_deface → nibabel
+        candidates = [mri_reface, deepdefacer, mri_deface, nibabel]
 
     for backend in candidates:
         if backend.available():
             log.info("Defacing backend selected: %s", backend.name)
             return backend
 
-    raise RuntimeError("No defacing backend is available. Install mri_reface, mri_deface, or ensure pydicom/numpy are installed.")
+    raise RuntimeError("No defacing backend is available. Install mri_reface, deepdefacer, mri_deface, or ensure pydicom/numpy are installed.")
 
 
 _backend: DefacingBackend | None = None
