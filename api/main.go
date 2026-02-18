@@ -61,6 +61,8 @@ func main() {
 
 	mux.HandleFunc("GET /api/projects", srv.ListProjects)
 	mux.HandleFunc("POST /api/projects", srv.CreateProject)
+	mux.HandleFunc("GET /api/projects/{id}", srv.GetProject)
+	mux.HandleFunc("PUT /api/projects/{id}", srv.UpdateProject)
 
 	// Anonymization profiles — per-project DICOM tag retention overrides.
 	mux.HandleFunc("GET /api/projects/{projectID}/anon-profiles", srv.ListAnonProfiles)
@@ -88,6 +90,9 @@ func main() {
 
 	// Internal enterprise ingestion path.
 	mux.HandleFunc("POST /api/ingest", srv.InternalIngest)
+
+	// Batch import — import DICOM files from a server-local directory.
+	mux.HandleFunc("POST /api/import/batch", srv.BatchImport)
 
 	// Local dev only: serve stored files over HTTP (in GCS mode, signed URLs are used instead).
 	mux.HandleFunc("GET /api/storage/{key...}", srv.ServeStorageFile)
@@ -124,7 +129,18 @@ func main() {
 	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", srv.CreateDigestSubscription)
 	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", srv.DeleteDigestSubscription)
 
+	// Admin users — authorised dashboard users and their roles.
+	mux.HandleFunc("GET /api/admin-users", srv.ListAdminUsers)
+	mux.HandleFunc("POST /api/admin-users", srv.CreateAdminUser)
+	mux.HandleFunc("PUT /api/admin-users/{id}", srv.UpdateAdminUser)
+	mux.HandleFunc("DELETE /api/admin-users/{id}", srv.DeleteAdminUser)
+
 	mux.HandleFunc("POST /api/deface/{studyUID}", srv.TriggerDeface)
+	mux.HandleFunc("POST /api/studies/{studyUID}/phi-scan", srv.TriggerPhiScan)
+	mux.HandleFunc("POST /api/studies/{studyUID}/qc-check", srv.TriggerQcCheck)
+	mux.HandleFunc("POST /api/studies/{studyUID}/bids-convert", srv.TriggerBidsConversion)
+	mux.HandleFunc("GET /api/studies/{studyUID}/bids-download", srv.ServeBidsDownload)
+	mux.HandleFunc("POST /api/studies/{studyUID}/classify", srv.TriggerClassification)
 
 	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by OHIF Viewer.
 	mux.HandleFunc("GET /dicomweb/studies", srv.DicomwebStudies)

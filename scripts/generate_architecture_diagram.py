@@ -9,7 +9,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 
 # Canvas
-W, H = 2400, 1800
+W, H = 2400, 2060
 img = Image.new("RGB", (W, H), "#FFFFFF")
 draw = ImageDraw.Draw(img)
 
@@ -172,7 +172,7 @@ arrow_down(W // 2, 380, 450, "HTTPS (TLS 1.2+) — De-identified DICOM only")
 # ══════════════════════════════════════════════════════
 # GCP PROJECT
 # ══════════════════════════════════════════════════════
-gcp_xy = (60, 450, 2340, 1700)
+gcp_xy = (60, 450, 2340, 1460)
 rounded_rect(gcp_xy, fill=BG_GCP, outline=BORDER_GCP, width=3)
 draw.text((80, 460), "GCP PROJECT  (Secured Enterprise Tenancy)", fill=BORDER_GCP, font=HEADING)
 
@@ -232,11 +232,12 @@ service_box(
 
 # ── Pub/Sub ──
 service_box(
-    (2000, 610, 2320, 770),
+    (2000, 610, 2320, 790),
     "Pub/Sub",
     [
         "Ingest notifications",
         "Defacing triggers",
+        "PHI scan triggers",
         "Routing events",
         "Audit events",
     ],
@@ -271,6 +272,24 @@ arrow_down(425, 870, 920, "HTTP trigger")
 # Arrow from Defacing back to Healthcare API
 arrow_right(750, 800, 1050, "Defaced DICOM")
 
+# ── PHI Detection Service ──
+service_box(
+    (100, 1200, 750, 1420),
+    "PHI Detection (Python / Cloud Run)",
+    [
+        "Burned-in text OCR on pixel data",
+        "Tesseract backend (local dev)",
+        "Vertex AI Document AI (prod)",
+        "Confidence-threshold filtering",
+        "Structured findings per file",
+        "Non-blocking (informational flag)",
+    ],
+    ACCENT_PYTHON,
+)
+
+# Arrow from API to PHI Detection
+arrow_down(425, 1180, 1200, "HTTP trigger")
+
 # ── OHIF Viewer / Admin Dashboard ──
 service_box(
     (800, 920, 1450, 1180),
@@ -280,6 +299,7 @@ service_box(
         "OHIF Viewer (DICOMweb)",
         "Study browser + QC review",
         "Defacing review (before/after)",
+        "Burned-in PHI scan status",
         "Routing rule configuration",
         "User/institution management",
         "Audit log viewer",
@@ -318,7 +338,7 @@ for i, item in enumerate(items_sec):
 # ══════════════════════════════════════════════════════
 # Bottom: Repository Structure + Tech Stack
 # ══════════════════════════════════════════════════════
-repos_y = 1230
+repos_y = 1490
 
 rounded_rect((100, repos_y, 1150, repos_y + 220), fill="#F5F5F5", outline="#9E9E9E", width=2)
 draw.text((120, repos_y + 10), "Repository Structure (5 Repos)", fill=TEXT_DARK, font=BOLD)
@@ -337,13 +357,14 @@ for i, (name, desc, color) in enumerate(repos):
     draw.text((530, y + 2), desc, fill=TEXT_LIGHT, font=SMALL)
 
 # Tech stack
-rounded_rect((1200, repos_y, 2320, repos_y + 220), fill="#F5F5F5", outline="#9E9E9E", width=2)
+rounded_rect((1200, repos_y, 2320, repos_y + 254), fill="#F5F5F5", outline="#9E9E9E", width=2)
 draw.text((1220, repos_y + 10), "Key Open-Source Dependencies", fill=TEXT_DARK, font=BOLD)
 
 deps = [
     ("Go:", "suyashkumar/dicom, GCP Go SDK", ACCENT_GO),
     ("Browser:", "dcmjs, dicomParser, OHIF Viewer", ACCENT_REACT),
     ("Defacing:", "mri_deface, dcm2niix, pydicom, nibabel", ACCENT_PYTHON),
+    ("PHI Detect:", "Tesseract OCR, pytesseract, pydicom", ACCENT_PYTHON),
     ("Infra:", "Terraform Google Provider, Cloud Build", "#795548"),
     ("Viewing:", "OHIF Viewer (MIT) — DICOMweb native", ACCENT_VIEWER),
 ]
@@ -353,7 +374,7 @@ for i, (cat, desc, color) in enumerate(deps):
     draw.text((1350, y + 2), desc, fill=TEXT_MED, font=SMALL)
 
 # ── Phases ──
-phases_y = repos_y + 240
+phases_y = repos_y + 250
 rounded_rect((100, phases_y, 2320, phases_y + 170), fill="#F3E5F5", outline="#7B1FA2", width=2)
 draw.text((120, phases_y + 10), "Implementation Phases", fill="#7B1FA2", font=BOLD)
 
@@ -387,6 +408,6 @@ for i, (title, desc) in enumerate(phase_data):
         draw.text((x + 15, ly), line, fill=TEXT_MED, font=SMALL)
 
 # Save
-out_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "architecture.png")
+out_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ARCHITECTURE.png")
 img.save(out_path, "PNG", quality=95)
 print(f"Saved to {out_path}")

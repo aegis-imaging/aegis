@@ -61,6 +61,20 @@ func GetProjectByID(ctx context.Context, db *sql.DB, id string) (*Project, error
 	return &p, nil
 }
 
+func UpdateProject(ctx context.Context, db *sql.DB, id, name, slug, description string) (*Project, error) {
+	var p Project
+	err := db.QueryRowContext(ctx, `
+		UPDATE projects SET name=$1, slug=$2, description=$3, updated_at=now()
+		WHERE id=$4
+		RETURNING `+projectColumns,
+		name, slug, description, id).
+		Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 func CreateProject(ctx context.Context, db *sql.DB, name, slug, description string) (*Project, error) {
 	var p Project
 	err := db.QueryRowContext(ctx, `

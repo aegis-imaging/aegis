@@ -124,6 +124,62 @@ func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.S
 			outcome = "already rejected (no-op)"
 		}
 
+	case "require_phi_scan":
+		if !s.PhiScanRequired {
+			s.PhiScanRequired = true
+			s.PhiScanStatus = "pending"
+			if err := model.SetPhiScanRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set phi_scan_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "phi_scan_required set to true"
+			}
+		} else {
+			outcome = "phi_scan_required already true (no-op)"
+		}
+
+	case "require_qc_check":
+		if !s.QcRequired {
+			s.QcRequired = true
+			s.QcStatus = "pending"
+			if err := model.SetQcRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set qc_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "qc_required set to true"
+			}
+		} else {
+			outcome = "qc_required already true (no-op)"
+		}
+
+	case "require_bids_conversion":
+		if !s.BidsRequired {
+			s.BidsRequired = true
+			s.BidsStatus = "pending"
+			if err := model.SetBidsRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set bids_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "bids_required set to true"
+			}
+		} else {
+			outcome = "bids_required already true (no-op)"
+		}
+
+	case "require_classification":
+		if !s.ClassificationRequired {
+			s.ClassificationRequired = true
+			s.ClassificationStatus = "pending"
+			if err := model.SetClassificationRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set classification_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "classification_required set to true"
+			}
+		} else {
+			outcome = "classification_required already true (no-op)"
+		}
+
 	case "route_to":
 		if r.DestinationID == nil {
 			outcome = "error: route_to rule has no destination_id"

@@ -103,6 +103,123 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Verify subject: `AEGIS Weekly Summary — default — <date range>`, body has study counts, no PHI/UIDs
 - [ ] Delete the subscription from the Notifications tab
 
+## 7e. Admin Users
+
+- [ ] Open admin dashboard → **Users** tab
+- [ ] Create a user: email `admin@example.com`, name `Test Admin`, role `admin` → appears in table
+- [ ] Edit → change role to `viewer`, add notes → save
+- [ ] Disable the user → row greys out; re-enable
+- [ ] Delete with confirm prompt
+- [ ] Verify `admin_user.created`, `admin_user.updated`, `admin_user.deleted` appear in Audit Log tab
+
+## 7f. Project Settings
+
+- [ ] Open admin dashboard → **Projects** tab
+- [ ] Click **+ New project** → enter name only (slug auto-generated) → create → appears in table
+- [ ] Click **Edit** on the row → change description → save → description updates
+- [ ] Try editing slug → warning hint is shown
+- [ ] Verify `project.created` and `project.updated` in Audit Log tab
+- [ ] `GET http://localhost:8080/api/projects/{id}` returns the updated project
+
+## 7g. Upload Portal QoL
+
+- [ ] Upload a folder of DICOMs via the Upload Portal
+- [ ] During the uploading stage, verify the current filename appears below the progress bar
+- [ ] Long filenames are truncated with `…` prefix (>48 chars)
+- [ ] (Optional) Throttle network in DevTools mid-upload → verify retries up to 3× before error
+
+## 7h. Burned-in PHI Detection
+
+- [ ] Install Tesseract OCR: `brew install tesseract` (macOS) or `apt-get install tesseract-ocr` (Linux)
+- [ ] Start the PHI detection service:
+  ```bash
+  cd phi-detection && pip install -r requirements.txt
+  uvicorn app.main:app --port 8082
+  ```
+- [ ] Verify health: `curl http://localhost:8082/healthz` → should show `{"status":"ok","backend":"tesseract"}`
+- [ ] Start the Go API with PHI detection enabled:
+  ```bash
+  cd api && PHI_DETECTION_SERVICE_URL=http://localhost:8082 go run .
+  ```
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_phi_scan` (any modality)
+- [ ] Upload a study via the Upload Portal → study row shows PHI Scan badge: **pending**
+- [ ] Click **Scan for PHI** → badge changes to **scanning** → then **clean** or **flagged**
+- [ ] Check Audit Log tab → `phi_scan.triggered` and `phi_scan.complete` entries appear
+- [ ] Verify admin can still Approve a flagged study (flag is informational, not blocking)
+
+## 7i. Batch Import CLI
+
+- [ ] Build the CLI: `cd api && go build -o aegis-import ./cmd/import`
+- [ ] Dry run: `./aegis-import --dir ../test-data/brain-mri --project default --dry-run`
+- [ ] Verify dry run output shows study count, modality, body part for each study
+- [ ] Full import: `./aegis-import --dir ../test-data/brain-mri --project default`
+- [ ] Verify studies appear in admin dashboard with `source=internal`
+- [ ] Verify `import.batch` entries in Audit Log tab
+- [ ] Re-run the same import → should report duplicate errors (StudyInstanceUID unique constraint)
+- [ ] Test API endpoint:
+  ```bash
+  curl -X POST http://localhost:8080/api/import/batch \
+    -H "Content-Type: application/json" \
+    -d '{"dir":"/absolute/path/to/test-data/brain-mri","project_slug":"default","dry_run":true}'
+  ```
+
+## 7j. QC Automation Service
+
+- [ ] Start the QC service:
+  ```bash
+  cd qc-service && pip install -r requirements.txt
+  uvicorn app.main:app --port 8083
+  ```
+- [ ] Verify health: `curl http://localhost:8083/healthz` → should show `{"status":"ok","backend":"basic"}`
+- [ ] Start the Go API with QC enabled:
+  ```bash
+  cd api && QC_SERVICE_URL=http://localhost:8083 go run .
+  ```
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_qc_check` (any modality)
+- [ ] Upload a study via the Upload Portal → study row shows QC badge: **pending**
+- [ ] Click **Run QC** → badge changes to **checking** → then **pass**, **warn**, or **fail**
+- [ ] Check Audit Log tab → `qc_check.triggered` and `qc_check.complete` entries appear
+- [ ] Verify admin can still Approve a study with warn/fail QC status (status is informational)
+
+## 7k. NIfTI/BIDS Conversion Service
+
+- [ ] Install dcm2niix: `brew install dcm2niix` (macOS) or `apt-get install dcm2niix` (Linux)
+- [ ] Start the BIDS service:
+  ```bash
+  cd bids-service && pip install -r requirements.txt
+  uvicorn app.main:app --port 8084
+  ```
+- [ ] Verify health: `curl http://localhost:8084/healthz` → should show `{"status":"ok","backend":"dcm2niix"}`
+- [ ] Start the Go API with BIDS service enabled:
+  ```bash
+  cd api && BIDS_SERVICE_URL=http://localhost:8084 go run .
+  ```
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_bids_conversion` (any modality)
+- [ ] Upload a study via the Upload Portal → study row shows BIDS badge: **pending**
+- [ ] Click **Convert to BIDS** → badge changes to **converting** → then **complete**
+- [ ] Click **Download BIDS** → browser downloads a zip archive
+- [ ] Unzip and verify BIDS structure: `dataset_description.json`, `participants.tsv`, `sub-*/anat/*.nii.gz` + `*.json`
+- [ ] Check Audit Log tab → `bids_conversion.triggered` and `bids_conversion.complete` entries appear
+
+## 7l. Metadata Classification Service
+
+- [ ] Start the classification service:
+  ```bash
+  cd classification-service && pip install -r requirements.txt
+  uvicorn app.main:app --port 8085
+  ```
+- [ ] Verify health: `curl http://localhost:8085/healthz` → should show `{"status":"ok","backend":"heuristic"}`
+- [ ] Start the Go API with classification service enabled:
+  ```bash
+  cd api && CLASSIFICATION_SERVICE_URL=http://localhost:8085 go run .
+  ```
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_classification` (any modality)
+- [ ] Upload a study with missing modality → study row shows Classification badge: **pending**
+- [ ] Click **Classify** → badge changes to **classifying** → then **classified**
+- [ ] Verify study modality and body_part updated from "—" to classified values
+- [ ] Verify routing rules re-evaluated (e.g. a `require_defacing` rule for HEAD now fires)
+- [ ] Check Audit Log tab → `classification.triggered` and `classification.complete` entries appear
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
@@ -153,7 +270,11 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 - [ ] Verify remote is set: `git remote -v`
 - [ ] Push monorepo scaffold to `develop` branch
-- [ ] Set up branch protection on `main` (require PR reviews)
+- [ ] Set up branch protection on `main` and `develop` (require PR reviews, prevent deletion)
+  - **Requires GitHub Pro** ($4/month) for private repos, or make the repo public
+  - Go to Settings → Branches → Add branch protection rule
+  - Branch name patterns: `main` and `develop`
+  - Enable: "Require a pull request before merging", "Do not allow deletions"
 - [ ] (Optional) Set up GitHub Actions for CI (lint, typecheck, Go test)
 
 ## 10. Future — Before Proposing to Work
