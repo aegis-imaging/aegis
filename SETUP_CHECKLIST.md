@@ -181,6 +181,26 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 - [ ] Check Audit Log tab → `qc_check.triggered` and `qc_check.complete` entries appear
 - [ ] Verify admin can still Approve a study with warn/fail QC status (status is informational)
 
+## 7k. NIfTI/BIDS Conversion Service
+
+- [ ] Install dcm2niix: `brew install dcm2niix` (macOS) or `apt-get install dcm2niix` (Linux)
+- [ ] Start the BIDS service:
+  ```bash
+  cd bids-service && pip install -r requirements.txt
+  uvicorn app.main:app --port 8084
+  ```
+- [ ] Verify health: `curl http://localhost:8084/healthz` → should show `{"status":"ok","backend":"dcm2niix"}`
+- [ ] Start the Go API with BIDS service enabled:
+  ```bash
+  cd api && BIDS_SERVICE_URL=http://localhost:8084 go run .
+  ```
+- [ ] Open admin dashboard → **Routing** tab → create a rule: action `require_bids_conversion` (any modality)
+- [ ] Upload a study via the Upload Portal → study row shows BIDS badge: **pending**
+- [ ] Click **Convert to BIDS** → badge changes to **converting** → then **complete**
+- [ ] Click **Download BIDS** → browser downloads a zip archive
+- [ ] Unzip and verify BIDS structure: `dataset_description.json`, `participants.tsv`, `sub-*/anat/*.nii.gz` + `*.json`
+- [ ] Check Audit Log tab → `bids_conversion.triggered` and `bids_conversion.complete` entries appear
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
