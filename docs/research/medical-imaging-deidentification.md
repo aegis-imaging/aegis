@@ -1,6 +1,6 @@
 # Medical Imaging De-identification — Research References
 
-Compiled for use in the AEGIS pitch deck, architecture documentation, and compliance materials.
+Compiled for use in the AEGIS Executive Summary, architecture documentation, and compliance materials.
 All sources verified. Notes on source type and citeability included.
 
 ---

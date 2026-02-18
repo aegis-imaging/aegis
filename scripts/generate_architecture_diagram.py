@@ -85,7 +85,7 @@ def service_box(xy, title, items, accent, title_font=BOLD):
 
 
 # ── Title with logo ──
-logo_path = os.path.join(PROJECT_DIR, "logo.png")
+logo_path = os.path.join(PROJECT_DIR, "AEGIS_Logo.png")
 if os.path.exists(logo_path):
     logo = Image.open(logo_path).convert("RGBA")
     logo_h = 90
