@@ -11,6 +11,7 @@ type Study struct {
 	ID               string    `json:"id"`
 	ProjectID        string    `json:"project_id"`
 	UploadSessionID  *string   `json:"upload_session_id,omitempty"`
+	InstitutionID    *string   `json:"institution_id,omitempty"`
 	StudyInstanceUID string    `json:"study_instance_uid"`
 	Modality         string    `json:"modality"`
 	BodyPart         string    `json:"body_part"`
@@ -26,7 +27,7 @@ type Study struct {
 }
 
 const studyColumns = `
-	id, project_id, upload_session_id, study_instance_uid, modality, body_part,
+	id, project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
 	study_description, series_count, instance_count, status, defacing_required,
 	dicom_store, source, created_at, updated_at`
 
@@ -36,7 +37,7 @@ type scannable interface {
 
 func scanStudy(row scannable, s *Study) error {
 	return row.Scan(
-		&s.ID, &s.ProjectID, &s.UploadSessionID, &s.StudyInstanceUID,
+		&s.ID, &s.ProjectID, &s.UploadSessionID, &s.InstitutionID, &s.StudyInstanceUID,
 		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.SeriesCount, &s.InstanceCount,
 		&s.Status, &s.DefacingRequired, &s.DicomStore, &s.Source, &s.CreatedAt, &s.UpdatedAt,
 	)
