@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import './App.css'
 import { FileDropZone } from './components/FileDropZone'
 import { StudySummary } from './components/StudySummary'
 import { TagDiffTable } from './components/TagDiffTable'
@@ -19,6 +20,7 @@ export function App() {
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [uploaderEmail, setUploaderEmail] = useState('')
+  const [currentFile, setCurrentFile] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const handleFilesSelected = useCallback(async (selectedFiles: File[]) => {
@@ -117,6 +119,7 @@ export function App() {
 
       const result = await uploadStudy(files, 'default', summary, {
         onProgress: (uploaded, total) => setUploadProgress({ current: uploaded, total }),
+        onFileStart: (filename) => setCurrentFile(filename),
         uploaderEmail: uploaderEmail.trim() || undefined,
         deid: retainedTags ? { retainedTags } : undefined,
       })
@@ -282,6 +285,11 @@ export function App() {
               transition: 'width 0.2s ease',
             }} />
           </div>
+          {currentFile && (
+            <p className="upload-current-file">
+              {currentFile.length > 48 ? '…' + currentFile.slice(-46) : currentFile}
+            </p>
+          )}
         </div>
       )}
 

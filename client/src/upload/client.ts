@@ -7,6 +7,8 @@ export interface UploadOptions {
   apiBaseUrl?: string
   /** Called after each file is successfully uploaded. */
   onProgress?: (uploaded: number, total: number) => void
+  /** Called just before each file's upload begins (filename, 0-based index, total). */
+  onFileStart?: (filename: string, index: number, total: number) => void
   /** De-identification options (salt, keepPrivateTags). */
   deid?: DeidOptions
   /** Optional email address — uploader receives a confirmation when the study is processed. */
@@ -18,6 +20,24 @@ export interface UploadResult {
   status: string
   study?: {
     studyInstanceUid: string
+  }
+}
+
+/** Retry a fetch PUT up to maxAttempts times with exponential backoff (1s/2s/4s). */
+async function putWithRetry(url: string, body: Uint8Array, maxAttempts = 3): Promise<void> {
+  let delay = 1000
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/dicom' },
+      body,
+    })
+    if (res.ok) return
+    if (attempt === maxAttempts) {
+      throw new Error(`File upload failed after ${maxAttempts} attempts (${res.status})`)
+    }
+    await new Promise(r => setTimeout(r, delay))
+    delay *= 2
   }
 }
 
@@ -76,6 +96,8 @@ export async function uploadStudy(
 
   // 2. De-identify, serialize, and upload each file
   for (let i = 0; i < files.length; i++) {
+    options.onFileStart?.(files[i].filename, i, files.length)
+
     // Re-parse from the original buffer to get a fresh mutable dataset + raw meta
     const { dataset, rawMeta } = parseDicomFile(files[i].arrayBuffer, files[i].filename)
 
@@ -89,15 +111,8 @@ export async function uploadStudy(
     // Re-serialize to DICOM bytes preserving the original transfer syntax
     const deidBytes = serializeDataset(rawMeta, deidDataset)
 
-    const putRes = await fetch(initData.upload_urls[i], {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/dicom' },
-      body: deidBytes,
-    })
-
-    if (!putRes.ok) {
-      throw new Error(`File upload failed at index ${i} (${putRes.status})`)
-    }
+    // Upload with automatic retry (up to 3 attempts, 1s/2s/4s backoff)
+    await putWithRetry(initData.upload_urls[i], deidBytes)
 
     options.onProgress?.(i + 1, files.length)
   }
