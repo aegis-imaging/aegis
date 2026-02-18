@@ -35,7 +35,7 @@ css: |
   <h1 style="font-size: 42px; margin: 0; color: #1a1a2e;">AEGIS</h1>
   <p style="font-size: 22px; color: #4a4a6a; margin: 8px 0 0;">Anonymization &amp; Exchange Gateway for Imaging Studies</p>
   <hr style="width: 60%; margin: 30px auto; border: 1px solid #e0e0e0;" />
-  <p style="font-size: 16px; color: #6b7280;">A cloud-hosted platform for secure, HIPAA-compliant sharing of medical imaging data across all DICOM modalities</p>
+  <p style="font-size: 16px; color: #6b7280;">A cloud-hosted platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
   <p style="font-size: 13px; color: #9ca3af; margin-top: 20px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research.</p>
 </div>
 
@@ -77,7 +77,7 @@ The medical image exchange market is growing, driven by federal data sharing man
 
 ## The Solution
 
-**AEGIS** is a cloud-hosted platform that makes secure medical image sharing as easy as uploading a file — for any DICOM modality.
+**AEGIS** is a cloud-hosted platform that makes secure medical image sharing as easy as uploading a file — for any DICOM modality. It serves two complementary audiences from a single platform.
 
 | Capability | What It Does |
 |-----------|-------------|
@@ -89,6 +89,26 @@ The medical image exchange market is growing, driven by federal data sharing man
 | **MRI protocol compliance** | Automated verification that acquisition parameters (TR, TE, flip angle, resolution) match site-specific templates per scanner manufacturer, model, and software version — catching the 0.19–64% non-compliance rates found across multi-site studies.<sup><a href="#ref-10">[10]</a></sup> |
 | **Centralized audit trail** | Every upload, approval, rejection, and data export is logged with a timestamp and actor. Institutions can demonstrate HIPAA compliance from a single dashboard. |
 | **Clinician review before release** | Administrators review anonymized images in a web-based DICOM viewer (OHIF) before approving studies for sharing. Nothing is shared automatically without human sign-off. |
+
+---
+
+## Who It's For
+
+AEGIS serves two audiences from a single de-identification and routing platform:
+
+**Multi-site research teams** need to collect imaging data from hospitals they don't control, de-identify it to meet NIH and IRB requirements, and convert it to research-ready formats. AEGIS gives them a browser link they can send to any participating site — no software installation, no IT negotiation. The research pipeline (protocol compliance, automated QC, BIDS conversion, defacing) ensures data arrives analysis-ready.
+
+**Hospital radiology departments** need to de-identify imaging data for internal uses — training AI models, building real-world evidence databases, sharing with referring physicians, and fulfilling data requests from payers and registries. AEGIS gives them a centralized de-identification gateway with a complete audit trail, burned-in PHI detection, and configurable routing rules — without replacing their PACS or requiring a separate enterprise integration project.
+
+| | Research Teams | Radiology Departments |
+|--|---------------|----------------------|
+| **Entry point** | Browser upload link sent to external sites | DIMSE receive / internal batch import |
+| **Key need** | NIH DMS compliance, multi-site consistency | HIPAA de-identification, audit trail |
+| **Differentiator** | Zero-install at sending sites | No PACS/VNA integration required |
+| **Pipeline features** | Defacing, protocol compliance, QC, BIDS | Burned-in PHI, routing rules, export shares |
+| **Review workflow** | PI/coordinator approves before archive | Radiologist/admin approves before release |
+
+The underlying platform — de-identification engine, routing rules, audit trail, OHIF viewer, and admin dashboard — is shared. Research-specific features (defacing, BIDS, protocol templates) and enterprise features (DIMSE receive, HL7/FHIR notifications, tag standardization) extend it for each audience.
 
 ---
 
@@ -174,7 +194,11 @@ AEGIS does not create a new de-identification standard — it implements the one
 | **Open source** | Yes | No (commercial) | Yes | No | Yes |
 | **Audit trail** | Centralized, per-study | Chain of custody | Per-instance | Built-in | Limited |
 
-Enlitic's ENCOG is the closest commercial analogue to AEGIS's de-identification pipeline.<sup><a href="#ref-12">[12]</a></sup> It uses AI-driven computer vision to detect burned-in text overlays and claims to protect over 4,000 DICOM fields. However, ENCOG requires PACS/VNA integration at each sending site, does not offer volumetric defacing for head imaging, and publicly documents only four modalities (MR, CT, XR, ultrasound). ENCOG is also part of a broader commercial suite (Ensight) that includes data standardization (ENDEX, FDA 510(k) cleared) and migration tools — positioning it as an enterprise radiology product rather than a cross-institution research sharing platform.
+Existing platforms tend to serve either research (XNAT, Flywheel) or enterprise radiology (ENCOG/Enlitic, MIRC CTP) — but not both. AEGIS is designed for both audiences from a shared platform.
+
+Enlitic's ENCOG is the closest commercial analogue to AEGIS's de-identification pipeline.<sup><a href="#ref-12">[12]</a></sup> It uses AI-driven computer vision to detect burned-in text overlays and claims to protect over 4,000 DICOM fields. However, ENCOG requires PACS/VNA integration at each sending site, does not offer volumetric defacing for head imaging, and publicly documents only four modalities (MR, CT, XR, ultrasound). ENCOG is part of a broader commercial suite (Ensight) that includes data standardization (ENDEX, FDA 510(k) cleared) and migration tools — but lacks the research pipeline features (protocol compliance, QC, BIDS) that multi-site studies require.
+
+XNAT and Flywheel serve research well but require software installation at sending sites and offer limited enterprise radiology integration. MIRC CTP is a robust open-source pipeline but requires on-premises Java infrastructure and has no burned-in PHI detection or defacing.
 
 **Key differences from existing platforms:**
 
@@ -182,7 +206,7 @@ Enlitic's ENCOG is the closest commercial analogue to AEGIS's de-identification 
 2. **Two-phase de-identification** — both tag-level (browser) and pixel-level (server-side OCR) are addressed in a unified pipeline
 3. **Defacing is automated and reviewable** — not optional, manual, or absent. Neither ENCOG nor MIRC CTP offer volumetric defacing.
 4. **Not specialty-specific** — designed for all DICOM modalities from the start, unlike XNAT (neuroimaging focus) or ENCOG (4 listed modalities)
-5. **Research-oriented pipeline** — protocol compliance, automated QC, and BIDS conversion are built in. Commercial platforms like ENCOG and Flywheel focus on enterprise radiology workflows rather than multi-site research data management.
+5. **Dual-market platform** — research features (protocol compliance, QC, BIDS) and enterprise features (DIMSE receive, routing rules, tag standardization) extend a shared de-identification core. Competitors serve one audience or the other.
 
 ---
 
@@ -212,6 +236,14 @@ Enlitic's ENCOG is the closest commercial analogue to AEGIS's de-identification 
 - MRI protocol compliance — per-scanner, per-sequence parameter validation against configurable templates with tolerances, following the approach used by ADNI<sup><a href="#ref-11">[11]</a></sup> and tools like mrQA<sup><a href="#ref-10">[10]</a></sup>
 - BIDS format conversion for neuroimaging research output
 - Batch import tools for historical data migration
+
+### Phase 5 — Enterprise Radiology
+- DIMSE receive endpoint — hospitals push studies directly from PACS/VNA without browser upload
+- DICOM tag standardization — normalize study/series descriptions across sites and scanners for consistent downstream processing
+- HL7 FHIR notifications — notify hospital EMR/RIS systems when studies are de-identified, approved, or exported
+- Reversible de-identification — organization-owned keys for internal use cases where re-identification may be required
+- PACS/VNA query-retrieve — pull studies from hospital archives on demand rather than waiting for push
+- Multi-tenant SaaS deployment — shared infrastructure with per-organization data isolation for radiology groups managing multiple facilities
 
 ---
 
@@ -269,6 +301,6 @@ Production costs scale with data volume. A 1,000-session multi-site study (~500 
   <img src="logo-small.png" alt="AEGIS Logo" style="width: 120px; margin-bottom: 16px;" />
   <h2 style="color: #1a1a2e;">AEGIS</h2>
   <p style="font-size: 16px; color: #6b7280; max-width: 600px; margin: 0 auto;">
-    Secure, browser-based medical image sharing for any DICOM modality — built on established de-identification standards, with automated defacing, pixel-level PHI detection, and administrator review before any data is released.
+    Secure, browser-based medical image de-identification and sharing for any DICOM modality — serving both multi-site research teams and hospital radiology departments from a single platform, with automated defacing, pixel-level PHI detection, and administrator review before any data is released.
   </p>
 </div>

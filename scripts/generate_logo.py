@@ -133,26 +133,39 @@ draw.text((cx - sw2 / 2, text_y + 218), sub2, fill=TEAL, font=sub_font)
 # ── Modality badges ──
 badge_y = text_y + 278
 badge_font = font(22)
-badges = ["Brain MRI", "PET", "CT", "DICOM"]
-badge_colors = ["#1565C0", "#7B1FA2", "#00695C", "#E65100"]
-total_badge_w = 0
-badge_widths = []
-for b in badges:
-    bw = draw.textlength(b, font=badge_font) + 30
-    badge_widths.append(bw)
-    total_badge_w += bw
-gap = 16
-total_badge_w += gap * (len(badges) - 1)
 
-bx = cx - total_badge_w / 2
-for i, (badge, bw) in enumerate(zip(badges, badge_widths)):
+# Primary badge: "All DICOM Modalities"
+primary_text = "All DICOM Modalities"
+primary_color = "#00695C"
+pw = draw.textlength(primary_text, font=badge_font) + 40
+px = cx - pw / 2
+draw.rounded_rectangle(
+    (px, badge_y, px + pw, badge_y + 36),
+    radius=18, fill=primary_color
+)
+ptw = draw.textlength(primary_text, font=badge_font)
+draw.text((px + (pw - ptw) / 2, badge_y + 5), primary_text, fill=WHITE, font=badge_font)
+
+# Secondary badges: specific modalities (smaller, muted)
+secondary_y = badge_y + 48
+secondary_font = font(16)
+secondaries = ["MRI", "CT", "PET", "US", "XR", "NM", "MG", "RT"]
+secondary_colors = ["#37474F"] * len(secondaries)  # uniform muted dark gray
+sec_widths = []
+for s in secondaries:
+    sec_widths.append(draw.textlength(s, font=secondary_font) + 20)
+sec_gap = 8
+total_sec_w = sum(sec_widths) + sec_gap * (len(secondaries) - 1)
+
+sx = cx - total_sec_w / 2
+for i, (label, sw) in enumerate(zip(secondaries, sec_widths)):
     draw.rounded_rectangle(
-        (bx, badge_y, bx + bw, badge_y + 36),
-        radius=18, fill=badge_colors[i]
+        (sx, secondary_y, sx + sw, secondary_y + 28),
+        radius=14, fill=secondary_colors[i]
     )
-    btw = draw.textlength(badge, font=badge_font)
-    draw.text((bx + (bw - btw) / 2, badge_y + 5), badge, fill=WHITE, font=badge_font)
-    bx += bw + gap
+    stw = draw.textlength(label, font=secondary_font)
+    draw.text((sx + (sw - stw) / 2, secondary_y + 4), label, fill=WHITE, font=secondary_font)
+    sx += sw + sec_gap
 
 # ── Save ──
 out_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
