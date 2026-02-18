@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications'
+type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'notifications' | 'users'
 
 type AuditEntry = {
   id: string
@@ -123,6 +123,16 @@ type DigestSubscription = {
   frequency: 'weekly' | 'monthly'
   enabled: boolean
   last_sent_at?: string | null
+  created_at: string
+}
+
+type AdminUser = {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'viewer'
+  enabled: boolean
+  notes: string
   created_at: string
 }
 
@@ -1679,6 +1689,183 @@ function InstitutionsPanel() {
   )
 }
 
+// ── Users Panel ───────────────────────────────────────────────────────────────
+
+const EMPTY_USER: Omit<AdminUser, 'id' | 'created_at'> = {
+  email: '', name: '', role: 'admin', enabled: true, notes: '',
+}
+
+function UsersPanel() {
+  const [users, setUsers]         = useState<AdminUser[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+
+  const [form, setForm]           = useState<Omit<AdminUser, 'id' | 'created_at'>>(EMPTY_USER)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin-users')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setUsers(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchUsers() }, [fetchUsers])
+
+  function openNew() {
+    setForm(EMPTY_USER)
+    setEditingId(null)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  function openEdit(u: AdminUser) {
+    setForm({ email: u.email, name: u.name, role: u.role, enabled: u.enabled, notes: u.notes })
+    setEditingId(u.id)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.email) { setFormError('Email is required'); return }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const url = editingId ? `/api/admin-users/${editingId}` : '/api/admin-users'
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      setEditingId(null)
+      fetchUsers()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteUser(id: string, email: string) {
+    if (!confirm(`Delete user "${email}"? This cannot be undone.`)) return
+    await fetch(`/api/admin-users/${id}`, { method: 'DELETE' })
+    fetchUsers()
+  }
+
+  async function toggleUser(u: AdminUser) {
+    await fetch(`/api/admin-users/${u.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...u, enabled: !u.enabled }),
+    })
+    fetchUsers()
+  }
+
+  if (loading) return <div className="state-loading">Loading users…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Admin Users</div>
+            <div className="routing-section-sub">
+              Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production.
+            </div>
+          </div>
+          <div className="actions-cell">
+            <button type="button" className="btn-refresh" onClick={fetchUsers}>Refresh</button>
+            <button type="button" className="btn-primary" onClick={openNew}>+ Add user</button>
+          </div>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit user' : 'New user'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" type="email" placeholder="Email address *"
+                value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+              <input className="form-input" placeholder="Display name"
+                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <select className="form-select" aria-label="Role" value={form.role}
+                onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'viewer' }))}>
+                <option value="admin">admin — full access</option>
+                <option value="viewer">viewer — read-only</option>
+              </select>
+              <input className="form-input form-input--wide" placeholder="Notes (optional)"
+                value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {users.length === 0 && !showForm ? (
+          <div className="state-empty">No users yet.</div>
+        ) : users.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Notes</th>
+                <th>Added</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} className={u.enabled ? '' : 'routing-row--disabled'}>
+                  <td>
+                    <div className="routing-name">{u.name || u.email}</div>
+                    {u.name && <div className="routing-desc">{u.email}</div>}
+                  </td>
+                  <td>
+                    <span className={`routing-action routing-action--${u.role}`}>{u.role}</span>
+                  </td>
+                  <td>
+                    <span className={`badge badge--${u.enabled ? 'enabled' : 'disabled'}`}>
+                      {u.enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </td>
+                  <td className="routing-desc">{u.notes || '—'}</td>
+                  <td className="td-date">{fmtDate(u.created_at)}</td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--edit" onClick={() => openEdit(u)}>Edit</button>
+                      <button type="button" className="btn btn--secondary" onClick={() => toggleUser(u)}>
+                        {u.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      <button type="button" className="btn btn--revoke" onClick={() => deleteUser(u.id, u.email)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 type StudiesState = 'loading' | 'loaded' | 'error'
@@ -1772,6 +1959,13 @@ export function App() {
         >
           Notifications
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'users' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('users')}
+        >
+          Users
+        </button>
       </nav>
 
       {/* Studies tab */}
@@ -1834,6 +2028,9 @@ export function App() {
 
       {/* Notifications tab */}
       {tab === 'notifications' && <NotificationsPanel />}
+
+      {/* Users tab */}
+      {tab === 'users' && <UsersPanel />}
     </div>
   )
 }
