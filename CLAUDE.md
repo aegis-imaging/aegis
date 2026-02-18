@@ -591,6 +591,32 @@ git checkout develop && git pull
 # then branch again for the next feature
 ```
 
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on PRs to `develop` and `main`:
+
+| Job | What it checks |
+|-----|---------------|
+| `go` | `go build ./...` + `go vet ./...` |
+| `python` (5× matrix) | `py_compile` on all `.py` files per service |
+| `frontend` (3× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard) |
+| `docker` (6× matrix) | `docker build` for all service images |
+
+## Makefile
+
+Common dev commands available via `make`:
+
+| Target | Description |
+|--------|-------------|
+| `make up` | `docker compose up -d` (start all services) |
+| `make down` | `docker compose down` |
+| `make clean` | `docker compose down -v` (destroy volumes) |
+| `make build` | `docker compose build` |
+| `make api` | Run Go API locally (`go run .`) |
+| `make lint` | Lint all languages (Go vet, Python py_compile, TypeScript tsc) |
+| `make check` | `curl /healthz` with pretty JSON output |
+| `make logs` | `docker compose logs -f` |
+
 ## Conventions
 
 - Product naming: always use **Anonymization & Exchange Gateway for Imaging Studies** for first mention, then **AEGIS** thereafter.
