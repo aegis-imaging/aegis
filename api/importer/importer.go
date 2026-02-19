@@ -40,6 +40,7 @@ type Result struct {
 	StudiesCreated int      `json:"studies_created"`
 	StudiesFailed  int      `json:"studies_failed"`
 	Errors         []string `json:"errors,omitempty"`
+	StudyIDs       []string `json:"study_ids,omitempty"` // IDs of successfully created studies
 }
 
 // StudyGroup holds DICOM files grouped by StudyInstanceUID.
@@ -100,7 +101,8 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	for i, g := range sorted {
 		log.Printf("aegis-import: [%d/%d] importing study %s (%d files)",
 			i+1, len(sorted), g.StudyInstanceUID, len(g.Files))
-		if err := importStudy(ctx, db, store, project, g, opts); err != nil {
+		studyID, err := importStudy(ctx, db, store, project, g, opts)
+		if err != nil {
 			result.StudiesFailed++
 			errMsg := fmt.Sprintf("study %s: %v", g.StudyInstanceUID, err)
 			result.Errors = append(result.Errors, errMsg)
@@ -108,6 +110,7 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 			continue
 		}
 		result.StudiesCreated++
+		result.StudyIDs = append(result.StudyIDs, studyID)
 	}
 
 	log.Printf("aegis-import: complete — %d studies created, %d failed, %d files imported",
@@ -214,11 +217,11 @@ func getStringTag(dataset dicom.Dataset, t tag.Tag) string {
 
 // importStudy processes a single study group: creates session, copies files,
 // creates study record, evaluates routing rules, and creates audit entry.
-func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project *model.Project, g *StudyGroup, opts Options) error {
+func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project *model.Project, g *StudyGroup, opts Options) (string, error) {
 	// Create upload session for traceability.
 	session, err := model.CreateUploadSession(ctx, db, project.ID, len(g.Files), "batch-import", "batch-import", "")
 	if err != nil {
-		return fmt.Errorf("create upload session: %w", err)
+		return "", fmt.Errorf("create upload session: %w", err)
 	}
 
 	// Sort files for deterministic ordering.
@@ -230,12 +233,12 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 		f, err := os.Open(filePath)
 		if err != nil {
 			model.UpdateUploadSessionFailed(ctx, db, session.ID, err.Error())
-			return fmt.Errorf("open source file %s: %w", filepath.Base(filePath), err)
+			return "", fmt.Errorf("open source file %s: %w", filepath.Base(filePath), err)
 		}
 		if err := store.Store(ctx, key, f); err != nil {
 			f.Close()
 			model.UpdateUploadSessionFailed(ctx, db, session.ID, err.Error())
-			return fmt.Errorf("store file %d: %w", i, err)
+			return "", fmt.Errorf("store file %d: %w", i, err)
 		}
 		f.Close()
 	}
@@ -267,7 +270,7 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 
 	if err := model.CreateStudy(ctx, db, study); err != nil {
 		model.UpdateUploadSessionFailed(ctx, db, session.ID, err.Error())
-		return fmt.Errorf("create study: %w", err)
+		return "", fmt.Errorf("create study: %w", err)
 	}
 
 	// Evaluate routing rules — may set defacing_required, phi_scan, auto_approve, etc.
@@ -287,7 +290,7 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 		"project":        opts.ProjectSlug,
 	})
 
-	return nil
+	return study.ID, nil
 }
 
 // sortedGroups returns study groups sorted by StudyInstanceUID for deterministic output.

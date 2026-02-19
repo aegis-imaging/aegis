@@ -165,6 +165,9 @@ func (s *Server) runBidsConversion(study *model.Study) {
 		"warnings":         svcResp.Warnings,
 		"duration_seconds": fmt.Sprintf("%.1f", svcResp.DurationSeconds),
 	})
+
+	// Advance pipeline — may dispatch next eligible services.
+	s.AdvancePipeline(ctx, study.ID)
 }
 
 // ServeBidsDownload streams the BIDS output directory as a zip archive.
