@@ -650,20 +650,34 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 ## 8c. Landing Page & Contact Form (Vercel + Brevo)
 
-The landing page (aegisimaging.ai) is deployed to Vercel as a static site with a serverless function for the contact form. See `docs/VERCEL_DEPLOYMENT.md` for full deployment steps.
+**Site:** aegisimaging.ai | **Source:** `frontend/landing/` | **Framework:** Vite + React
 
-### Vercel setup
+The landing page is deployed to Vercel as a static site with a serverless function for the contact form. Vercel auto-deploys on every push to the connected branch — no manual deploys needed after initial setup. Every PR also gets a preview URL.
 
-- [ ] Create a Vercel account for AEGIS Imaging LLC (separate from Encore)
-- [ ] Connect the AEGIS GitHub repo → set root directory to `frontend/landing`
-- [ ] Deploy — Vercel auto-detects Vite, builds `dist/`, and serves the SPA
-- [ ] Add custom domain `aegisimaging.ai` in Vercel → configure DNS at GoDaddy (see `docs/VERCEL_DEPLOYMENT.md`)
+### Step 1: Set up Vercel project
 
-### Brevo SMTP setup (contact form email delivery)
+- [ ] Create a Vercel account for AEGIS Imaging LLC (separate from Encore) at [vercel.com](https://vercel.com) (free Hobby plan)
+- [ ] Click **Add New → Project**
+- [ ] Connect your GitHub account and select the **AEGIS** repo
+- [ ] **Configure Project:**
+
+| Setting | Value |
+|---------|-------|
+| **Root Directory** | `frontend/landing` |
+| **Framework Preset** | Vite (should auto-detect) |
+| **Build Command** | `npm run build` (default) |
+| **Output Directory** | `dist` (default) |
+
+- [ ] Click **Deploy** — wait for the first build to succeed
+- [ ] Note the preview URL Vercel gives you (e.g. `aegis-abc123.vercel.app`)
+
+### Step 2: Configure contact form email (Brevo SMTP)
+
+The contact form uses a Vercel serverless function (`api/contact.ts`) that sends email via Brevo SMTP. Without these env vars, submissions are logged to the console but not emailed — you can configure this later.
 
 - [ ] Create a Brevo account for AEGIS Imaging LLC at [brevo.com](https://www.brevo.com) (free tier: 300 emails/day)
-- [ ] Go to Settings → SMTP & API → SMTP → note credentials
-- [ ] In Vercel project → Settings → Environment Variables, add:
+- [ ] Go to **Settings → SMTP & API → SMTP** and note your credentials
+- [ ] In your Vercel project: **Settings → Environment Variables**, add:
 
 | Key | Value | Environments |
 |-----|-------|-------------|
@@ -673,21 +687,55 @@ The landing page (aegisimaging.ai) is deployed to Vercel as a static site with a
 | `BREVO_SMTP_PASS` | *(your Brevo SMTP password)* | Production, Preview |
 | `BREVO_SMTP_FROM` | `AEGIS <noreply@aegisimaging.ai>` | Production, Preview |
 
-- [ ] Redeploy on Vercel
+- [ ] Redeploy (Settings → Deployments → click **⋮** on latest → **Redeploy**)
 - [ ] Test: submit the contact form → check inbox at `contact@aegisimaging.ai`
 
-*Without Brevo env vars, submissions log to the Vercel function console but are not emailed. You can configure this later.*
+### Step 3: Add custom domain in Vercel
+
+- [ ] In your Vercel project: **Settings → Domains**
+- [ ] Type `aegisimaging.ai` and click **Add**
+- [ ] Vercel will show the DNS records you need — keep this page open
+
+### Step 4: Configure DNS at GoDaddy
+
+- [ ] Log in to [godaddy.com](https://godaddy.com)
+- [ ] Go to **My Products → aegisimaging.ai → DNS → Manage DNS**
+- [ ] Delete any GoDaddy parking/forwarding records if present
+- [ ] Add or edit these records:
+
+| Type | Name | Value | TTL |
+|------|------|-------|-----|
+| `A` | `@` | `76.76.21.21` | 1 Hour |
+| `CNAME` | `www` | `cname.vercel-dns.com` | 1 Hour |
+
+- [ ] Save changes
+- [ ] Go back to the Vercel Domains page — wait for the green checkmark (5–30 min, sometimes up to 48 hours)
+- [ ] Vercel provisions a free SSL certificate automatically
+
+### Step 5: Set up aegisimaging.org redirect (optional)
+
+- [ ] **Option A — Via Vercel:** Add `aegisimaging.org` as a domain in the same Vercel project. Vercel will redirect it to the primary domain.
+- [ ] **Option B — Via GoDaddy:** On the `.org` domain, set up a domain forward: GoDaddy → My Products → aegisimaging.org → Manage → Forwarding → Forward to `https://aegisimaging.ai`
+
+### Step 6: Verify everything works
+
+- [ ] Visit `https://aegisimaging.ai` — page loads with SSL
+- [ ] Visit `https://www.aegisimaging.ai` — redirects to apex
+- [ ] Scroll through all sections — animations trigger
+- [ ] Test mobile layout (resize browser or use phone)
+- [ ] Submit the contact form — check inbox at `contact@aegisimaging.ai`
+- [ ] Visit `https://aegisimaging.org` — redirects to `.ai` (if configured)
 
 ### How the contact form works
 
-The contact form has two independent delivery paths (same `/api/contact` endpoint):
+The contact form (`POST /api/contact`) has two independent delivery paths:
 
 | Path | Backend | When |
 |------|---------|------|
 | **Vercel serverless function** | `frontend/landing/api/contact.ts` — nodemailer + Brevo SMTP | Landing page on Vercel (standalone) |
 | **Go API endpoint** | `api/handler/contact.go` — existing SMTP config | Landing page proxied to Go backend |
 
-Both accept `{ name, email, organization, role, message }` and return `{ sent: true }`.
+Both accept `{ name, email, organization, role, message }` and return `{ sent: true }`. The Vercel function is self-contained — it doesn't depend on the Go API. This means the landing page and contact form work even before the backend is deployed.
 
 ## 9. GitHub Repository
 
