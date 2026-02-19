@@ -146,6 +146,12 @@
 .badge--protocol-minor_deviations { background: #fef3c7; color: #92400e; }
 .badge--protocol-non_compliant    { background: #fee2e2; color: #b91c1c; }
 
+/* Export status badges */
+.badge--export-pending   { background: #dbeafe; color: #1e40af; }
+.badge--export-exporting { background: #fef3c7; color: #92400e; }
+.badge--export-exported  { background: #dcfce7; color: #15803d; }
+.badge--export-failed    { background: #fee2e2; color: #b91c1c; }
+
 /* ── Filter bar ──────────────────────────────────────────────────────────── */
 .filter-bar {
   display: flex;
@@ -272,6 +278,9 @@
 .btn--bids-convert  { background: #8b5cf6; border: 1px solid #7c3aed; color: #fff; }
 .btn--bids-download { background: #059669; border: 1px solid #047857; color: #fff; font-size: 0.75rem; text-decoration: none; }
 .btn--classify      { background: #f59e0b; border: 1px solid #d97706; color: #fff; }
+.btn--dicom-download { background: #0d9488; border: 1px solid #0f766e; color: #fff; font-size: 0.75rem; text-decoration: none; }
+.btn--export        { background: #2563eb; border: 1px solid #1d4ed8; color: #fff; }
+.btn--protocol-check { background: #6366f1; border: 1px solid #4f46e5; color: #fff; }
 .btn--edit       { background: #f8fafc; border: 1px solid #d1d5db; color: #374151; }
 .btn--secondary  { background: #f3f4f6; border: 1px solid #d1d5db; color: #4b5563; }
 

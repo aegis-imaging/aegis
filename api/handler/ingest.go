@@ -68,7 +68,7 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Evaluate routing rules — may mutate study (e.g. auto_approve, require_defacing).
-	routing.EvaluateRules(r.Context(), s.db, study)
+	routing.EvaluateRules(r.Context(), s.db, s.store, study)
 
 	// Auto-dispatch processing pipeline.
 	s.AdvancePipeline(r.Context(), study.ID)

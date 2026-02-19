@@ -191,7 +191,7 @@ func (s *Server) runClassification(study *model.Study) {
 		}
 		log.Printf("classification: re-evaluating routing rules for %s (modality=%s, body_part=%s)",
 			studyUID, updated.Modality, updated.BodyPart)
-		routing.EvaluateRules(ctx, s.db, updated)
+		routing.EvaluateRules(ctx, s.db, s.store, updated)
 	}
 
 	// Advance pipeline — dispatch next eligible services.
