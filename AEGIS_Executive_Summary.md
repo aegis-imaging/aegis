@@ -73,13 +73,13 @@ The medical image exchange market is growing, driven by federal data sharing man
 - The NIH DMS Policy (2023) creates a compliance obligation for tens of thousands of active grants that did not previously require a data sharing plan
 - A 2024 NCI-sponsored benchmark (MIDI-B, presented at MICCAI 2024) formally tested de-identification tools and found that burned-in pixel PHI and free-text fields remain the hardest unsolved problems — no existing tool handles all cases reliably<sup><a href="#ref-7">[7]</a></sup>
 - Growing multi-site trial volume in oncology (PSMA PET, amyloid PET, whole-body MRI) and neurology (tau PET, fMRI) is driving demand for scalable data collection from distributed hospital networks
-- Cloud-hosted DICOM storage (GCP Healthcare API, AWS HealthImaging) is now mature commodity infrastructure, reducing the barrier to building managed platforms
+- Cloud-hosted DICOM storage (GCS, S3, Azure Blob) and managed databases (Cloud SQL, RDS, Azure Database) are now mature commodity infrastructure, reducing the barrier to building managed platforms
 
 ---
 
 ## The Solution
 
-**AEGIS** is a cloud-hosted platform that makes secure medical image sharing as easy as uploading a file — for any DICOM modality. It serves two complementary audiences from a single platform.
+**AEGIS** is a multi-cloud platform that makes secure medical image sharing as easy as uploading a file — for any DICOM modality. It runs on GCP, AWS, or Azure — or locally via Docker Compose. It serves two complementary audiences from a single platform.
 
 | Capability | What It Does |
 |-----------|-------------|
@@ -159,11 +159,12 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 | **Frontend** | React + TypeScript | Runs in any modern browser, no installation required |
 | **Database** | PostgreSQL 15 (Cloud SQL / RDS) | Audit trail, project/user management, routing rules |
 | **DICOM Storage** | Cloud-neutral (GCS, S3, or local filesystem) | Abstracted behind a pluggable storage interface |
-| **OCR / PHI Detection** | Tesseract OCR (local) / Document AI (cloud) | Detects burned-in text in image pixels |
-| **Defacing** | mri_deface (FreeSurfer) | Established tool, used in neuroimaging research |
+| **OCR / PHI Detection** | Tesseract OCR (local) / cloud AI (pluggable) | Detects burned-in text in image pixels |
+| **Defacing** | DeepDefacer (default), mri_deface, mri_reface | Multiple backends with automatic fallback; see `docs/research/mri-defacing-tools-comparison.md` |
 | **DICOM Viewer** | OHIF Viewer (v3) | Open-source, browser-based, supports all modalities |
 | **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
-| **Infrastructure** | Terraform (GCP + AWS modules) | Reproducible, version-controlled, multi-cloud |
+| **Processing Pipeline** | 6 Python FastAPI sidecars | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion — auto-dispatched in dependency order |
+| **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
 
 **On the use of automated tools:** AEGIS uses automated tools to assist with — not replace — human review. Automated de-identification flags potential issues; a trained administrator reviews and approves every study before it is shared. Automated defacing quality is reviewed side-by-side against the original in the admin interface.
 
@@ -178,7 +179,7 @@ AEGIS is designed around established regulatory and technical standards:
 | HIPAA Privacy Rule | 45 CFR § 164.514(b) | De-identification methods: Safe Harbor (18 identifiers) and Expert Determination |
 | DICOM Confidentiality Profile | NEMA PS3.15 Annex E | Tag-level de-identification actions for all DICOM attributes |
 | NIH Data Management Policy | NOT-OD-21-013 (eff. Jan 25, 2023) | Data sharing obligations for NIH-funded investigators |
-| GCP Security | BAA, VPC, CMEK | Business Associate Agreement, encrypted storage, network controls |
+| Cloud Security | BAA, VPC/VPC-SC, CMEK/KMS | Business Associate Agreement, encrypted storage, network controls — available on GCP, AWS, and Azure |
 
 AEGIS does not create a new de-identification standard — it implements the ones that already exist.
 
