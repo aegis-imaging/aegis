@@ -4,49 +4,66 @@
 
 **Anonymization & Exchange Gateway for Imaging Studies**
 
-A GCP-hosted platform for secure, HIPAA-compliant sharing of medical imaging data (all DICOM modalities) between hospitals, universities, and research institutions.
+A multi-cloud platform for secure, HIPAA-compliant sharing of medical imaging data (all DICOM modalities) between hospitals, universities, and research institutions. Runs on GCP, AWS, or Azure — or locally via Docker Compose.
 
 The name carries a double meaning. As an acronym it describes exactly what the system does — an **A**nonymization & **E**xchange **G**ateway for **I**maging **S**tudies. As a word it comes from Greek mythology: the *aegis* was the divine shield of Zeus and Athena, a symbol of protection. That duality captures the platform's core mission — shielding patient identity while enabling the free flow of medical imaging data for research and clinical care.
 
 ## What It Does
 
 - **Browser-based anonymization** — DICOM tag-level de-identification happens in the browser before data leaves the hospital network. No software installation required. Works with any DICOM modality.
-- **Internal enterprise ingress** — Studies originating inside the enterprise can be ingested directly into the enterprise GCP tenancy and routed through the same anonymization/QC pipeline.
-- **Server-side defacing** — Automated facial feature removal from 3D head scans after upload. Non-head modalities bypass defacing automatically.
-- **Secure cloud routing** — Encrypted transmission to a GCP Healthcare API DICOM store with DICOMweb endpoints.
-- **Admin review** — OHIF-powered viewer for QC, defacing review, and study management.
-- **Controlled external sharing** — After approval, processed studies can be shared with external partners through policy-controlled export/download paths.
+- **Internal enterprise ingress** — Studies originating inside the enterprise can be ingested directly via API or batch import CLI and routed through the same processing pipeline.
+- **Server-side defacing** — Automated facial feature removal from 3D head scans (DeepDefacer, mri_deface, mri_reface). Non-head modalities bypass defacing automatically.
+- **Automated processing pipeline** — Classification, PHI detection, protocol compliance, QC, defacing, and BIDS conversion run automatically in dependency order after upload.
+- **Cloud-neutral storage** — DICOM files stored in local filesystem, S3, or GCS with a built-in DICOMweb proxy.
+- **Admin review** — OHIF-powered viewer for QC, defacing review (before/after), and study management.
+- **Controlled external sharing** — Token-authenticated export downloads, DICOMweb STOW-RS forwarding to external destinations, and configurable routing rules.
 - **Modality-agnostic** — Supports MRI, CT, PET, PET/CT, ultrasound, X-ray, nuclear medicine, mammography, and all other DICOM-compliant imaging. MVP focuses on brain MRI/PET/CT.
 
 ## Architecture
 
 See [AEGIS_Architecture.md](AEGIS_Architecture.md) for the full system design.
 
-For signed upload setup details, see [GCP_UPLOAD_NOTES.md](GCP_UPLOAD_NOTES.md).
-
 ![Architecture Diagram](architecture.png)
 
-## Repositories
+## Repository Structure (Monorepo)
 
-| Repo | Description |
-|------|-------------|
-| `aegis-terraform-prj` | GCP project bootstrap (IAM, KMS, VPC-SC) |
-| `aegis-terraform-infra` | Infrastructure (Cloud Run, Healthcare API, Cloud Armor) |
-| `aegis-api` | Go backend — upload orchestration, routing, DICOMweb proxy |
-| `aegis-frontend` | React — Upload Portal + Admin Dashboard |
-| `aegis-client` | TypeScript uploader library (npm package) |
+Currently a single monorepo. Planned to split into separate repos once interfaces stabilize.
+
+```
+aegis/
+├── terraform/project/          # GCP project bootstrap (IAM, KMS, VPC-SC)
+├── terraform/infra/            # GCP infrastructure (Cloud Run, Healthcare API)
+├── terraform/aws/              # AWS infrastructure (ECS Fargate, S3, RDS, ALB)
+├── api/                        # Go backend — upload orchestration, DICOMweb proxy
+├── frontend/
+│   ├── upload-portal/          # React — public-facing upload + anonymization UI
+│   ├── admin-dashboard/        # React — internal QC, OHIF viewer, study management
+│   ├── export-portal/          # React — public-facing export share download UI
+│   └── landing/                # React — marketing landing page (aegisimaging.ai)
+├── client/                     # TypeScript DICOM anonymization library (npm)
+├── defacing/                   # Python defacing service (DeepDefacer, mri_deface)
+├── phi-detection/              # Python burned-in PHI detection (Tesseract OCR)
+├── qc-service/                 # Python QC automation service
+├── bids-service/               # Python NIfTI/BIDS conversion service (dcm2niix)
+├── classification-service/     # Python metadata classification service
+├── protocol-service/           # Python MRI protocol compliance service
+└── docs/                       # Shared research and documentation
+```
 
 ## Tech Stack
 
-- **Backend**: Go on Cloud Run (`distroless` containers)
-- **Database**: Cloud SQL (PostgreSQL 15)
-- **Frontend**: React + TypeScript
-- **DICOM**: GCP Healthcare API (DICOMweb), dcmjs, dicomParser
-- **Analytics**: BigQuery (DICOM metadata export, audit dashboards)
-- **AI/ML**: Vertex AI (burned-in PHI detection, image QC)
-- **Defacing**: mri_deface, dcm2niix, pydicom (Python Cloud Run sidecar)
-- **Viewer**: OHIF Viewer
-- **Infrastructure**: Terraform, Cloud Build
+- **Backend**: Go 1.24 on Cloud Run / ECS Fargate (`distroless` containers)
+- **Database**: PostgreSQL 15 (Cloud SQL on GCP, RDS on AWS, Docker for local dev)
+- **Frontend**: React 19 + TypeScript + Vite (4 apps)
+- **DICOM Storage**: Cloud-neutral file storage (local, GCS, or S3) with built-in DICOMweb proxy
+- **Processing**: 6 Python FastAPI sidecars (defacing, PHI detection, QC, BIDS, classification, protocol)
+- **AI/ML**: Pluggable — local backends (Tesseract, pydicom heuristics) or cloud AI (Vertex AI, SageMaker)
+- **Defacing**: DeepDefacer (default), mri_deface (fallback), mri_reface (research)
+- **Viewer**: OHIF Viewer v3 (embedded in admin dashboard)
+- **Auth**: Multi-provider — GCP IAP, Azure AD Easy Auth, AWS ALB + Cognito
+- **Email**: Standard SMTP (any provider). Dev: Mailpit
+- **Infrastructure**: Terraform (GCP + AWS modules), Docker Compose for local dev
+- **CI**: GitHub Actions (Go build+vet+test, Python syntax, TypeScript type check, Docker build)
 
 ## License
 
