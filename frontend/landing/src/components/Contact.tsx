@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
-const FORMSPREE_ID = import.meta.env.VITE_FORMSPREE_ID || ''
-
 const ROLES = [
   '',
   'Researcher',
@@ -27,18 +25,9 @@ export function Contact() {
     e.preventDefault()
     setError('')
 
-    if (!FORMSPREE_ID) {
-      const subject = encodeURIComponent('AEGIS Early Access Request')
-      const body = encodeURIComponent(
-        `Name: ${name}\nOrganization: ${organization}\nRole: ${role}\n\n${message}`
-      )
-      window.location.href = `mailto:contact@aegisimaging.ai?subject=${subject}&body=${body}`
-      return
-    }
-
     setSubmitting(true)
     try {
-      const res = await fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
+      const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, organization, role, message }),

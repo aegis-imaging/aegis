@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -55,4 +57,45 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		Limit:   limit,
 		Offset:  offset,
 	})
+}
+
+// GetStudy returns a single study by ID.
+func (s *Server) GetStudy(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	study, err := model.GetStudyByID(r.Context(), s.db, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, study)
+}
+
+// ListStudyAudit returns all audit entries for a specific study.
+func (s *Server) ListStudyAudit(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	// Verify the study exists.
+	_, err := model.GetStudyByID(r.Context(), s.db, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		return
+	}
+
+	entries, err := model.ListAuditEntriesForStudy(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to list audit entries")
+		return
+	}
+	if entries == nil {
+		entries = []model.AuditEntry{}
+	}
+	s.writeJSON(w, http.StatusOK, entries)
 }

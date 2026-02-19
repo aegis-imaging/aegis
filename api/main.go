@@ -102,6 +102,9 @@ func main() {
 	mux.HandleFunc("PUT /api/upload/file/{sessionID}/{index}", srv.UploadFile)
 	mux.HandleFunc("POST /api/upload/complete", srv.UploadComplete)
 
+	// Contact form — public, called from landing page (Vercel or local dev).
+	mux.HandleFunc("POST /api/contact", srv.ContactForm)
+
 	// Public export endpoints — token-authenticated, no session required.
 	mux.HandleFunc("GET /api/export/{token}/download", srv.ServeDicomDownloadByToken)
 	mux.HandleFunc("GET /api/export/{token}", srv.RedeemExport)
@@ -141,8 +144,10 @@ func main() {
 	mux.HandleFunc("PUT /api/anon-profiles/{id}", adminOnly(srv.UpdateAnonProfile))
 	mux.HandleFunc("DELETE /api/anon-profiles/{id}", adminOnly(srv.DeleteAnonProfile))
 
-	// Studies — list and shares readable by all; mutations require admin.
+	// Studies — list, detail, and shares readable by all; mutations require admin.
 	mux.HandleFunc("GET /api/studies", auth(srv.ListStudies))
+	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
+	mux.HandleFunc("GET /api/studies/{id}/audit", auth(srv.ListStudyAudit))
 	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
 	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
 	mux.HandleFunc("POST /api/studies/{id}/share", adminOnly(srv.CreateShare))
