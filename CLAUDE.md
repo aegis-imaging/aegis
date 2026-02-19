@@ -85,6 +85,46 @@ S3-compatible stores (MinIO, LocalStack) are supported via the `S3_ENDPOINT` env
 
 ## Development
 
+### Testing (Go)
+
+The Go API has a comprehensive test suite (~120 tests) using `testify` for assertions and `testcontainers-go` for integration tests against real PostgreSQL.
+
+```bash
+# All tests (requires Docker for testcontainers)
+cd api && go test -v -count=1 ./...
+
+# Unit tests only (no Docker needed, fast)
+cd api && go test -short -v ./...
+
+# With race detector
+cd api && go test -race ./...
+
+# Single package
+cd api && go test -v ./routing/
+```
+
+Makefile shortcuts: `make test`, `make test-unit`, `make test-race`
+
+**Test architecture:**
+
+| Tier | What | DB? | Location |
+|------|------|-----|----------|
+| Unit | Pure functions (routing Matches, JWT parsing, CORS, config, email templates, storage, slugify) | No | `*_test.go` in each package |
+| Model integration | CRUD against real PostgreSQL | Yes | `api/model/*_test.go` |
+| Handler HTTP | Full request/response via httptest | Yes | `api/handler/*_test.go` |
+| Auth integration | Middleware with DB lookups | Yes | `api/middleware/auth_integration_test.go` |
+
+**Test helpers** (`api/testutil/`):
+- `TestDB(t)` — spins up PostgreSQL 15 container, runs migrations, returns `*sql.DB`
+- `TestServer(t, db)` — creates `handler.Server` with temp local storage and `PipelineAuto: false`
+- `SeedProject(t, db)` — returns the default project from migration 001
+- `CreateTestStudy(t, db, projectID)` — creates a study with sensible defaults
+- `CreateTestAdminUser(t, db, email, role)` — creates an admin user
+- `CreateTestDestination(t, db, name)` — creates a DICOMweb destination
+- `CreateTestRoutingRule(t, db, name, action)` — creates a routing rule
+
+Integration tests are skipped with `-short` flag for fast local feedback.
+
 ### API (Go)
 ```bash
 cd api && go run .          # runs on :8080

@@ -479,6 +479,36 @@ The pipeline auto-dispatches processing services after upload. Enabled by defaul
 - [ ] Test manual override: click a manual trigger button in the dashboard — should still work
 - [ ] Test disable: set `PIPELINE_AUTO=false`, upload again — no auto-dispatch, manual buttons required
 
+## 7s. Automated Tests (Go API)
+
+Three-tier test suite: unit tests (no Docker), model integration tests (real PostgreSQL via testcontainers), and handler HTTP tests (httptest + real DB + temp storage).
+
+### Unit tests only (no Docker required)
+
+- [ ] Run: `cd api && go test -short -v ./...`
+- [ ] Verify ~55 tests pass: routing engine, auth JWT parsing, CORS, config, email templates, storage, slugify
+
+### Full test suite (requires Docker)
+
+- [ ] Ensure Docker Desktop is running
+- [ ] Run: `cd api && go test -v -count=1 ./...`
+- [ ] Verify ~120 tests pass including model CRUD and handler HTTP tests
+- [ ] Run with race detector: `cd api && go test -race -count=1 ./...`
+
+### Test helpers (`api/testutil/`)
+
+- `TestDB(t)` — spins up PostgreSQL 15 via testcontainers, runs migrations, auto-cleanup
+- `TestServer(t, db)` — creates `handler.Server` with temp local storage, pipeline disabled
+- `SeedProject(t, db)` / `CreateTestStudy(t, db, projectID)` / `CreateTestAdminUser(t, db, email, role)` — test fixtures
+
+### Makefile targets
+
+```bash
+make test        # full suite (requires Docker)
+make test-unit   # unit tests only (no Docker)
+make test-race   # full suite with race detector
+```
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
@@ -569,4 +599,4 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-19. See AEGIS_Architecture.md for the full system design.*
+*Generated 2026-02-18. Updated 2026-02-20. See AEGIS_Architecture.md for the full system design.*

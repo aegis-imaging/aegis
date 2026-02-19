@@ -20,6 +20,18 @@ jobs:
         working-directory: api
         run: go vet ./...
 
+  go-test:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Run tests
+        working-directory: api
+        run: go test -race -v -count=1 ./...
+
   python:
     name: "Python check (${{ matrix.service }})"
     runs-on: ubuntu-latest
