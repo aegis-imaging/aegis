@@ -36,7 +36,7 @@ func CreateAuditEntry(ctx context.Context, db *sql.DB, action, actor, resourceTy
 }
 
 func ListAuditEntries(ctx context.Context, db *sql.DB, action, resourceType string, limit int) ([]AuditEntry, error) {
-	query := `SELECT id, action, actor, resource_type, resource_id, detail, ip_address, created_at FROM audit_trail`
+	query := `SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at FROM audit_trail`
 	var conditions []string
 	var args []any
 	argN := 1

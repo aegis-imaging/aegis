@@ -230,7 +230,7 @@ func CreateRoutingLogEntry(ctx context.Context, db *sql.DB, e *RoutingLogEntry) 
 
 func ListRoutingLogForStudy(ctx context.Context, db *sql.DB, studyID string) ([]RoutingLogEntry, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, study_id, rule_id, action, destination_id, outcome, detail, created_at
+		SELECT id, study_id, rule_id, action, destination_id, outcome, COALESCE(detail, 'null'), created_at
 		FROM routing_log WHERE study_id = $1 ORDER BY created_at ASC`, studyID)
 	if err != nil {
 		return nil, err
