@@ -1,13 +1,15 @@
 # AEGIS Defacing Service
 #
 # Defacing backend is controlled by DEFACE_TOOL env var:
-#   - "auto" (default): tries mri_reface → mri_deface → nibabel-fallback
+#   - "auto" (default): tries mri_reface → deepdefacer → mri_deface → nibabel-fallback
 #   - "mri_reface": uses mri_reface (best modality coverage; non-commercial research only)
+#   - "deepdefacer": uses DeepDefacer (3D U-Net, fast; requires TensorFlow)
 #   - "mri_deface": uses mri_deface from FreeSurfer (MRI only; no license restrictions)
 #   - "nibabel": pure-Python fallback (dev/testing only)
 #
-# To include mri_deface, build with: --build-arg INCLUDE_MRI_DEFACE=true
-# To include mri_reface, build with: --build-arg INCLUDE_MRI_REFACE=true
+# To include DeepDefacer, build with:  --build-arg INCLUDE_DEEPDEFACER=true
+# To include mri_deface, build with:   --build-arg INCLUDE_MRI_DEFACE=true
+# To include mri_reface, build with:   --build-arg INCLUDE_MRI_REFACE=true
 # (mri_reface requires MATLAB Runtime + ANTs + NiftyReg — adds ~3 GB)
 
 FROM python:3.12-slim
@@ -73,6 +75,16 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# ── DeepDefacer (optional, pip-installable, ~500 MB with TensorFlow) ────────
+# Supports: MRI only. License: no commercial restrictions documented.
+# Uses a 3D U-Net model — significantly faster than registration-based tools.
+# https://github.com/AKhazane/DeepDeface
+ARG INCLUDE_DEEPDEFACER=false
+RUN if [ "$INCLUDE_DEEPDEFACER" = "true" ]; then \
+    pip install --no-cache-dir deepdefacer \
+    && python -c "import deepdefacer; print('DeepDefacer installed successfully')"; \
+fi
+
 # ── Application code ────────────────────────────────────────────────────────
 COPY app/ ./app/
 
@@ -83,9 +95,10 @@ ENV MRI_DEFACE_BRAIN=/opt/mri_deface/talairach_mixed_with_skull.gca
 ENV MRI_DEFACE_FACE=/opt/mri_deface/face.gca
 ENV MRI_REFACE_BIN=/usr/local/bin/mri_reface
 ENV DCM2NIIX_BIN=/usr/local/bin/dcm2niix
+ENV DEEPDEFACER_GPU=false
 
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
     CMD curl -f http://localhost:8080/healthz || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

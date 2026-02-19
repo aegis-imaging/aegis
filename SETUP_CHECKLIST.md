@@ -296,6 +296,36 @@ Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-
     http://localhost:8080/api/studies | jq .total
   ```
 
+### Production mode (AWS ALB + Cognito)
+
+- [ ] Start API with AWS ALB auth:
+  ```bash
+  cd api && AUTH_ENABLED=true AUTH_PROVIDER=aws go run .
+  ```
+- [ ] Verify AWS ALB header auth works (simulate ALB-injected JWT):
+  ```bash
+  # Create a base64url-encoded JWT payload with email claim
+  PAYLOAD=$(echo -n '{"email":"admin@test.com"}' | base64 | tr '+/' '-_' | tr -d '=')
+  JWT="header.${PAYLOAD}.signature"
+  curl -s -H "X-Amzn-Oidc-Data: ${JWT}" \
+    http://localhost:8080/api/studies | jq .total
+  ```
+
+### AWS S3 Storage
+
+- [ ] Start API with S3 storage (LocalStack for dev):
+  ```bash
+  # Start LocalStack (S3-compatible)
+  docker run -p 4566:4566 localstack/localstack
+  # Create bucket
+  aws --endpoint-url=http://localhost:4566 s3 mb s3://aegis-dev
+  # Run API with S3 backend
+  cd api && STORAGE_MODE=s3 S3_BUCKET=aegis-dev S3_REGION=us-east-1 S3_ENDPOINT=http://localhost:4566 go run .
+  ```
+- [ ] Upload a study via the Upload Portal → verify files stored in S3 bucket
+- [ ] View study in OHIF → verify DICOMweb proxy retrieves from S3
+- [ ] Verify signed URLs work: upload + download flows complete without error
+
 ### Azure AD App Registration Setup (for production Azure deployments)
 
 1. **Register the application in Azure Portal:**
@@ -361,6 +391,58 @@ The viewer role is read-only — viewers can browse all data but cannot create, 
 - [ ] Verify Institutions tab: data visible; Add/Edit/Delete/Toggle/Link/Unlink hidden; Projects view button visible
 - [ ] Verify Profiles, Protocol Templates, Notifications, Projects tabs: data visible; create/edit/delete buttons hidden
 - [ ] Switch back to admin: restart API with `DEV_USER_EMAIL=dev@aegis.local` (or default) — all buttons return
+
+## 7p. Defacing Service Backends
+
+The defacing service supports multiple pluggable backends selected via the `DEFACE_TOOL` env var. DeepDefacer (3D U-Net) is the recommended production default for speed.
+
+### Local verification (without Docker)
+
+- [ ] Install dependencies:
+  ```bash
+  cd defacing
+  pip install -r requirements.txt
+  pip install deepdefacer
+  ```
+- [ ] Start with DeepDefacer:
+  ```bash
+  DEFACE_TOOL=deepdefacer uvicorn app.main:app --port 8081
+  ```
+- [ ] Verify health endpoint:
+  ```bash
+  curl http://localhost:8081/healthz | python3 -m json.tool
+  # → {"status":"ok","backend":"deepdefacer","available":true}
+  ```
+- [ ] Test explicit backend selection:
+  - `DEFACE_TOOL=nibabel` → health shows `nibabel-fallback`
+  - `DEFACE_TOOL=mri_deface` → falls back to `nibabel-fallback` (unless mri_deface installed)
+  - `DEFACE_TOOL=auto` → uses first available (deepdefacer if installed)
+
+### Docker verification
+
+- [ ] Build with DeepDefacer:
+  ```bash
+  docker compose build defacing
+  # docker-compose.yml sets INCLUDE_DEEPDEFACER=true by default
+  ```
+- [ ] Start defacing service:
+  ```bash
+  docker compose up defacing
+  ```
+- [ ] Verify via API health: `curl http://localhost:8080/healthz | python3 -m json.tool` → services.defacing shows healthy
+
+## 7q. Automated Processing Pipeline
+
+The pipeline auto-dispatches processing services after upload. Enabled by default (`PIPELINE_AUTO=true`).
+
+- [ ] Configure routing rules that require multiple services (e.g. `require_classification` + `require_defacing` + `require_qc_check` + `require_bids_conversion`)
+- [ ] Upload a study via the upload portal
+- [ ] Check API logs for `pipeline: dispatching classification for ...` — classification runs first
+- [ ] After classification completes, verify logs show parallel dispatch of defacing + PHI scan (if configured)
+- [ ] After defacing completes, verify QC check and BIDS conversion are auto-dispatched
+- [ ] Verify audit log shows `pipeline.dispatch` entries for each service
+- [ ] Test manual override: click a manual trigger button in the dashboard — should still work
+- [ ] Test disable: set `PIPELINE_AUTO=false`, upload again — no auto-dispatch, manual buttons required
 
 ## 8. Go API
 

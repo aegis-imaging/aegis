@@ -169,4 +169,7 @@ func (s *Server) runDefacing(study *model.Study) {
 		"output_files":     len(svcResp.OutputPaths),
 		"duration_seconds": fmt.Sprintf("%.1f", svcResp.DurationSeconds),
 	})
+
+	// Advance pipeline — unblocks Phase 2 (QC, BIDS) which wait for defacing.
+	s.AdvancePipeline(ctx, study.ID)
 }

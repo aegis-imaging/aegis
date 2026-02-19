@@ -73,6 +73,12 @@ func main() {
 			log.Fatalf("init gcs storage: %v", err)
 		}
 		store = gcsStore
+	case "s3":
+		s3Store, err := storage.NewS3(context.Background(), cfg.S3Bucket, cfg.S3Region, cfg.S3Endpoint)
+		if err != nil {
+			log.Fatalf("init s3 storage: %v", err)
+		}
+		store = s3Store
 	default:
 		store = storage.NewLocal(cfg.LocalStorageDir, cfg.APIBaseURL)
 	}
