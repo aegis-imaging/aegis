@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -87,7 +88,7 @@ func TestApproveStudy_AlreadyApproved(t *testing.T) {
 	srv := testutil.TestServer(t, db)
 	proj := testutil.SeedProject(t, db)
 	study := testutil.CreateTestStudy(t, db, proj.ID)
-	model.UpdateStudyStatus(nil, db, study.ID, "approved")
+	model.UpdateStudyStatus(context.Background(), db, study.ID, "approved")
 
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
 	req.SetPathValue("id", study.ID)
