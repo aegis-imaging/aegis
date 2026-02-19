@@ -113,6 +113,42 @@ Export shares created:   {{ .SharesCreated }}
 This is an automated message from AEGIS. To unsubscribe, contact your administrator.
 `))
 
+var contactFormTmpl = template.Must(template.New("contact_form").Parse(
+	`New contact form submission from the AEGIS website.
+
+Name:         {{ .Name }}
+Email:        {{ .Email }}
+{{ if .Organization }}Organization: {{ .Organization }}
+{{ end }}{{ if .Role }}Role:         {{ .Role }}
+{{ end }}
+Message:
+{{ .Message }}
+
+--
+This message was submitted via the contact form at aegisimaging.ai.
+`))
+
+// ContactForm renders a contact form submission email.
+func ContactForm(name, contactEmail, organization, role, message string) (subject, body string) {
+	subject = "[AEGIS Contact] " + name + " — " + truncate(message, 60)
+	var buf bytes.Buffer
+	contactFormTmpl.Execute(&buf, struct {
+		Name         string
+		Email        string
+		Organization string
+		Role         string
+		Message      string
+	}{name, contactEmail, organization, role, message})
+	return subject, buf.String()
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}
+
 // DigestSummary renders a periodic digest email for a project.
 func DigestSummary(projectName, frequency, periodLabel string, received, approved, rejected, pending, sharesCreated int) (subject, body string) {
 	freqTitle := strings.ToUpper(frequency[:1]) + frequency[1:]
