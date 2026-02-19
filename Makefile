@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -39,6 +39,17 @@ lint-frontend:
 	cd client && npx tsc --noEmit
 	cd frontend/upload-portal && npx tsc --noEmit
 	cd frontend/admin-dashboard && npx tsc --noEmit
+
+# ── Tests ──────────────────────────────────────────────────────────
+
+test:
+	cd api && go test -v -count=1 ./...
+
+test-unit:
+	cd api && go test -short -v ./...
+
+test-race:
+	cd api && go test -race -count=1 ./...
 
 # ── Health check ────────────────────────────────────────────────────
 
