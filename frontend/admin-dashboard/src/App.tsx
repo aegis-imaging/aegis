@@ -19,9 +19,12 @@ type AuditEntry = {
 
 type Study = {
   id: string
+  project_id: string
   study_instance_uid: string
   modality: string
   body_part: string
+  study_description: string
+  series_count: number
   source: string
   status: string
   defacing_required: boolean
@@ -37,7 +40,20 @@ type Study = {
   protocol_status: string
   export_required: boolean
   export_status: string
+  dicom_store: string
   instance_count: number
+  created_at: string
+  updated_at: string
+}
+
+type RoutingLogEntry = {
+  id: string
+  study_id: string
+  rule_id: string
+  action: string
+  destination_id?: string
+  outcome: string
+  detail?: Record<string, unknown>
   created_at: string
 }
 
@@ -543,9 +559,290 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
   )
 }
 
+// ── Study Detail Panel ────────────────────────────────────────────────────────
+
+type PipelineStage = {
+  label: string
+  required: boolean
+  status: string
+}
+
+function pipelineColorClass(status: string): string {
+  if (['clean', 'pass', 'complete', 'classified', 'compliant', 'exported', 'approved', 'defaced'].includes(status)) return 'pipeline-dot--success'
+  if (['warn', 'minor_deviations', 'flagged'].includes(status)) return 'pipeline-dot--warn'
+  if (['fail', 'non_compliant', 'failed', 'rejected'].includes(status)) return 'pipeline-dot--error'
+  if (['scanning', 'checking', 'converting', 'classifying', 'defacing', 'exporting'].includes(status)) return 'pipeline-dot--active'
+  return 'pipeline-dot--pending'
+}
+
+function PipelineNode({ stage }: { stage: PipelineStage }) {
+  if (!stage.required) return (
+    <div className="pipeline-node pipeline-node--skip">
+      <div className="pipeline-dot pipeline-dot--skip" />
+      <span className="pipeline-label">{stage.label}</span>
+      <span className="pipeline-status">n/a</span>
+    </div>
+  )
+  return (
+    <div className="pipeline-node">
+      <div className={`pipeline-dot ${pipelineColorClass(stage.status)}`} />
+      <span className="pipeline-label">{stage.label}</span>
+      <span className="pipeline-status">{stage.status || 'pending'}</span>
+    </div>
+  )
+}
+
+function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
+  studyId: string
+  onBack: () => void
+  onAction: () => void
+  isAdmin: boolean
+}) {
+  const [study, setStudy] = useState<Study | null>(null)
+  const [audit, setAudit] = useState<AuditEntry[]>([])
+  const [routingLog, setRoutingLog] = useState<RoutingLogEntry[]>([])
+  const [shares, setShares] = useState<Share[]>([])
+  const [loading, setLoading] = useState(true)
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares'>('audit')
+
+  // Viewer / review state
+  const [viewOpen, setViewOpen] = useState(false)
+  const [defaceOpen, setDefaceOpen] = useState(false)
+
+  // Share form state
+  const [shareEmail, setShareEmail] = useState('')
+  const [shareNote, setShareNote] = useState('')
+  const [shareDays, setShareDays] = useState(7)
+  const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
+
+  const loadData = useCallback(() => {
+    setLoading(true)
+    Promise.all([
+      fetch(`/api/studies/${studyId}`).then(r => r.ok ? r.json() : null),
+      fetch(`/api/studies/${studyId}/audit`).then(r => r.ok ? r.json() : []),
+      fetch(`/api/studies/${studyId}/routing-log`).then(r => r.ok ? r.json() : []),
+      fetch(`/api/studies/${studyId}/shares`).then(r => r.ok ? r.json() : []),
+    ]).then(([s, a, rl, sh]) => {
+      setStudy(s)
+      setAudit(a ?? [])
+      setRoutingLog(rl ?? [])
+      setShares(sh ?? [])
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [studyId])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  if (loading) return <div className="state-loading">Loading study details…</div>
+  if (!study) return <div className="state-error">Study not found. <button type="button" className="btn btn--secondary" onClick={onBack}>Back</button></div>
+
+  const stages: PipelineStage[] = [
+    { label: 'Classification', required: study.classification_required, status: study.classification_status },
+    { label: 'PHI Scan', required: study.phi_scan_required, status: study.phi_scan_status },
+    { label: 'Protocol', required: study.protocol_required, status: study.protocol_status },
+    { label: 'Defacing', required: study.defacing_required, status: study.status === 'defaced' ? 'defaced' : study.status === 'defacing' ? 'defacing' : study.defacing_required ? 'pending' : '' },
+    { label: 'QC', required: study.qc_required, status: study.qc_status },
+    { label: 'BIDS', required: study.bids_required, status: study.bids_status },
+    { label: 'Export', required: study.export_required, status: study.export_status },
+  ]
+
+  const canApprove = !['approved', 'rejected'].includes(study.status)
+  const canReject = study.status !== 'rejected'
+  const canShare = study.status === 'approved'
+  const canReviewDeface = study.defacing_required && ['defaced', 'approved'].includes(study.status)
+  const canPhiScan = study.phi_scan_required && study.phi_scan_status === 'pending'
+  const canQcCheck = study.qc_required && study.qc_status === 'pending'
+  const canBidsConvert = study.bids_required && study.bids_status === 'pending'
+  const canBidsDownload = study.bids_status === 'complete'
+  const canClassify = study.classification_required && study.classification_status === 'pending'
+  const canProtocolCheck = study.protocol_required && study.protocol_status === 'pending'
+
+  const doAction = async (url: string) => {
+    await fetch(url, { method: 'POST' })
+    loadData()
+    onAction()
+  }
+
+  const handleShare = async () => {
+    const expires = new Date()
+    expires.setDate(expires.getDate() + shareDays)
+    const resp = await fetch(`/api/studies/${study.id}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expires_at: expires.toISOString() }),
+    })
+    if (resp.ok) {
+      const result = await resp.json()
+      setShareResult(result)
+      setShareEmail('')
+      setShareNote('')
+      loadData()
+    }
+  }
+
+  return (
+    <div className="study-detail">
+      <div className="study-detail__header">
+        <button type="button" className="btn btn--secondary study-detail__back" onClick={onBack}>← Back to studies</button>
+        <div className="study-detail__title-row">
+          <h2 className="study-detail__title">{study.study_instance_uid}</h2>
+          <Badge label={study.status} prefix="status" />
+          <Badge label={study.source} prefix="source" />
+        </div>
+        {study.study_description && <p className="study-detail__description">{study.study_description}</p>}
+      </div>
+
+      {/* Meta row */}
+      <div className="study-detail__meta">
+        <div className="study-detail__meta-item"><strong>Modality</strong> {study.modality || '—'}</div>
+        <div className="study-detail__meta-item"><strong>Body Part</strong> {study.body_part || '—'}</div>
+        <div className="study-detail__meta-item"><strong>Files</strong> {study.instance_count}</div>
+        <div className="study-detail__meta-item"><strong>Series</strong> {study.series_count}</div>
+        <div className="study-detail__meta-item"><strong>Store</strong> {study.dicom_store || 'raw'}</div>
+        <div className="study-detail__meta-item"><strong>Received</strong> {fmtDate(study.created_at)}</div>
+        <div className="study-detail__meta-item"><strong>Updated</strong> {fmtDate(study.updated_at)}</div>
+      </div>
+
+      {/* Pipeline visualization */}
+      <div className="study-detail__section">
+        <h3 className="study-detail__section-title">Processing Pipeline</h3>
+        <div className="pipeline-row">
+          {stages.map((stage, i) => (
+            <div key={stage.label} className="pipeline-step">
+              <PipelineNode stage={stage} />
+              {i < stages.length - 1 && <div className="pipeline-arrow">→</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="study-detail__section">
+        <h3 className="study-detail__section-title">Actions</h3>
+        <div className="study-detail__actions">
+          {isAdmin && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
+          {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={() => { if (confirm('Reject this study?')) doAction(`/api/studies/${study.id}/reject`) }}>Reject</button>}
+          {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
+          {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
+          {isAdmin && canProtocolCheck && <button type="button" className="btn btn--protocol-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/protocol-check`)}>Check Protocol</button>}
+          {isAdmin && canQcCheck && <button type="button" className="btn btn--qc-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/qc-check`)}>Run QC</button>}
+          {isAdmin && canBidsConvert && <button type="button" className="btn btn--bids-convert" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/bids-convert`)}>Convert to BIDS</button>}
+          {canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
+          {study.status === 'approved' && <a href={`/api/studies/${study.study_instance_uid}/dicom-download`} className="btn btn--dicom-download" download>Download DICOM</a>}
+          {isAdmin && study.export_required && (study.export_status === 'pending' || study.export_status === 'failed') && study.status === 'approved' && (
+            <button type="button" className="btn btn--export" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/trigger-export`)}>Export</button>
+          )}
+          {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
+          <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View in OHIF'}</button>
+        </div>
+      </div>
+
+      {/* Inline viewer */}
+      {viewOpen && <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />}
+      {defaceOpen && <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />}
+
+      {/* Share form (admin only, approved studies) */}
+      {isAdmin && canShare && (
+        <div className="study-detail__section">
+          <h3 className="study-detail__section-title">Create Share Link</h3>
+          <div className="share-inline">
+            <input type="email" placeholder="Recipient email" value={shareEmail} onChange={e => setShareEmail(e.target.value)} className="share-input" />
+            <input type="text" placeholder="Note (optional)" value={shareNote} onChange={e => setShareNote(e.target.value)} className="share-input" />
+            <select title="Expiry period" value={shareDays} onChange={e => setShareDays(Number(e.target.value))} className="share-select">
+              <option value={7}>7 days</option>
+              <option value={14}>14 days</option>
+              <option value={30}>30 days</option>
+              <option value={90}>90 days</option>
+            </select>
+            <button type="button" className="btn btn--approve" disabled={!shareEmail} onClick={handleShare}>Send</button>
+          </div>
+          {shareResult && (
+            <div className="share-result">
+              Share created! Link: <code>{shareResult.export_url}</code>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Detail tabs: Audit / Routing / Shares */}
+      <div className="study-detail__section">
+        <div className="study-detail__tab-nav">
+          <button type="button" className={`tab-btn${detailTab === 'audit' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('audit')}>
+            Audit Trail ({audit.length})
+          </button>
+          <button type="button" className={`tab-btn${detailTab === 'routing' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('routing')}>
+            Routing Log ({routingLog.length})
+          </button>
+          <button type="button" className={`tab-btn${detailTab === 'shares' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('shares')}>
+            Shares ({shares.length})
+          </button>
+        </div>
+
+        {detailTab === 'audit' && (
+          <table className="detail-table">
+            <thead>
+              <tr><th>Time</th><th>Action</th><th>Actor</th><th>Detail</th></tr>
+            </thead>
+            <tbody>
+              {audit.length === 0 && <tr><td colSpan={4}>No audit entries.</td></tr>}
+              {audit.map(e => (
+                <tr key={e.id}>
+                  <td className="td-date">{fmtDate(e.created_at)}</td>
+                  <td><code>{e.action}</code></td>
+                  <td>{e.actor}</td>
+                  <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {detailTab === 'routing' && (
+          <table className="detail-table">
+            <thead>
+              <tr><th>Time</th><th>Action</th><th>Outcome</th><th>Detail</th></tr>
+            </thead>
+            <tbody>
+              {routingLog.length === 0 && <tr><td colSpan={4}>No routing log entries.</td></tr>}
+              {routingLog.map(e => (
+                <tr key={e.id}>
+                  <td className="td-date">{fmtDate(e.created_at)}</td>
+                  <td><code>{e.action}</code></td>
+                  <td><Badge label={e.outcome} prefix="status" /></td>
+                  <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {detailTab === 'shares' && (
+          <table className="detail-table">
+            <thead>
+              <tr><th>Recipient</th><th>Created</th><th>Expires</th><th>Status</th><th>Note</th></tr>
+            </thead>
+            <tbody>
+              {shares.length === 0 && <tr><td colSpan={5}>No shares.</td></tr>}
+              {shares.map(s => (
+                <tr key={s.id}>
+                  <td>{s.recipient_email}</td>
+                  <td className="td-date">{fmtDate(s.created_at)}</td>
+                  <td className="td-date">{fmtDate(s.expires_at)}</td>
+                  <td>{s.revoked_at ? <span className="badge badge--rejected">Revoked</span> : <span className="badge badge--approved">Active</span>}</td>
+                  <td>{s.note || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Study Row ─────────────────────────────────────────────────────────────────
 
-function StudyRow({ study, onAction, isAdmin }: { study: Study; onAction: () => void; isAdmin: boolean }) {
+function StudyRow({ study, onAction, onSelect, isAdmin }: { study: Study; onAction: () => void; onSelect: () => void; isAdmin: boolean }) {
   const [shareOpen,  setShareOpen]  = useState(false)
   const [viewOpen,   setViewOpen]   = useState(false)
   const [defaceOpen, setDefaceOpen] = useState(false)
@@ -606,7 +903,7 @@ function StudyRow({ study, onAction, isAdmin }: { study: Study; onAction: () => 
   return (
     <>
       <tr>
-        <td className="td-uid">{uidShort(study.study_instance_uid)}</td>
+        <td className="td-uid"><button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button></td>
         <td>{study.modality || '—'}</td>
         <td>{study.body_part || '—'}</td>
         <td><Badge label={study.source} prefix="source" /></td>
@@ -2405,6 +2702,7 @@ export function App() {
   const [studies, setStudies] = useState<Study[]>([])
   const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null)
 
   // Auth state
   const [currentUser, setCurrentUser] = useState<AuthIdentity | null>(null)
@@ -2578,7 +2876,15 @@ export function App() {
       </nav>
 
       {/* Studies tab */}
-      {tab === 'studies' && (
+      {tab === 'studies' && selectedStudyId && (
+        <StudyDetailPanel
+          studyId={selectedStudyId}
+          onBack={() => setSelectedStudyId(null)}
+          onAction={() => setRefreshTick(t => t + 1)}
+          isAdmin={isAdmin}
+        />
+      )}
+      {tab === 'studies' && !selectedStudyId && (
         <>
           {/* Filter bar */}
           <div className="filter-bar">
@@ -2665,7 +2971,7 @@ export function App() {
                 </thead>
                 <tbody>
                   {studies.map(study => (
-                    <StudyRow key={study.id} study={study} onAction={() => setRefreshTick(t => t + 1)} isAdmin={isAdmin} />
+                    <StudyRow key={study.id} study={study} onAction={() => setRefreshTick(t => t + 1)} onSelect={() => setSelectedStudyId(study.id)} isAdmin={isAdmin} />
                   ))}
                 </tbody>
               </table>
