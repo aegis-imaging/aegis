@@ -4,6 +4,7 @@ const NAV_LINKS = [
   { id: 'problem', label: 'Problem' },
   { id: 'solution', label: 'Solution' },
   { id: 'how-it-works', label: 'How It Works' },
+  { id: 'trust', label: 'Compliance' },
   { id: 'architecture', label: 'Architecture' },
   { id: 'contact', label: 'Contact' },
 ]

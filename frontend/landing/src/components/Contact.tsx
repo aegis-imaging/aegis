@@ -1,6 +1,5 @@
 import { useState } from 'react'
-
-const FORMSPREE_ID = import.meta.env.VITE_FORMSPREE_ID || ''
+import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
 const ROLES = [
   '',
@@ -20,23 +19,15 @@ export function Contact() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
+  const { ref, isVisible } = useScrollAnimation()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    if (!FORMSPREE_ID) {
-      const subject = encodeURIComponent('AEGIS Early Access Request')
-      const body = encodeURIComponent(
-        `Name: ${name}\nOrganization: ${organization}\nRole: ${role}\n\n${message}`
-      )
-      window.location.href = `mailto:contact@aegisimaging.ai?subject=${subject}&body=${body}`
-      return
-    }
-
     setSubmitting(true)
     try {
-      const res = await fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
+      const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, organization, role, message }),
@@ -70,14 +61,16 @@ export function Contact() {
 
   return (
     <section id="contact" className="section section--alt">
-      <div className="section__inner">
-        <h2 className="section__title">Get Early Access</h2>
-        <p className="section__subtitle">
+      <div className="section__inner" ref={ref}>
+        <h2 className={`section__title animate animate--fade-up ${isVisible ? 'animate--visible' : ''}`}>
+          Get Early Access
+        </h2>
+        <p className={`section__subtitle animate animate--fade-up animate--delay-1 ${isVisible ? 'animate--visible' : ''}`}>
           AEGIS is in active development. Sign up for updates or reach out to
           discuss your use case.
         </p>
 
-        <form className="contact__form" onSubmit={handleSubmit}>
+        <form className={`contact__form animate animate--fade-up animate--delay-2 ${isVisible ? 'animate--visible' : ''}`} onSubmit={handleSubmit}>
           {error && <div className="contact__error">{error}</div>}
 
           <div className="contact__row">
@@ -147,6 +140,11 @@ export function Contact() {
             {submitting ? 'Sending...' : 'Join the Waitlist'}
           </button>
         </form>
+
+        <p className="contact__direct">
+          Or email us directly at{' '}
+          <a href="mailto:contact@aegisimaging.ai">contact@aegisimaging.ai</a>
+        </p>
       </div>
     </section>
   )

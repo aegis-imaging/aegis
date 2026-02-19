@@ -1,0 +1,84 @@
+.arch__diagram-wrapper {
+  margin-bottom: var(--space-10);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(37, 99, 235, 0.08);
+  border: 1px solid var(--color-gray-200);
+}
+
+.arch__diagram {
+  width: 100%;
+}
+
+.arch__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.arch__heading {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  margin-bottom: var(--space-4);
+}
+
+.arch__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.arch__tag {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-gray-100);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-gray-700);
+}
+
+.arch__cloud-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.arch__cloud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+}
+
+.arch__cloud-badge--supported {
+  background: var(--color-green-50);
+  color: var(--color-green-600);
+  border: 1px solid var(--color-green-100);
+}
+
+.arch__cloud-badge--planned {
+  background: var(--color-gray-100);
+  color: var(--color-gray-500);
+  border: 1px solid var(--color-gray-200);
+}
+
+@media (min-width: 768px) {
+  .arch__details {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .arch__tech {
+    flex: 2;
+  }
+
+  .arch__clouds {
+    flex: 1;
+  }
+}
