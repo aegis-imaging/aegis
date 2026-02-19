@@ -1,3 +1,6 @@
+import { useScrollAnimation } from '../hooks/useScrollAnimation'
+import { CheckIcon, ArrowRightIcon, ShieldCheckIcon } from './icons'
+
 const PHASE_1_STEPS = [
   'DICOM tags stripped per PS3.15 Basic Confidentiality Profile',
   '18 HIPAA Safe Harbor identifiers addressed',
@@ -14,15 +17,19 @@ const PHASE_2_STEPS = [
 ]
 
 export function HowItWorks() {
+  const { ref, isVisible } = useScrollAnimation()
+
   return (
     <section id="how-it-works" className="section">
-      <div className="section__inner">
-        <h2 className="section__title">How It Works</h2>
-        <p className="section__subtitle">
+      <div className="section__inner" ref={ref}>
+        <h2 className={`section__title animate animate--fade-up ${isVisible ? 'animate--visible' : ''}`}>
+          How It Works
+        </h2>
+        <p className={`section__subtitle animate animate--fade-up animate--delay-1 ${isVisible ? 'animate--visible' : ''}`}>
           Two-phase de-identification addresses every known gap
         </p>
         <div className="hiw__phases">
-          <div className="hiw__phase hiw__phase--browser">
+          <div className={`hiw__phase hiw__phase--browser animate animate--fade-up animate--delay-2 ${isVisible ? 'animate--visible' : ''}`}>
             <div className="hiw__phase-header">
               <span className="hiw__phase-number">1</span>
               <div>
@@ -32,14 +39,19 @@ export function HowItWorks() {
             </div>
             <ul className="hiw__steps">
               {PHASE_1_STEPS.map((s) => (
-                <li key={s} className="hiw__step">{s}</li>
+                <li key={s} className="hiw__step">
+                  <CheckIcon size={18} />
+                  {s}
+                </li>
               ))}
             </ul>
           </div>
 
-          <div className="hiw__arrow">&#x2192;</div>
+          <div className={`hiw__connector animate animate--fade-in animate--delay-3 ${isVisible ? 'animate--visible' : ''}`}>
+            <ArrowRightIcon size={32} />
+          </div>
 
-          <div className="hiw__phase hiw__phase--server">
+          <div className={`hiw__phase hiw__phase--server animate animate--fade-up animate--delay-4 ${isVisible ? 'animate--visible' : ''}`}>
             <div className="hiw__phase-header">
               <span className="hiw__phase-number">2</span>
               <div>
@@ -49,12 +61,16 @@ export function HowItWorks() {
             </div>
             <ul className="hiw__steps">
               {PHASE_2_STEPS.map((s) => (
-                <li key={s} className="hiw__step">{s}</li>
+                <li key={s} className="hiw__step">
+                  <CheckIcon size={18} />
+                  {s}
+                </li>
               ))}
             </ul>
           </div>
         </div>
-        <p className="hiw__footer">
+        <p className={`hiw__footer animate animate--fade-up animate--delay-5 ${isVisible ? 'animate--visible' : ''}`}>
+          <ShieldCheckIcon size={20} />
           Nothing is shared without human sign-off.
         </p>
       </div>

@@ -1,0 +1,45 @@
+/* Additional responsive overrides
+   Most component-level responsive styles are in their own CSS files.
+   This file handles cross-cutting responsive concerns. */
+
+/* Reduce section padding on mobile */
+@media (max-width: 767px) {
+  .section {
+    padding: var(--space-12) var(--space-4);
+  }
+
+  .section__title {
+    font-size: var(--text-2xl);
+  }
+
+  .section__subtitle {
+    font-size: var(--text-base);
+  }
+
+  /* Stack footer columns */
+  .footer__inner {
+    gap: var(--space-8);
+  }
+
+  .footer__brand-col {
+    max-width: 100%;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .solution__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .trust__badges {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Large screens — increase content area */
+@media (min-width: 1280px) {
+  :root {
+    --max-width: 1280px;
+  }
+}
