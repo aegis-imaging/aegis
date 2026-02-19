@@ -984,3 +984,243 @@
   font-size: 15px;
   font-weight: 600;
 }
+
+/* ── Study Detail Panel ─────────────────────────────────────────────────── */
+.study-detail {
+  max-width: 1200px;
+}
+
+.study-detail__header {
+  margin-bottom: 24px;
+}
+
+.study-detail__back {
+  margin-bottom: 12px;
+}
+
+.study-detail__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.study-detail__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.study-detail__description {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.study-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.study-detail__meta-item {
+  font-size: 13px;
+  color: #374151;
+}
+
+.study-detail__meta-item strong {
+  display: block;
+  font-size: 11px;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
+.study-detail__section {
+  margin-bottom: 24px;
+}
+
+.study-detail__section-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.study-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.study-detail__tab-nav {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+/* ── Pipeline Visualization ──────────────────────────────────────────── */
+.pipeline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  overflow-x: auto;
+  padding: 8px 0;
+}
+
+.pipeline-step {
+  display: flex;
+  align-items: center;
+}
+
+.pipeline-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 90px;
+  padding: 8px 6px;
+}
+
+.pipeline-node--skip {
+  opacity: 0.45;
+}
+
+.pipeline-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-bottom: 6px;
+}
+
+.pipeline-dot--success { background: #22c55e; }
+.pipeline-dot--warn    { background: #f59e0b; }
+.pipeline-dot--error   { background: #ef4444; }
+.pipeline-dot--active  { background: #3b82f6; }
+.pipeline-dot--pending { background: #d1d5db; }
+.pipeline-dot--skip    { background: #e5e7eb; }
+
+.pipeline-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+}
+
+.pipeline-status {
+  font-size: 11px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.pipeline-arrow {
+  color: #d1d5db;
+  font-size: 18px;
+  margin: 0 2px;
+  padding-bottom: 20px;
+}
+
+/* ── Detail tables (audit, routing, shares) ──────────────────────────── */
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.detail-table th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid #e5e7eb;
+  font-weight: 600;
+  font-size: 12px;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.detail-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.td-detail {
+  max-width: 400px;
+}
+
+.detail-json {
+  margin: 0;
+  font-size: 11px;
+  background: #f8fafc;
+  padding: 6px 8px;
+  border-radius: 4px;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ── Share inline form ───────────────────────────────────────────────── */
+.share-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.share-input {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  min-width: 180px;
+}
+
+.share-select {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.share-result {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.share-result code {
+  font-size: 12px;
+  background: #d1fae5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
+/* ── Clickable UID link ──────────────────────────────────────────────── */
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-family: monospace;
+  font-size: 12px;
+  color: #2563eb;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-link:hover {
+  color: #1d4ed8;
+}
