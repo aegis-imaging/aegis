@@ -67,6 +67,9 @@ type Config struct {
 	SMTPUsername string // SMTP_USERNAME — omit for unauthenticated relays
 	SMTPPassword string // SMTP_PASSWORD
 	EmailEnabled bool   // true when SMTPHost != ""
+
+	// Contact form recipient
+	ContactEmail string // CONTACT_EMAIL — where contact form submissions go (default: contact@aegisimaging.ai)
 }
 
 func Load() *Config {
@@ -97,7 +100,7 @@ func Load() *Config {
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 
-		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3004"), ","),
+		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004"), ","),
 
 		AuthEnabled:  os.Getenv("AUTH_ENABLED") == "true",
 		AuthProvider: envOr("AUTH_PROVIDER", "auto"),
@@ -109,6 +112,8 @@ func Load() *Config {
 		SMTPUsername: os.Getenv("SMTP_USERNAME"),
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
 		EmailEnabled: smtpHost != "",
+
+		ContactEmail: envOr("CONTACT_EMAIL", "contact@aegisimaging.ai"),
 	}
 }
 
