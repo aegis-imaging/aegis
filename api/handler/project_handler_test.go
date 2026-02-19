@@ -3,6 +3,7 @@ package handler_test
 import (
 	"bytes"
 	"encoding/json"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,7 +61,7 @@ func TestGetProject_Handler(t *testing.T) {
 	srv := testutil.TestServer(t, db)
 
 	// Get the default project ID first
-	projects, _ := model.ListProjects(nil, db)
+	projects, _ := model.ListProjects(context.Background(), db)
 	projID := projects[0].ID
 
 	req := httptest.NewRequest("GET", "/api/projects/"+projID, nil)

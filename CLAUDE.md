@@ -880,9 +880,30 @@ git checkout develop && git pull
 | Job | What it checks |
 |-----|---------------|
 | `go` | `go build ./...` + `go vet ./...` |
+| `go-test` | `go test -race -v -count=1 ./...` (~120 tests) |
 | `python` (6× matrix) | `py_compile` on all `.py` files per service |
-| `frontend` (4× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal) |
+| `python-test` (6× matrix) | `pytest -v --tb=short` per service (~133 tests total) |
+| `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
 | `docker` (7× matrix) | `docker build` for all service images |
+
+### Python Sidecar Testing
+
+Each sidecar has `requirements-test.txt` (pytest + httpx) and a `tests/` directory:
+
+```bash
+cd {service} && pip install -r requirements.txt -r requirements-test.txt && pytest -v
+```
+
+| Service | Tests | Coverage |
+|---------|-------|----------|
+| classification-service | 19 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, endpoint tests |
+| protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
+| qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
+| defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
+| phi-detection | 14 | Windowing, uint8 normalization, mock Tesseract OCR, multi-file detection |
+| bids-service | 17 | Series classification (T1w/FLAIR/bold/DWI/ASL/PET/CT), subject label hashing, mock dcm2niix |
+
+All tests use **synthetic DICOM files** generated via pydicom — no test data on disk. External tools (tesseract, dcm2niix, mri_deface) are mocked.
 
 ## Makefile
 
