@@ -10,11 +10,11 @@ The name **AEGIS** serves double duty. As an acronym, it describes exactly what 
 
 Medical imaging studies across **all DICOM modalities** need to be shared between hospitals, universities, and research institutions. Before transmission, DICOM images must be de-identified of all PHI per HIPAA Safe Harbor rules (18 identifier categories). Head imaging additionally requires **defacing** (removing facial features from 3D volumes to prevent re-identification via facial reconstruction). Sending hospitals have locked-down IT environments where installing software is difficult or impossible.
 
-AEGIS is a GCP-hosted platform with **two ingress paths** into the enterprise GCP tenancy:
+AEGIS is a multi-cloud platform (GCP, AWS, or Azure) with **two ingress paths**:
 1. **External-site ingress** — external institutions upload DICOM data of any modality after browser-based tag anonymization.
-2. **Internal-enterprise ingress** — studies originating within the enterprise network are ingested directly into the same tenancy.
+2. **Internal-enterprise ingress** — studies originating within the enterprise network are ingested directly via API or batch import CLI.
 
-Both paths converge on a common processing pipeline (validation, de-identification policy enforcement, optional defacing, QC, and audit), after which approved data is routed/shared to authorized downstream recipients.
+Both paths converge on a common automated processing pipeline (classification, PHI detection, protocol compliance, defacing, QC, and BIDS conversion), after which approved data is routed/shared to authorized downstream recipients.
 
 ### Supported Modalities
 AEGIS supports **all DICOM-compliant imaging modalities**, including but not limited to:
@@ -57,147 +57,132 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
 ┌─────────────────────────────────────────────────────────────────┐
 │  SENDING SITE (Hospital Browser)                                │
 │                                                                 │
-│  React PWA (Upload Portal)                                      │
+│  React Upload Portal                                            │
 │  ├── DICOM parsing (dcmjs / dicomParser)                        │
 │  ├── Tag-level de-identification (DICOM PS3.15 Annex E)         │
-│  ├── Validation & anonymization preview                         │
-│  └── Encrypted upload (TLS 1.2+ to GCS signed URL)             │
+│  ├── Per-project anonymization profiles (retained tags)         │
+│  ├── Validation & anonymization preview (before/after diff)     │
+│  └── Encrypted upload (TLS 1.2+ to signed URL or direct PUT)   │
 │                                                                 │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ HTTPS (TLS 1.2+)
                            │ Only tag-de-identified data
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  GCP PROJECT (Secured Enterprise Tenancy)                       │
-│  ┌─────────────────────────────────────────────────────┐        │
-│  │  Cloud Armor (DDoS/WAF) + Global HTTPS LB           │        │
-│  └──────────────────────────┬──────────────────────────┘        │
-│                              │                                   │
-│  ┌──────────────────────────▼──────────────────────────┐        │
-│  │  Cloud Run — API Backend (Go)                        │        │
-│  │  ├── Upload orchestration (signed URLs, validation)  │        │
-│  │  ├── Study/project management                        │        │
-│  │  ├── User auth (Google Identity / OAuth 2.0)         │        │
-│  │  ├── Routing rules engine                            │        │
-│  │  └── DICOMweb proxy to Healthcare API                │        │
-│  └──────┬───────────┬───────────────┬──────────────────┘        │
-│         │           │               │                            │
-│  ┌──────▼───┐  ┌────▼──────────┐  ┌▼─────────────────────┐     │
-│  │ Cloud    │  │ Healthcare API│  │ Cloud Run — Defacing  │     │
-│  │ Storage  │  │ ├─ DICOM Store│  │ Service (Python)      │     │
-│  │ (staging)│  │ ├─ DICOMweb   │  │ ├─ dcm2niix           │     │
-│  │          │  │ ├─ De-id      │  │ ├─ mri_deface or      │     │
-│  │          │  │ ├─ Pub/Sub    │  │ │  DeepDefacer         │     │
-│  │          │  │ └─ BigQuery   │  │ └─ Pixel injection     │     │
-│  └──────────┘  └──────────────┘  └───────────────────────┘     │
+│  CLOUD / ON-PREM (GCP, AWS, Azure, or Docker Compose)          │
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  Go API Backend (Cloud Run / ECS Fargate / Docker)    │       │
+│  │  ├── Upload orchestration (signed URLs, validation)   │       │
+│  │  ├── Study/project/institution management             │       │
+│  │  ├── Multi-provider auth (IAP, Azure AD, ALB+Cognito)│       │
+│  │  ├── Routing rules engine (priority-ordered)          │       │
+│  │  ├── Automated pipeline orchestrator                  │       │
+│  │  ├── DICOMweb proxy (QIDO-RS + WADO-RS)             │       │
+│  │  ├── Export (zip download + STOW-RS forwarding)       │       │
+│  │  └── Batch import CLI                                 │       │
+│  └──────┬───────────────────────────────────────────────┘       │
+│         │                                                        │
+│  ┌──────▼────────────────────────────────────────────┐          │
+│  │  6 Python Sidecar Services (FastAPI)               │          │
+│  │  ├── Defacing (DeepDefacer / mri_deface)           │          │
+│  │  ├── PHI Detection (Tesseract OCR)                 │          │
+│  │  ├── QC Automation (pydicom + numpy)               │          │
+│  │  ├── NIfTI/BIDS Conversion (dcm2niix)             │          │
+│  │  ├── Metadata Classification (DICOM heuristics)    │          │
+│  │  └── Protocol Compliance (parameter validation)    │          │
+│  └───────────────────────────────────────────────────┘          │
 │                                                                  │
-│  ┌──────────────────────────────────────────────────┐            │
-│  │  Cloud Run — Admin Dashboard (React + nginx)      │            │
-│  │  ├── Behind Identity-Aware Proxy (IAP)            │            │
-│  │  ├── Study review / QC interface                  │            │
-│  │  ├── Defacing review (before/after)               │            │
-│  │  ├── OHIF Viewer integration (DICOMweb)           │            │
-│  │  └── Audit logs                                   │            │
-│  └──────────────────────────────────────────────────┘            │
+│  ┌──────────────┐  ┌────────────────────────┐                   │
+│  │ File Storage  │  │ PostgreSQL 15           │                   │
+│  │ (local/S3/GCS)│  │ ├── Users, RBAC         │                   │
+│  │ ├── raw/      │  │ ├── Projects, routing   │                   │
+│  │ └── clean/    │  │ ├── Upload sessions     │                   │
+│  └──────────────┘  │ └── Audit trail          │                   │
+│                     └────────────────────────┘                   │
 │                                                                  │
-│  ┌──────────────────────────────────────────────────┐            │
-│  │  Cloud SQL (PostgreSQL 15)                        │            │
-│  │  ├── User accounts, RBAC, institutions            │            │
-│  │  ├── Upload sessions & routing rules              │            │
-│  │  └── App-level audit trail                        │            │
-│  └──────────────────────────────────────────────────┘            │
+│  ┌──────────────────────────────────────────────────┐           │
+│  │  React Frontends (4 apps)                         │           │
+│  │  ├── Admin Dashboard (OHIF Viewer, study mgmt)    │           │
+│  │  ├── Upload Portal (public-facing, anonymization) │           │
+│  │  ├── Export Portal (token-authenticated download)  │           │
+│  │  └── Landing Page (aegisimaging.ai)               │           │
+│  └──────────────────────────────────────────────────┘           │
 │                                                                  │
-│  ┌──────────────────────────────────────────────────┐            │
-│  │  BigQuery                                         │            │
-│  │  ├── Healthcare API DICOM metadata export         │            │
-│  │  └── Audit analytics & QC dashboards              │            │
-│  └──────────────────────────────────────────────────┘            │
+│  ┌──────────────┐  ┌──────────────┐                             │
+│  │  OHIF Viewer  │  │  Email (SMTP) │                             │
+│  │  (DICOMweb)   │  │  Dev: Mailpit │                             │
+│  └──────────────┘  └──────────────┘                             │
 │                                                                  │
-│  ┌──────────────────────────────────────────────────┐            │
-│  │  Vertex AI                                        │            │
-│  │  ├── Burned-in PHI detection (Document AI / OCR)  │            │
-│  │  └── Image QC & smart routing models              │            │
-│  └──────────────────────────────────────────────────┘            │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────┐            │
-│  │  Email (dual-path)                                │            │
-│  │  ├── Internal: PSC → On-Prem SMTP (admins)       │            │
-│  │  └── External: SendGrid (uploaders)               │            │
-│  └──────────────────────────────────────────────────┘            │
-│                                                                  │
-│  VPC Service Controls perimeter around all services              │
-│  CMEK encryption via Cloud KMS                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Repository Structure (5 Repos)
+## Repository Structure (Monorepo)
 
-### 1. `aegis-terraform-prj` — GCP Project Bootstrap
-- Terraform for project-level resources: APIs, billing, org policies
-- Service account creation, IAM bindings
-- VPC Service Controls perimeter
-- Cloud KMS key rings and keys
-- BAA configuration documentation
+Currently a single monorepo. Planned to split into 5 repos (`aegis-terraform-prj`, `aegis-terraform-infra`, `aegis-api`, `aegis-frontend`, `aegis-client`) once interfaces stabilize.
 
-### 2. `aegis-terraform-infra` — Infrastructure
-- VPC, subnets, Cloud NAT, firewall rules
-- Cloud Run service definitions (API, admin dashboard, defacing service)
-- Cloud Storage buckets (staging, archive)
-- Healthcare API dataset + DICOM stores (raw + defaced)
-- Cloud SQL (PostgreSQL 15) instance for application data
-- BigQuery dataset for DICOM metadata analytics and audit reporting
-- Vertex AI API enablement and endpoint configuration
-- Private Service Connect endpoint for on-prem SMTP relay
-- Cloud Armor security policies
-- Pub/Sub topics and subscriptions
-- Cloud Build triggers
-- IAP configuration for admin dashboard
-- Artifact Registry for Docker images
-- Monitoring, alerting, audit log sinks
+```
+aegis/
+├── terraform/
+│   ├── project/                # GCP project bootstrap (IAM, KMS, VPC-SC)
+│   ├── infra/                  # GCP infrastructure (Cloud Run, Healthcare API)
+│   └── aws/                    # AWS infrastructure (ECS Fargate, S3, RDS, ALB)
+├── api/                        # Go backend (~8k LOC)
+│   ├── handler/                # HTTP handlers (studies, projects, users, routing, export, DICOMweb)
+│   ├── model/                  # PostgreSQL CRUD (studies, projects, admin_users, routing, audit)
+│   ├── middleware/             # Auth (IAP, Azure AD, ALB+Cognito), CORS
+│   ├── routing/                # Rules engine (priority-ordered, all-matching)
+│   ├── storage/                # File storage interface (local, S3, GCS)
+│   ├── config/                 # Environment-based config
+│   ├── email/                  # SMTP client + templates
+│   ├── migrate/                # Goose-based schema migrations
+│   ├── importer/               # Batch DICOM import library
+│   ├── cmd/import/             # Batch import CLI binary
+│   ├── digest/                 # Email digest scheduler
+│   └── testutil/               # Test helpers (testcontainers, fixtures)
+├── frontend/
+│   ├── upload-portal/          # React — public upload + anonymization UI (:3000)
+│   ├── admin-dashboard/        # React — study mgmt, OHIF viewer, 10-tab admin (:3001)
+│   ├── export-portal/          # React — token-authenticated export download (:3004)
+│   └── landing/                # React — marketing site for aegisimaging.ai (:3003)
+├── client/                     # @aegis/client TypeScript npm package
+├── defacing/                   # Python FastAPI — DeepDefacer, mri_deface, nibabel
+├── phi-detection/              # Python FastAPI — Tesseract OCR burned-in text detection
+├── qc-service/                 # Python FastAPI — 5 automated quality checks
+├── bids-service/               # Python FastAPI — dcm2niix DICOM→NIfTI/BIDS conversion
+├── classification-service/     # Python FastAPI — DICOM header heuristic classification
+├── protocol-service/           # Python FastAPI — MRI parameter compliance checking
+└── docs/                       # Shared research and documentation
+```
 
-### 3. `aegis-api` — Backend API (Go)
-- Cloud Run service, `distroless` Docker image (~10-20 MB)
-- Endpoints:
-  - `POST /api/upload/init` — generate signed URL for GCS upload
-  - `POST /api/upload/complete` — trigger ingest pipeline
-  - `GET/POST /api/studies` — study management
-  - `GET/POST /api/projects` — project/routing config
-  - `GET /api/dicomweb/*` — proxy to Healthcare API DICOM store
-  - `POST /api/deface/{studyUID}` — trigger defacing pipeline
-  - `GET /api/audit` — audit log queries
-  - `POST /api/notify` — trigger email notifications via SMTP/PSC
-- Auth middleware (JWT / Google Identity tokens)
-- Pub/Sub event handlers for DICOM ingest events
-- Cloud SQL (PostgreSQL) for users, projects, routing rules, audit trail
-- Vertex AI client for burned-in PHI detection and QC models
-- SMTP client for email notifications via Private Service Connect
+### Go API — Key Endpoints
 
-### 4. `aegis-frontend` — React Applications
-- Monorepo with two apps + shared libraries
-- **Upload Portal** (public-facing):
-  - DICOM file selection (drag-and-drop, directory picker via `<input webkitdirectory>`)
-  - Client-side parsing with dcmjs/dicomParser in Web Workers
-  - De-identification engine (DICOM PS3.15 Annex E tag actions)
-  - Anonymization preview (before/after tag diff table)
-  - Study metadata summary (modality, series count, image count)
-  - Progress tracking, chunked upload to GCS via signed URLs
-  - PWA capabilities for optional "install to desktop"
-- **Admin Dashboard** (internal, behind IAP):
-  - Study browser with OHIF Viewer integration
-  - QC review workflow (prearchive → defacing → archive)
-  - Defacing review: side-by-side before/after 3D rendering
-  - Routing rule configuration UI
-  - User/institution management
-  - Audit log viewer
+- `POST /api/upload/init` — generate signed URL for upload
+- `POST /api/upload/complete` — trigger ingest + automated pipeline
+- `GET /api/studies` — paginated list with filters (status, modality, source, search)
+- `POST /api/studies/{id}/approve|reject` — study status management
+- `POST /api/studies/{uid}/trigger-deface|phi-scan|qc-check|bids-convert|classify|protocol-check|trigger-export` — manual processing triggers
+- `GET /api/studies/{uid}/dicom-download|bids-download` — file downloads (zip)
+- `GET/POST /api/projects|destinations|routing-rules|institutions|admin-users|anon-profiles|digest-subscriptions|protocol-templates` — admin CRUD
+- `GET /api/export/{token}` — share token validation + download
+- `POST /api/import/batch` — batch DICOM import from directory
+- `GET /api/dicomweb/*` — QIDO-RS + WADO-RS proxy (from current DICOM store)
+- `GET /api/dicomweb-raw/*` — WADO-RS from raw store (defacing review)
+- `GET /api/auth/me` — current user identity
+- `GET /healthz` — health check with database, storage, and sidecar status
 
-### 5. `aegis-client` — Uploader Library (TypeScript)
-- Reusable TypeScript library extracted from the Upload Portal
-- Can be embedded in other web apps or used standalone
-- Core modules: DICOM parser, de-identification engine, upload client
-- Published as npm package for institutional integration
-- No desktop app — pure browser library
+### React Frontends (4 apps)
+
+- **Upload Portal** — DICOM file picker, client-side PS3.15 de-identification, per-project anonymization profiles, before/after preview, per-file progress with auto-retry
+- **Admin Dashboard** — 10 tabs: Studies, Audit Log, Routing, Institutions, Profiles, Notifications, Projects, Users, Protocol Templates; OHIF Viewer integration; RBAC (admin/viewer roles)
+- **Export Portal** — Token-authenticated study download page for share recipients
+- **Landing Page** — Marketing site for aegisimaging.ai (static, deployed to Vercel)
+
+### @aegis/client (TypeScript npm package)
+
+Reusable library for browser-based DICOM anonymization and upload. Core modules: DICOM parser, PS3.15 de-identification engine, upload client with `onFileStart` callback and exponential-backoff retry.
 
 ---
 
@@ -213,11 +198,11 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
 - **DICOM library**: [suyashkumar/dicom](https://github.com/suyashkumar/dicom) for validation/metadata. The **Healthcare API handles heavy DICOM processing**, so the Go library only needs basic parsing
 - **GCP SDK**: First-class Go SDK (`cloud.google.com/go/healthcare`, `cloud.google.com/go/storage`)
 
-**Python sidecar (defacing service only):**
-- All defacing tools (mri_deface, DeepDefacer, pydeface) are Python or C with Python bindings
-- Isolated Cloud Run service with its own container and update cycle
-- Keeps the Python dependency surface separate from the main API
-- Uses pydicom for pixel data injection (defaced NIfTI → original DICOM)
+**Python sidecars (6 services):**
+- All ML/imaging tools (DeepDefacer, Tesseract, dcm2niix, pydicom) are Python or C with Python bindings
+- Isolated containers with their own dependency trees and update cycles
+- Keeps Python dependency surface completely separate from the Go API
+- Services: defacing, PHI detection, QC automation, BIDS conversion, classification, protocol compliance
 
 ### Frontend: React + TypeScript
 - **Key libraries**:
@@ -230,62 +215,61 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
 - **GCP**: `terraform/project/` (bootstrap) + `terraform/infra/` (Cloud Run, Healthcare API, Cloud SQL, GCS)
 - **AWS**: `terraform/aws/` (VPC, ECS Fargate, RDS, S3, ALB, ECR, KMS, SNS/SQS)
 - **Azure**: Planned
-- CI/CD: GitHub Actions (Go build+vet, Python syntax, TypeScript type check, Docker build)
-- Docker images stored in Artifact Registry (GCP) or ECR (AWS)
+- **Local dev**: `docker-compose.yml` (PostgreSQL, Mailpit, OHIF, Go API, 6 Python sidecars)
+- CI/CD: GitHub Actions (Go build+vet+test, Python syntax, TypeScript type check, Docker build)
 
-### DICOM Storage: GCP Healthcare API
-- **DICOMweb** (STOW-RS, WADO-RS, QIDO-RS) — no need to self-host dcm4chee or Orthanc
-- **Two DICOM stores**: `raw` (tag-de-identified but not defaced) and `clean` (fully processed)
-- **Built-in de-identification** as server-side validation pass
-- **Pub/Sub** notifications on ingest → trigger defacing pipeline
-- **BigQuery export** for metadata analytics and QC reporting
+### DICOM Storage: Cloud-Neutral File Storage
 
-### Application Database: Cloud SQL (PostgreSQL 15)
+The Go API uses a `storage.Storage` interface with three implementations:
 
-**Rationale**: Healthcare API stores DICOM data and metadata, but the application needs a relational database for state that doesn't belong in DICOM:
-- **User accounts and RBAC** — roles (uploader, reviewer, admin), institution membership
+| Mode | Backend | Config |
+|------|---------|--------|
+| `local` | Local filesystem | `LOCAL_STORAGE_DIR` (default: `./dicom`) |
+| `s3` | Amazon S3 (or S3-compatible: MinIO, LocalStack) | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` |
+| `gcs` | Google Cloud Storage | `GCS_BUCKET` |
+
+Files organized as `dicom/{store}/{studyUID}/{index}.dcm` with two stores:
+- **`raw`** — tag-de-identified but not defaced (original upload)
+- **`clean`** — fully processed (after defacing, if applicable)
+
+A built-in DICOMweb proxy (`QIDO-RS` + `WADO-RS`) serves study/series/instance metadata from PostgreSQL and streams DICOM bytes from the storage backend. No need for dcm4chee, Orthanc, or GCP Healthcare API for local development.
+
+### Application Database: PostgreSQL 15
+
+PostgreSQL stores all application state:
+- **User accounts and RBAC** — roles (admin, viewer), institution membership
 - **Projects and institutions** — multi-tenant organization of studies
-- **Upload sessions** — tracking upload state, resumability, completion
-- **Routing rules** — configurable forwarding rules per project/modality
-- **App-level audit trail** — who did what, when (supplements GCP audit logs)
-- **Email notification log** — delivery tracking, digests
+- **Upload sessions** — tracking upload state, completion
+- **Studies** — 28-field model with processing status fields for each sidecar
+- **Routing rules and destinations** — configurable forwarding rules per project/modality
+- **Protocol templates** — per-project MRI parameter compliance rules
+- **Anonymization profiles** — per-project retained tag overrides
+- **Export shares** — token-authenticated download links with expiry
+- **App-level audit trail** — who did what, when
 
-Cloud SQL with Private IP inside the VPC. CMEK encryption via Cloud KMS.
+Hosted on Cloud SQL (GCP), RDS (AWS), or Docker postgres (local dev). CMEK encryption in production.
 
-### Analytics: BigQuery
+### AI/ML: Pluggable Backends
 
-- **Healthcare API DICOM metadata export** — automatic streaming of study/series/instance metadata
-- **Audit analytics** — query upload/anonymization/routing history for compliance
-- **QC dashboards** — aggregate stats on processing times, rejection rates, data quality
-- **Research metadata queries** — cross-study searches for specific scan parameters, modalities
+Each processing service supports local backends for development and cloud AI backends for production:
 
-### AI/ML: Vertex AI
-
-- **Burned-in PHI detection** — Document AI / Vision API to OCR pixel data and flag text embedded in images
-- **Image quality assessment** — custom models for detecting motion artifacts, incomplete coverage, truncation
-- **Smart routing** — classify studies by modality/anatomy when DICOM metadata is unreliable or missing
-- **Future**: defacing quality scoring, automated QC pass/fail
+| Service | Local Backend | Cloud Backend (planned) |
+|---------|--------------|------------------------|
+| PHI Detection | Tesseract OCR | Vertex AI Document AI / AWS Textract |
+| Classification | DICOM header heuristics | Vertex AI / SageMaker |
+| QC Automation | pydicom + numpy | Vertex AI custom models |
+| Protocol Compliance | pydicom parameter extraction | — (local backend sufficient) |
+| Defacing | DeepDefacer / mri_deface | — (local backend sufficient) |
+| BIDS Conversion | dcm2niix | — (local backend sufficient) |
 
 ### Email Notifications
 
-**Current implementation (`api/email/`):**
 - Single SMTP client using Go stdlib `net/smtp` — zero external dependencies
 - Disabled by default; enabled by setting `SMTP_HOST` env var (silent no-op when unset)
-- Triggers implemented: share created → recipient; upload confirmed → uploader; study approved/rejected → uploader
-- No PHI in email bodies — only anonymized Study UIDs, file counts, and export URLs
-- Dev: use [Mailpit](https://github.com/axllent/mailpit) (`docker run -p 1025:1025 -p 8025:8025 axllent/mailpit`)
-
-**Planned dual-path (production):**
-
-*Internal recipients (admins, reviewers) — On-prem SMTP via Private Service Connect:*
-- PSC endpoint from GCP VPC to on-prem SMTP relay
-- Already compatible: `net/smtp` client routes through the PSC endpoint with no code changes
-- Additional triggers: defacing alerts, routing failure alerts, weekly/monthly digests
-
-*External recipients (uploaders, sending sites) — SendGrid:*
-- External users cannot receive email through the on-prem relay
-- **SendGrid** for external delivery (bounce handling, spam compliance, analytics)
-- SendGrid exposes an SMTP interface — no code changes required, just point `SMTP_HOST` at the SendGrid relay
+- Triggers: share created → recipient; upload confirmed → uploader; study approved/rejected → uploader; weekly/monthly digest summaries
+- No PHI in email bodies — only anonymized study counts, file counts, and export URLs
+- Dev: Mailpit (included in Docker Compose)
+- Production: any SMTP provider (institutional relay, SendGrid, SES, etc.)
 
 ### Viewing: OHIF Viewer
 
@@ -295,7 +279,7 @@ Cloud SQL with Private IP inside the VPC. CMEK encryption via Cloud KMS.
 
 Admin dashboard **View button**: each study row shows an inline iframe panel (OHIF embedded in the dashboard) and an "Open in new tab ↗" link. Both modes open `http://localhost:3002/viewer?StudyInstanceUIDs={uid}`.
 
-**Production**: OHIF served from Cloud Run behind IAP, configured to connect directly to the GCP Healthcare API DICOMweb endpoint. The Go DICOMweb proxy is replaced by the Healthcare API's native DICOMweb support.
+**Production**: OHIF served from a container behind the cloud's auth layer (IAP, ALB+Cognito, or Azure AD). The Go DICOMweb proxy continues to serve DICOM data from cloud storage (S3/GCS) — no external DICOM server required.
 
 - Web-based, React, MIT license
 - Supports all standard DICOM modalities (MRI, CT, PET, US, X-Ray, NM, etc.)
@@ -321,9 +305,12 @@ Admin dashboard **View button**: each study row shows an inline iframe panel (OH
 - Mapping table (original → anonymized IDs) stays local, never uploaded
 
 **Phase 2 — Server-side processing (after upload):**
-- Healthcare API validates de-identification completeness
-- InfoType detection (DLP-based) catches any residual PHI in text fields
+- **PHI detection service** (Tesseract OCR) scans pixel data for burned-in text (patient names, dates, accession numbers)
 - **Defacing pipeline** (see below) removes facial features from head scans
+- **QC automation** validates file integrity, slice consistency, SNR, coverage, missing slices
+- **Protocol compliance** checks acquisition parameters against per-project templates
+- **Classification service** fills in missing modality/body_part from DICOM headers
+- **BIDS conversion** produces NIfTI files with BIDS-compliant directory structure
 - Results written to `clean` DICOM store; `raw` store used as staging
 
 ### Defacing Pipeline (Server-Side — Head Imaging Only)
@@ -332,18 +319,17 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 **Pipeline:**
 ```
-1. Pub/Sub event: new study ingested into Healthcare API
-2. Go API checks modality and body part
-3. If head imaging (MR/PT/CT + HEAD/BRAIN) → triggers defacing service
-   If non-head imaging → moves directly to "clean" store after validation
-4. Defacing service (head imaging only):
-   a. Retrieves DICOM series from Healthcare API via WADO-RS
+1. Routing rule with action require_defacing sets defacing_required=true
+2. Pipeline orchestrator dispatches defacing service (Phase 1, parallel with PHI scan)
+3. Defacing service (head imaging only):
+   a. Reads DICOM files from cloud-neutral storage (local/S3/GCS)
    b. Converts to NIfTI via dcm2niix
-   c. Runs defacing tool (mri_deface or DeepDefacer)
+   c. Runs defacing tool (DeepDefacer, mri_deface, or mri_reface)
    d. Injects defaced pixel data back into original DICOM (pydicom)
-   e. Stores defaced DICOM back via STOW-RS to "clean" store
-5. Admin reviews defacing quality in dashboard (OHIF side-by-side)
-6. Admin approves → study available for routing/download
+   e. Stores defaced DICOM to "clean" store
+4. Study status: received → defacing → defaced; dicom_store switches from raw to clean
+5. Admin reviews defacing quality in dashboard (OHIF side-by-side before/after)
+6. Admin approves → study available for export/download
 ```
 
 **Defacing tool options (ranked by deployment practicality):**
@@ -378,20 +364,23 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 ```
 1. Data enters through one of two ingress paths:
-  - **External-site path**: uploader uses `upload.aegis.example.com`, browser performs client-side tag anonymization, then uploads de-identified files.
-  - **Internal-enterprise path**: internal system/user ingests studies directly into enterprise-controlled intake (API/DICOMweb/batch ingest).
-2. Go API records intake session and metadata in PostgreSQL audit/application tables.
-3. Ingested files are written to staging / intake and then into Healthcare API DICOM store.
-4. Pub/Sub notification triggers common processing pipeline:
-    a. Server-side de-id validation (Healthcare API)
-    b. If head imaging → trigger defacing service
-       If non-head → move directly to "clean" store
-    c. (Head only) Defacing service processes and stores to "clean" store
-5. Admin reviews in dashboard (OHIF Viewer)
-    - Tag anonymization completeness check
-    - Defacing quality review (head imaging only — before/after)
-6. Admin approves → study becomes shareable/exportable under policy.
-7. External partner access is granted via controlled mechanisms (signed download links, authorized DICOMweb routes, or approved project-level export channels).
+   - External-site path: browser performs client-side tag anonymization,
+     then uploads de-identified files via signed URL or direct PUT.
+   - Internal-enterprise path: batch import CLI or API ingest directly
+     into the same processing pipeline.
+2. Go API records intake session and metadata in PostgreSQL.
+3. Files stored in cloud-neutral storage (local/S3/GCS) under dicom/raw/{studyUID}/.
+4. Routing rules evaluate → set processing flags on the study.
+5. Automated pipeline orchestrates services in dependency order:
+   Phase 0: Classification (fills modality/body_part, re-evaluates routing)
+   Phase 1: PHI scan + Protocol check + Defacing (parallel, raw files)
+   Phase 2: QC check + BIDS conversion (after defacing, final files)
+6. Admin reviews in dashboard (OHIF Viewer)
+   - Processing status badges for each service
+   - Defacing quality review (head imaging only — before/after OHIF panels)
+7. Admin approves → study becomes shareable/exportable.
+8. Export: token-authenticated zip download, DICOMweb STOW-RS forwarding
+   to external destinations, or admin DICOM download.
 ```
 
 ---
@@ -400,20 +389,18 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 | Layer | Measure |
 |-------|---------|
-| **Network** | VPC Service Controls perimeter, Cloud Armor DDoS/WAF, Global HTTPS LB |
-| **Transport** | TLS 1.2+ enforced on all endpoints (automatic on GCP) |
-| **Auth (upload portal)** | OAuth 2.0 / Google Identity — sending sites get project-scoped credentials |
-| **Auth (admin dashboard)** | Identity-Aware Proxy (IAP) — Google Workspace / Cloud Identity |
-| **Authorization** | Per-service-account IAM (least privilege); app-level RBAC for projects |
-| **Encryption at rest** | CMEK via Cloud KMS for Healthcare datasets, GCS buckets |
-| **Audit** | Cloud Audit Logs for all data access; app-level audit trail |
-| **PHI protection** | Client-side tag de-id; server-side validation + defacing; no PHI in logs |
-| **Container security** | Go: `distroless` base (~10 MB). Python defacer: `slim` base, pinned deps |
-| **Database** | Cloud SQL PostgreSQL 15 with Private IP, CMEK encryption, automated backups |
-| **Email** | SMTP via Private Service Connect to on-prem relay (no PHI in email bodies) |
-| **AI/ML** | Vertex AI within VPC-SC perimeter; no data leaves project boundary |
-| **Secrets** | Secret Manager for API keys, service credentials, DB passwords |
-| **Scanning** | Artifact Registry vulnerability scanning; regular dependency updates |
+| **Network** | Cloud: VPC, WAF/DDoS protection (Cloud Armor, AWS WAF), HTTPS LB |
+| **Transport** | TLS 1.2+ enforced on all endpoints |
+| **Auth (admin)** | Multi-provider: GCP IAP, Azure AD Easy Auth, AWS ALB + Cognito; dev mode auto-auth |
+| **Authorization** | `admin_users` table with RBAC (admin/viewer roles); `RequireAuth`/`RequireRole` middleware |
+| **Encryption at rest** | Cloud KMS (GCP), KMS (AWS), or filesystem encryption; CMEK for managed databases |
+| **Audit** | App-level audit trail in PostgreSQL (per-study, per-action, with actor email); cloud audit logs |
+| **PHI protection** | Client-side tag de-id; server-side PHI scan (Tesseract OCR) + defacing; no PHI in logs or email |
+| **Container security** | Go: `distroless` base (~10 MB). Python sidecars: `slim` base, pinned deps |
+| **Database** | PostgreSQL 15 (Cloud SQL / RDS / Docker) with private networking, encrypted, automated backups |
+| **Email** | Standard SMTP (any provider); no PHI in email bodies |
+| **Secrets** | Secret Manager (GCP), Secrets Manager (AWS), or env vars (dev) |
+| **CI** | GitHub Actions: Go build+vet+test, Python syntax check, TypeScript type check, Docker build |
 
 ---
 
@@ -493,19 +480,23 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 | Component | Library | License | Purpose |
 |-----------|---------|---------|---------|
-| Go DICOM | [suyashkumar/dicom](https://github.com/suyashkumar/dicom) | MIT | Backend DICOM validation |
+| Go DICOM | [suyashkumar/dicom](https://github.com/suyashkumar/dicom) | MIT | Server-side DICOM header parsing (batch import) |
 | Browser DICOM read/write | [dcmjs](https://github.com/dcmjs-org/dcmjs) | MIT | Client-side tag modification |
 | Browser DICOM parsing | [dicomParser](https://github.com/cornerstonejs/dicomParser) | MIT | Robust Part 10 parsing |
 | Viewer | [OHIF Viewer](https://github.com/OHIF/Viewers) | MIT | DICOMweb viewer in admin |
-| DICOM→NIfTI | [dcm2niix](https://github.com/rordenlab/dcm2niix) | BSD | Format conversion for defacing |
+| DICOM→NIfTI | [dcm2niix](https://github.com/rordenlab/dcm2niix) | BSD | Format conversion for defacing + BIDS |
 | Defacing (default) | [DeepDefacer](https://pypi.org/project/deepdefacer/) | Research-friendly | 3D U-Net facial feature removal |
 | Defacing (fallback) | [mri_deface](https://surfer.nmr.mgh.harvard.edu/fswiki/mri_deface) | Free | Atlas-based facial feature removal |
-| Python DICOM | [pydicom](https://github.com/pydicom/pydicom) | MIT | Pixel data injection in defacing svc |
-| NIfTI I/O | [nibabel](https://github.com/nipy/nibabel) | MIT | NIfTI reading in defacing svc |
-| IaC | [Terraform Google Provider](https://registry.terraform.io/providers/hashicorp/google/) | MPL-2.0 | GCP infrastructure |
-| Go PostgreSQL | [pgx](https://github.com/jackc/pgx) | MIT | Cloud SQL (PostgreSQL) driver |
+| Python DICOM | [pydicom](https://github.com/pydicom/pydicom) | MIT | Pixel data injection, parameter extraction |
+| NIfTI I/O | [nibabel](https://github.com/nipy/nibabel) | MIT | NIfTI reading in defacing/BIDS |
+| OCR | [Tesseract](https://github.com/tesseract-ocr/tesseract) | Apache-2.0 | Burned-in PHI detection |
+| IaC (GCP) | [Terraform Google Provider](https://registry.terraform.io/providers/hashicorp/google/) | MPL-2.0 | GCP infrastructure |
+| IaC (AWS) | [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/) | MPL-2.0 | AWS infrastructure |
+| Go PostgreSQL | [pgx](https://github.com/jackc/pgx) | MIT | PostgreSQL driver |
 | Go Migrations | [goose](https://github.com/pressly/goose) | MIT | Database schema migrations |
-| Vertex AI | [cloud.google.com/go/aiplatform](https://pkg.go.dev/cloud.google.com/go/aiplatform) | Apache-2.0 | Vertex AI SDK for Go |
+| Go S3 | [aws-sdk-go-v2](https://github.com/aws/aws-sdk-go-v2) | Apache-2.0 | S3 storage backend |
+| Go GCS | [cloud.google.com/go/storage](https://pkg.go.dev/cloud.google.com/go/storage) | Apache-2.0 | GCS storage backend |
+| Go Testing | [testify](https://github.com/stretchr/testify) + [testcontainers-go](https://github.com/testcontainers/testcontainers-go) | MIT | Assertions + PostgreSQL test containers |
 
 ---
 
@@ -513,9 +504,10 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 After each phase, verify:
 
-1. **Terraform**: `terraform plan` shows expected resources; `terraform apply` succeeds; Healthcare API DICOM store accepts STOW-RS
-2. **Go API**: Unit tests + integration test uploading a sample DICOM to GCS → Healthcare API
+1. **Automated tests**: `make test-unit` (55 unit tests, no Docker) + `make test` (120 tests including PostgreSQL integration via testcontainers)
+2. **Go API**: `make api` → `curl http://localhost:8080/healthz` shows healthy status for database, storage, and all configured sidecars
 3. **Upload Portal**: Load a sample brain MRI DICOM directory, verify all PHI tags are stripped in the preview, upload succeeds
-4. **Admin Dashboard**: View uploaded study in OHIF, verify de-identified tags
-5. **Defacing**: Upload a head MRI → verify defacing service triggers → compare original vs defaced in viewer
-6. **End-to-end**: External browser → upload → de-id → ingest → deface → review → approve → route
+4. **Admin Dashboard**: View uploaded study in OHIF, verify de-identified tags, verify pipeline auto-dispatches processing
+5. **Defacing**: Upload a head MRI with `require_defacing` routing rule → pipeline triggers defacing → compare original vs defaced in OHIF side-by-side
+6. **End-to-end**: External browser → upload → de-id → ingest → classify → deface → QC → review → approve → export
+7. **Docker Compose**: `docker compose up -d` → all 10 services healthy → full pipeline works
