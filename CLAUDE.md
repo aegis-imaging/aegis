@@ -167,7 +167,30 @@ cd frontend/admin-dashboard && npm install && npm run dev  # runs on :3001, prox
 cd frontend/landing && npm install && npm run dev    # runs on :3003
 ```
 
-Static marketing site for aegisimaging.ai. No API proxy needed — purely static content. Contact form uses Formspree (set `VITE_FORMSPREE_ID` env var, or falls back to `mailto:contact@aegisimaging.ai`). Deployed to Vercel, separate from the GCP/AWS backend.
+Static marketing site for aegisimaging.ai. Deployed to Vercel, separate from the GCP/AWS backend.
+
+**Contact form** has two delivery paths (both use the same `/api/contact` endpoint):
+
+| Path | How it works | When to use |
+|------|-------------|-------------|
+| **Vercel serverless function** | `frontend/landing/api/contact.ts` — nodemailer + Brevo SMTP | Landing page on Vercel (standalone, no Go API needed) |
+| **Go API endpoint** | `POST /api/contact` — uses existing SMTP config | Landing page proxied to Go backend (local dev or production) |
+
+Vercel env vars (set in Vercel dashboard):
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `BREVO_SMTP_HOST` | *(empty — disabled)* | `smtp-relay.brevo.com`; empty = logs to console |
+| `BREVO_SMTP_PORT` | `587` | |
+| `BREVO_SMTP_USER` | *(empty)* | Brevo SMTP credentials |
+| `BREVO_SMTP_PASS` | *(empty)* | |
+| `BREVO_SMTP_FROM` | `AEGIS <noreply@aegisimaging.ai>` | Envelope sender |
+
+Go API env var (optional):
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `CONTACT_EMAIL` | `contact@aegisimaging.ai` | Recipient for contact form submissions |
 
 ### Export Portal (React)
 ```bash
@@ -246,6 +269,24 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 | `modality` | Case-insensitive exact match (e.g. `MRI`, `CT`) |
 | `source` | `external\|internal` |
 | `search` | Substring match on `study_instance_uid` or `study_description` |
+
+### Study Detail (`GET /api/studies/{id}`)
+
+Returns a single study by UUID. Used by the admin dashboard's study detail panel.
+
+### Study Audit (`GET /api/studies/{id}/audit`)
+
+Returns all audit trail entries for a specific study (by `resource_id`). Used by the study detail panel's audit tab.
+
+### Study Detail Panel (Admin Dashboard)
+
+Clicking a study UID in the studies table navigates to a dedicated detail view with:
+- **Header** — full study UID, status/source badges, description
+- **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
+- **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
+- **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
+- **Share form** — inline share creation for approved studies (email, note, expiry)
+- **Detail tabs** — Audit Trail, Routing Log, Export Shares with per-study data
 
 ### Routing Rules Engine (`api/routing/`, `api/handler/routing.go`)
 
