@@ -133,6 +133,9 @@ func (s *Server) CreateRoutingRule(w http.ResponseWriter, r *http.Request) {
 	validActions := map[string]bool{
 		"route_to": true, "require_defacing": true,
 		"auto_approve": true, "require_qa": true, "reject": true,
+		"require_phi_scan": true, "require_qc_check": true,
+		"require_bids_conversion": true, "require_classification": true,
+		"require_protocol_check": true,
 	}
 	if !validActions[rule.Action] {
 		s.writeError(w, http.StatusBadRequest, "invalid action")

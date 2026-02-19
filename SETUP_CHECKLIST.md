@@ -431,6 +431,19 @@ The defacing service supports multiple pluggable backends selected via the `DEFA
   ```
 - [ ] Verify via API health: `curl http://localhost:8080/healthz | python3 -m json.tool` → services.defacing shows healthy
 
+## 7q. Automated Processing Pipeline
+
+The pipeline auto-dispatches processing services after upload. Enabled by default (`PIPELINE_AUTO=true`).
+
+- [ ] Configure routing rules that require multiple services (e.g. `require_classification` + `require_defacing` + `require_qc_check` + `require_bids_conversion`)
+- [ ] Upload a study via the upload portal
+- [ ] Check API logs for `pipeline: dispatching classification for ...` — classification runs first
+- [ ] After classification completes, verify logs show parallel dispatch of defacing + PHI scan (if configured)
+- [ ] After defacing completes, verify QC check and BIDS conversion are auto-dispatched
+- [ ] Verify audit log shows `pipeline.dispatch` entries for each service
+- [ ] Test manual override: click a manual trigger button in the dashboard — should still work
+- [ ] Test disable: set `PIPELINE_AUTO=false`, upload again — no auto-dispatch, manual buttons required
+
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
