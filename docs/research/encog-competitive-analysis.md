@@ -94,7 +94,7 @@ No named hospital customers for ENCOG specifically are publicly disclosed. Compa
 | **De-identification** | Server-side AI (PACS integration) | Client-side browser (zero install) + server-side pipeline |
 | **Burned-in PHI** | AI CV detection (claims 100%) | Server-side Tesseract OCR |
 | **Defacing** | Not supported | Dedicated service (mri_deface/mri_reface) |
-| **Deployment** | On-premise/hybrid (PACS/VNA) | Cloud-hosted (GCP) |
+| **Deployment** | On-premise/hybrid (PACS/VNA) | Multi-cloud (GCP, AWS, Azure) |
 | **Install at sending site** | Required (PACS/VNA integration) | None (browser-based) |
 | **Modalities** | MR, CT, XR, US (4 listed) | All DICOM modalities |
 | **Protocol compliance** | Not offered | Per-scanner template matching |
