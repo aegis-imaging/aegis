@@ -40,6 +40,13 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Auto-dispatch export forwarding if required.
+	if updated, err := model.GetStudyByID(r.Context(), s.db, study.ID); err == nil {
+		if updated.ExportRequired && updated.ExportStatus == "pending" {
+			go s.runExportForward(updated)
+		}
+	}
+
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
 }
 
@@ -175,11 +182,17 @@ type exportFile struct {
 }
 
 type redeemResponse struct {
-	ShareID   string       `json:"share_id"`
-	StudyUID  string       `json:"study_uid"`
-	Modality  string       `json:"modality"`
-	ExpiresAt time.Time    `json:"expires_at"`
-	Files     []exportFile `json:"files"`
+	ShareID          string       `json:"share_id"`
+	StudyUID         string       `json:"study_uid"`
+	Modality         string       `json:"modality"`
+	BodyPart         string       `json:"body_part"`
+	StudyDescription string       `json:"study_description"`
+	InstanceCount    int          `json:"instance_count"`
+	ExpiresAt        time.Time    `json:"expires_at"`
+	Note             string       `json:"note"`
+	CreatedBy        string       `json:"created_by"`
+	DownloadURL      string       `json:"download_url"`
+	Files            []exportFile `json:"files"`
 }
 
 // RedeemExport is the public (token-authenticated) endpoint for recipients to
@@ -241,12 +254,21 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 		"file_count": len(files),
 	})
 
+	rawToken = r.PathValue("token")
+	downloadURL := fmt.Sprintf("%s/api/export/%s/download", s.cfg.APIBaseURL, rawToken)
+
 	s.writeJSON(w, http.StatusOK, redeemResponse{
-		ShareID:   share.ID,
-		StudyUID:  study.StudyInstanceUID,
-		Modality:  study.Modality,
-		ExpiresAt: share.ExpiresAt,
-		Files:     files,
+		ShareID:          share.ID,
+		StudyUID:         study.StudyInstanceUID,
+		Modality:         study.Modality,
+		BodyPart:         study.BodyPart,
+		StudyDescription: study.StudyDescription,
+		InstanceCount:    study.InstanceCount,
+		ExpiresAt:        share.ExpiresAt,
+		Note:             share.Note,
+		CreatedBy:        share.CreatedBy,
+		DownloadURL:      downloadURL,
+		Files:            files,
 	})
 }
 

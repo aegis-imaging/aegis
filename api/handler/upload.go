@@ -245,7 +245,7 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 	}
 
 	// Evaluate routing rules — may mutate study (e.g. auto_approve, require_defacing).
-	routing.EvaluateRules(ctx, s.db, study)
+	routing.EvaluateRules(ctx, s.db, s.store, study)
 
 	// Auto-dispatch processing pipeline (classification → defacing → QC → BIDS, etc.)
 	s.AdvancePipeline(ctx, study.ID)

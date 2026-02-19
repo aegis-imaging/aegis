@@ -274,7 +274,7 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 	}
 
 	// Evaluate routing rules — may set defacing_required, phi_scan, auto_approve, etc.
-	routing.EvaluateRules(ctx, db, study)
+	routing.EvaluateRules(ctx, db, store, study)
 
 	// Finalize upload session.
 	model.UpdateUploadSessionComplete(ctx, db, session.ID, g.StudyInstanceUID, g.Modality, g.BodyPart)

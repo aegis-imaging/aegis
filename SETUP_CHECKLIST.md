@@ -431,6 +431,41 @@ The defacing service supports multiple pluggable backends selected via the `DEFA
   ```
 - [ ] Verify via API health: `curl http://localhost:8080/healthz | python3 -m json.tool` → services.defacing shows healthy
 
+## 7r. Study Export & DICOM Download
+
+### Admin DICOM Download
+
+- [ ] Upload and approve a study
+- [ ] In the admin dashboard, click **Download DICOM** on the approved study row
+- [ ] Verify a zip file downloads containing all DICOM files (`.dcm`)
+- [ ] Verify unapproved studies do NOT show the Download DICOM button
+
+### Export Portal (Share Recipient Download)
+
+- [ ] Create an export share for an approved study (admin dashboard → Share panel)
+- [ ] Copy the share token from the API response
+- [ ] Open the export portal: `http://localhost:3004?token={token}`
+- [ ] Verify study info is displayed: modality, body part, file count, description, expiry
+- [ ] Click **Download All (ZIP)** → zip file downloads
+- [ ] Test expired/revoked token → clean error message displayed
+- [ ] Test invalid token → "Share not found" error
+
+### Export Forwarding (DICOMweb STOW-RS)
+
+- [ ] Open admin dashboard → **Routing** tab
+- [ ] Create a Destination (type: `dicomweb`, URL of a DICOMweb endpoint)
+- [ ] Create a Routing Rule: action `require_export` + `route_to` (select the destination)
+- [ ] Upload a study → verify `export_required=true` and `export_status=pending` in the studies table
+- [ ] Approve the study → verify export auto-dispatches (status changes to `exporting` → `exported`)
+- [ ] Check Audit Log tab → `export.triggered` and `export.complete` entries appear
+- [ ] Test manual re-trigger: click **Export** button on a failed export → retries forwarding
+
+### Export Portal Dev Server
+
+```bash
+cd frontend/export-portal && npm install && npm run dev   # runs on :3004, proxies /api to :8080
+```
+
 ## 7q. Automated Processing Pipeline
 
 The pipeline auto-dispatches processing services after upload. Enabled by default (`PIPELINE_AUTO=true`).
@@ -520,7 +555,7 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
   - Branch name patterns: `main` and `develop`
   - Enable: "Require a pull request before merging", "Do not allow deletions"
 - [ ] CI is configured: `.github/workflows/ci.yml` runs automatically on PRs to `develop` and `main`
-  - Go build + vet, Python syntax check (6 services), TypeScript type check (3 apps), Docker build (7 images)
+  - Go build + vet, Python syntax check (6 services), TypeScript type check (4 apps), Docker build (7 images)
 - [ ] Verify CI passes: open a test PR and check the Actions tab
 - [ ] Run `make lint` locally to validate before pushing
 
@@ -534,4 +569,4 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-18. See AEGIS_Architecture.md for the full system design.*
+*Generated 2026-02-18. Updated 2026-02-19. See AEGIS_Architecture.md for the full system design.*
