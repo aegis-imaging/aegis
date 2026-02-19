@@ -40,7 +40,8 @@ aegis/
 ├── api/                  # Go backend — upload orchestration, DICOMweb proxy
 ├── frontend/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
-│   └── admin-dashboard/  # React — internal QC, OHIF viewer, study management
+│   ├── admin-dashboard/  # React — internal QC, OHIF viewer, study management
+│   └── landing/          # React — public landing page (aegisimaging.ai)
 ├── client/               # TypeScript DICOM anonymization library (npm package)
 ├── defacing/             # Python defacing service (DeepDefacer, mri_deface, dcm2niix)
 ├── phi-detection/        # Python burned-in PHI detection service (Tesseract OCR)
@@ -119,6 +120,13 @@ cd frontend/upload-portal && npm install && npm run dev   # runs on :3000, proxi
 ```bash
 cd frontend/admin-dashboard && npm install && npm run dev  # runs on :3001, proxies /api to :8080
 ```
+
+### Landing Page (React)
+```bash
+cd frontend/landing && npm install && npm run dev    # runs on :3003
+```
+
+Static marketing site for aegisimaging.ai. No API proxy needed — purely static content. Contact form uses Formspree (set `VITE_FORMSPREE_ID` env var, or falls back to `mailto:contact@aegisimaging.ai`). Deployed to Vercel, separate from the GCP/AWS backend.
 
 ### Full-Stack Docker Compose
 

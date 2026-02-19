@@ -43,6 +43,7 @@ jobs:
           - { dir: client, name: "@aegis/client", needs_client: false }
           - { dir: frontend/upload-portal, name: upload-portal, needs_client: true }
           - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: false }
+          - { dir: frontend/landing, name: landing, needs_client: false }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
