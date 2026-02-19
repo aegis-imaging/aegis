@@ -32,6 +32,8 @@ type Study struct {
 	ClassificationStatus   string    `json:"classification_status"`
 	ProtocolRequired       bool      `json:"protocol_required"`
 	ProtocolStatus         string    `json:"protocol_status"`
+	ExportRequired         bool      `json:"export_required"`
+	ExportStatus           string    `json:"export_status"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
@@ -42,6 +44,7 @@ const studyColumns = `
 	dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 	bids_required, bids_status, classification_required, classification_status,
 	protocol_required, protocol_status,
+	export_required, export_status,
 	created_at, updated_at`
 
 type scannable interface {
@@ -57,6 +60,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.BidsRequired, &s.BidsStatus,
 		&s.ClassificationRequired, &s.ClassificationStatus,
 		&s.ProtocolRequired, &s.ProtocolStatus,
+		&s.ExportRequired, &s.ExportStatus,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -68,15 +72,17 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 		                     bids_required, bids_status,
 		                     classification_required, classification_status,
-		                     protocol_required, protocol_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+		                     protocol_required, protocol_status,
+		                     export_required, export_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
 		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
 		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus,
 		s.BidsRequired, s.BidsStatus,
 		s.ClassificationRequired, s.ClassificationStatus,
-		s.ProtocolRequired, s.ProtocolStatus).
+		s.ProtocolRequired, s.ProtocolStatus,
+		s.ExportRequired, s.ExportStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
@@ -404,6 +410,38 @@ func ClaimProtocolCheck(ctx context.Context, db *sql.DB, id string) (bool, error
 	res, err := db.ExecContext(ctx, `
 		UPDATE studies SET protocol_status = 'checking', updated_at = now()
 		WHERE id = $1 AND protocol_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// SetExportRequired sets the export_required flag and initialises export_status to "pending".
+func SetExportRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET export_required = $1, export_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdateExportStatus sets the export_status field on a study.
+func UpdateExportStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET export_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// ClaimExport atomically claims export dispatch.
+func ClaimExport(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET export_status = 'exporting', updated_at = now()
+		WHERE id = $1 AND export_status = 'pending'`, id)
 	if err != nil {
 		return false, err
 	}

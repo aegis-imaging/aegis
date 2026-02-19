@@ -41,6 +41,7 @@ aegis/
 ├── frontend/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
 │   ├── admin-dashboard/  # React — internal QC, OHIF viewer, study management
+│   ├── export-portal/    # React — public-facing export share download UI
 │   └── landing/          # React — public landing page (aegisimaging.ai)
 ├── client/               # TypeScript DICOM anonymization library (npm package)
 ├── defacing/             # Python defacing service (DeepDefacer, mri_deface, dcm2niix)
@@ -127,6 +128,13 @@ cd frontend/landing && npm install && npm run dev    # runs on :3003
 ```
 
 Static marketing site for aegisimaging.ai. No API proxy needed — purely static content. Contact form uses Formspree (set `VITE_FORMSPREE_ID` env var, or falls back to `mailto:contact@aegisimaging.ai`). Deployed to Vercel, separate from the GCP/AWS backend.
+
+### Export Portal (React)
+```bash
+cd frontend/export-portal && npm install && npm run dev  # runs on :3004, proxies /api to :8080
+```
+
+Public-facing download page for export share recipients. Reads a share token from `?token=...` query param, calls `GET /api/export/{token}` to validate, and shows study info with a "Download All (ZIP)" button pointing at `GET /api/export/{token}/download`.
 
 ### Full-Stack Docker Compose
 
@@ -227,10 +235,11 @@ Routing rules are evaluated on every study ingest (upload complete + internal in
 | `require_bids_conversion` | Forces `bids_required=true`, sets `bids_status=pending` |
 | `require_classification` | Forces `classification_required=true`, sets `classification_status=pending` |
 | `require_protocol_check` | Forces `protocol_required=true`, sets `protocol_status=pending` |
+| `require_export` | Forces `export_required=true`, sets `export_status=pending` |
 | `auto_approve` | Skips manual QC, sets `status=approved` |
 | `require_qa` | No-op — holds for manual review (default) |
 | `reject` | Auto-rejects the study |
-| `route_to` | Async forward to a Destination via DICOMweb |
+| `route_to` | Async forward DICOM files to a Destination via DICOMweb STOW-RS (`multipart/related`) |
 
 Other endpoints:
 - `POST /api/routing-rules/evaluate/{studyID}` — re-evaluate rules for an existing study
@@ -749,6 +758,41 @@ Phase 2: QC check + BIDS conversion (after defacing, final files)
 
 **Audit trail:** Each auto-dispatch creates a `pipeline.dispatch` audit entry recording which service was dispatched and for which study.
 
+### Study Export & DICOM Download (`api/handler/export.go`, `api/handler/dicom_download.go`, `api/handler/export_forward.go`)
+
+Full export workflow for approved studies: admin DICOM download, token-authenticated recipient download, and automated DICOMweb STOW-RS forwarding to external destinations.
+
+**DICOM Download (admin):**
+- `GET /api/studies/{studyUID}/dicom-download` — streams all DICOM files as a zip archive
+- Requires auth (read-only, like BIDS download); study must be `approved`
+- Uses `storage.Storage` interface (cloud-agnostic — works with local, S3, or GCS)
+
+**DICOM Download (export share):**
+- `GET /api/export/{token}/download` — token-authenticated zip download (no login required)
+- Same token validation as `GET /api/export/{token}` (SHA-256 hash, expiry, revocation)
+- Logs to `export_downloads` table + audit trail
+
+**Export share redemption** (`GET /api/export/{token}`) — enhanced response includes:
+- `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
+- Used by the export portal to display study info and download link
+
+**Export forwarding** (DICOMweb STOW-RS):
+- `POST /api/studies/{studyUID}/trigger-export` — manual trigger (admin only, study must be approved + export_required)
+- Background goroutine finds matching `route_to` rules and forwards DICOM files to each destination
+- Files sent as `multipart/related; type="application/dicom"` per DICOM PS3.18 §10.5
+- Streamed via `io.Pipe()` (no full-study memory buffering); 10-minute timeout for large studies
+- Auto-dispatches on study approval when `export_required=true` and `export_status=pending`
+
+**Study fields:**
+- `export_required` — boolean flag, set by `require_export` routing rule action
+- `export_status` — `''` (not required), `pending`, `exporting`, `exported`, `failed`
+
+**Admin dashboard:**
+- Export column with status badge (pending/exporting/exported/failed)
+- "Download DICOM" button for approved studies (read-only — visible to viewers)
+- "Export" trigger button for admin (approved + export_required + pending/failed)
+- `require_export` option in routing rules action dropdown
+
 ### Terraform
 ```bash
 cd terraform/project && terraform init && terraform plan
@@ -797,7 +841,7 @@ git checkout develop && git pull
 |-----|---------------|
 | `go` | `go build ./...` + `go vet ./...` |
 | `python` (6× matrix) | `py_compile` on all `.py` files per service |
-| `frontend` (3× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard) |
+| `frontend` (4× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal) |
 | `docker` (7× matrix) | `docker build` for all service images |
 
 ## Makefile

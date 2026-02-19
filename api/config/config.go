@@ -97,7 +97,7 @@ func Load() *Config {
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 
-		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002"), ","),
+		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3004"), ","),
 
 		AuthEnabled:  os.Getenv("AUTH_ENABLED") == "true",
 		AuthProvider: envOr("AUTH_PROVIDER", "auto"),

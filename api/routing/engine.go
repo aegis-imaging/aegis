@@ -5,32 +5,36 @@
 // logged. Multiple rules may fire for a single study.
 //
 // Actions:
-//   - require_defacing  — sets defacing_required=true (overrides tag-based detection)
-//   - auto_approve      — immediately approves (skips manual QC)
-//   - require_qa        — no-op; marks study for manual QC (default pipeline behaviour)
-//   - reject            — auto-rejects the study
-//   - route_to          — dispatches the study to an external DICOMweb destination (async)
+//   - require_defacing      — sets defacing_required=true (overrides tag-based detection)
+//   - auto_approve          — immediately approves (skips manual QC)
+//   - require_qa            — no-op; marks study for manual QC (default pipeline behaviour)
+//   - reject                — auto-rejects the study
+//   - route_to              — forwards DICOM files to an external DICOMweb destination via STOW-RS (async)
+//   - require_export        — sets export_required=true (auto-forward on approval)
 package routing
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 
 	"github.com/msenjem/aegis/api/model"
+	"github.com/msenjem/aegis/api/storage"
 )
 
 // EvaluateRules loads all enabled routing rules and applies them to study.
 // It mutates the study record in-place (e.g. setting DefacingRequired, Status)
 // and persists each mutation immediately. Side effects (e.g. forwarding) run
 // asynchronously so they don't block the ingest response.
-func EvaluateRules(ctx context.Context, db *sql.DB, study *model.Study) {
+func EvaluateRules(ctx context.Context, db *sql.DB, store storage.Storage, study *model.Study) {
 	rules, err := model.ListEnabledRoutingRules(ctx, db)
 	if err != nil {
 		log.Printf("routing: load rules: %v", err)
@@ -42,15 +46,15 @@ func EvaluateRules(ctx context.Context, db *sql.DB, study *model.Study) {
 
 	for i := range rules {
 		r := &rules[i]
-		if !matches(r, study) {
+		if !Matches(r, study) {
 			continue
 		}
-		applyRule(ctx, db, r, study)
+		applyRule(ctx, db, store, r, study)
 	}
 }
 
-// matches returns true when all non-nil conditions of the rule apply to study.
-func matches(r *model.RoutingRule, s *model.Study) bool {
+// Matches returns true when all non-nil conditions of the rule apply to study.
+func Matches(r *model.RoutingRule, s *model.Study) bool {
 	if r.ProjectID != nil && *r.ProjectID != s.ProjectID {
 		return false
 	}
@@ -67,7 +71,7 @@ func matches(r *model.RoutingRule, s *model.Study) bool {
 }
 
 // applyRule executes a single matching rule against the study.
-func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.Study) {
+func applyRule(ctx context.Context, db *sql.DB, store storage.Storage, r *model.RoutingRule, s *model.Study) {
 	var outcome string
 
 	switch r.Action {
@@ -194,6 +198,20 @@ func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.S
 			outcome = "protocol_required already true (no-op)"
 		}
 
+	case "require_export":
+		if !s.ExportRequired {
+			s.ExportRequired = true
+			s.ExportStatus = "pending"
+			if err := model.SetExportRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set export_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "export_required set to true"
+			}
+		} else {
+			outcome = "export_required already true (no-op)"
+		}
+
 	case "route_to":
 		if r.DestinationID == nil {
 			outcome = "error: route_to rule has no destination_id"
@@ -213,7 +231,9 @@ func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.S
 		outcome = "forwarding dispatched"
 		studyCopy := *s
 		destCopy := *dest
-		go forwardStudy(context.Background(), db, r.ID, &studyCopy, &destCopy)
+		go func() {
+			_ = ForwardStudy(context.Background(), db, store, &studyCopy, &destCopy)
+		}()
 
 	default:
 		outcome = fmt.Sprintf("unknown action: %s", r.Action)
@@ -237,47 +257,90 @@ func applyRule(ctx context.Context, db *sql.DB, r *model.RoutingRule, s *model.S
 	}
 }
 
-// forwardStudy pushes study metadata to an external DICOMweb destination via a
-// minimal STOW-RS metadata-only POST. In a production system this would stream
-// the actual DICOM files; here it sends the study metadata payload so the
-// destination can acknowledge receipt. Runs in a background goroutine.
-func forwardStudy(ctx context.Context, db *sql.DB, ruleID string, s *model.Study, dest *model.Destination) {
-	payload := map[string]any{
-		"study_instance_uid": s.StudyInstanceUID,
-		"modality":           s.Modality,
-		"body_part":          s.BodyPart,
-		"source":             s.Source,
-		"sent_at":            time.Now().UTC().Format(time.RFC3339),
-	}
-	body, _ := json.Marshal(payload)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		strings.TrimRight(dest.DicomwebURL, "/")+"/studies", bytes.NewReader(body))
+// ForwardStudy pushes a study's DICOM files to an external DICOMweb destination
+// via STOW-RS (multipart/related with application/dicom parts). Files are
+// streamed from storage via io.Pipe to avoid buffering entire studies in memory.
+// Returns nil on success (HTTP 2xx from destination) or an error.
+func ForwardStudy(ctx context.Context, db *sql.DB, store storage.Storage, s *model.Study, dest *model.Destination) error {
+	prefix := fmt.Sprintf("dicom/%s/%s", s.DicomStore, s.StudyInstanceUID)
+	keys, err := store.List(ctx, prefix)
 	if err != nil {
-		log.Printf("routing: forward build request (study=%s dest=%s): %v", s.ID, dest.ID, err)
-		return
+		log.Printf("routing: list files for forward (study=%s dest=%s): %v", s.ID, dest.ID, err)
+		model.CreateAuditEntry(ctx, db, "routing.forward_failed", "routing-engine", "study", s.ID, "", map[string]any{
+			"destination": dest.Name,
+			"error":       err.Error(),
+		})
+		return fmt.Errorf("list files: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if len(keys) == 0 {
+		log.Printf("routing: no files to forward (study=%s dest=%s)", s.ID, dest.ID)
+		return fmt.Errorf("no DICOM files found")
+	}
+
+	boundary := fmt.Sprintf("aegis-stow-%s-%d", s.StudyInstanceUID[:min(8, len(s.StudyInstanceUID))], time.Now().UnixNano())
+	pr, pw := io.Pipe()
+
+	// Write DICOM files as multipart parts in background.
+	go func() {
+		defer pw.Close()
+		mw := multipart.NewWriter(pw)
+		mw.SetBoundary(boundary)
+		for _, key := range keys {
+			partHeader := textproto.MIMEHeader{
+				"Content-Type": {"application/dicom"},
+			}
+			part, err := mw.CreatePart(partHeader)
+			if err != nil {
+				log.Printf("routing: create multipart part %s: %v", key, err)
+				continue
+			}
+			rc, err := store.Retrieve(ctx, key)
+			if err != nil {
+				log.Printf("routing: retrieve %s for forward: %v", key, err)
+				continue
+			}
+			io.Copy(part, rc)
+			rc.Close()
+		}
+		mw.Close()
+	}()
+
+	url := strings.TrimRight(dest.DicomwebURL, "/") + "/studies"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
+	if err != nil {
+		pr.Close()
+		log.Printf("routing: forward build request (study=%s dest=%s): %v", s.ID, dest.ID, err)
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type",
+		fmt.Sprintf(`multipart/related; type="application/dicom"; boundary=%s`, boundary))
 	if dest.DicomwebAuthHeader != "" {
 		req.Header.Set("Authorization", dest.DicomwebAuthHeader)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("routing: forward request (study=%s dest=%s): %v", s.ID, dest.ID, err)
 		model.CreateAuditEntry(ctx, db, "routing.forward_failed", "routing-engine", "study", s.ID, "", map[string]any{
 			"destination": dest.Name,
+			"file_count":  len(keys),
 			"error":       err.Error(),
 		})
-		return
+		return fmt.Errorf("forward request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	outcome := fmt.Sprintf("HTTP %d", resp.StatusCode)
 	model.CreateAuditEntry(ctx, db, "routing.forwarded", "routing-engine", "study", s.ID, "", map[string]any{
 		"destination": dest.Name,
+		"file_count":  len(keys),
 		"status_code": resp.StatusCode,
 	})
-	log.Printf("routing: forward complete (study=%s dest=%s): %s", s.ID, dest.ID, outcome)
+	log.Printf("routing: forward complete (study=%s dest=%s): HTTP %d (%d files)",
+		s.ID, dest.ID, resp.StatusCode, len(keys))
+
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("destination returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }

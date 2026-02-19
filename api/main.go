@@ -102,7 +102,8 @@ func main() {
 	mux.HandleFunc("PUT /api/upload/file/{sessionID}/{index}", srv.UploadFile)
 	mux.HandleFunc("POST /api/upload/complete", srv.UploadComplete)
 
-	// Public export endpoint — token-authenticated, no session required.
+	// Public export endpoints — token-authenticated, no session required.
+	mux.HandleFunc("GET /api/export/{token}/download", srv.ServeDicomDownloadByToken)
 	mux.HandleFunc("GET /api/export/{token}", srv.RedeemExport)
 
 	// Local dev only: serve stored files over HTTP (in GCS mode, signed URLs are used instead).
@@ -208,6 +209,8 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{studyUID}/bids-download", auth(srv.ServeBidsDownload))
 	mux.HandleFunc("POST /api/studies/{studyUID}/classify", adminOnly(srv.TriggerClassification))
 	mux.HandleFunc("POST /api/studies/{studyUID}/protocol-check", adminOnly(srv.TriggerProtocolCheck))
+	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-download", auth(srv.ServeDicomDownload))
+	mux.HandleFunc("POST /api/studies/{studyUID}/trigger-export", adminOnly(srv.TriggerExport))
 
 	var h http.Handler = mux
 	h = middleware.Recover(h)
