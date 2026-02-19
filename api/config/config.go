@@ -56,6 +56,9 @@ type Config struct {
 	AuthProvider string // AUTH_PROVIDER — "auto" (default), "iap" (GCP), "azure" (Azure AD), or "aws" (ALB + Cognito)
 	DevUserEmail string // DEV_USER_EMAIL — auto-authenticated email when AUTH_ENABLED=false
 
+	// Pipeline
+	PipelineAuto bool // PIPELINE_AUTO — auto-dispatch processing after routing (default true)
+
 	// Email (SMTP)
 	// EmailEnabled is derived: true when SMTPHost is non-empty.
 	SMTPHost     string // SMTP_HOST — e.g. localhost; leave empty to disable email
@@ -91,6 +94,8 @@ func Load() *Config {
 		BidsServiceURL:             os.Getenv("BIDS_SERVICE_URL"),              // e.g. http://localhost:8084
 		ClassificationServiceURL:   os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
 		ProtocolServiceURL:         os.Getenv("PROTOCOL_SERVICE_URL"),      // e.g. http://localhost:8086
+
+		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002"), ","),
 

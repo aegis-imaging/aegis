@@ -333,3 +333,80 @@ func UpdateStudyMetadata(ctx context.Context, db *sql.DB, id, modality, bodyPart
 		WHERE id = $3`, modality, bodyPart, id)
 	return err
 }
+
+// --- Atomic claim functions for pipeline orchestration ---
+// Each function attempts to transition a study's processing status from "pending"
+// to "in-progress" using a conditional UPDATE. Returns true if this caller won
+// the race (RowsAffected == 1), false if another goroutine already claimed it.
+
+// ClaimClassification atomically claims classification dispatch.
+func ClaimClassification(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET classification_status = 'classifying', updated_at = now()
+		WHERE id = $1 AND classification_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ClaimPhiScan atomically claims PHI scan dispatch.
+func ClaimPhiScan(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET phi_scan_status = 'scanning', updated_at = now()
+		WHERE id = $1 AND phi_scan_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ClaimDefacing atomically claims defacing dispatch.
+func ClaimDefacing(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET status = 'defacing', updated_at = now()
+		WHERE id = $1 AND status = 'received' AND defacing_required = true`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ClaimQcCheck atomically claims QC check dispatch.
+func ClaimQcCheck(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET qc_status = 'checking', updated_at = now()
+		WHERE id = $1 AND qc_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ClaimBidsConversion atomically claims BIDS conversion dispatch.
+func ClaimBidsConversion(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET bids_status = 'converting', updated_at = now()
+		WHERE id = $1 AND bids_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ClaimProtocolCheck atomically claims protocol check dispatch.
+func ClaimProtocolCheck(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET protocol_status = 'checking', updated_at = now()
+		WHERE id = $1 AND protocol_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
