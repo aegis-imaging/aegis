@@ -270,6 +270,24 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 | `source` | `external\|internal` |
 | `search` | Substring match on `study_instance_uid` or `study_description` |
 
+### Study Detail (`GET /api/studies/{id}`)
+
+Returns a single study by UUID. Used by the admin dashboard's study detail panel.
+
+### Study Audit (`GET /api/studies/{id}/audit`)
+
+Returns all audit trail entries for a specific study (by `resource_id`). Used by the study detail panel's audit tab.
+
+### Study Detail Panel (Admin Dashboard)
+
+Clicking a study UID in the studies table navigates to a dedicated detail view with:
+- **Header** — full study UID, status/source badges, description
+- **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
+- **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
+- **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
+- **Share form** — inline share creation for approved studies (email, note, expiry)
+- **Detail tabs** — Audit Trail, Routing Log, Export Shares with per-study data
+
 ### Routing Rules Engine (`api/routing/`, `api/handler/routing.go`)
 
 Routing rules are evaluated on every study ingest (upload complete + internal ingest). Rules are ordered by `priority` (lower = first); all matching rules fire.

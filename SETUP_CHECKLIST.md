@@ -479,6 +479,24 @@ The pipeline auto-dispatches processing services after upload. Enabled by defaul
 - [ ] Test manual override: click a manual trigger button in the dashboard — should still work
 - [ ] Test disable: set `PIPELINE_AUTO=false`, upload again — no auto-dispatch, manual buttons required
 
+## 7r2. Study Detail Page
+
+The admin dashboard now includes a study detail view. Clicking a study UID in the studies table opens a dedicated panel.
+
+- [ ] Open admin dashboard: `http://localhost:3001`
+- [ ] Click any study UID link in the studies table → detail panel opens
+- [ ] Verify header shows full study UID, status badge, source badge, description
+- [ ] Verify meta row shows modality, body part, files, series, store, timestamps
+- [ ] Verify pipeline visualization shows 7 stages with color-coded dots
+- [ ] Test action buttons: Approve, Reject, Classify, Scan for PHI, etc.
+- [ ] Click "View in OHIF" → OHIF viewer opens inline
+- [ ] For approved studies: verify share form appears, create a share link
+- [ ] Check Audit Trail tab → shows all audit entries for this study
+- [ ] Check Routing Log tab → shows routing rule evaluations
+- [ ] Check Shares tab → shows created export shares
+- [ ] Click "← Back to studies" → returns to the studies table
+- [ ] API endpoints: `GET /api/studies/{id}` and `GET /api/studies/{id}/audit`
+
 ## 7s. Automated Tests (Go API)
 
 Three-tier test suite: unit tests (no Docker), model integration tests (real PostgreSQL via testcontainers), and handler HTTP tests (httptest + real DB + temp storage).
