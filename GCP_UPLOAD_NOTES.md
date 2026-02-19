@@ -1,5 +1,7 @@
 # AEGIS GCP Upload Notes (Human Runbook)
 
+> **Multi-cloud note:** AEGIS supports GCP, AWS, and local (Docker Compose) deployments. This file covers the **GCP-specific** signed URL upload path (`STORAGE_MODE=gcs`). For AWS, see `terraform/aws/` (S3 storage, ALB + Cognito auth). For local development, use `STORAGE_MODE=local` — no cloud configuration needed.
+
 This file documents what you need to configure in GCP for both:
 
 - external-site signed URL uploads (`STORAGE_MODE=gcs`), and
@@ -10,8 +12,8 @@ This file documents what you need to configure in GCP for both:
 - A GCP project with billing enabled
 - A Cloud Storage bucket for staging and raw DICOM objects
 - A service account with permission to sign URLs and access bucket objects
-- Healthcare API dataset + DICOM stores (`raw`, `clean`)
-- A controlled export/download mechanism for external partners (signed URL generation or authorized DICOMweb access)
+- DICOM files stored in two bucket prefixes: `dicom/raw/` (tag-de-identified) and `dicom/clean/` (fully processed including defacing). The Go API provides a built-in DICOMweb proxy — no Healthcare API required.
+- A controlled export/download mechanism for external partners (token-authenticated export shares, DICOMweb STOW-RS forwarding)
 
 ## 2) Service account IAM
 
