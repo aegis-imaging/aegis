@@ -714,7 +714,40 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 4. For each study: creates upload session + study record, copies files to `dicom/raw/{studyUID}/`, evaluates routing rules
 5. Duplicate StudyInstanceUIDs are rejected (unique constraint) — safe to re-run
 
-**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors}`.
+**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
+
+### Automated Processing Pipeline (`api/handler/pipeline.go`)
+
+After routing rules evaluate (upload complete, internal ingest, batch import), the pipeline orchestrator automatically dispatches all required processing services in the correct order. No manual button clicks needed — studies flow through the pipeline hands-free.
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `PIPELINE_AUTO` | `true` | Set to `"false"` to disable auto-dispatch (manual-only mode) |
+
+**Dependency graph (3 phases):**
+
+```
+Phase 0: Classification (blocks — fills modality/body_part, re-evaluates routing)
+    ↓
+Phase 1: PHI scan + Protocol check + Defacing (parallel, raw files)
+    ↓
+Phase 2: QC check + BIDS conversion (after defacing, final files)
+```
+
+- **Phase 0**: Classification must complete first — it fills `modality`/`body_part` from DICOM headers, then re-evaluates routing rules which may add new requirements (e.g. `require_defacing` for HEAD studies)
+- **Phase 1**: PHI scan, protocol check, and defacing run in parallel on raw files. Each service is dispatched only if its URL is configured.
+- **Phase 2**: QC and BIDS run after defacing completes (if defacing is required). They operate on the final `dicom_store` (clean after defacing, raw otherwise).
+
+**How it works:**
+- `AdvancePipeline(ctx, studyID)` is called after routing rules evaluate and after each service completes
+- Uses atomic SQL "claim" queries (`UPDATE ... WHERE status='pending'`) to prevent duplicate dispatches
+- Services that fail stop their branch; admin can re-trigger manually via dashboard buttons
+- Manual trigger buttons continue to work regardless of `PIPELINE_AUTO` setting
+- Services with no URL configured are silently skipped (study stays in "pending")
+
+**Audit trail:** Each auto-dispatch creates a `pipeline.dispatch` audit entry recording which service was dispatched and for which study.
 
 ### Terraform
 ```bash

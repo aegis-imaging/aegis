@@ -95,7 +95,7 @@ func (s *Server) runQcCheck(study *model.Study) {
 
 	studyUID := study.StudyInstanceUID
 
-	files, err := s.listDicomFiles("raw", studyUID)
+	files, err := s.listDicomFiles(study.DicomStore, studyUID)
 	if err != nil || len(files) == 0 {
 		log.Printf("qc_check: no files found for study %s: %v", studyUID, err)
 		model.UpdateQcStatus(ctx, s.db, study.ID, "failed")
@@ -164,4 +164,7 @@ func (s *Server) runQcCheck(study *model.Study) {
 		"duration_seconds": fmt.Sprintf("%.1f", svcResp.DurationSeconds),
 		"quality_issues":   svcResp.QualityIssues,
 	})
+
+	// Advance pipeline — may dispatch next eligible services.
+	s.AdvancePipeline(ctx, study.ID)
 }
