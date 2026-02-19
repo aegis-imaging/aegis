@@ -1,10 +1,14 @@
-const TECH_STACK = [
-  { label: 'Backend', value: 'Go on Cloud Run / ECS Fargate' },
-  { label: 'Frontend', value: 'React + TypeScript' },
-  { label: 'Database', value: 'PostgreSQL 15' },
-  { label: 'Viewer', value: 'OHIF Viewer v3' },
-  { label: 'Infrastructure', value: 'Terraform (GCP + AWS)' },
-  { label: 'Auth', value: 'IAP, Cognito, Azure AD' },
+import { useScrollAnimation } from '../hooks/useScrollAnimation'
+
+const TECH_TAGS = [
+  'Go',
+  'React 19',
+  'TypeScript',
+  'PostgreSQL 15',
+  'Python FastAPI',
+  'Terraform',
+  'Docker',
+  'OHIF Viewer',
 ]
 
 const CLOUDS = [
@@ -14,34 +18,37 @@ const CLOUDS = [
 ]
 
 export function Architecture() {
+  const { ref, isVisible } = useScrollAnimation()
+
   return (
     <section id="architecture" className="section">
-      <div className="section__inner">
-        <h2 className="section__title">Architecture</h2>
-        <p className="section__subtitle">
-          Multi-cloud, open-source, built on established standards
+      <div className="section__inner" ref={ref}>
+        <h2 className={`section__title animate animate--fade-up ${isVisible ? 'animate--visible' : ''}`}>
+          Architecture
+        </h2>
+        <p className={`section__subtitle animate animate--fade-up animate--delay-1 ${isVisible ? 'animate--visible' : ''}`}>
+          Multi-cloud, built on established standards
         </p>
 
-        <div className="arch__diagram-wrapper">
+        <div className={`arch__diagram-wrapper animate animate--scale-in animate--delay-2 ${isVisible ? 'animate--visible' : ''}`}>
           <img
             src="/architecture.png"
             alt="AEGIS system architecture diagram"
             className="arch__diagram"
             loading="lazy"
+            width="1200"
+            height="800"
           />
         </div>
 
-        <div className="arch__details">
+        <div className={`arch__details animate animate--fade-up animate--delay-3 ${isVisible ? 'animate--visible' : ''}`}>
           <div className="arch__tech">
             <h3 className="arch__heading">Tech Stack</h3>
-            <dl className="arch__dl">
-              {TECH_STACK.map((t) => (
-                <div key={t.label} className="arch__dl-row">
-                  <dt className="arch__dt">{t.label}</dt>
-                  <dd className="arch__dd">{t.value}</dd>
-                </div>
+            <div className="arch__tags">
+              {TECH_TAGS.map((tag) => (
+                <span key={tag} className="arch__tag">{tag}</span>
               ))}
-            </dl>
+            </div>
           </div>
 
           <div className="arch__clouds">

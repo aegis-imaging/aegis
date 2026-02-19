@@ -1,0 +1,22 @@
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--font-normal);
+  line-height: var(--leading-normal);
+  color: var(--color-gray-700);
+  background: var(--color-white);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-gray-900);
+  line-height: var(--leading-tight);
+}
+
+a:hover {
+  color: var(--color-blue-600);
+}
+
+::selection {
+  background: var(--color-blue-100);
+  color: var(--color-navy-900);
+}

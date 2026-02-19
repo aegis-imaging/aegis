@@ -194,7 +194,7 @@ AEGIS does not create a new de-identification standard — it implements the one
 | **Burned-in PHI** | OCR detection | AI CV detection | None | Built-in | None |
 | **Defacing** | Automated, reviewable | None | Manual or plugin | Built-in | None |
 | **Modalities** | All DICOM | MR, CT, XR, US | Neuroimaging focus | All imaging | All imaging |
-| **Open source** | Yes | No (commercial) | Yes | No | Yes |
+| **Open source** | Private (built on open-source stack) | No (commercial) | Yes | No | Yes |
 | **Audit trail** | Centralized, per-study | Chain of custody | Per-instance | Built-in | Limited |
 
 Existing platforms tend to serve either research (XNAT, Flywheel) or enterprise radiology (ENCOG/Enlitic, MIRC CTP) — but not both. AEGIS is designed for both audiences from a shared platform, and is the only option that runs on any major cloud provider without re-architecture.
