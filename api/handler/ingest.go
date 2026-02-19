@@ -70,6 +70,9 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	// Evaluate routing rules — may mutate study (e.g. auto_approve, require_defacing).
 	routing.EvaluateRules(r.Context(), s.db, study)
 
+	// Auto-dispatch processing pipeline.
+	s.AdvancePipeline(r.Context(), study.ID)
+
 	model.CreateAuditEntry(r.Context(), s.db, "ingest.internal", actorEmail(r), "study", study.ID, clientIP(r), map[string]any{
 		"study_uid": studyUID,
 		"modality":  study.Modality,

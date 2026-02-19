@@ -179,4 +179,7 @@ func (s *Server) runPhiScan(study *model.Study) {
 		detail["findings"] = svcResp.Findings
 	}
 	model.CreateAuditEntry(ctx, s.db, "phi_scan.complete", "system", "study", study.ID, "", detail)
+
+	// Advance pipeline — may dispatch next eligible services.
+	s.AdvancePipeline(ctx, study.ID)
 }

@@ -224,4 +224,7 @@ func (s *Server) runProtocolCheck(study *model.Study, templates []model.Protocol
 		"duration_seconds":    fmt.Sprintf("%.1f", svcResp.DurationSeconds),
 		"findings":            svcResp.Findings,
 	})
+
+	// Advance pipeline — may dispatch next eligible services.
+	s.AdvancePipeline(ctx, study.ID)
 }

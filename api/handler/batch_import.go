@@ -25,5 +25,11 @@ func (s *Server) BatchImport(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "import failed: "+err.Error())
 		return
 	}
+
+	// Auto-dispatch processing pipeline for each imported study.
+	for _, studyID := range result.StudyIDs {
+		s.AdvancePipeline(r.Context(), studyID)
+	}
+
 	s.writeJSON(w, http.StatusOK, result)
 }

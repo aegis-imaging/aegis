@@ -8,7 +8,7 @@ import (
 type Config struct {
 	Port            string
 	DatabaseURL     string
-	StorageMode     string // "local" or "gcs"
+	StorageMode     string // "local", "gcs", or "s3"
 	LocalStorageDir string
 	APIBaseURL      string // for generating local upload URLs
 
@@ -18,6 +18,11 @@ type Config struct {
 	DicomDataset    string
 	DicomStoreRaw   string
 	DicomStoreClean string
+
+	// AWS (only used when StorageMode = "s3")
+	S3Bucket   string
+	S3Region   string
+	S3Endpoint string // optional — set for S3-compatible stores (MinIO, LocalStack)
 
 	// Defacing service (Python Cloud Run sidecar)
 	// Empty string disables the defacing service call (pipeline still records status).
@@ -48,8 +53,11 @@ type Config struct {
 
 	// Auth
 	AuthEnabled  bool
-	AuthProvider string // AUTH_PROVIDER — "auto" (default), "iap" (GCP), or "azure" (Azure AD)
+	AuthProvider string // AUTH_PROVIDER — "auto" (default), "iap" (GCP), "azure" (Azure AD), or "aws" (ALB + Cognito)
 	DevUserEmail string // DEV_USER_EMAIL — auto-authenticated email when AUTH_ENABLED=false
+
+	// Pipeline
+	PipelineAuto bool // PIPELINE_AUTO — auto-dispatch processing after routing (default true)
 
 	// Email (SMTP)
 	// EmailEnabled is derived: true when SMTPHost is non-empty.
@@ -76,12 +84,18 @@ func Load() *Config {
 		DicomStoreRaw:   envOr("DICOM_STORE_RAW", "raw"),
 		DicomStoreClean: envOr("DICOM_STORE_CLEAN", "clean"),
 
+		S3Bucket:   os.Getenv("S3_BUCKET"),
+		S3Region:   envOr("S3_REGION", "us-east-1"),
+		S3Endpoint: os.Getenv("S3_ENDPOINT"), // e.g. http://localhost:4566 for LocalStack
+
 		DefacingServiceURL:     os.Getenv("DEFACING_SERVICE_URL"),     // e.g. http://localhost:8081
 		PhiDetectionServiceURL: os.Getenv("PHI_DETECTION_SERVICE_URL"), // e.g. http://localhost:8082
 		QcServiceURL:           os.Getenv("QC_SERVICE_URL"),            // e.g. http://localhost:8083
 		BidsServiceURL:             os.Getenv("BIDS_SERVICE_URL"),              // e.g. http://localhost:8084
 		ClassificationServiceURL:   os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
 		ProtocolServiceURL:         os.Getenv("PROTOCOL_SERVICE_URL"),      // e.g. http://localhost:8086
+
+		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002"), ","),
 

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f8f9fa;
+  padding: 30px;
+  width: 1600px;
+}
+.header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.header img {
+  width: 80px;
+  margin-bottom: 8px;
+}
+.header h1 {
+  font-size: 28px;
+  color: #1a1a2e;
+  margin: 0;
+}
+.header .subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 4px 0 0;
+}
+.header .author {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 4px 0 0;
+}
+
+.row { display: flex; gap: 16px; margin-bottom: 16px; }
+.row.stretch > * { flex: 1; }
+
+.card {
+  border-radius: 8px;
+  padding: 14px;
+  border: 2px solid;
+  position: relative;
+}
+.card h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card ul {
+  list-style: none;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #374151;
+}
+.card ul li::before {
+  content: "•";
+  margin-right: 5px;
+  color: #9ca3af;
+}
+
+.blue { background: #eff6ff; border-color: #3b82f6; }
+.blue h3 { color: #1d4ed8; }
+.green { background: #f0fdf4; border-color: #22c55e; }
+.green h3 { color: #15803d; }
+.purple { background: #faf5ff; border-color: #a855f7; }
+.purple h3 { color: #7e22ce; }
+.orange { background: #fff7ed; border-color: #f97316; }
+.orange h3 { color: #c2410c; }
+.red { background: #fef2f2; border-color: #ef4444; }
+.red h3 { color: #b91c1c; }
+.teal { background: #f0fdfa; border-color: #14b8a6; }
+.teal h3 { color: #0f766e; }
+.gray { background: #f9fafb; border-color: #6b7280; }
+.gray h3 { color: #374151; }
+.yellow { background: #fefce8; border-color: #eab308; }
+.yellow h3 { color: #a16207; }
+.indigo { background: #eef2ff; border-color: #6366f1; }
+.indigo h3 { color: #4338ca; }
+.pink { background: #fdf2f8; border-color: #ec4899; }
+.pink h3 { color: #be185d; }
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #6b7280;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.cloud-region {
+  border: 3px dashed #3b82f6;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: #fafbff;
+  position: relative;
+}
+.cloud-region .region-label {
+  position: absolute;
+  top: -12px;
+  left: 20px;
+  background: #3b82f6;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 12px;
+  border-radius: 4px;
+}
+
+.arrow-down {
+  text-align: center;
+  font-size: 24px;
+  color: #9ca3af;
+  margin: 6px 0;
+  line-height: 1;
+}
+.arrow-label {
+  text-align: center;
+  font-size: 10px;
+  color: #6b7280;
+  margin: 2px 0 6px;
+  font-style: italic;
+}
+
+.phase-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.phase {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+.phase .phase-title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.phase.done { background: #dcfce7; border: 1px solid #22c55e; }
+.phase.done .phase-title { color: #15803d; }
+.phase.next { background: #fef3c7; border: 1px solid #f59e0b; }
+.phase.next .phase-title { color: #b45309; }
+.phase.future { background: #f3f4f6; border: 1px solid #d1d5db; }
+.phase.future .phase-title { color: #6b7280; }
+
+.badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.badge-green { background: #dcfce7; color: #15803d; }
+.badge-yellow { background: #fef3c7; color: #b45309; }
+.badge-gray { background: #f3f4f6; color: #6b7280; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img src="../logo-small.png" alt="AEGIS Logo" />
+  <h1>AEGIS Architecture</h1>
+  <div class="subtitle">Anonymization & Exchange Gateway for Imaging Studies</div>
+  <div class="author">Matthew L. Senjem, M.S. — February 18, 2026</div>
+</div>
+
+<div class="section-label">Sending Sources (External Browser + Internal Enterprise)</div>
+<div class="row stretch">
+  <div class="card blue">
+    <h3>React Upload Portal (Web)</h3>
+    <ul>
+      <li>DICOM file picker</li>
+      <li>Client-side parsing (dcmjs)</li>
+      <li>Tag anonymization preview (before/after)</li>
+      <li>Optional email for notifications</li>
+      <li>Project & profile selection</li>
+      <li>Per-file progress + retry (3× backoff)</li>
+    </ul>
+  </div>
+  <div class="card green">
+    <h3>De-identification Engine (@aegis/client)</h3>
+    <ul>
+      <li>DICOM PS3.15 Annex E Basic Profile</li>
+      <li>18 HIPAA Safe Harbor identifiers</li>
+      <li>Per-project retained tags (anon profiles)</li>
+      <li>StudyInstanceUID regeneration</li>
+      <li>Runs in browser — PHI never leaves hospital</li>
+    </ul>
+  </div>
+  <div class="card purple">
+    <h3>Batch Import CLI (Go)</h3>
+    <ul>
+      <li>Server-side DICOM parsing (suyashkumar/dicom)</li>
+      <li>Recursive directory scan</li>
+      <li>Groups files by StudyInstanceUID</li>
+      <li>Dry-run mode for preview</li>
+      <li>Duplicate detection (safe re-run)</li>
+    </ul>
+  </div>
+  <div class="card gray">
+    <h3>Key Principle</h3>
+    <ul>
+      <li>PHI is stripped in the browser BEFORE data leaves the hospital network</li>
+      <li>Only tag-de-identified DICOM is transmitted over HTTPS</li>
+      <li>No software installation required at sending sites</li>
+      <li>Batch import assumes pre-de-identified data</li>
+    </ul>
+  </div>
+</div>
+
+<div class="arrow-down">&#9660;</div>
+<div class="arrow-label">HTTPS (TLS 1.3) — De-identified DICOM only</div>
+
+<div class="cloud-region">
+  <div class="region-label">Cloud Platform (GCP / AWS / Azure) — Secured Tenancy</div>
+
+  <div class="row stretch" style="margin-top: 12px;">
+    <div class="card orange" style="flex: 2;">
+      <h3>Go API Backend (Cloud Run / ECS Fargate)</h3>
+      <ul>
+        <li>Upload orchestration (init → file → complete)</li>
+        <li>Study, project, institution management</li>
+        <li>Routing rules engine (priority-ordered, all matching fire)</li>
+        <li>DICOMweb proxy (QIDO-RS + WADO-RS for OHIF)</li>
+        <li>Async dispatch to 6 Python sidecar services</li>
+        <li>PostgreSQL migrations (goose)</li>
+        <li>Export shares with time-limited tokens</li>
+        <li>Centralized audit trail (every action logged)</li>
+        <li>Email notifications (upload, approve, reject, digest)</li>
+        <li>Health check: /healthz with DB + sidecar status</li>
+      </ul>
+    </div>
+    <div class="card blue" style="flex: 1;">
+      <h3>PostgreSQL 15 (Cloud SQL / RDS)</h3>
+      <ul>
+        <li>Studies, upload sessions</li>
+        <li>Projects, institutions</li>
+        <li>Routing rules, destinations, routing log</li>
+        <li>Anonymization profiles</li>
+        <li>Protocol templates (JSONB rules)</li>
+        <li>Admin users (RBAC)</li>
+        <li>Digest subscriptions</li>
+        <li>Export shares</li>
+        <li>Audit entries (actor, event, detail)</li>
+        <li>16 migrations</li>
+      </ul>
+    </div>
+    <div class="card green" style="flex: 1;">
+      <h3>Object Storage (GCS / S3 / Local)</h3>
+      <ul>
+        <li>Pluggable Storage interface (8 methods)</li>
+        <li>Presigned upload/download URLs</li>
+        <li>dicom/raw/{studyUID}/ — pre-defacing</li>
+        <li>dicom/clean/{studyUID}/ — post-defacing</li>
+        <li>bids/{studyUID}/ — BIDS output</li>
+        <li>KMS encryption at rest</li>
+        <li>Lifecycle rules for staging cleanup</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top: 14px;">Python Sidecar Services (FastAPI, async dispatch from Go API)</div>
+  <div class="row stretch">
+    <div class="card red">
+      <h3>Defacing Service</h3>
+      <ul>
+        <li>4 backends: DeepDefacer, mri_deface, mri_reface, nibabel</li>
+        <li>DICOM → NIfTI → deface → DICOM</li>
+        <li>Head imaging only (auto-routed)</li>
+        <li>Side-by-side review in admin</li>
+      </ul>
+    </div>
+    <div class="card purple">
+      <h3>PHI Detection</h3>
+      <ul>
+        <li>Tesseract OCR on pixel data</li>
+        <li>Detects burned-in text overlays</li>
+        <li>Confidence threshold filtering</li>
+        <li>Findings → audit trail</li>
+      </ul>
+    </div>
+    <div class="card teal">
+      <h3>QC Service</h3>
+      <ul>
+        <li>5 checks: integrity, consistency, SNR, coverage, gaps</li>
+        <li>pydicom + numpy</li>
+        <li>pass / warn / fail status</li>
+        <li>Quality issues → audit trail</li>
+      </ul>
+    </div>
+    <div class="card indigo">
+      <h3>BIDS Conversion</h3>
+      <ul>
+        <li>dcm2niix backend</li>
+        <li>BIDS directory structure</li>
+        <li>Series → datatype classification</li>
+        <li>Zip download endpoint</li>
+      </ul>
+    </div>
+    <div class="card yellow">
+      <h3>Classification</h3>
+      <ul>
+        <li>Heuristic DICOM tag analysis</li>
+        <li>Modality + body part detection</li>
+        <li>Re-evaluates routing rules</li>
+        <li>SOP Class / description matching</li>
+      </ul>
+    </div>
+    <div class="card pink">
+      <h3>Protocol Compliance</h3>
+      <ul>
+        <li>Classic + Enhanced DICOM</li>
+        <li>Per-scanner template matching</li>
+        <li>TR, TE, flip angle, resolution</li>
+        <li>numeric / exact / range rules</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="row stretch" style="margin-top: 4px;">
+    <div class="card blue" style="flex: 2;">
+      <h3>React Admin Dashboard (Web)</h3>
+      <ul>
+        <li>Study management: filter, search, paginate (50/page), approve/reject</li>
+        <li>OHIF Viewer integration (embedded iframe + new tab)</li>
+        <li>Side-by-side defacing review (raw vs clean data source)</li>
+        <li>Pipeline badges: PHI scan, QC, BIDS, Classification, Protocol</li>
+        <li>9 tabs: Studies, Audit Log, Routing, Institutions, Profiles, Protocol Templates, Notifications, Projects, Users</li>
+        <li>RBAC: admin (full) / viewer (read-only), Users tab hidden for viewers</li>
+      </ul>
+    </div>
+    <div class="card red" style="flex: 1;">
+      <h3>Authentication & Security</h3>
+      <ul>
+        <li>Multi-provider auth middleware (auto-detect)</li>
+        <li>GCP: Identity-Aware Proxy (IAP)</li>
+        <li>AWS: ALB + Cognito (JWT)</li>
+        <li>Azure: AD Easy Auth</li>
+        <li>Dev: auto-auth via DEV_USER_EMAIL</li>
+        <li>RBAC: RequireAuth / RequireRole("admin")</li>
+        <li>CORS, rate limiting, TLS 1.3</li>
+      </ul>
+    </div>
+    <div class="card gray" style="flex: 1;">
+      <h3>Routing Rules Engine</h3>
+      <ul>
+        <li>Conditions: project, modality, body part, source</li>
+        <li>Actions: require_defacing, require_phi_scan, require_qc_check, require_bids_conversion, require_classification, require_protocol_check</li>
+        <li>auto_approve, reject, route_to destination</li>
+        <li>Priority-ordered, all matching rules fire</li>
+        <li>Re-evaluation after classification</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section-label">Infrastructure as Code (Terraform)</div>
+<div class="row stretch">
+  <div class="card blue">
+    <h3>GCP Module (terraform/infra/)</h3>
+    <ul>
+      <li>Cloud Run (API + sidecars)</li>
+      <li>Cloud SQL PostgreSQL 15</li>
+      <li>GCS bucket + KMS</li>
+      <li>Cloud Armor WAF</li>
+      <li>Identity-Aware Proxy</li>
+      <li>VPC + Private Service Connect</li>
+    </ul>
+  </div>
+  <div class="card orange">
+    <h3>AWS Module (terraform/aws/)</h3>
+    <ul>
+      <li>ECS Fargate cluster</li>
+      <li>RDS PostgreSQL 15</li>
+      <li>S3 bucket + KMS</li>
+      <li>Application Load Balancer</li>
+      <li>Cognito user pool</li>
+      <li>VPC (2 AZ, public + private subnets)</li>
+      <li>ECR repositories (7 services)</li>
+      <li>SNS + SQS event bus</li>
+    </ul>
+  </div>
+  <div class="card gray">
+    <h3>Local Development (Docker Compose)</h3>
+    <ul>
+      <li>PostgreSQL + Mailpit + OHIF Viewer</li>
+      <li>Go API + 6 Python sidecars</li>
+      <li>Shared aegis-data volume</li>
+      <li>Health checks on all services</li>
+      <li>Makefile: up, down, clean, build, check, logs</li>
+      <li>GitHub Actions CI (Go + Python + TS + Docker)</li>
+    </ul>
+  </div>
+  <div class="card green">
+    <h3>Key Open-Source Dependencies</h3>
+    <ul>
+      <li><strong>Go:</strong> suyashkumar/dicom, goose, pgx</li>
+      <li><strong>DICOM:</strong> dcmjs, dicomParser, dcm2niix</li>
+      <li><strong>Defacing:</strong> DeepDefacer, mri_deface, nibabel, pydicom</li>
+      <li><strong>PHI:</strong> Tesseract OCR, Pillow</li>
+      <li><strong>Viewer:</strong> OHIF Viewer v3</li>
+      <li><strong>Infra:</strong> Terraform, Docker, GitHub Actions</li>
+    </ul>
+  </div>
+</div>
+
+<div class="section-label" style="margin-top: 8px;">Implementation Phases</div>
+<div class="phase-bar">
+  <div class="phase done">
+    <div class="phase-title">Phase 1: Foundation <span class="badge badge-green">Code Complete</span></div>
+    Terraform (GCP + AWS), Go API, Upload Portal, Admin Dashboard, OHIF Viewer
+  </div>
+  <div class="phase done">
+    <div class="phase-title">Phase 2: Defacing Pipeline <span class="badge badge-green">Code Complete</span></div>
+    mri_deface, side-by-side review, email notifications (upload/approve/reject)
+  </div>
+  <div class="phase done">
+    <div class="phase-title">Phase 3: Operations <span class="badge badge-green">Code Complete</span></div>
+    Routing rules, institutions, anon profiles, audit log, admin users, RBAC, auth middleware
+  </div>
+  <div class="phase done">
+    <div class="phase-title">Phase 4: Advanced Processing <span class="badge badge-green">Code Complete</span></div>
+    PHI detection, QC, BIDS, classification, protocol compliance, batch import, multi-cloud
+  </div>
+  <div class="phase next">
+    <div class="phase-title">Next: Test Deployment <span class="badge badge-yellow">Planned</span></div>
+    Deploy to GCP/AWS, end-to-end test with TCIA data, performance benchmarking
+  </div>
+  <div class="phase future">
+    <div class="phase-title">Phase 5: Enterprise <span class="badge badge-gray">Future</span></div>
+    DIMSE receive, HL7/FHIR, tag standardization, reversible de-id, multi-tenant SaaS
+  </div>
+</div>
+
+</body>
+</html>
