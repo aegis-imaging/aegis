@@ -167,7 +167,30 @@ cd frontend/admin-dashboard && npm install && npm run dev  # runs on :3001, prox
 cd frontend/landing && npm install && npm run dev    # runs on :3003
 ```
 
-Static marketing site for aegisimaging.ai. No API proxy needed — purely static content. Contact form uses Formspree (set `VITE_FORMSPREE_ID` env var, or falls back to `mailto:contact@aegisimaging.ai`). Deployed to Vercel, separate from the GCP/AWS backend.
+Static marketing site for aegisimaging.ai. Deployed to Vercel, separate from the GCP/AWS backend.
+
+**Contact form** has two delivery paths (both use the same `/api/contact` endpoint):
+
+| Path | How it works | When to use |
+|------|-------------|-------------|
+| **Vercel serverless function** | `frontend/landing/api/contact.ts` — nodemailer + Brevo SMTP | Landing page on Vercel (standalone, no Go API needed) |
+| **Go API endpoint** | `POST /api/contact` — uses existing SMTP config | Landing page proxied to Go backend (local dev or production) |
+
+Vercel env vars (set in Vercel dashboard):
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `BREVO_SMTP_HOST` | *(empty — disabled)* | `smtp-relay.brevo.com`; empty = logs to console |
+| `BREVO_SMTP_PORT` | `587` | |
+| `BREVO_SMTP_USER` | *(empty)* | Brevo SMTP credentials |
+| `BREVO_SMTP_PASS` | *(empty)* | |
+| `BREVO_SMTP_FROM` | `AEGIS <noreply@aegisimaging.ai>` | Envelope sender |
+
+Go API env var (optional):
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `CONTACT_EMAIL` | `contact@aegisimaging.ai` | Recipient for contact form submissions |
 
 ### Export Portal (React)
 ```bash

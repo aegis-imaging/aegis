@@ -24,18 +24,7 @@ css: |
 
 ---
 
-## Step 1: Create a Formspree Form
-
-- [ ] Go to [formspree.io](https://formspree.io) and sign up (free tier)
-- [ ] Create a new form — name it "AEGIS Contact"
-- [ ] Copy the form ID from the endpoint URL (the part after `https://formspree.io/f/`)
-- [ ] Save it — you'll need it in Step 3
-
-*If you skip this, the contact form falls back to a `mailto:contact@aegisimaging.ai` link.*
-
----
-
-## Step 2: Set Up Vercel Project
+## Step 1: Set Up Vercel Project
 
 - [ ] Go to [vercel.com](https://vercel.com) and sign up (free Hobby plan is fine)
 - [ ] Click **Add New → Project**
@@ -54,20 +43,31 @@ css: |
 
 ---
 
-## Step 3: Set Environment Variable
+## Step 2: Configure Contact Form Email (Brevo SMTP)
 
+The contact form uses a Vercel serverless function (`api/contact.ts`) that sends email via Brevo SMTP. Without these env vars, submissions are logged to the console but not emailed.
+
+- [ ] Sign up at [brevo.com](https://www.brevo.com) (free tier: 300 emails/day)
+- [ ] Go to **Settings → SMTP & API → SMTP** and note your credentials
 - [ ] In your Vercel project: **Settings → Environment Variables**
-- [ ] Add:
+- [ ] Add the following:
 
 | Key | Value | Environments |
 |-----|-------|-------------|
-| `VITE_FORMSPREE_ID` | *(your form ID from Step 1)* | Production, Preview, Development |
+| `BREVO_SMTP_HOST` | `smtp-relay.brevo.com` | Production, Preview |
+| `BREVO_SMTP_PORT` | `587` | Production, Preview |
+| `BREVO_SMTP_USER` | *(your Brevo SMTP login)* | Production, Preview |
+| `BREVO_SMTP_PASS` | *(your Brevo SMTP password)* | Production, Preview |
+| `BREVO_SMTP_FROM` | `AEGIS <noreply@aegisimaging.ai>` | Production, Preview |
 
 - [ ] Redeploy (Settings → Deployments → click **⋮** on latest → **Redeploy**)
+- [ ] Test the contact form — check your inbox at `contact@aegisimaging.ai`
+
+*If you skip this step, the contact form still works — submissions are logged server-side but not emailed. You can configure it later.*
 
 ---
 
-## Step 4: Add Custom Domain in Vercel
+## Step 3: Add Custom Domain in Vercel
 
 - [ ] In your Vercel project: **Settings → Domains**
 - [ ] Type `aegisimaging.ai` and click **Add**
@@ -75,7 +75,7 @@ css: |
 
 ---
 
-## Step 5: Configure DNS at GoDaddy
+## Step 4: Configure DNS at GoDaddy
 
 - [ ] Log in to [godaddy.com](https://godaddy.com)
 - [ ] Go to **My Products → aegisimaging.ai → DNS → Manage DNS**
@@ -93,20 +93,20 @@ css: |
 
 ---
 
-## Step 6: Set Up aegisimaging.org Redirect (Optional)
+## Step 5: Set Up aegisimaging.org Redirect (Optional)
 
 - [ ] **Option A — Via Vercel:** Add `aegisimaging.org` as a domain in the same Vercel project. Vercel will redirect it to the primary domain.
 - [ ] **Option B — Via GoDaddy:** On the `.org` domain, set up a domain forward: GoDaddy → My Products → aegisimaging.org → Manage → Forwarding → Forward to `https://aegisimaging.ai`
 
 ---
 
-## Step 7: Verify Everything Works
+## Step 6: Verify Everything Works
 
 - [ ] Visit `https://aegisimaging.ai` — page loads with SSL
 - [ ] Visit `https://www.aegisimaging.ai` — redirects to apex
-- [ ] Scroll through all 13 sections — animations trigger
+- [ ] Scroll through all sections — animations trigger
 - [ ] Test mobile layout (resize browser or use phone)
-- [ ] Submit the contact form — check Formspree dashboard for the submission
+- [ ] Submit the contact form — check inbox at `contact@aegisimaging.ai`
 - [ ] Visit `https://aegisimaging.org` — redirects to `.ai` (if configured)
 
 ---
@@ -114,3 +114,18 @@ css: |
 ## Ongoing: Auto-Deploy
 
 Vercel auto-deploys on every push to the branch it's connected to (typically `develop` or `main`). No manual deploys needed after initial setup. Every PR also gets a preview URL.
+
+---
+
+## Architecture: Contact Form
+
+The contact form (`POST /api/contact`) works via two independent paths:
+
+| Path | Backend | When |
+|------|---------|------|
+| **Vercel serverless function** | `frontend/landing/api/contact.ts` — nodemailer + Brevo SMTP | Landing page hosted on Vercel (standalone) |
+| **Go API endpoint** | `api/handler/contact.go` — existing SMTP config | Landing page proxied to Go backend |
+
+Both accept the same JSON payload `{ name, email, organization, role, message }` and return `{ sent: true }`.
+
+The Vercel function is self-contained — it doesn't depend on the Go API. This means the landing page and contact form work even before the backend is deployed. Once the backend is live, the Go API endpoint provides the same functionality using the platform's existing SMTP infrastructure.
