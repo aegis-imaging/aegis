@@ -4,6 +4,40 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 
 ---
 
+## 0. Business & Account Setup
+
+Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC and Encore Music LLC — keeps billing, sender reputation, and access controls separate per legal entity.
+
+### Per-LLC accounts to create
+
+| Service | AEGIS Imaging LLC | Why separate |
+|---------|------------------|--------------|
+| **GCP** | New project under AEGIS billing account | Billing tied to LLC, Terraform state isolated |
+| **Vercel** | New account (free Hobby tier) | Separate deployment, billing, env vars |
+| **Brevo** | New account (free: 300 emails/day) | Separate sender domain/reputation (`@aegisimaging.ai` vs `@encoremusicapp.com`) |
+| **Business bank account** | Open for AEGIS Imaging LLC | Required for GCP billing, separates finances |
+
+### GitHub — use Organizations (one personal account is fine)
+
+- [ ] Create GitHub Organization `aegis-imaging` (free tier)
+- [ ] Transfer `msenjem/AEGIS` repo to `aegis-imaging/AEGIS` (Settings → Transfer ownership) — do this before adding collaborators
+- [ ] Your `msenjem` account stays as owner of the org
+
+### P.O. Box (shared across all LLCs)
+
+- [ ] Get a P.O. Box (one box, shared by AEGIS Imaging LLC, Encore Music LLC, Matt Senjem Music LLC)
+- [ ] Amend each LLC filing with MN Secretary of State (~$35 each) to replace home address with P.O. Box
+
+### Prerequisites checklist
+
+- [ ] AEGIS Imaging LLC EIN obtained ✓
+- [ ] Open business bank account for AEGIS Imaging LLC
+- [ ] Create GCP account + billing account for AEGIS Imaging LLC
+- [ ] Create Vercel account for AEGIS Imaging LLC
+- [ ] Create Brevo account for AEGIS Imaging LLC (free tier: 300 emails/day)
+
+---
+
 ## 1. Local Development Environment
 
 - [ ] Install Go 1.23+ (`brew install go`)
@@ -14,11 +48,32 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 
 ## 2. GCP Project Setup
 
-- [ ] Create a new GCP project (e.g., `aegis-dev`) in your personal GCP account
-- [ ] Link a billing account to the project (free tier covers most dev usage)
+- [ ] Create a new GCP project (e.g., `aegis-dev`) under the **AEGIS Imaging LLC billing account** (not personal)
+- [ ] Link the AEGIS billing account to the project (free tier covers most dev usage)
 - [ ] Install the gcloud CLI (`brew install google-cloud-sdk`)
 - [ ] Authenticate: `gcloud auth login` and `gcloud auth application-default login`
 - [ ] Set default project: `gcloud config set project aegis-dev`
+
+### Beta launch auth (GCP IAP)
+
+For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard. No custom auth flow needed — Google handles login.
+
+| User type | Auth | How |
+|-----------|------|-----|
+| **Upload portal** (external sites) | None | Public — anyone with the link can upload |
+| **Admin dashboard** (beta testers) | GCP IAP | Sign in with Google account |
+
+- [ ] Deploy Go API to Cloud Run (see Terraform sections below)
+- [ ] Enable IAP on the Cloud Run load balancer
+- [ ] Add beta testers' Google accounts to IAP access list:
+  ```bash
+  gcloud iap web add-iam-policy-binding \
+    --member="user:tester@gmail.com" \
+    --role="roles/iap.httpsResourceAccessUser"
+  ```
+- [ ] Add the same emails to `admin_users` table (role: `admin` or `viewer`)
+- [ ] Set env vars on Cloud Run: `AUTH_ENABLED=true AUTH_PROVIDER=iap`
+- [ ] Verify: tester visits admin dashboard URL → Google sign-in → dashboard loads
 
 ## 3. Terraform — Project Bootstrap
 
@@ -593,7 +648,106 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 - [ ] Verify no crash when `SMTP_HOST` is unset (email silently skipped, no error returned)
 - [ ] Verify upload with no email entered still completes successfully (no notification sent)
 
+## 8c. Landing Page & Contact Form (Vercel + Brevo)
+
+**Site:** aegisimaging.ai | **Source:** `frontend/landing/` | **Framework:** Vite + React
+
+The landing page is deployed to Vercel as a static site with a serverless function for the contact form. Vercel auto-deploys on every push to the connected branch — no manual deploys needed after initial setup. Every PR also gets a preview URL.
+
+### Step 1: Set up Vercel project
+
+- [ ] Create a Vercel account for AEGIS Imaging LLC (separate from Encore) at [vercel.com](https://vercel.com) (free Hobby plan)
+- [ ] Click **Add New → Project**
+- [ ] Connect your GitHub account and select the **AEGIS** repo
+- [ ] **Configure Project:**
+
+| Setting | Value |
+|---------|-------|
+| **Root Directory** | `frontend/landing` |
+| **Framework Preset** | Vite (should auto-detect) |
+| **Build Command** | `npm run build` (default) |
+| **Output Directory** | `dist` (default) |
+
+- [ ] Click **Deploy** — wait for the first build to succeed
+- [ ] Note the preview URL Vercel gives you (e.g. `aegis-abc123.vercel.app`)
+
+### Step 2: Configure contact form email (Brevo SMTP)
+
+The contact form uses a Vercel serverless function (`api/contact.ts`) that sends email via Brevo SMTP. Without these env vars, submissions are logged to the console but not emailed — you can configure this later.
+
+- [ ] Create a Brevo account for AEGIS Imaging LLC at [brevo.com](https://www.brevo.com) (free tier: 300 emails/day)
+- [ ] Go to **Settings → SMTP & API → SMTP** and note your credentials
+- [ ] In your Vercel project: **Settings → Environment Variables**, add:
+
+| Key | Value | Environments |
+|-----|-------|-------------|
+| `BREVO_SMTP_HOST` | `smtp-relay.brevo.com` | Production, Preview |
+| `BREVO_SMTP_PORT` | `587` | Production, Preview |
+| `BREVO_SMTP_USER` | *(your Brevo SMTP login)* | Production, Preview |
+| `BREVO_SMTP_PASS` | *(your Brevo SMTP password)* | Production, Preview |
+| `BREVO_SMTP_FROM` | `AEGIS <noreply@aegisimaging.ai>` | Production, Preview |
+
+- [ ] Redeploy (Settings → Deployments → click **⋮** on latest → **Redeploy**)
+- [ ] Test: submit the contact form → check inbox at `contact@aegisimaging.ai`
+
+### Step 3: Add custom domain in Vercel
+
+- [ ] In your Vercel project: **Settings → Domains**
+- [ ] Type `aegisimaging.ai` and click **Add**
+- [ ] Vercel will show the DNS records you need — keep this page open
+
+### Step 4: Configure DNS at GoDaddy
+
+- [ ] Log in to [godaddy.com](https://godaddy.com)
+- [ ] Go to **My Products → aegisimaging.ai → DNS → Manage DNS**
+- [ ] Delete any GoDaddy parking/forwarding records if present
+- [ ] Add or edit these records:
+
+| Type | Name | Value | TTL |
+|------|------|-------|-----|
+| `A` | `@` | `76.76.21.21` | 1 Hour |
+| `CNAME` | `www` | `cname.vercel-dns.com` | 1 Hour |
+
+- [ ] Save changes
+- [ ] Go back to the Vercel Domains page — wait for the green checkmark (5–30 min, sometimes up to 48 hours)
+- [ ] Vercel provisions a free SSL certificate automatically
+
+### Step 5: Set up aegisimaging.org redirect (optional)
+
+- [ ] **Option A — Via Vercel:** Add `aegisimaging.org` as a domain in the same Vercel project. Vercel will redirect it to the primary domain.
+- [ ] **Option B — Via GoDaddy:** On the `.org` domain, set up a domain forward: GoDaddy → My Products → aegisimaging.org → Manage → Forwarding → Forward to `https://aegisimaging.ai`
+
+### Step 6: Verify everything works
+
+- [ ] Visit `https://aegisimaging.ai` — page loads with SSL
+- [ ] Visit `https://www.aegisimaging.ai` — redirects to apex
+- [ ] Scroll through all sections — animations trigger
+- [ ] Test mobile layout (resize browser or use phone)
+- [ ] Submit the contact form — check inbox at `contact@aegisimaging.ai`
+- [ ] Visit `https://aegisimaging.org` — redirects to `.ai` (if configured)
+
+### How the contact form works
+
+The contact form (`POST /api/contact`) has two independent delivery paths:
+
+| Path | Backend | When |
+|------|---------|------|
+| **Vercel serverless function** | `frontend/landing/api/contact.ts` — nodemailer + Brevo SMTP | Landing page on Vercel (standalone) |
+| **Go API endpoint** | `api/handler/contact.go` — existing SMTP config | Landing page proxied to Go backend |
+
+Both accept `{ name, email, organization, role, message }` and return `{ sent: true }`. The Vercel function is self-contained — it doesn't depend on the Go API. This means the landing page and contact form work even before the backend is deployed.
+
 ## 9. GitHub Repository
+
+### Organization setup
+
+Use GitHub Organizations to separate codebases by company. One personal GitHub account (`msenjem`) is fine — you own both orgs.
+
+- [ ] Create GitHub Organization: `aegis-imaging`
+- [ ] Transfer repo: `msenjem/AEGIS` → `aegis-imaging/AEGIS` (Settings → Transfer ownership)
+- [ ] Update local remote: `git remote set-url origin git@github.com:aegis-imaging/AEGIS.git`
+
+### Repository setup
 
 - [ ] Verify remote is set: `git remote -v`
 - [ ] Push monorepo scaffold to `develop` branch
@@ -603,7 +757,7 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
   - Branch name patterns: `main` and `develop`
   - Enable: "Require a pull request before merging", "Do not allow deletions"
 - [ ] CI is configured: `.github/workflows/ci.yml` runs automatically on PRs to `develop` and `main`
-  - Go build + vet, Python syntax check (6 services), TypeScript type check (4 apps), Docker build (7 images)
+  - Go build + vet, Python syntax check (6 services), TypeScript type check (5 apps), Docker build (7 images)
 - [ ] Verify CI passes: open a test PR and check the Actions tab
 - [ ] Run `make lint` locally to validate before pushing
 
@@ -617,4 +771,4 @@ Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-20. See AEGIS_Architecture.md for the full system design.*
+*Generated 2026-02-18. Updated 2026-02-19. See AEGIS_Architecture.md for the full system design.*
