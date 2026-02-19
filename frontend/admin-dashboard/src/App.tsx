@@ -35,6 +35,8 @@ type Study = {
   classification_status: string
   protocol_required: boolean
   protocol_status: string
+  export_required: boolean
+  export_status: string
   instance_count: number
   created_at: string
 }
@@ -177,7 +179,7 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' }) {
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' | 'export' }) {
   const modifier =
     (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
     (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
@@ -186,6 +188,7 @@ function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' |
     (prefix === 'protocol' && label === 'compliant') ? 'protocol-compliant' :
     (prefix === 'protocol' && label === 'minor_deviations') ? 'protocol-minor_deviations' :
     (prefix === 'protocol' && label === 'non_compliant') ? 'protocol-non_compliant' :
+    (prefix === 'export') ? `export-${label}` :
     label
   const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
@@ -595,6 +598,10 @@ function StudyRow({ study, onAction, isAdmin }: { study: Study; onAction: () => 
     await fetch(`/api/studies/${study.study_instance_uid}/protocol-check`, { method: 'POST' })
     onAction()
   }
+  const handleTriggerExport = async () => {
+    await fetch(`/api/studies/${study.study_instance_uid}/trigger-export`, { method: 'POST' })
+    onAction()
+  }
 
   return (
     <>
@@ -609,6 +616,7 @@ function StudyRow({ study, onAction, isAdmin }: { study: Study; onAction: () => 
         <td>{study.bids_required ? <Badge label={study.bids_status || 'n/a'} prefix="bids" /> : '—'}</td>
         <td>{study.classification_required ? <Badge label={study.classification_status || 'n/a'} prefix="classify" /> : '—'}</td>
         <td>{study.protocol_required ? <Badge label={study.protocol_status || 'n/a'} prefix="protocol" /> : '—'}</td>
+        <td>{study.export_required ? <Badge label={study.export_status || 'n/a'} prefix="export" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
@@ -636,11 +644,17 @@ function StudyRow({ study, onAction, isAdmin }: { study: Study; onAction: () => 
             {canBidsDownload && (
               <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>
             )}
+            {study.status === 'approved' && (
+              <a href={`/api/studies/${study.study_instance_uid}/dicom-download`} className="btn btn--dicom-download" download>Download DICOM</a>
+            )}
             {isAdmin && canClassify && (
               <button type="button" className="btn btn--classify" onClick={handleClassify}>Classify</button>
             )}
             {isAdmin && canProtocolCheck && (
               <button type="button" className="btn btn--protocol-check" onClick={handleProtocolCheck}>Check Protocol</button>
+            )}
+            {isAdmin && study.export_required && (study.export_status === 'pending' || study.export_status === 'failed') && study.status === 'approved' && (
+              <button type="button" className="btn btn--export" onClick={handleTriggerExport}>Export</button>
             )}
             {canReviewDeface && (
               <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>
@@ -655,21 +669,21 @@ function StudyRow({ study, onAction, isAdmin }: { study: Study; onAction: () => 
       </tr>
       {shareOpen && (
         <tr>
-          <td colSpan={13}>
+          <td colSpan={14}>
             <SharePanel study={study} onClose={() => setShareOpen(false)} />
           </td>
         </tr>
       )}
       {defaceOpen && (
         <tr>
-          <td colSpan={13}>
+          <td colSpan={14}>
             <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />
           </td>
         </tr>
       )}
       {viewOpen && (
         <tr>
-          <td colSpan={13}>
+          <td colSpan={14}>
             <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
           </td>
         </tr>
@@ -981,6 +995,7 @@ function RoutingPanel({ isAdmin }: { isAdmin: boolean }) {
                 <option value="require_bids_conversion">require_bids_conversion — convert to NIfTI/BIDS</option>
                 <option value="require_classification">require_classification — classify modality/body part</option>
                 <option value="require_protocol_check">require_protocol_check — check protocol compliance</option>
+                <option value="require_export">require_export — auto-forward to destinations on approval</option>
                 <option value="auto_approve">auto_approve — skip QC, approve immediately</option>
                 <option value="reject">reject — auto-reject</option>
                 <option value="route_to">route_to — forward to external destination</option>
@@ -2642,6 +2657,7 @@ export function App() {
                     <th>BIDS</th>
                     <th>Class.</th>
                     <th>Protocol</th>
+                    <th>Export</th>
                     <th className="align-right">Files</th>
                     <th>Received</th>
                     <th>Actions</th>

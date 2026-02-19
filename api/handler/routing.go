@@ -221,7 +221,7 @@ func (s *Server) EvaluateRoutingRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	routing.EvaluateRules(r.Context(), s.db, study)
+	routing.EvaluateRules(r.Context(), s.db, s.store, study)
 
 	log, err := model.ListRoutingLogForStudy(r.Context(), s.db, study.ID)
 	if err != nil {
