@@ -18,6 +18,7 @@ from app.ingest import (
     clear_dead_letter,
     process_retry_queue,
     replay_dead_letter,
+    replay_dead_letter_study,
     retry_details,
     retry_snapshot,
 )
@@ -112,6 +113,13 @@ def ingest_retry_replay(limit: int = Query(default=100, ge=1, le=10000)):
     """Replay dead-letter items back into the retry queue."""
     snap = replay_dead_letter(limit=limit)
     return {"status": "ok", "ingest_retry": snap}
+
+
+@app.post("/ingest/retry/replay/{study_instance_uid}")
+def ingest_retry_replay_study(study_instance_uid: str):
+    """Replay a specific dead-letter study by StudyInstanceUID."""
+    result = replay_dead_letter_study(study_instance_uid=study_instance_uid)
+    return {"status": "ok", "ingest_retry": result}
 
 
 @app.post("/ingest/retry/clear-dead-letter")
