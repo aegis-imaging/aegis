@@ -582,10 +582,14 @@ def test_clear_dead_letter_removes_items(monkeypatch):
 
     after = clear_dead_letter(limit=1)
     assert after["cleared_now"] == 1
+    assert after["before_dead_letter"] == 2
+    assert after["after_dead_letter"] == 1
     assert after["dead_letter"] == 1
 
     after2 = clear_dead_letter(limit=10)
     assert after2["cleared_now"] == 1
+    assert after2["before_dead_letter"] == 1
+    assert after2["after_dead_letter"] == 0
     assert after2["dead_letter"] == 0
     assert after2["cleared_dead_letter_total"] == 2
 
@@ -622,6 +626,8 @@ def test_clear_dead_letter_study_found(monkeypatch):
     result = clear_dead_letter_study("2.2.2.2")
     assert result["found"] is True
     assert result["cleared"] == 1
+    assert result["before_dead_letter"] == 2
+    assert result["after_dead_letter"] == 1
     assert result["snapshot"]["dead_letter"] == 1
 
 
@@ -629,6 +635,8 @@ def test_clear_dead_letter_study_not_found():
     result = clear_dead_letter_study("missing-study")
     assert result["found"] is False
     assert result["cleared"] == 0
+    assert result["before_dead_letter"] == 0
+    assert result["after_dead_letter"] == 0
 
 
 def test_clear_pending_removes_items(monkeypatch):
@@ -644,10 +652,14 @@ def test_clear_pending_removes_items(monkeypatch):
 
     after = clear_pending(limit=1)
     assert after["cleared_now"] == 1
+    assert after["before_pending"] == 2
+    assert after["after_pending"] == 1
     assert after["pending"] == 1
 
     after2 = clear_pending(limit=10)
     assert after2["cleared_now"] == 1
+    assert after2["before_pending"] == 1
+    assert after2["after_pending"] == 0
     assert after2["pending"] == 0
     assert after2["cleared_pending_total"] == 2
 
@@ -663,6 +675,8 @@ def test_clear_pending_study_found(monkeypatch):
     result = clear_pending_study("2.2.2.2")
     assert result["found"] is True
     assert result["cleared"] == 1
+    assert result["before_pending"] == 2
+    assert result["after_pending"] == 1
     assert result["snapshot"]["pending"] == 1
 
 
@@ -670,3 +684,5 @@ def test_clear_pending_study_not_found():
     result = clear_pending_study("missing-study")
     assert result["found"] is False
     assert result["cleared"] == 0
+    assert result["before_pending"] == 0
+    assert result["after_pending"] == 0
