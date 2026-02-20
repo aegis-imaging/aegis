@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.ingest import reset_retry_state
 from app.main import app
 
 
@@ -16,6 +17,10 @@ class _DummyAE:
         self.shutdown_called = True
 
 
+def setup_function():
+    reset_retry_state()
+
+
 def test_healthz_ok_with_running_scp():
     dummy = _DummyAE(active_associations=[])
 
@@ -25,7 +30,10 @@ def test_healthz_ok_with_running_scp():
         with TestClient(app) as client:
             resp = client.get("/healthz")
             assert resp.status_code == 200
-            assert resp.json() == {"status": "ok", "scp": "running"}
+            data = resp.json()
+            assert data["status"] == "ok"
+            assert data["scp"] == "running"
+            assert "ingest_retry" in data
 
     assert dummy.shutdown_called is True
 
@@ -39,7 +47,10 @@ def test_healthz_degraded_when_scp_not_running():
         with TestClient(app) as client:
             resp = client.get("/healthz")
             assert resp.status_code == 200
-            assert resp.json() == {"status": "degraded", "scp": "not_running"}
+            data = resp.json()
+            assert data["status"] == "degraded"
+            assert data["scp"] == "not_running"
+            assert "ingest_retry" in data
 
 
 def test_forward_success():
@@ -101,3 +112,18 @@ def test_forward_runtime_error_maps_to_502():
 
     assert resp.status_code == 502
     assert "association failed" in resp.json()["detail"]
+
+
+def test_ingest_retry_status_endpoint():
+    from unittest.mock import patch
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ):
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert "ingest_retry" in body
