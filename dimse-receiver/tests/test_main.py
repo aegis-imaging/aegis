@@ -21,6 +21,9 @@ class _DummyAE:
 def setup_function():
     reset_retry_state()
     reset_actions()
+    import app.config as cfg
+
+    cfg.DIMSE_OPERATOR_API_KEY = ""
 
 
 def test_healthz_ok_with_running_scp():
@@ -129,6 +132,55 @@ def test_ingest_retry_status_endpoint():
     body = resp.json()
     assert body["status"] == "ok"
     assert "ingest_retry" in body
+
+
+def test_retry_endpoints_require_operator_key_when_configured(monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.setattr("app.config.DIMSE_OPERATOR_API_KEY", "secret")
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ):
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry")
+
+    assert resp.status_code == 401
+    assert "operator auth required" in resp.json()["detail"]
+
+
+def test_retry_endpoints_accept_operator_key_header(monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.setattr("app.config.DIMSE_OPERATOR_API_KEY", "secret")
+    actions = {"total": 1, "items": [{"action": "retry_process"}]}
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.get_actions", return_value=actions):
+        with TestClient(app) as client:
+            resp = client.get(
+                "/ingest/retry/actions?limit=1",
+                headers={"x-aegis-operator-key": "secret"},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "actions": actions}
+
+
+def test_retry_endpoints_accept_operator_bearer(monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.setattr("app.config.DIMSE_OPERATOR_API_KEY", "secret")
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ):
+        with TestClient(app) as client:
+            resp = client.get(
+                "/ingest/retry",
+                headers={"authorization": "Bearer secret"},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
 
 
 def test_ingest_retry_actions_endpoint():
