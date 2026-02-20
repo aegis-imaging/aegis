@@ -8,6 +8,7 @@ import app.ingest as ingest_module
 from app.ingest import (
     clear_dead_letter,
     replay_dead_letter,
+    replay_dead_letter_study,
     retry_details,
     StudyAccumulator,
     process_retry_queue,
@@ -305,3 +306,24 @@ def test_clear_dead_letter_removes_items(monkeypatch):
     assert after2["cleared_now"] == 1
     assert after2["dead_letter"] == 0
     assert after2["cleared_dead_letter_total"] == 2
+
+
+def test_replay_dead_letter_study_moves_matching_item(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 10)
+    result = replay_dead_letter_study("1.2.3.4", now=456.0)
+    assert result["found"] is True
+    assert result["moved"] == 1
+    assert result["blocked_by_queue_full"] is False
+    assert result["snapshot"]["pending"] == 1
+    assert result["snapshot"]["dead_letter"] == 0
+
+
+def test_replay_dead_letter_study_not_found():
+    result = replay_dead_letter_study("missing-study")
+    assert result["found"] is False
+    assert result["moved"] == 0
+    assert result["blocked_by_queue_full"] is False

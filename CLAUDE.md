@@ -876,6 +876,7 @@ uvicorn app.main:app --port 8087
 - `GET /ingest/retry/details?limit=N` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, next retry timing, last_error).
 - `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
 - `POST /ingest/retry/replay?limit=N` — re-queues up to `N` dead-letter items for retry.
+- `POST /ingest/retry/replay/{study_instance_uid}` — targeted re-queue for a specific dead-letter study.
 - `POST /ingest/retry/clear-dead-letter?limit=N` — clears acknowledged dead-letter items.
 
 ### Batch Import CLI (`api/cmd/import/`)
@@ -1071,7 +1072,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 39 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication, retry status/details/process/replay/clear endpoints |
+| dimse-receiver | 41 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication, retry status/details/process/replay/targeted-replay/clear endpoints |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
