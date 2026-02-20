@@ -906,6 +906,7 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 Validation behavior:
 - `project_slug` is trimmed/lowercased; empty values default to `default`.
 - `source` is normalized and validated; only `internal` or `external` are accepted.
+- `source=external` requires explicit institution selector (`institution_id`, `institution_slug`, or `institution_ae_title`) for provenance.
 - `institution_id` and `institution_slug` are mutually exclusive (provide only one).
 - If `institution_ae_title` is provided alongside `institution_id` or `institution_slug`, they must resolve to the same institution.
 - `institution_ae_title` alone must resolve to exactly one enabled institution; ambiguous matches are rejected with a validation error.

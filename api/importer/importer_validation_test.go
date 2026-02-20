@@ -138,3 +138,25 @@ func TestRun_RejectsInvalidSource(t *testing.T) {
 	assert.True(t, IsValidationError(err))
 	assert.Contains(t, err.Error(), "source must be internal or external")
 }
+
+func TestValidateSourceInstitutionPolicy_RequiresSelectorForExternalSource(t *testing.T) {
+	opts := &Options{Source: "external"}
+	err := validateSourceInstitutionPolicy(opts)
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "institution selector required when source is external")
+}
+
+func TestValidateSourceInstitutionPolicy_AllowsExternalSourceWithSelector(t *testing.T) {
+	opts := &Options{Source: "external", InstitutionAETitle: "PACS_ALPHA"}
+	require.NoError(t, validateSourceInstitutionPolicy(opts))
+}
+
+func TestRun_RejectsExternalSourceWithoutInstitutionSelector(t *testing.T) {
+	_, err := Run(context.Background(), nil, nil, Options{
+		Source: "external",
+	})
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "institution selector required when source is external")
+}
