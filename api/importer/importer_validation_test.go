@@ -60,16 +60,25 @@ func TestValidationErrorMarker(t *testing.T) {
 
 func TestNormalizeInstitutionSelectors_TrimAndLower(t *testing.T) {
 	opts := &Options{
-		InstitutionID:      "  ",
-		InstitutionSlug:    "  Hospital-BRAVO  ",
-		InstitutionAETitle: "  PACS_ALPHA  ",
+		InstitutionID:   "  ",
+		InstitutionSlug: "  Hospital-BRAVO  ",
 	}
 
 	err := normalizeInstitutionSelectors(opts)
 	require.NoError(t, err)
 	assert.Equal(t, "", opts.InstitutionID)
 	assert.Equal(t, "hospital-bravo", opts.InstitutionSlug)
-	assert.Equal(t, "PACS_ALPHA", normalizeAETitle(opts.InstitutionAETitle))
+}
+
+func TestNormalizeInstitutionSelectors_RejectsAETitle(t *testing.T) {
+	opts := &Options{
+		InstitutionAETitle: "PACS_ALPHA",
+	}
+
+	err := normalizeInstitutionSelectors(opts)
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "institution_ae_title is no longer supported")
 }
 
 func TestNormalizeInstitutionSelectors_RejectsConflictingSelectors(t *testing.T) {
@@ -93,10 +102,6 @@ func TestRun_RejectsConflictingInstitutionSelectors(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, IsValidationError(err))
 	assert.Contains(t, err.Error(), "only one")
-}
-
-func TestNormalizeAETitle(t *testing.T) {
-	assert.Equal(t, "PACS_ALPHA", normalizeAETitle("  pacs_alpha  "))
 }
 
 func TestNormalizeImportDir_Required(t *testing.T) {
@@ -177,14 +182,6 @@ func TestValidateSourceInstitutionPolicy_AllowsExternalSourceWithSelector(t *tes
 	require.NoError(t, validateSourceInstitutionPolicy(opts))
 }
 
-func TestValidateSourceInstitutionPolicy_RejectsAETitleForExternalSource(t *testing.T) {
-	opts := &Options{Source: "external", InstitutionAETitle: "PACS_ALPHA", InstitutionSlug: "hospital-bravo"}
-	err := validateSourceInstitutionPolicy(opts)
-	require.Error(t, err)
-	assert.True(t, IsValidationError(err))
-	assert.Contains(t, err.Error(), "institution_ae_title is not allowed when source is external")
-}
-
 func TestRun_RejectsExternalSourceWithoutCanonicalInstitutionSelector(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
 		Dir:    "x",
@@ -195,13 +192,13 @@ func TestRun_RejectsExternalSourceWithoutCanonicalInstitutionSelector(t *testing
 	assert.Contains(t, err.Error(), "institution_id or institution_slug required when source is external")
 }
 
-func TestRun_RejectsExternalSourceUsingAETitle(t *testing.T) {
+func TestRun_RejectsAnySourceUsingAETitle(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
 		Dir:                "x",
-		Source:             "external",
+		Source:             "internal",
 		InstitutionAETitle: "PACS_ALPHA",
 	})
 	require.Error(t, err)
 	assert.True(t, IsValidationError(err))
-	assert.Contains(t, err.Error(), "institution_ae_title is not allowed when source is external")
+	assert.Contains(t, err.Error(), "institution_ae_title is no longer supported")
 }
