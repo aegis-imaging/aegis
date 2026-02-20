@@ -98,6 +98,18 @@ func TestNormalizeAETitle(t *testing.T) {
 	assert.Equal(t, "PACS_ALPHA", normalizeAETitle("  pacs_alpha  "))
 }
 
+func TestNormalizeProjectSlug_DefaultsToDefault(t *testing.T) {
+	opts := &Options{ProjectSlug: "   "}
+	normalizeProjectSlug(opts)
+	assert.Equal(t, "default", opts.ProjectSlug)
+}
+
+func TestNormalizeProjectSlug_TrimAndLower(t *testing.T) {
+	opts := &Options{ProjectSlug: "  ReSearch-Study  "}
+	normalizeProjectSlug(opts)
+	assert.Equal(t, "research-study", opts.ProjectSlug)
+}
+
 func TestNormalizeImportSource_DefaultsToInternal(t *testing.T) {
 	opts := &Options{Source: "   "}
 	require.NoError(t, normalizeImportSource(opts))
