@@ -176,11 +176,39 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 - [ ] Verify `project.created` and `project.updated` in Audit Log tab
 - [ ] `GET http://localhost:8080/api/projects/{id}` returns the updated project
 
-## 7g. Upload Portal QoL
+## 7g. Upload Portal Features
 
-- [ ] Upload a folder of DICOMs via the Upload Portal
-- [ ] During the uploading stage, verify the current filename appears below the progress bar
-- [ ] Long filenames are truncated with `…` prefix (>48 chars)
+### Project selector
+- [ ] Create a second project in admin dashboard → Projects tab → **+ New project** (e.g. name: "Research")
+- [ ] Open upload portal at http://localhost:3000
+- [ ] Verify project dropdown appears with both projects listed
+- [ ] Select the new project → upload a study → verify study appears under that project in admin dashboard
+- [ ] Delete the second project → reload upload portal → dropdown is hidden (single project auto-selected)
+
+### Drag-and-drop polish
+- [ ] Drag a folder of DICOMs onto the drop zone → parsing starts with file count and total size displayed
+- [ ] Click **Cancel** during parsing → returns to file selection
+- [ ] Re-select files → on the preview screen, verify file count and size shown in the blue info bar
+- [ ] Verify the **Confirm** button shows file count and size (e.g. "Confirm anonymization & upload (42 files, 156 MB)")
+- [ ] During upload, verify current filename appears below the progress bar
+- [ ] Click **Cancel** during upload → returns to preview with error message "Upload cancelled."
+
+### Email validation
+- [ ] On the preview screen, type an invalid email (e.g. "foo") → tab away → red validation error appears
+- [ ] Verify **Confirm** button is disabled while email is invalid
+- [ ] Clear the email field → button re-enables (email is optional)
+- [ ] Enter a valid email → validation error disappears, helper text shows "You'll receive an email when your study is approved or rejected"
+
+### Multi-study upload
+- [ ] Prepare a folder containing DICOM files from 2+ different studies (different StudyInstanceUIDs)
+- [ ] Upload the folder → portal detects multiple studies and shows a yellow notice
+- [ ] Each study has its own StudySummary card with series/image count
+- [ ] Click **Confirm & upload N studies** → each study uploads as a separate session
+- [ ] Upload progress shows "Study X of N" during multi-study upload
+- [ ] Success screen lists all session IDs and study UIDs
+- [ ] Verify each study appears as a separate row in the admin dashboard
+
+### Auto-retry
 - [ ] (Optional) Throttle network in DevTools mid-upload → verify retries up to 3× before error
 
 ## 7h. Burned-in PHI Detection
