@@ -236,6 +236,22 @@ def test_ingest_retry_process_endpoint():
     mock_record.assert_called_once()
 
 
+def test_ingest_retry_process_study_endpoint():
+    from unittest.mock import patch
+
+    result = {"study_instance_uid": "1.2.3.4", "found": True, "attempted": True, "result": "ok"}
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.process_retry_study", return_value=result) as mock_process:
+        with TestClient(app) as client:
+            resp = client.post("/ingest/retry/process/1.2.3.4")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": result}
+    mock_process.assert_called_once_with(study_instance_uid="1.2.3.4")
+
+
 def test_ingest_retry_replay_endpoint():
     from unittest.mock import patch
 
@@ -346,6 +362,7 @@ def test_retry_control_endpoints_emit_action_records():
     ):
         with TestClient(app) as client:
             client.post("/ingest/retry/process")
+            client.post("/ingest/retry/process/abc")
             client.post("/ingest/retry/replay?limit=1")
             client.post("/ingest/retry/replay/abc")
             client.post("/ingest/retry/clear-dead-letter?limit=1")
@@ -358,6 +375,7 @@ def test_retry_control_endpoints_emit_action_records():
     items = actions_resp.json()["actions"]["items"]
     names = [x["action"] for x in items]
     assert "retry_process" in names
+    assert "retry_process_study" in names
     assert "retry_replay_bulk" in names
     assert "retry_replay_study" in names
     assert "retry_clear_dead_letter" in names
