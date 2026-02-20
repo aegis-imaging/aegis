@@ -48,6 +48,9 @@ type Config struct {
 	// Empty string disables the service call (studies stay in "pending" until service is configured).
 	ProtocolServiceURL string
 
+	// DIMSE receiver service (Python sidecar) — accepts DICOM C-STORE from PACS systems.
+	DimseReceiverURL string
+
 	// CORS
 	AllowedOrigins []string
 
@@ -91,12 +94,13 @@ func Load() *Config {
 		S3Region:   envOr("S3_REGION", "us-east-1"),
 		S3Endpoint: os.Getenv("S3_ENDPOINT"), // e.g. http://localhost:4566 for LocalStack
 
-		DefacingServiceURL:     os.Getenv("DEFACING_SERVICE_URL"),     // e.g. http://localhost:8081
-		PhiDetectionServiceURL: os.Getenv("PHI_DETECTION_SERVICE_URL"), // e.g. http://localhost:8082
-		QcServiceURL:           os.Getenv("QC_SERVICE_URL"),            // e.g. http://localhost:8083
-		BidsServiceURL:             os.Getenv("BIDS_SERVICE_URL"),              // e.g. http://localhost:8084
-		ClassificationServiceURL:   os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
-		ProtocolServiceURL:         os.Getenv("PROTOCOL_SERVICE_URL"),      // e.g. http://localhost:8086
+		DefacingServiceURL:       os.Getenv("DEFACING_SERVICE_URL"),       // e.g. http://localhost:8081
+		PhiDetectionServiceURL:   os.Getenv("PHI_DETECTION_SERVICE_URL"),  // e.g. http://localhost:8082
+		QcServiceURL:             os.Getenv("QC_SERVICE_URL"),             // e.g. http://localhost:8083
+		BidsServiceURL:           os.Getenv("BIDS_SERVICE_URL"),           // e.g. http://localhost:8084
+		ClassificationServiceURL: os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
+		ProtocolServiceURL:       os.Getenv("PROTOCOL_SERVICE_URL"),       // e.g. http://localhost:8086
+		DimseReceiverURL:         os.Getenv("DIMSE_RECEIVER_URL"),         // e.g. http://localhost:8087
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 

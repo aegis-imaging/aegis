@@ -43,6 +43,8 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+.pytest_cache/
+.cache/
 
 # Business documents (CBI — never commit)
 Original Filing - Limited Liability Company (Domestic).pdf
