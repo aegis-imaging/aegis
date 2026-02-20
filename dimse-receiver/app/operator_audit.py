@@ -26,11 +26,14 @@ def record_action(action: str, **details: Any) -> None:
             del _actions[:overflow]
 
 
-def get_actions(limit: int = 100) -> dict[str, Any]:
-    """Return most recent action entries first."""
+def get_actions(limit: int = 100, action: str | None = None) -> dict[str, Any]:
+    """Return most recent action entries first, optionally filtered by action."""
     with _lock:
-        total = len(_actions)
-        items = list(reversed(_actions[-limit:]))
+        source = _actions
+        if action:
+            source = [event for event in _actions if event.get("action") == action]
+        total = len(source)
+        items = list(reversed(source[-limit:]))
     return {"total": total, "items": items}
 
 
