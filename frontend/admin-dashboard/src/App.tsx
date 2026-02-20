@@ -217,24 +217,28 @@ function fmtRemaining(seconds: number) {
   return `${mins}m`
 }
 
-function shareStatusLabel(share: Share): 'active' | 'expired' | 'revoked' {
-  if (share.status) return share.status
-  if (share.revoked_at) return 'revoked'
-  return new Date(share.expires_at) < new Date() ? 'expired' : 'active'
+function parseExpiresEpochMs(iso: string): number | null {
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? ms : null
 }
 
-function tickShareCountdown(share: Share): Share {
-  const status = shareStatusLabel(share)
-  if (status !== 'active') return share
-  if (typeof share.expires_in_seconds !== 'number') return share
-
-  const next = Math.max(0, Math.floor(share.expires_in_seconds) - 1)
-  if (next === share.expires_in_seconds) return share
-  return {
-    ...share,
-    expires_in_seconds: next,
-    status: next <= 0 ? 'expired' : 'active',
+function shareRemainingSeconds(share: Share, nowMs: number): number | null {
+  const expiresAtMs = parseExpiresEpochMs(share.expires_at)
+  if (expiresAtMs !== null) {
+    return Math.max(0, Math.floor((expiresAtMs - nowMs) / 1000))
   }
+  if (typeof share.expires_in_seconds === 'number') {
+    return Math.max(0, Math.floor(share.expires_in_seconds))
+  }
+  return null
+}
+
+function shareStatusLabel(share: Share, nowMs = Date.now()): 'active' | 'expired' | 'revoked' {
+  if (share.status === 'revoked' || share.revoked_at) return 'revoked'
+  if (share.status === 'expired') return 'expired'
+  const remaining = shareRemainingSeconds(share, nowMs)
+  if (remaining !== null && remaining <= 0) return 'expired'
+  return 'active'
 }
 
 function uidShort(uid: string) {
@@ -447,12 +451,14 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const [newShare, setNewShare] = useState<NewShareResult | null>(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const fetchShares = useCallback(async () => {
     try {
       const res = await fetch(`/api/studies/${study.id}/shares`)
       const data = await res.json()
       setShares(data)
+      setNowMs(Date.now())
     } catch {
       // non-fatal
     } finally {
@@ -463,12 +469,15 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
   useEffect(() => { fetchShares() }, [fetchShares])
 
   const hasLiveCountdown = shares.some(
-    s => shareStatusLabel(s) === 'active' && typeof s.expires_in_seconds === 'number',
+    s => shareStatusLabel(s, nowMs) === 'active' && shareRemainingSeconds(s, nowMs) !== null,
   )
+    || (newShare !== null
+      && shareStatusLabel(newShare, nowMs) === 'active'
+      && shareRemainingSeconds(newShare, nowMs) !== null)
   useEffect(() => {
     if (!hasLiveCountdown) return
     const id = window.setInterval(() => {
-      setShares(prev => prev.map(tickShareCountdown))
+      setNowMs(Date.now())
     }, 1000)
     return () => window.clearInterval(id)
   }, [hasLiveCountdown])
@@ -489,6 +498,7 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
       }
       const data = await res.json() as NewShareResult
       setNewShare(data)
+      setNowMs(Date.now())
       setEmail('')
       setNote('')
       fetchShares()
@@ -514,6 +524,9 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
     }
   }
 
+  const newShareStatus = newShare ? shareStatusLabel(newShare, nowMs) : null
+  const newShareRemainingSeconds = newShare ? shareRemainingSeconds(newShare, nowMs) : null
+
   return (
     <div className="share-panel">
       <div className="share-panel-header">
@@ -532,8 +545,8 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
           </div>
           <div className="share-url-meta">
             Expires {fmtDate(newShare.expires_at)} · Recipient: {newShare.recipient_email}
-            {newShare.status === 'active' && typeof newShare.expires_in_seconds === 'number' && (
-              <> · {fmtRemaining(newShare.expires_in_seconds)} remaining</>
+            {newShareStatus === 'active' && newShareRemainingSeconds !== null && (
+              <> · {fmtRemaining(newShareRemainingSeconds)} remaining</>
             )}
           </div>
         </div>
@@ -591,12 +604,13 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
           </thead>
           <tbody>
             {shares.map(s => {
-              const shareStatus = shareStatusLabel(s)
+              const shareStatus = shareStatusLabel(s, nowMs)
               const rowClass = shareStatus !== 'active' ? 'share-row--inactive' : ''
               const statusClass = `share-status--${shareStatus}`
+              const remainingSeconds = shareRemainingSeconds(s, nowMs)
               const remainingLabel =
-                shareStatus === 'active' && typeof s.expires_in_seconds === 'number'
-                  ? fmtRemaining(s.expires_in_seconds)
+                shareStatus === 'active' && remainingSeconds !== null
+                  ? fmtRemaining(remainingSeconds)
                   : ''
               return (
                 <tr key={s.id} className={rowClass}>
@@ -679,6 +693,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shareNote, setShareNote] = useState('')
   const [shareDays, setShareDays] = useState(7)
   const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const loadData = useCallback(() => {
     setLoading(true)
@@ -692,6 +707,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       setAudit(a ?? [])
       setRoutingLog(rl ?? [])
       setShares(sh ?? [])
+      setNowMs(Date.now())
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [studyId])
@@ -699,12 +715,12 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   useEffect(() => { loadData() }, [loadData])
 
   const hasLiveShareCountdown = shares.some(
-    s => shareStatusLabel(s) === 'active' && typeof s.expires_in_seconds === 'number',
+    s => shareStatusLabel(s, nowMs) === 'active' && shareRemainingSeconds(s, nowMs) !== null,
   )
   useEffect(() => {
     if (!hasLiveShareCountdown) return
     const id = window.setInterval(() => {
-      setShares(prev => prev.map(tickShareCountdown))
+      setNowMs(Date.now())
     }, 1000)
     return () => window.clearInterval(id)
   }, [hasLiveShareCountdown])
@@ -899,11 +915,12 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             <tbody>
               {shares.length === 0 && <tr><td colSpan={5}>No shares.</td></tr>}
               {shares.map(s => {
-                const shareStatus = shareStatusLabel(s)
+                const shareStatus = shareStatusLabel(s, nowMs)
                 const statusClass = `share-status--${shareStatus}`
+                const remainingSeconds = shareRemainingSeconds(s, nowMs)
                 const remainingLabel =
-                  shareStatus === 'active' && typeof s.expires_in_seconds === 'number'
-                    ? fmtRemaining(s.expires_in_seconds)
+                  shareStatus === 'active' && remainingSeconds !== null
+                    ? fmtRemaining(remainingSeconds)
                     : ''
                 return (
                   <tr key={s.id}>
