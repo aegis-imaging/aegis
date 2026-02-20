@@ -169,20 +169,39 @@ func TestValidateSourceInstitutionPolicy_RequiresSelectorForExternalSource(t *te
 	err := validateSourceInstitutionPolicy(opts)
 	require.Error(t, err)
 	assert.True(t, IsValidationError(err))
-	assert.Contains(t, err.Error(), "institution selector required when source is external")
+	assert.Contains(t, err.Error(), "institution_id or institution_slug required when source is external")
 }
 
 func TestValidateSourceInstitutionPolicy_AllowsExternalSourceWithSelector(t *testing.T) {
-	opts := &Options{Source: "external", InstitutionAETitle: "PACS_ALPHA"}
+	opts := &Options{Source: "external", InstitutionSlug: "hospital-bravo"}
 	require.NoError(t, validateSourceInstitutionPolicy(opts))
 }
 
-func TestRun_RejectsExternalSourceWithoutInstitutionSelector(t *testing.T) {
+func TestValidateSourceInstitutionPolicy_RejectsAETitleForExternalSource(t *testing.T) {
+	opts := &Options{Source: "external", InstitutionAETitle: "PACS_ALPHA", InstitutionSlug: "hospital-bravo"}
+	err := validateSourceInstitutionPolicy(opts)
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "institution_ae_title is not allowed when source is external")
+}
+
+func TestRun_RejectsExternalSourceWithoutCanonicalInstitutionSelector(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
 		Dir:    "x",
 		Source: "external",
 	})
 	require.Error(t, err)
 	assert.True(t, IsValidationError(err))
-	assert.Contains(t, err.Error(), "institution selector required when source is external")
+	assert.Contains(t, err.Error(), "institution_id or institution_slug required when source is external")
+}
+
+func TestRun_RejectsExternalSourceUsingAETitle(t *testing.T) {
+	_, err := Run(context.Background(), nil, nil, Options{
+		Dir:                "x",
+		Source:             "external",
+		InstitutionAETitle: "PACS_ALPHA",
+	})
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "institution_ae_title is not allowed when source is external")
 }

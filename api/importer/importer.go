@@ -212,8 +212,11 @@ func validateSourceInstitutionPolicy(opts *Options) error {
 	if opts.Source != "external" {
 		return nil
 	}
-	if opts.InstitutionID == "" && opts.InstitutionSlug == "" && opts.InstitutionAETitle == "" {
-		return validationErrorf("institution selector required when source is external")
+	if opts.InstitutionAETitle != "" {
+		return validationErrorf("institution_ae_title is not allowed when source is external; use institution_id or institution_slug")
+	}
+	if opts.InstitutionID == "" && opts.InstitutionSlug == "" {
+		return validationErrorf("institution_id or institution_slug required when source is external")
 	}
 	return nil
 }
