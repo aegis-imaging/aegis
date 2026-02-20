@@ -39,6 +39,8 @@ def test_healthz_ok_with_running_scp():
             assert data["status"] == "ok"
             assert data["scp"] == "running"
             assert "ingest_retry" in data
+            assert "pending_oldest_age_seconds" in data["ingest_retry"]
+            assert "dead_letter_oldest_age_seconds" in data["ingest_retry"]
 
     assert dummy.shutdown_called is True
 
@@ -56,6 +58,8 @@ def test_healthz_degraded_when_scp_not_running():
             assert data["status"] == "degraded"
             assert data["scp"] == "not_running"
             assert "ingest_retry" in data
+            assert "pending_oldest_age_seconds" in data["ingest_retry"]
+            assert "dead_letter_oldest_age_seconds" in data["ingest_retry"]
 
 
 def test_forward_success():

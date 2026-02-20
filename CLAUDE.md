@@ -876,9 +876,9 @@ uvicorn app.main:app --port 8087
 
 **Operational endpoints:**
 - If `DIMSE_OPERATOR_API_KEY` is set, all `/ingest/retry*` endpoints require that key.
-- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total` and `dead_letter_deduped_total`) and returns `degraded` if SCP is down or dead-letter is non-zero.
+- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total` and `dead_letter_deduped_total`) plus oldest-age metrics (`pending_oldest_age_seconds`, `dead_letter_oldest_age_seconds`), and returns `degraded` if SCP is down or dead-letter is non-zero.
 - Retry scheduling uses bounded exponential backoff (base interval, multiplier, max interval cap).
-- `GET /ingest/retry` — returns retry/dead-letter counters for troubleshooting.
+- `GET /ingest/retry` — returns retry/dead-letter counters plus oldest-age metrics for troubleshooting.
 - `GET /ingest/retry/actions?limit=N` — returns recent operator actions on retry controls (bounded in-memory audit log).
 - `GET /ingest/retry/details?limit=N` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, next retry timing, last_error).
 - `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
