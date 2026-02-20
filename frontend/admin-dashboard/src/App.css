@@ -455,6 +455,11 @@
 }
 
 .shares-table .td-muted { color: #6b7280; }
+.td-subtle {
+  color: #9ca3af;
+  font-size: 12px;
+  margin-top: 2px;
+}
 
 .share-row--inactive { opacity: 0.6; }
 

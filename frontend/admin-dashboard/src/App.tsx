@@ -63,7 +63,11 @@ type Share = {
   recipient_email: string
   note: string
   expires_at: string
+  expires_in_seconds?: number
+  // Client-only epoch anchor used for drift-resistant countdowns from server remaining seconds.
+  expires_anchor_epoch_ms?: number
   revoked_at?: string
+  status?: 'active' | 'expired' | 'revoked'
   created_at: string
 }
 
@@ -187,8 +191,80 @@ type AuthIdentity = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+  timeZoneName: 'short',
+})
+
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString()
+  if (!iso) return ''
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return iso
+  return DATE_TIME_FORMAT.format(dt)
+}
+
+function fmtRemaining(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds))
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const mins = Math.floor((total % 3600) / 60)
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
+}
+
+function parseExpiresEpochMs(iso: string): number | null {
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? ms : null
+}
+
+function withShareExpiryAnchor<T extends Share>(share: T, nowMs = Date.now()): T {
+  const anchoredFromRemaining =
+    typeof share.expires_in_seconds === 'number'
+      ? nowMs + (Math.max(0, Math.floor(share.expires_in_seconds)) * 1000)
+      : null
+  if (anchoredFromRemaining !== null) {
+    return {
+      ...share,
+      expires_anchor_epoch_ms: anchoredFromRemaining,
+    }
+  }
+  const parsedExpiresAt = parseExpiresEpochMs(share.expires_at)
+  if (parsedExpiresAt !== null) {
+    return {
+      ...share,
+      expires_anchor_epoch_ms: parsedExpiresAt,
+    }
+  }
+  return share
+}
+
+function shareRemainingSeconds(share: Share, nowMs: number): number | null {
+  if (typeof share.expires_anchor_epoch_ms === 'number') {
+    return Math.max(0, Math.floor((share.expires_anchor_epoch_ms - nowMs) / 1000))
+  }
+  const expiresAtMs = parseExpiresEpochMs(share.expires_at)
+  if (expiresAtMs !== null) {
+    return Math.max(0, Math.floor((expiresAtMs - nowMs) / 1000))
+  }
+  if (typeof share.expires_in_seconds === 'number') {
+    return Math.max(0, Math.floor(share.expires_in_seconds))
+  }
+  return null
+}
+
+function shareStatusLabel(share: Share, nowMs = Date.now()): 'active' | 'expired' | 'revoked' {
+  if (share.status === 'revoked' || share.revoked_at) return 'revoked'
+  if (share.status === 'expired') return 'expired'
+  const remaining = shareRemainingSeconds(share, nowMs)
+  if (remaining !== null && remaining <= 0) return 'expired'
+  return 'active'
 }
 
 function uidShort(uid: string) {
@@ -401,12 +477,15 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const [newShare, setNewShare] = useState<NewShareResult | null>(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const fetchShares = useCallback(async () => {
     try {
       const res = await fetch(`/api/studies/${study.id}/shares`)
-      const data = await res.json()
-      setShares(data)
+      const now = Date.now()
+      const data = (await res.json()) as Share[]
+      setShares(data.map(s => withShareExpiryAnchor(s, now)))
+      setNowMs(now)
     } catch {
       // non-fatal
     } finally {
@@ -415,6 +494,20 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
   }, [study.id])
 
   useEffect(() => { fetchShares() }, [fetchShares])
+
+  const hasLiveCountdown = shares.some(
+    s => shareStatusLabel(s, nowMs) === 'active' && shareRemainingSeconds(s, nowMs) !== null,
+  )
+    || (newShare !== null
+      && shareStatusLabel(newShare, nowMs) === 'active'
+      && shareRemainingSeconds(newShare, nowMs) !== null)
+  useEffect(() => {
+    if (!hasLiveCountdown) return
+    const id = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [hasLiveCountdown])
 
   const handleCreate = async () => {
     if (!email) { setError('Recipient email is required'); return }
@@ -430,8 +523,10 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
         const body = await res.json()
         throw new Error(body.error ?? 'Failed to create share')
       }
+      const now = Date.now()
       const data = await res.json() as NewShareResult
-      setNewShare(data)
+      setNewShare(withShareExpiryAnchor(data, now))
+      setNowMs(now)
       setEmail('')
       setNote('')
       fetchShares()
@@ -457,6 +552,9 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
     }
   }
 
+  const newShareStatus = newShare ? shareStatusLabel(newShare, nowMs) : null
+  const newShareRemainingSeconds = newShare ? shareRemainingSeconds(newShare, nowMs) : null
+
   return (
     <div className="share-panel">
       <div className="share-panel-header">
@@ -475,6 +573,9 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
           </div>
           <div className="share-url-meta">
             Expires {fmtDate(newShare.expires_at)} · Recipient: {newShare.recipient_email}
+            {newShareStatus === 'active' && newShareRemainingSeconds !== null && (
+              <> · {fmtRemaining(newShareRemainingSeconds)} remaining</>
+            )}
           </div>
         </div>
       )}
@@ -531,15 +632,21 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
           </thead>
           <tbody>
             {shares.map(s => {
-              const revoked = !!s.revoked_at
-              const expired = !revoked && new Date(s.expires_at) < new Date()
-              const shareStatus = revoked ? 'revoked' : expired ? 'expired' : 'active'
+              const shareStatus = shareStatusLabel(s, nowMs)
               const rowClass = shareStatus !== 'active' ? 'share-row--inactive' : ''
               const statusClass = `share-status--${shareStatus}`
+              const remainingSeconds = shareRemainingSeconds(s, nowMs)
+              const remainingLabel =
+                shareStatus === 'active' && remainingSeconds !== null
+                  ? fmtRemaining(remainingSeconds)
+                  : ''
               return (
                 <tr key={s.id} className={rowClass}>
                   <td>{s.recipient_email}</td>
-                  <td className="td-muted">{fmtDate(s.expires_at)}</td>
+                  <td className="td-muted">
+                    {fmtDate(s.expires_at)}
+                    {remainingLabel && <div className="td-subtle">({remainingLabel} remaining)</div>}
+                  </td>
                   <td className={statusClass}>{shareStatus}</td>
                   <td className="td-muted">{fmtDate(s.created_at)}</td>
                   <td>
@@ -614,6 +721,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shareNote, setShareNote] = useState('')
   const [shareDays, setShareDays] = useState(7)
   const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const loadData = useCallback(() => {
     setLoading(true)
@@ -623,15 +731,29 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/routing-log`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/shares`).then(r => r.ok ? r.json() : []),
     ]).then(([s, a, rl, sh]) => {
+      const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
       setRoutingLog(rl ?? [])
-      setShares(sh ?? [])
+      const shareRows = (sh ?? []) as Share[]
+      setShares(shareRows.map(row => withShareExpiryAnchor(row, now)))
+      setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [studyId])
 
   useEffect(() => { loadData() }, [loadData])
+
+  const hasLiveShareCountdown = shares.some(
+    s => shareStatusLabel(s, nowMs) === 'active' && shareRemainingSeconds(s, nowMs) !== null,
+  )
+  useEffect(() => {
+    if (!hasLiveShareCountdown) return
+    const id = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [hasLiveShareCountdown])
 
   if (loading) return <div className="state-loading">Loading study details…</div>
   if (!study) return <div className="state-error">Study not found. <button type="button" className="btn btn--secondary" onClick={onBack}>Back</button></div>
@@ -664,12 +786,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   }
 
   const handleShare = async () => {
-    const expires = new Date()
-    expires.setDate(expires.getDate() + shareDays)
+    const expiryHours = Math.max(1, shareDays * 24)
     const resp = await fetch(`/api/studies/${study.id}/share`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expires_at: expires.toISOString() }),
+      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expiry_hours: expiryHours }),
     })
     if (resp.ok) {
       const result = await resp.json()
@@ -823,15 +944,27 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             </thead>
             <tbody>
               {shares.length === 0 && <tr><td colSpan={5}>No shares.</td></tr>}
-              {shares.map(s => (
-                <tr key={s.id}>
-                  <td>{s.recipient_email}</td>
-                  <td className="td-date">{fmtDate(s.created_at)}</td>
-                  <td className="td-date">{fmtDate(s.expires_at)}</td>
-                  <td>{s.revoked_at ? <span className="badge badge--rejected">Revoked</span> : <span className="badge badge--approved">Active</span>}</td>
-                  <td>{s.note || '—'}</td>
-                </tr>
-              ))}
+              {shares.map(s => {
+                const shareStatus = shareStatusLabel(s, nowMs)
+                const statusClass = `share-status--${shareStatus}`
+                const remainingSeconds = shareRemainingSeconds(s, nowMs)
+                const remainingLabel =
+                  shareStatus === 'active' && remainingSeconds !== null
+                    ? fmtRemaining(remainingSeconds)
+                    : ''
+                return (
+                  <tr key={s.id}>
+                    <td>{s.recipient_email}</td>
+                    <td className="td-date">{fmtDate(s.created_at)}</td>
+                    <td className="td-date">
+                      {fmtDate(s.expires_at)}
+                      {remainingLabel && <div className="td-subtle">({remainingLabel} remaining)</div>}
+                    </td>
+                    <td><span className={statusClass}>{shareStatus}</span></td>
+                    <td>{s.note || '—'}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

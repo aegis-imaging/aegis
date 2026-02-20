@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	aegis-import --dir /path/to/dicom [--project slug] [--institution uuid] [--source internal] [--dry-run]
+//	aegis-import --dir /path/to/dicom [--project slug] [--institution uuid] [--institution-slug slug] [--institution-ae-title AE_TITLE] [--source internal] [--dry-run]
 package main
 
 import (
@@ -28,6 +28,8 @@ func main() {
 	dir := flag.String("dir", "", "Directory containing DICOM files to import (required)")
 	project := flag.String("project", "default", "Project slug to import into")
 	institution := flag.String("institution", "", "Institution UUID (optional)")
+	institutionSlug := flag.String("institution-slug", "", "Institution slug (optional)")
+	institutionAETitle := flag.String("institution-ae-title", "", "Institution AE Title (optional)")
 	source := flag.String("source", "internal", "Study source: internal or external")
 	dryRun := flag.Bool("dry-run", false, "Scan and report without importing")
 	flag.Parse()
@@ -69,11 +71,13 @@ func main() {
 	}
 
 	opts := importer.Options{
-		Dir:           *dir,
-		ProjectSlug:   *project,
-		InstitutionID: *institution,
-		Source:        *source,
-		DryRun:        *dryRun,
+		Dir:                *dir,
+		ProjectSlug:        *project,
+		InstitutionID:      *institution,
+		InstitutionSlug:    *institutionSlug,
+		InstitutionAETitle: *institutionAETitle,
+		Source:             *source,
+		DryRun:             *dryRun,
 	}
 
 	result, err := importer.Run(context.Background(), db, store, opts)

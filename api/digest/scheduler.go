@@ -38,9 +38,11 @@ func run(ctx context.Context, db *sql.DB, mailer *email.Client) {
 }
 
 func send(ctx context.Context, db *sql.DB, mailer *email.Client) {
-	subs, err := model.ListDueSubscriptions(ctx, db)
+	nowUTC := time.Now().UTC()
+
+	subs, err := model.ListEnabledDigestSubscriptions(ctx, db)
 	if err != nil {
-		log.Printf("digest: list due subscriptions: %v", err)
+		log.Printf("digest: list enabled subscriptions: %v", err)
 		return
 	}
 	if len(subs) == 0 {
@@ -48,7 +50,10 @@ func send(ctx context.Context, db *sql.DB, mailer *email.Client) {
 	}
 
 	for _, sub := range subs {
-		if err := sendOne(ctx, db, mailer, sub); err != nil {
+		if !isDigestDue(sub.Frequency, sub.LastSentAt, nowUTC) {
+			continue
+		}
+		if err := sendOne(ctx, db, mailer, sub, nowUTC); err != nil {
 			log.Printf("digest: send to %s (project %s): %v", sub.Email, sub.ProjectName, err)
 			// Continue processing remaining subscriptions even if one fails.
 			continue
@@ -59,16 +64,15 @@ func send(ctx context.Context, db *sql.DB, mailer *email.Client) {
 	}
 }
 
-func sendOne(ctx context.Context, db *sql.DB, mailer *email.Client, sub model.DigestSubscription) error {
-	since := sinceTime(sub.Frequency)
-	stats, err := model.GetDigestStats(ctx, db, sub.ProjectID, since)
+func sendOne(ctx context.Context, db *sql.DB, mailer *email.Client, sub model.DigestSubscription, nowUTC time.Time) error {
+	sinceUTC, _, period := periodRange(sub.Frequency, nowUTC)
+	stats, err := model.GetDigestStats(ctx, db, sub.ProjectID, sinceUTC)
 	if err != nil {
 		return fmt.Errorf("query stats: %w", err)
 	}
 
-	periodLabel := periodLabel(sub.Frequency, since)
 	subject, body := email.DigestSummary(
-		sub.ProjectName, sub.Frequency, periodLabel,
+		sub.ProjectName, sub.Frequency, period,
 		stats.Received, stats.Approved, stats.Rejected, stats.Pending, stats.SharesCreated,
 	)
 
@@ -78,24 +82,50 @@ func sendOne(ctx context.Context, db *sql.DB, mailer *email.Client, sub model.Di
 	return nil
 }
 
-// sinceTime returns the start of the period for the given frequency.
-func sinceTime(frequency string) time.Time {
-	now := time.Now().UTC()
+func isDigestDue(frequency string, lastSentAt *time.Time, nowUTC time.Time) bool {
+	if lastSentAt == nil {
+		return true
+	}
+	nowUTC = nowUTC.UTC()
+	lastUTC := lastSentAt.UTC()
 	switch frequency {
 	case "monthly":
-		return now.AddDate(0, -1, 0)
+		return lastUTC.Before(monthlyCutoffUTC(nowUTC))
 	default: // weekly
-		return now.AddDate(0, 0, -7)
+		return lastUTC.Before(nowUTC.AddDate(0, 0, -7))
 	}
 }
 
-// periodLabel returns a human-readable label for the digest period.
-func periodLabel(frequency string, since time.Time) string {
-	now := time.Now().UTC()
+// monthlyCutoffUTC returns the same day/time in the previous month, clamping to
+// the last day when the previous month is shorter (e.g., Mar 31 -> Feb 28/29).
+func monthlyCutoffUTC(nowUTC time.Time) time.Time {
+	nowUTC = nowUTC.UTC()
+	year, month, day := nowUTC.Date()
+	hour, minute, second := nowUTC.Clock()
+	nsec := nowUTC.Nanosecond()
+
+	prevMonthStart := time.Date(year, month, 1, hour, minute, second, nsec, time.UTC).AddDate(0, -1, 0)
+	thisMonthStart := time.Date(year, month, 1, hour, minute, second, nsec, time.UTC)
+	lastDayPrevMonth := thisMonthStart.AddDate(0, 0, -1).Day()
+	if day > lastDayPrevMonth {
+		day = lastDayPrevMonth
+	}
+
+	return time.Date(prevMonthStart.Year(), prevMonthStart.Month(), day, hour, minute, second, nsec, time.UTC)
+}
+
+// periodRange returns [since, until] for the digest frequency, plus a UTC label.
+// The label always includes explicit UTC timestamps to avoid timezone ambiguity.
+func periodRange(frequency string, nowUTC time.Time) (sinceUTC, untilUTC time.Time, label string) {
+	nowUTC = nowUTC.UTC()
+	untilUTC = nowUTC
+
 	switch frequency {
 	case "monthly":
-		return since.Format("Jan 2006") + " – " + now.Format("Jan 2006")
-	default:
-		return since.Format("2006-01-02") + " – " + now.Format("2006-01-02")
+		sinceUTC = monthlyCutoffUTC(nowUTC)
+	default: // weekly
+		sinceUTC = nowUTC.AddDate(0, 0, -7)
 	}
+	label = sinceUTC.Format("2006-01-02 15:04 UTC") + " – " + untilUTC.Format("2006-01-02 15:04 UTC")
+	return sinceUTC, untilUTC, label
 }
