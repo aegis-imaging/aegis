@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 build/
+.vite/
 tsconfig.tsbuildinfo
 
 # Go
@@ -41,6 +42,8 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+
+# Business documents (CBI — never commit)
 Original Filing - Limited Liability Company (Domestic).pdf
 State of Minnesota - Secretary of State.pdf
 AEGIS_Imaging_LLC_EIN.pdf
