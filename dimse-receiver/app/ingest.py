@@ -269,6 +269,30 @@ def process_retry_study(study_instance_uid: str, now: float | None = None) -> di
     }
 
 
+def process_retry_all(limit: int = 10000, now: float | None = None) -> dict[str, object]:
+    """Immediately process up to `limit` pending retry items regardless of schedule."""
+    current = time.time() if now is None else now
+    with _retry_lock:
+        ordered = sorted(_retry_queue, key=lambda item: item.next_attempt_at)
+        selected = ordered[:limit]
+        selected_ids = {id(item) for item in selected}
+        _retry_queue[:] = [item for item in _retry_queue if id(item) not in selected_ids]
+
+    counts = {"ok": 0, "requeued": 0, "dead_letter": 0}
+    for item in selected:
+        result = _process_retry_item(item, current)
+        if result in counts:
+            counts[result] += 1
+
+    return {
+        "snapshot": retry_snapshot(),
+        "processed": len(selected),
+        "ok": counts["ok"],
+        "requeued": counts["requeued"],
+        "dead_letter": counts["dead_letter"],
+    }
+
+
 def retry_snapshot() -> dict[str, int]:
     """Return queue/dead-letter counters for health/status endpoints."""
     with _retry_lock:

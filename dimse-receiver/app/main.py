@@ -21,6 +21,7 @@ from app.ingest import (
     clear_dead_letter,
     clear_dead_letter_study,
     process_retry_queue,
+    process_retry_all,
     process_retry_study,
     replay_dead_letter,
     replay_dead_letter_study,
@@ -144,6 +145,22 @@ def ingest_retry_process(request: Request):
         dead_letter=snap["dead_letter"],
     )
     return {"status": "ok", "processed": processed, "ingest_retry": snap}
+
+
+@app.post("/ingest/retry/process-all")
+def ingest_retry_process_all(request: Request, limit: int = Query(default=10000, ge=1, le=50000)):
+    """Immediately process pending retries up to limit, ignoring schedule."""
+    _require_operator_key(request)
+    result = process_retry_all(limit=limit)
+    record_action(
+        "retry_process_all",
+        limit=limit,
+        processed=result.get("processed", 0),
+        ok=result.get("ok", 0),
+        requeued=result.get("requeued", 0),
+        dead_letter=result.get("dead_letter", 0),
+    )
+    return {"status": "ok", "ingest_retry": result}
 
 
 @app.post("/ingest/retry/process/{study_instance_uid}")
