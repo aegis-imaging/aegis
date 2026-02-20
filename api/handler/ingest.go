@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,8 +16,10 @@ import (
 )
 
 type ingestRequest struct {
-	ProjectSlug string        `json:"project_slug"`
-	Metadata    studyMetadata `json:"study_metadata"`
+	ProjectSlug        string        `json:"project_slug"`
+	InstitutionID      string        `json:"institution_id,omitempty"`
+	InstitutionAETitle string        `json:"institution_ae_title,omitempty"`
+	Metadata           studyMetadata `json:"study_metadata"`
 }
 
 // InternalIngest accepts studies originating inside the enterprise network.
@@ -40,6 +45,16 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var institutionID *string
+	if strings.TrimSpace(req.InstitutionID) != "" || strings.TrimSpace(req.InstitutionAETitle) != "" {
+		inst, err := s.resolveIngestInstitution(r.Context(), project.ID, req.InstitutionID, req.InstitutionAETitle)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		institutionID = &inst.ID
+	}
+
 	studyUID := req.Metadata.StudyInstanceUID
 	if studyUID == "" {
 		studyUID = fmt.Sprintf("2.25.%d", time.Now().UnixNano())
@@ -60,6 +75,7 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		DefacingRequired: defacingRequired,
 		DicomStore:       "raw",
 		Source:           "internal",
+		InstitutionID:    institutionID,
 	}
 	if err := model.CreateStudy(r.Context(), s.db, study); err != nil {
 		log.Printf("create study (internal ingest): %v", err)
@@ -73,15 +89,79 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	// Auto-dispatch processing pipeline.
 	s.AdvancePipeline(r.Context(), study.ID)
 
-	model.CreateAuditEntry(r.Context(), s.db, "ingest.internal", actorEmail(r), "study", study.ID, clientIP(r), map[string]any{
+	detail := map[string]any{
 		"study_uid": studyUID,
 		"modality":  study.Modality,
 		"project":   slug,
-	})
+	}
+	if institutionID != nil {
+		detail["institution_id"] = *institutionID
+	}
+	if strings.TrimSpace(req.InstitutionAETitle) != "" {
+		detail["institution_ae_title"] = strings.TrimSpace(req.InstitutionAETitle)
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "ingest.internal", actorEmail(r), "study", study.ID, clientIP(r), detail)
 
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"status":  "received",
 		"study":   study,
 		"message": "Study received — processing pipeline pending Phase 1 implementation",
 	})
+}
+
+func normalizeAETitle(aeTitle string) string {
+	return strings.ToUpper(strings.TrimSpace(aeTitle))
+}
+
+func (s *Server) resolveIngestInstitution(ctx context.Context, projectID, institutionID, institutionAETitle string) (*model.Institution, error) {
+	var (
+		inst *model.Institution
+		err  error
+	)
+
+	institutionID = strings.TrimSpace(institutionID)
+	institutionAETitle = strings.TrimSpace(institutionAETitle)
+
+	if institutionID != "" {
+		inst, err = model.GetInstitutionByID(ctx, s.db, institutionID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("institution not found")
+			}
+			return nil, fmt.Errorf("lookup institution: %w", err)
+		}
+	}
+
+	if institutionAETitle != "" {
+		if inst == nil {
+			inst, err = model.GetInstitutionByAETitle(ctx, s.db, institutionAETitle)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return nil, fmt.Errorf("institution not found for ae_title %q", institutionAETitle)
+				}
+				return nil, fmt.Errorf("lookup institution by ae_title: %w", err)
+			}
+		} else if normalizeAETitle(inst.AETitle) != normalizeAETitle(institutionAETitle) {
+			return nil, fmt.Errorf("institution_id and institution_ae_title do not match")
+		}
+	}
+
+	if inst == nil {
+		return nil, fmt.Errorf("institution_id or institution_ae_title required")
+	}
+	if !inst.Enabled {
+		return nil, fmt.Errorf("institution is disabled")
+	}
+	if inst.Type != "sender" && inst.Type != "both" {
+		return nil, fmt.Errorf("institution type must be sender or both")
+	}
+
+	allowed, err := model.InstitutionCanSendToProject(ctx, s.db, inst.ID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("validate institution project link: %w", err)
+	}
+	if !allowed {
+		return nil, fmt.Errorf("institution is not linked to project as sender/admin")
+	}
+	return inst, nil
 }
