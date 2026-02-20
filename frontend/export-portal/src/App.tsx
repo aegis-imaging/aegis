@@ -45,8 +45,22 @@ function fmtDateTime(iso: string) {
   return DATE_TIME_FORMAT.format(dt)
 }
 
+function fmtRemaining(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds))
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const mins = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+
+  if (days > 0) return `${days}d ${hours}h remaining`
+  if (hours > 0) return `${hours}h ${mins}m remaining`
+  if (mins > 0) return `${mins}m ${secs}s remaining`
+  return `${secs}s remaining`
+}
+
 export function App() {
   const [data, setData] = useState<ExportData | null>(null)
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [error, setError] = useState<ErrorState | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -69,6 +83,11 @@ export function App() {
         const json: ExportData = await resp.json()
         // Build download URL relative to current origin
         json.download_url = `/api/export/${token}/download`
+        if (typeof json.expires_in_seconds === 'number') {
+          setRemainingSeconds(Math.max(0, Math.floor(json.expires_in_seconds)))
+        } else {
+          setRemainingSeconds(null)
+        }
         setData(json)
       })
       .catch(() => {
@@ -76,6 +95,21 @@ export function App() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!data || remainingSeconds === null) return
+    const id = window.setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev === null) return prev
+        if (prev <= 1) {
+          window.clearInterval(id)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [data?.share_id, remainingSeconds === null])
 
   if (loading) {
     return (
@@ -119,11 +153,10 @@ export function App() {
   if (!data) return null
 
   const expiresDate = new Date(data.expires_at)
-  const secondsUntilExpiry =
-    typeof data.expires_in_seconds === 'number'
-      ? data.expires_in_seconds
-      : Math.floor((expiresDate.getTime() - Date.now()) / 1000)
-  const isExpiringSoon = secondsUntilExpiry > 0 && secondsUntilExpiry < 24 * 60 * 60
+  const fallbackSeconds = Math.floor((expiresDate.getTime() - Date.now()) / 1000)
+  const secondsUntilExpiry = remainingSeconds ?? fallbackSeconds
+  const isExpired = secondsUntilExpiry <= 0
+  const isExpiringSoon = !isExpired && secondsUntilExpiry < 24 * 60 * 60
 
   return (
     <div className="container">
@@ -149,6 +182,8 @@ export function App() {
                 <td className="label">Expires</td>
                 <td className={isExpiringSoon ? 'expiring-soon' : ''}>
                   {fmtDateTime(data.expires_at)}
+                  {isExpired && ' (expired — refresh link)'}
+                  {!isExpired && ` (${fmtRemaining(secondsUntilExpiry)})`}
                   {isExpiringSoon && ' (expiring soon)'}
                 </td>
               </tr>
@@ -165,9 +200,13 @@ export function App() {
         </div>
 
         <div className="download-section">
-          <a href={data.download_url} className="btn-download" download>
-            Download All ({data.files.length} file{data.files.length !== 1 ? 's' : ''}) as ZIP
-          </a>
+          {!isExpired ? (
+            <a href={data.download_url} className="btn-download" download>
+              Download All ({data.files.length} file{data.files.length !== 1 ? 's' : ''}) as ZIP
+            </a>
+          ) : (
+            <p className="download-disabled">This share has expired. Please request a new link.</p>
+          )}
         </div>
 
         <details className="file-list">
@@ -178,7 +217,11 @@ export function App() {
               const filename = parts[parts.length - 1]
               return (
                 <li key={i}>
-                  <a href={f.url} download={filename}>{filename}</a>
+                  {!isExpired ? (
+                    <a href={f.url} download={filename}>{filename}</a>
+                  ) : (
+                    <span className="file-link-disabled">{filename}</span>
+                  )}
                 </li>
               )
             })}
