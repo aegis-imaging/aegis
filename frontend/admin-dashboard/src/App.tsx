@@ -261,6 +261,13 @@ type DimseOperatorAction = {
   detail?: Record<string, unknown>
 }
 
+type DimseRetryAlert = {
+  timestamp: number
+  condition: string
+  message: string
+  snapshot?: Record<string, number>
+}
+
 type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -3006,6 +3013,7 @@ function UsersPanel() {
 function DimseOpsPanel() {
   const [summary, setSummary] = useState<DimseRetrySummary | null>(null)
   const [details, setDetails] = useState<DimseRetryDetails | null>(null)
+  const [alerts, setAlerts] = useState<DimseRetryAlert[]>([])
   const [actions, setActions] = useState<DimseOperatorAction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -3032,21 +3040,25 @@ function DimseOpsPanel() {
     try {
       const params = new URLSearchParams({ limit: '200', sort: 'age_desc' })
       if (studyFilter.trim()) params.set('study_instance_uid', studyFilter.trim())
-      const [summaryRes, detailsRes, actionsRes] = await Promise.all([
+      const [summaryRes, detailsRes, alertsRes, actionsRes] = await Promise.all([
         fetch('/api/dimse/retry/summary'),
         fetch(`/api/dimse/retry/details?${params.toString()}`),
+        fetch('/api/dimse/retry/alerts?limit=20'),
         fetch('/api/dimse/retry/actions?limit=20'),
       ])
 
       if (!summaryRes.ok) throw new Error(await readErrorBody(summaryRes))
       if (!detailsRes.ok) throw new Error(await readErrorBody(detailsRes))
+      if (!alertsRes.ok) throw new Error(await readErrorBody(alertsRes))
       if (!actionsRes.ok) throw new Error(await readErrorBody(actionsRes))
 
       const summaryBody = await summaryRes.json()
       const detailsBody = await detailsRes.json()
+      const alertsBody = await alertsRes.json()
       const actionsBody = await actionsRes.json()
       setSummary(summaryBody.ingest_retry as DimseRetrySummary)
       setDetails(detailsBody.ingest_retry as DimseRetryDetails)
+      setAlerts((alertsBody.alerts?.items ?? []) as DimseRetryAlert[])
       setActions((actionsBody.actions?.items ?? []) as DimseOperatorAction[])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load DIMSE retry state')
@@ -3338,6 +3350,40 @@ function DimseOpsPanel() {
                           Clear
                         </button>
                       </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {!loading && (
+        <div className="routing-section">
+          <div className="routing-section-header">
+            <div className="routing-section-title">Recent Retry Alerts</div>
+          </div>
+          {alerts.length === 0 ? (
+            <div className="state-empty">No recent retry threshold alerts.</div>
+          ) : (
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Condition</th>
+                  <th>Message</th>
+                  <th>Snapshot</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alerts.map((alert, idx) => (
+                  <tr key={`${alert.condition}-${alert.timestamp}-${idx}`}>
+                    <td className="td-date">{fmtDate(new Date(alert.timestamp * 1000).toISOString())}</td>
+                    <td><code>{alert.condition}</code></td>
+                    <td>{alert.message}</td>
+                    <td>
+                      <pre className="detail-json">{JSON.stringify(alert.snapshot ?? {}, null, 2)}</pre>
                     </td>
                   </tr>
                 ))}
