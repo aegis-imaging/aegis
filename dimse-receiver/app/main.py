@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from app import config
 from app.ingest import (
     clear_dead_letter,
+    clear_dead_letter_study,
     process_retry_queue,
     replay_dead_letter,
     replay_dead_letter_study,
@@ -184,6 +185,20 @@ def ingest_retry_clear_dead_letter(request: Request, limit: int = Query(default=
         dead_letter=snap["dead_letter"],
     )
     return {"status": "ok", "ingest_retry": snap}
+
+
+@app.post("/ingest/retry/clear-dead-letter/{study_instance_uid}")
+def ingest_retry_clear_dead_letter_study(request: Request, study_instance_uid: str):
+    """Clear one dead-letter study by StudyInstanceUID."""
+    _require_operator_key(request)
+    result = clear_dead_letter_study(study_instance_uid=study_instance_uid)
+    record_action(
+        "retry_clear_dead_letter_study",
+        study_instance_uid=study_instance_uid,
+        found=result.get("found", False),
+        cleared=result.get("cleared", 0),
+    )
+    return {"status": "ok", "ingest_retry": result}
 
 
 class DimseDestination(BaseModel):
