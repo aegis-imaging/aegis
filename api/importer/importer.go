@@ -77,11 +77,9 @@ type StudyGroup struct {
 
 // Run executes the batch import.
 func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (*Result, error) {
+	normalizeProjectSlug(&opts)
 	if err := normalizeImportSource(&opts); err != nil {
 		return nil, err
-	}
-	if opts.ProjectSlug == "" {
-		opts.ProjectSlug = "default"
 	}
 	if err := normalizeInstitutionSelectors(&opts); err != nil {
 		return nil, err
@@ -193,6 +191,13 @@ func normalizeImportSource(opts *Options) error {
 		return validationErrorf("source must be internal or external")
 	}
 	return nil
+}
+
+func normalizeProjectSlug(opts *Options) {
+	opts.ProjectSlug = strings.ToLower(strings.TrimSpace(opts.ProjectSlug))
+	if opts.ProjectSlug == "" {
+		opts.ProjectSlug = "default"
+	}
 }
 
 func normalizeAETitle(aeTitle string) string {
