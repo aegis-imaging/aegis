@@ -87,12 +87,120 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 ## 4. Terraform — Infrastructure
 
 - [ ] Copy `terraform/infra/terraform.tfvars.example` to `terraform/infra/terraform.tfvars`
-- [ ] Fill in your `project_id` and `region`
+- [ ] Fill in required `terraform/infra/terraform.tfvars` values:
+  - `project_id`, `region`, `environment`
+  - `api_domain`, `admin_domain` (DNS hostnames pointed at the LB IP after apply)
+  - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
+  - `db_password`, `db_password_secret_id`
+  - image URIs for `api`, `admin-dashboard`, and all processing sidecars
+  - optional: `alert_email`, `smtp_relay_host`, `cloud_armor_allowed_ip_ranges`
+- [ ] Build and push images to Artifact Registry paths referenced in tfvars (example tag `:latest`)
 - [ ] Run `terraform init` in `terraform/infra/`
+- [ ] Run `terraform fmt -check`
+- [ ] Run `terraform validate`
 - [ ] Run `terraform plan` and review
-- [ ] Run `terraform apply` to create Healthcare API DICOM stores, GCS bucket, Pub/Sub
+- [ ] Run `terraform apply` to create:
+  - VPC/subnet/private-service networking/Cloud NAT
+  - Artifact Registry repository
+  - Cloud SQL PostgreSQL (private IP), Healthcare API dataset + DICOM stores, GCS buckets, Pub/Sub, BigQuery
+  - Cloud Run services (API + sidecars + admin dashboard)
+  - Global HTTPS load balancer + managed cert + Cloud Armor + IAP admin backend
+  - Monitoring notification channel/policies (if configured)
+- [ ] Verify Artifact Registry repository exists:
+  ```bash
+  gcloud artifacts repositories list --location=us-central1
+  ```
+- [ ] Verify Cloud Run services are deployed:
+  ```bash
+  gcloud run services list --region=us-central1
+  ```
 - [ ] Verify DICOM store exists: `gcloud healthcare dicom-stores list --dataset=aegis --location=us-central1`
 - [ ] Verify staging bucket exists: `gsutil ls`
+- [ ] Verify API health through LB domain:
+  ```bash
+  curl -f https://<api_domain>/healthz
+  ```
+- [ ] Verify each sidecar health endpoint (using `run.app` URL from `gcloud run services describe`):
+  ```bash
+  gcloud run services describe defacing --region=us-central1 --format='value(status.url)'
+  ```
+- [ ] Verify admin dashboard is gated by IAP:
+  - Open `https://<admin_domain>` in an incognito window
+  - Confirm Google sign-in challenge appears before dashboard access
+  - Confirm a non-authorized account is denied
+- [ ] Verify Cloud Armor policy is attached to API backend:
+  ```bash
+  gcloud compute backend-services describe aegis-dev-api-backend --global --format='value(securityPolicy)'
+  ```
+- [ ] Verify SMTP egress static IP (documented PSC-equivalent path):
+  ```bash
+  terraform output smtp_egress_ip
+  ```
+  - [ ] Allowlist that IP on your SMTP relay/service
+- [ ] Verify monitoring baseline exists:
+  ```bash
+  gcloud monitoring policies list --format='value(displayName)'
+  ```
+
+## 4a. Secrets Bootstrap and Rotation
+
+### GCP (Cloud SQL + Cloud Run API)
+
+- [ ] Confirm DB password secret exists:
+  ```bash
+  gcloud secrets describe aegis-dev-db-password --project <project_id>
+  ```
+- [ ] Confirm API service account has secret accessor:
+  ```bash
+  gcloud secrets get-iam-policy aegis-dev-db-password --project <project_id>
+  ```
+- [ ] Rotate DB password (dev drill):
+  ```bash
+  export NEW_DB_PASSWORD='<new-strong-password>'
+  gcloud secrets versions add aegis-dev-db-password --data-file=- <<<"$NEW_DB_PASSWORD"
+  gcloud sql users set-password aegis-api --instance=aegis-dev-postgres --password="$NEW_DB_PASSWORD"
+  gcloud run services update aegis-api --region=us-central1 --update-env-vars=ROTATION_EPOCH=$(date +%s)
+  ```
+- [ ] Verify post-rotation health:
+  ```bash
+  curl -f https://<api_domain>/healthz
+  ```
+
+### AWS (RDS managed master credentials)
+
+- [ ] Confirm RDS is configured with managed master password in AWS Secrets Manager:
+  ```bash
+  aws rds describe-db-instances --db-instance-identifier aegis-postgres \
+    --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text
+  ```
+- [ ] Rotate AWS RDS master credentials (dev drill):
+  ```bash
+  aws rds modify-db-instance --db-instance-identifier aegis-postgres \
+    --rotate-master-user-password --apply-immediately
+  ```
+
+## 4b. Automated Cloud Smoke Suite
+
+- [ ] Run the cloud smoke suite against deployed API:
+  ```bash
+  python3 scripts/cloud_smoke_test.py \
+    --base-url https://<api_domain> \
+    --admin-header "X-Goog-Authenticated-User-Email: accounts.google.com:<your-email>"
+  ```
+- [ ] Verify suite exits with status code `0` and prints all PASS steps:
+  - `healthz`
+  - `auth.me`
+  - `upload.init`, `upload.file`, `upload.complete`
+  - `pipeline.progression`
+  - `study.approve`
+  - `share.create`, `share.redeem`, `share.download`
+- [ ] Verify fail-fast behavior:
+  - re-run with an invalid admin header and confirm the suite fails quickly at `auth.me`
+  - re-run with an invalid `--base-url` and confirm early transport failure
+
+Manual trigger via GitHub Actions:
+- Workflow: **Cloud Smoke** (`.github/workflows/cloud-smoke.yml`)
+- Set input `base_url` and (optional) repository secret `CLOUD_SMOKE_ADMIN_HEADER`
 
 ## 5. Sample DICOM Data for Local Testing
 

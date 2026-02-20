@@ -28,6 +28,16 @@ def test_get_actions_limit():
     assert out["items"][1]["action"] == "a3"
 
 
+def test_get_actions_filters_by_action_name():
+    record_action("retry_process", value=1)
+    record_action("retry_replay_bulk", value=2)
+    record_action("retry_process", value=3)
+
+    out = get_actions(limit=10, action="retry_process")
+    assert out["total"] == 2
+    assert [x["action"] for x in out["items"]] == ["retry_process", "retry_process"]
+
+
 def test_operator_audit_max_retention(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_OPERATOR_AUDIT_MAX", 3)
     for i in range(5):
