@@ -215,6 +215,31 @@ def test_retry_snapshot_reports_oldest_queue_ages(monkeypatch):
     assert snap["dead_letter_oldest_age_seconds"] == 40
 
 
+def test_retry_snapshot_reports_next_pending_attempt(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+
+    acc_a = _acc()
+    acc_b = _acc()
+    acc_b.study_instance_uid = "2.2.2.2"
+
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=100.0):
+        submit_ingest(acc_a)  # next due = 115
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=120.0):
+        submit_ingest(acc_b)  # next due = 135
+
+    snap = retry_snapshot(now=110.0)
+    assert snap["pending"] == 2
+    assert snap["pending_next_attempt_at"] == 115
+    assert snap["pending_next_attempt_in_seconds"] == 5
+
+
+def test_retry_snapshot_reports_no_next_pending_attempt_when_empty():
+    snap = retry_snapshot(now=100.0)
+    assert snap["pending"] == 0
+    assert snap["pending_next_attempt_at"] == 0
+    assert snap["pending_next_attempt_in_seconds"] == 0
+
+
 def test_retry_delay_seconds_exponential_and_capped(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
     monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER", 2.0)
