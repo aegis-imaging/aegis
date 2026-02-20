@@ -24,7 +24,8 @@ classification_service_image = "us-central1-docker.pkg.dev/aegis-prod/aegis-serv
 protocol_service_image       = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/protocol-service:latest"
 
 # Cloud SQL runtime DB password for aegis-api user.
-db_password = "CHANGE_THIS_FOR_DEV"
+db_password          = "replace-with-strong-password"
+db_password_secret_id = "aegis-dev-db-password"
 
 # SMTP relay config (documented PSC-equivalent path via Cloud NAT static egress IP).
 smtp_relay_host = "smtp-relay.example.org"

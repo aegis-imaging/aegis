@@ -91,7 +91,7 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   - `project_id`, `region`, `environment`
   - `api_domain`, `admin_domain` (DNS hostnames pointed at the LB IP after apply)
   - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
-  - `db_password`
+  - `db_password`, `db_password_secret_id`
   - image URIs for `api`, `admin-dashboard`, and all processing sidecars
   - optional: `alert_email`, `smtp_relay_host`, `cloud_armor_allowed_ip_ranges`
 - [ ] Build and push images to Artifact Registry paths referenced in tfvars (example tag `:latest`)
@@ -140,6 +140,43 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 - [ ] Verify monitoring baseline exists:
   ```bash
   gcloud monitoring policies list --format='value(displayName)'
+  ```
+
+## 4a. Secrets Bootstrap and Rotation
+
+### GCP (Cloud SQL + Cloud Run API)
+
+- [ ] Confirm DB password secret exists:
+  ```bash
+  gcloud secrets describe aegis-dev-db-password --project <project_id>
+  ```
+- [ ] Confirm API service account has secret accessor:
+  ```bash
+  gcloud secrets get-iam-policy aegis-dev-db-password --project <project_id>
+  ```
+- [ ] Rotate DB password (dev drill):
+  ```bash
+  export NEW_DB_PASSWORD='<new-strong-password>'
+  gcloud secrets versions add aegis-dev-db-password --data-file=- <<<"$NEW_DB_PASSWORD"
+  gcloud sql users set-password aegis-api --instance=aegis-dev-postgres --password="$NEW_DB_PASSWORD"
+  gcloud run services update aegis-api --region=us-central1 --update-env-vars=ROTATION_EPOCH=$(date +%s)
+  ```
+- [ ] Verify post-rotation health:
+  ```bash
+  curl -f https://<api_domain>/healthz
+  ```
+
+### AWS (RDS managed master credentials)
+
+- [ ] Confirm RDS is configured with managed master password in AWS Secrets Manager:
+  ```bash
+  aws rds describe-db-instances --db-instance-identifier aegis-postgres \
+    --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text
+  ```
+- [ ] Rotate AWS RDS master credentials (dev drill):
+  ```bash
+  aws rds modify-db-instance --db-instance-identifier aegis-postgres \
+    --rotate-master-user-password --apply-immediately
   ```
 
 ## 5. Sample DICOM Data for Local Testing

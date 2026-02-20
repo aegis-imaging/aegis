@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -78,9 +80,26 @@ type Config struct {
 
 func Load() *Config {
 	smtpHost := os.Getenv("SMTP_HOST")
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		dbHost := envOr("DB_HOST", "localhost")
+		dbPort := envOr("DB_PORT", "5432")
+		dbName := envOr("DB_NAME", "aegis")
+		dbUser := envOr("DB_USER", "aegis")
+		dbPassword := envOr("DB_PASSWORD", "aegis")
+		databaseURL = fmt.Sprintf(
+			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			url.QueryEscape(dbUser),
+			url.QueryEscape(dbPassword),
+			dbHost,
+			dbPort,
+			dbName,
+		)
+	}
+
 	return &Config{
 		Port:            envOr("PORT", "8080"),
-		DatabaseURL:     envOr("DATABASE_URL", "postgres://aegis:aegis@localhost:5432/aegis?sslmode=disable"),
+		DatabaseURL:     databaseURL,
 		StorageMode:     envOr("STORAGE_MODE", "local"),
 		LocalStorageDir: envOr("LOCAL_STORAGE_DIR", "./data"),
 		APIBaseURL:      envOr("API_BASE_URL", "http://localhost:8080"),
