@@ -179,6 +179,29 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
     --rotate-master-user-password --apply-immediately
   ```
 
+## 4b. Automated Cloud Smoke Suite
+
+- [ ] Run the cloud smoke suite against deployed API:
+  ```bash
+  python3 scripts/cloud_smoke_test.py \
+    --base-url https://<api_domain> \
+    --admin-header "X-Goog-Authenticated-User-Email: accounts.google.com:<your-email>"
+  ```
+- [ ] Verify suite exits with status code `0` and prints all PASS steps:
+  - `healthz`
+  - `auth.me`
+  - `upload.init`, `upload.file`, `upload.complete`
+  - `pipeline.progression`
+  - `study.approve`
+  - `share.create`, `share.redeem`, `share.download`
+- [ ] Verify fail-fast behavior:
+  - re-run with an invalid admin header and confirm the suite fails quickly at `auth.me`
+  - re-run with an invalid `--base-url` and confirm early transport failure
+
+Manual trigger via GitHub Actions:
+- Workflow: **Cloud Smoke** (`.github/workflows/cloud-smoke.yml`)
+- Set input `base_url` and (optional) repository secret `CLOUD_SMOKE_ADMIN_HEADER`
+
 ## 5. Sample DICOM Data for Local Testing
 
 - [ ] Download sample brain MRI DICOM files for testing (options below):
