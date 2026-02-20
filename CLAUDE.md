@@ -45,10 +45,10 @@ aegis/
 │   └── landing/          # React — public landing page (aegisimaging.ai)
 ├── client/               # TypeScript DICOM anonymization library (npm package)
 ├── defacing/             # Python defacing service (DeepDefacer, mri_deface, dcm2niix)
-├── phi-detection/        # Python burned-in PHI detection service (Tesseract OCR)
+├── phi-detection/        # Python burned-in PHI detection service (Tesseract / Cloud Vision / Textract)
 ├── qc-service/           # Python QC automation service (pydicom + numpy)
 ├── bids-service/            # Python NIfTI/BIDS conversion service (dcm2niix)
-├── classification-service/  # Python metadata classification service (DICOM heuristics)
+├── classification-service/  # Python metadata classification service (heuristic / Cloud Vision / Rekognition)
 ├── protocol-service/        # Python MRI protocol compliance service (pydicom)
 └── docs/                    # Shared research, references, and analysis (see docs/README.md)
 ```
@@ -64,7 +64,7 @@ Planned to split into 5 separate repos once interfaces stabilize:
 - **DICOM Storage**: Cloud-neutral file storage (local, GCS, or S3) with DICOMweb proxy
 - **Defacing**: Python — mri_deface, dcm2niix, pydicom
 - **Viewer**: OHIF Viewer (embedded in admin dashboard)
-- **AI/ML**: Pluggable — local backends (Tesseract, pydicom heuristics) or cloud AI (Vertex AI, SageMaker)
+- **AI/ML**: Pluggable — local backends (Tesseract OCR, pydicom heuristics) or cloud AI (Google Cloud Vision, AWS Textract/Rekognition)
 - **Email**: Standard SMTP (works with any provider). Dev: Mailpit.
 - **Infrastructure**: Terraform (GCP and AWS modules), Docker Compose for local dev
 - **Auth**: Multi-provider — GCP IAP, Azure AD Easy Auth, AWS ALB + Cognito; dev mode auto-auth
@@ -537,9 +537,16 @@ uvicorn app.main:app --port 8082
 | Var | Default | Notes |
 |-----|---------|-------|
 | `PHI_DETECTION_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
-| `PHI_TOOL` | `auto` | Backend selection: `auto` or `tesseract` |
+| `PHI_TOOL` | `auto` | Backend selection: `auto`, `google_vision`, `aws_textract`, or `tesseract` |
 | `PHI_CONFIDENCE_THRESHOLD` | `0.4` | Minimum OCR confidence (0.0–1.0) |
 | `PHI_MIN_TEXT_LENGTH` | `3` | Minimum text length to report |
+
+**Dockerfile build args** (cloud SDKs installed conditionally):
+
+| Arg | Default | Installs |
+|-----|---------|----------|
+| `INCLUDE_GOOGLE_VISION` | `false` | `google-cloud-vision Pillow numpy` (~50 MB) |
+| `INCLUDE_AWS_TEXTRACT` | `false` | `boto3 Pillow numpy` (~50 MB) |
 
 **Study fields:**
 - `phi_scan_required` — boolean flag, set by `require_phi_scan` routing rule action
@@ -548,10 +555,20 @@ uvicorn app.main:app --port 8082
 **API:**
 - `POST /api/studies/{studyUID}/phi-scan` — trigger PHI scan (returns 202 Accepted, runs async)
 
+**Pluggable backends (auto-selection priority: google_vision > aws_textract > tesseract):**
+
+| Backend | SDK | Accuracy | Notes |
+|---------|-----|----------|-------|
+| `google_vision` | `google-cloud-vision` | Best | Cloud Vision `text_detection`; Application Default Credentials |
+| `aws_textract` | `boto3` | Good | Textract `detect_document_text`; IAM roles or `AWS_ACCESS_KEY_ID` |
+| `tesseract` | `pytesseract` | Baseline | Local OCR; requires `tesseract-ocr` binary installed |
+
+All backends share `pixel_utils.py` (DICOM pixel extraction → PIL Image). Cloud SDKs are optional — installed via Dockerfile build args.
+
 **Pipeline:**
 1. Routing rule with action `require_phi_scan` sets `phi_scan_required=true` and `phi_scan_status=pending`
 2. Admin clicks "Scan for PHI" → Go handler sets status to `scanning` and dispatches to Python service
-3. Python service reads each DICOM file, extracts pixel data, runs Tesseract OCR
+3. Python service reads each DICOM file, extracts pixel data, runs OCR (selected backend)
 4. Results returned: `phi_scan_status` set to `clean` (no text found) or `flagged` (text detected)
 5. Findings stored as JSONB in audit trail (`phi_scan.complete` entries)
 6. Admin can still approve flagged studies (the flag is informational)
@@ -667,7 +684,7 @@ Subject label = first 8 chars of SHA-256 hash of StudyInstanceUID (privacy-prese
 
 ### Metadata Classification Service (`classification-service/`, `api/handler/classification.go`)
 
-Classifies study modality and body part by reading DICOM headers. Studies can arrive with empty `modality` and `body_part` when DICOM tags are missing — this service fills them in using heuristic analysis (local dev) or Vertex AI (production), then **re-evaluates routing rules** so modality/body_part-dependent rules fire correctly.
+Classifies study modality and body part by reading DICOM headers. Studies can arrive with empty `modality` and `body_part` when DICOM tags are missing — this service fills them in using heuristic tag analysis (free, instant) or cloud image-based label inference (when tags are missing), then **re-evaluates routing rules** so modality/body_part-dependent rules fire correctly.
 
 **Running locally:**
 ```bash
@@ -682,8 +699,15 @@ uvicorn app.main:app --port 8085
 | Var | Default | Notes |
 |-----|---------|-------|
 | `CLASSIFICATION_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
-| `CLASSIFY_TOOL` | `auto` | Backend selection: `auto` or `heuristic` |
+| `CLASSIFY_TOOL` | `auto` | Backend selection: `auto`, `google_vision`, `aws_rekognition`, or `heuristic` |
 | `CLASSIFY_CONFIDENCE_THRESHOLD` | `0.5` | Minimum confidence (0.0–1.0) to update metadata |
+
+**Dockerfile build args** (cloud SDKs installed conditionally):
+
+| Arg | Default | Installs |
+|-----|---------|----------|
+| `INCLUDE_GOOGLE_VISION` | `false` | `google-cloud-vision Pillow numpy` (~50 MB) |
+| `INCLUDE_AWS_REKOGNITION` | `false` | `boto3 Pillow numpy` (~50 MB) |
 
 **Study fields:**
 - `classification_required` — boolean flag, set by `require_classification` routing rule action
@@ -692,17 +716,30 @@ uvicorn app.main:app --port 8085
 **API:**
 - `POST /api/studies/{studyUID}/classify` — trigger classification (returns 202 Accepted, runs async)
 
-**Heuristic backend classification strategy** (priority order):
+**Classification strategy** (priority order):
 1. **Direct DICOM tags** — `Modality` (0008,0060) + `BodyPartExamined` (0018,0015) → confidence 0.95
 2. **SOP Class UID** (0008,0016) → modality mapping (CT, MR, PT, US, CR, etc.) → confidence 0.90
 3. **SeriesDescription / ProtocolName** → body part regex (HEAD, CHEST, ABDOMEN, SPINE, EXTREMITY, NECK) → confidence 0.75
 4. **StudyDescription** → same patterns → confidence 0.65
-5. **Fallback** → empty (inconclusive)
+5. **Cloud image inference** (if heuristic confidence < threshold) — render DICOM pixels, run label detection → confidence 0.70
+6. **Fallback** → empty (inconclusive)
+
+Cloud backends inherit from HeuristicBackend and only call the API when heuristic strategies 1-4 produce low confidence. This avoids API cost when DICOM tags are present.
+
+**Pluggable backends (auto-selection priority: google_vision > aws_rekognition > heuristic):**
+
+| Backend | SDK | Notes |
+|---------|-----|-------|
+| `google_vision` | `google-cloud-vision` | Cloud Vision `label_detection` (20 labels) → body_part/modality mapping; Application Default Credentials |
+| `aws_rekognition` | `boto3` | Rekognition `detect_labels` → same mapping; IAM roles or `AWS_ACCESS_KEY_ID` |
+| `heuristic` | *(none)* | Local DICOM tag analysis only (strategies 1-4, no cloud dependencies) |
+
+All cloud backends share `pixel_utils.py` (DICOM pixel extraction → PIL Image). Cloud SDKs are optional — installed via Dockerfile build args.
 
 **Pipeline:**
 1. Routing rule with action `require_classification` sets `classification_required=true` and `classification_status=pending`
 2. Admin clicks "Classify" → Go handler sets status to `classifying` and dispatches to Python service
-3. Python service reads DICOM files, applies heuristic classification
+3. Python service reads DICOM files, applies heuristic classification (then cloud inference if needed)
 4. Results returned: if confidence >= 0.5, study `modality` and `body_part` are updated
 5. `classification_status` set to `classified` or `failed`
 6. **Routing rules re-evaluated** — downstream rules (e.g. `require_defacing` for HEAD studies) now fire
@@ -943,11 +980,11 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 
 | Service | Tests | Coverage |
 |---------|-------|----------|
-| classification-service | 19 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, endpoint tests |
+| classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
-| phi-detection | 14 | Windowing, uint8 normalization, mock Tesseract OCR, multi-file detection |
+| phi-detection | 35 | Windowing, uint8 normalization, mock Tesseract OCR, Cloud Vision/Textract OCR, pixel_utils, multi-file detection |
 | bids-service | 17 | Series classification (T1w/FLAIR/bold/DWI/ASL/PET/CT), subject label hashing, mock dcm2niix |
 
 All tests use **synthetic DICOM files** generated via pydicom — no test data on disk. External tools (tesseract, dcm2niix, mri_deface) are mocked.
