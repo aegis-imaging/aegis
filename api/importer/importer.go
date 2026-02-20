@@ -221,6 +221,12 @@ func resolveImportInstitution(ctx context.Context, db *sql.DB, opts Options) (*m
 				if errors.Is(err, sql.ErrNoRows) {
 					return nil, validationErrorf("institution ae_title %q not found", opts.InstitutionAETitle)
 				}
+				if errors.Is(err, model.ErrInstitutionAETitleAmbiguous) {
+					return nil, validationErrorf(
+						"institution ae_title %q matched multiple enabled institutions; use institution_id or institution_slug",
+						opts.InstitutionAETitle,
+					)
+				}
 				return nil, fmt.Errorf("lookup institution by ae_title: %w", err)
 			}
 		} else if normalizeAETitle(institution.AETitle) != normalizeAETitle(opts.InstitutionAETitle) {

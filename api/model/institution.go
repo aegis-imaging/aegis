@@ -3,6 +3,8 @@ package model
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -79,21 +81,43 @@ func GetInstitutionBySlug(ctx context.Context, db *sql.DB, slug string) (*Instit
 	return &inst, nil
 }
 
-// GetInstitutionByAETitle returns the first enabled institution matching ae_title
-// (case-insensitive, trimmed). Used for DIMSE/internal ingest attribution.
+var ErrInstitutionAETitleAmbiguous = errors.New("institution ae_title matched multiple enabled institutions")
+
+// GetInstitutionByAETitle returns the enabled institution matching ae_title
+// (case-insensitive, trimmed). If more than one enabled institution matches,
+// ErrInstitutionAETitleAmbiguous is returned so callers can require an explicit
+// selector (institution_id or institution_slug).
 func GetInstitutionByAETitle(ctx context.Context, db *sql.DB, aeTitle string) (*Institution, error) {
-	var inst Institution
-	err := scanInstitution(db.QueryRowContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
 		SELECT`+institutionColumns+`
 		FROM institutions
 		WHERE enabled = TRUE
 		  AND lower(trim(ae_title)) = lower(trim($1))
 		ORDER BY created_at ASC
-		LIMIT 1`, aeTitle), &inst)
+		LIMIT 2`, aeTitle)
 	if err != nil {
 		return nil, err
 	}
-	return &inst, nil
+	defer rows.Close()
+
+	var matches []Institution
+	for rows.Next() {
+		var inst Institution
+		if err := scanInstitution(rows, &inst); err != nil {
+			return nil, err
+		}
+		matches = append(matches, inst)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("%w: %q", ErrInstitutionAETitleAmbiguous, aeTitle)
+	}
+	return &matches[0], nil
 }
 
 func ListInstitutions(ctx context.Context, db *sql.DB) ([]Institution, error) {
