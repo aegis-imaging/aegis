@@ -27,6 +27,7 @@ from app.ingest import (
     replay_dead_letter_study,
     retry_details,
     retry_snapshot,
+    retry_summary,
 )
 from app.operator_audit import get_actions, record_action
 from app.scp import create_scp, start_scp
@@ -143,6 +144,13 @@ def ingest_retry_status(request: Request):
     """Return ingest retry queue/dead-letter counters."""
     _require_operator_key(request)
     return {"status": "ok", "ingest_retry": retry_snapshot()}
+
+
+@app.get("/ingest/retry/summary")
+def ingest_retry_summary(request: Request):
+    """Return retry queue summary with derived operational signals."""
+    _require_operator_key(request)
+    return {"status": "ok", "ingest_retry": retry_summary()}
 
 
 @app.get("/ingest/retry/actions")
