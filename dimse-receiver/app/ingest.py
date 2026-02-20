@@ -49,6 +49,7 @@ _metrics = {
     "dead_letter_deduped_total": 0,
     "replayed_total": 0,
     "cleared_dead_letter_total": 0,
+    "cleared_pending_total": 0,
 }
 
 
@@ -245,6 +246,7 @@ def retry_snapshot() -> dict[str, int]:
             "dead_letter_deduped_total": _metrics["dead_letter_deduped_total"],
             "replayed_total": _metrics["replayed_total"],
             "cleared_dead_letter_total": _metrics["cleared_dead_letter_total"],
+            "cleared_pending_total": _metrics["cleared_pending_total"],
         }
 
 
@@ -381,6 +383,43 @@ def clear_dead_letter_study(study_instance_uid: str) -> dict[str, object]:
     }
 
 
+def clear_pending(limit: int = 10000) -> dict[str, int]:
+    """Clear up to `limit` pending retry queue items and return counters."""
+    cleared = 0
+    with _retry_lock:
+        while cleared < limit and _retry_queue:
+            _retry_queue.pop(0)
+            cleared += 1
+        _metrics["cleared_pending_total"] += cleared
+
+    snapshot = retry_snapshot()
+    snapshot["cleared_now"] = cleared
+    return snapshot
+
+
+def clear_pending_study(study_instance_uid: str) -> dict[str, object]:
+    """Clear one pending retry entry by StudyInstanceUID."""
+    cleared = 0
+    found = False
+    with _retry_lock:
+        idx = next(
+            (i for i, item in enumerate(_retry_queue) if item.acc.study_instance_uid == study_instance_uid),
+            -1,
+        )
+        if idx >= 0:
+            found = True
+            _retry_queue.pop(idx)
+            cleared = 1
+            _metrics["cleared_pending_total"] += 1
+
+    return {
+        "snapshot": retry_snapshot(),
+        "study_instance_uid": study_instance_uid,
+        "found": found,
+        "cleared": cleared,
+    }
+
+
 def reset_retry_state() -> None:
     """Reset in-memory retry state (tests only)."""
     with _retry_lock:
@@ -394,3 +433,4 @@ def reset_retry_state() -> None:
         _metrics["dead_letter_deduped_total"] = 0
         _metrics["replayed_total"] = 0
         _metrics["cleared_dead_letter_total"] = 0
+        _metrics["cleared_pending_total"] = 0
