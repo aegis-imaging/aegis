@@ -87,12 +87,60 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 ## 4. Terraform — Infrastructure
 
 - [ ] Copy `terraform/infra/terraform.tfvars.example` to `terraform/infra/terraform.tfvars`
-- [ ] Fill in your `project_id` and `region`
+- [ ] Fill in required `terraform/infra/terraform.tfvars` values:
+  - `project_id`, `region`, `environment`
+  - `api_domain`, `admin_domain` (DNS hostnames pointed at the LB IP after apply)
+  - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
+  - `db_password`
+  - image URIs for `api`, `admin-dashboard`, and all processing sidecars
+  - optional: `alert_email`, `smtp_relay_host`, `cloud_armor_allowed_ip_ranges`
+- [ ] Build and push images to Artifact Registry paths referenced in tfvars (example tag `:latest`)
 - [ ] Run `terraform init` in `terraform/infra/`
+- [ ] Run `terraform fmt -check`
+- [ ] Run `terraform validate`
 - [ ] Run `terraform plan` and review
-- [ ] Run `terraform apply` to create Healthcare API DICOM stores, GCS bucket, Pub/Sub
+- [ ] Run `terraform apply` to create:
+  - VPC/subnet/private-service networking/Cloud NAT
+  - Artifact Registry repository
+  - Cloud SQL PostgreSQL (private IP), Healthcare API dataset + DICOM stores, GCS buckets, Pub/Sub, BigQuery
+  - Cloud Run services (API + sidecars + admin dashboard)
+  - Global HTTPS load balancer + managed cert + Cloud Armor + IAP admin backend
+  - Monitoring notification channel/policies (if configured)
+- [ ] Verify Artifact Registry repository exists:
+  ```bash
+  gcloud artifacts repositories list --location=us-central1
+  ```
+- [ ] Verify Cloud Run services are deployed:
+  ```bash
+  gcloud run services list --region=us-central1
+  ```
 - [ ] Verify DICOM store exists: `gcloud healthcare dicom-stores list --dataset=aegis --location=us-central1`
 - [ ] Verify staging bucket exists: `gsutil ls`
+- [ ] Verify API health through LB domain:
+  ```bash
+  curl -f https://<api_domain>/healthz
+  ```
+- [ ] Verify each sidecar health endpoint (using `run.app` URL from `gcloud run services describe`):
+  ```bash
+  gcloud run services describe defacing --region=us-central1 --format='value(status.url)'
+  ```
+- [ ] Verify admin dashboard is gated by IAP:
+  - Open `https://<admin_domain>` in an incognito window
+  - Confirm Google sign-in challenge appears before dashboard access
+  - Confirm a non-authorized account is denied
+- [ ] Verify Cloud Armor policy is attached to API backend:
+  ```bash
+  gcloud compute backend-services describe aegis-dev-api-backend --global --format='value(securityPolicy)'
+  ```
+- [ ] Verify SMTP egress static IP (documented PSC-equivalent path):
+  ```bash
+  terraform output smtp_egress_ip
+  ```
+  - [ ] Allowlist that IP on your SMTP relay/service
+- [ ] Verify monitoring baseline exists:
+  ```bash
+  gcloud monitoring policies list --format='value(displayName)'
+  ```
 
 ## 5. Sample DICOM Data for Local Testing
 

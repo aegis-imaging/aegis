@@ -1030,6 +1030,19 @@ cd terraform/project && terraform init && terraform plan
 cd terraform/infra && terraform init && terraform plan
 ```
 
+`terraform/infra` now provisions production-baseline GCP infra:
+- custom VPC + subnet + private-service networking + Cloud NAT (SMTP egress via static NAT IP),
+- Artifact Registry, Cloud SQL private IP, Healthcare API dataset/stores, GCS buckets, Pub/Sub, BigQuery,
+- Cloud Run services (API + admin dashboard + processing sidecars),
+- HTTPS load balancer with Cloud Armor on API backend and IAP on admin backend,
+- baseline monitoring notification channel + alert policies.
+
+Required infra tfvars include:
+- domains: `api_domain`, `admin_domain`
+- IAP OAuth credentials: `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
+- runtime images: API/admin/sidecar image URIs
+- database credential: `db_password`
+
 ## Key Architecture Decisions
 
 - Client-side DICOM tag anonymization in browser before upload (zero-install at sending sites)
