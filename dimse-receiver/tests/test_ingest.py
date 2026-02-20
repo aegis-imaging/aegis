@@ -16,6 +16,7 @@ from app.ingest import (
     retry_details,
     StudyAccumulator,
     process_retry_queue,
+    process_retry_all,
     process_retry_study,
     reset_retry_state,
     retry_snapshot,
@@ -303,6 +304,39 @@ def test_process_retry_study_not_found():
     assert result["found"] is False
     assert result["attempted"] is False
     assert result["result"] == "not_found"
+
+
+def test_process_retry_all_requeues_failures(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_MAX_ATTEMPTS", 5)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        acc2 = _acc()
+        acc2.study_instance_uid = "2.2.2.2"
+        submit_ingest(acc2)
+        result = process_retry_all(limit=10, now=100.0)
+
+    assert result["processed"] == 2
+    assert result["ok"] == 0
+    assert result["requeued"] == 2
+    assert result["dead_letter"] == 0
+    assert result["snapshot"]["pending"] == 2
+
+
+def test_process_retry_all_respects_limit(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        acc2 = _acc()
+        acc2.study_instance_uid = "2.2.2.2"
+        submit_ingest(acc2)
+
+    with patch("app.ingest.trigger_ingest", return_value=True):
+        result = process_retry_all(limit=1, now=100.0)
+
+    assert result["processed"] == 1
+    assert result["ok"] == 1
+    assert result["snapshot"]["pending"] == 1
 
 
 def test_submit_ingest_dead_letters_when_queue_full(monkeypatch):
