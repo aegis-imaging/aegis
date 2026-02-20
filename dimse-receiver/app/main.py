@@ -10,11 +10,11 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app import config
-from app.ingest import process_retry_queue, retry_snapshot
+from app.ingest import process_retry_queue, replay_dead_letter, retry_snapshot
 from app.scp import create_scp, start_scp
 from app.sender import forward_study
 
@@ -86,6 +86,20 @@ def healthz():
 def ingest_retry_status():
     """Return ingest retry queue/dead-letter counters."""
     return {"status": "ok", "ingest_retry": retry_snapshot()}
+
+
+@app.post("/ingest/retry/process")
+def ingest_retry_process():
+    """Run one immediate retry processing pass."""
+    processed = process_retry_queue()
+    return {"status": "ok", "processed": processed, "ingest_retry": retry_snapshot()}
+
+
+@app.post("/ingest/retry/replay")
+def ingest_retry_replay(limit: int = Query(default=100, ge=1, le=10000)):
+    """Replay dead-letter items back into the retry queue."""
+    snap = replay_dead_letter(limit=limit)
+    return {"status": "ok", "ingest_retry": snap}
 
 
 class DimseDestination(BaseModel):
