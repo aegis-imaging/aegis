@@ -50,6 +50,7 @@ aegis/
 ├── bids-service/            # Python NIfTI/BIDS conversion service (dcm2niix)
 ├── classification-service/  # Python metadata classification service (heuristic / Cloud Vision / Rekognition)
 ├── protocol-service/        # Python MRI protocol compliance service (pydicom)
+├── dimse-receiver/          # Python DIMSE adapter (pynetdicom C-STORE SCP + ingest trigger)
 └── docs/                    # Shared research, references, and analysis (see docs/README.md)
 ```
 
@@ -62,6 +63,7 @@ Planned to split into 5 separate repos once interfaces stabilize:
 - **Database**: PostgreSQL 15 (Cloud SQL on GCP, RDS on AWS) — users, projects, routing, audit
 - **Frontend**: React 19 + TypeScript + Vite
 - **DICOM Storage**: Cloud-neutral file storage (local, GCS, or S3) with DICOMweb proxy
+- **DICOM Networking**: DIMSE receiver sidecar (pynetdicom C-STORE SCP on port 11112)
 - **Defacing**: Python — mri_deface, dcm2niix, pydicom
 - **Viewer**: OHIF Viewer (embedded in admin dashboard)
 - **AI/ML**: Pluggable — local backends (Tesseract OCR, pydicom heuristics) or cloud AI (Google Cloud Vision, AWS Textract/Rekognition)
@@ -207,7 +209,7 @@ Public-facing download page for export share recipients. Reads a share token fro
 
 ### Full-Stack Docker Compose
 
-`docker compose up` starts the entire platform: PostgreSQL, Mailpit, OHIF, Go API, and all 6 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
+`docker compose up` starts the entire platform: PostgreSQL, Mailpit, OHIF, Go API, and all 7 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
 
 ```bash
 docker compose up -d          # start everything (background)
@@ -228,8 +230,9 @@ docker compose down -v        # stop all + destroy volumes
 | bids-service | (internal) | NIfTI/BIDS conversion (dcm2niix) |
 | classification-service | (internal) | Metadata classification |
 | protocol-service | (internal) | MRI protocol compliance |
+| dimse-receiver | 11112 (DICOM), 8080 (internal health) | Receives DICOM via C-STORE and calls API ingest |
 
-Sidecar services have no host port mapping — the Go API reaches them via Docker internal DNS (e.g., `http://defacing:8080`). The API's `LOCAL_STORAGE_DIR=/app/data` and all sidecars mount the same volume at `/app/data`.
+Most sidecar services have no host port mapping — the Go API reaches them via Docker internal DNS (e.g., `http://defacing:8080`). `dimse-receiver` exposes port `11112` so external PACS systems can send C-STORE directly. The API's `LOCAL_STORAGE_DIR=/app/data` and all sidecars mount the same volume at `/app/data`.
 
 **Health check** (`GET /healthz`) returns JSON with database, storage, and per-sidecar status:
 ```json
@@ -813,6 +816,30 @@ uvicorn app.main:app --port 8086
 - `require_protocol_check` option in routing rules action dropdown
 - **Protocol Templates tab** — full CRUD for per-project templates with rules editor
 
+### DIMSE Receiver Service (`dimse-receiver/`)
+
+Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts.
+
+**Running locally:**
+```bash
+cd dimse-receiver
+pip install -r requirements.txt
+uvicorn app.main:app --port 8087
+# DICOM SCP listens on DIMSE_PORT (default 11112) in a background thread.
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `DIMSE_AE_TITLE` | `AEGIS` | SCP AE title for PACS associations |
+| `DIMSE_PORT` | `11112` | DICOM C-STORE/C-ECHO listening port |
+| `DIMSE_DATA_DIR` | `/app/data` | Shared storage mount (same as Go API) |
+| `API_URL` | `http://api:8080` | Go API base URL for ingest calls |
+| `DIMSE_PROJECT_SLUG` | `default` | Project slug sent to `/api/ingest` |
+| `DIMSE_INGEST_TIMEOUT` | `30` | HTTP timeout (seconds) for ingest call |
+| `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
+
 ### Batch Import CLI (`api/cmd/import/`)
 
 CLI tool for importing DICOM files from a local directory into AEGIS. Used for bulk historical data migration. Files are assumed already de-identified — the import tool does NOT apply de-identification.
@@ -965,10 +992,10 @@ git checkout develop && git pull
 |-----|---------------|
 | `go` | `go build ./...` + `go vet ./...` |
 | `go-test` | `go test -race -v -count=1 ./...` (~120 tests) |
-| `python` (6× matrix) | `py_compile` on all `.py` files per service |
-| `python-test` (6× matrix) | `pytest -v --tb=short` per service (~133 tests total) |
+| `python` (7× matrix) | `py_compile` on all `.py` files per service |
+| `python-test` (7× matrix) | `pytest -v --tb=short` per service (~147 tests total) |
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
-| `docker` (7× matrix) | `docker build` for all service images |
+| `docker` (8× matrix) | `docker build` for all service images |
 
 ### Python Sidecar Testing
 
@@ -981,6 +1008,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
+| dimse-receiver | 14 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, health endpoint, ingest client payload/error handling |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |

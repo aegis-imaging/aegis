@@ -5,12 +5,16 @@ cloud vision label inference. Used by cloud classification backends.
 
 This is a standalone copy of the same utility in phi-detection, per the
 monorepo convention where each Python sidecar is an independent service.
+
+numpy and Pillow are optional dependencies — only installed when cloud
+backends are enabled (via Dockerfile build args). All imports are lazy
+so the module can be imported without them installed.
 """
+
+from __future__ import annotations
 
 import logging
 from typing import Optional
-
-import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +31,7 @@ def dicom_to_pil(path: str) -> Optional["PIL.Image.Image"]:
     Returns:
         A PIL.Image.Image in mode 'L' (8-bit grayscale), or None.
     """
+    import numpy as np
     import pydicom
     from PIL import Image
 
@@ -54,8 +59,10 @@ def dicom_to_pil(path: str) -> Optional["PIL.Image.Image"]:
     return Image.fromarray(arr)
 
 
-def _apply_windowing(ds, arr: np.ndarray) -> np.ndarray:
+def _apply_windowing(ds, arr: "np.ndarray") -> "np.ndarray":
     """Apply DICOM window center/width for better contrast."""
+    import numpy as np
+
     wc = getattr(ds, "WindowCenter", None)
     ww = getattr(ds, "WindowWidth", None)
     if wc is None or ww is None:
@@ -78,8 +85,10 @@ def _apply_windowing(ds, arr: np.ndarray) -> np.ndarray:
     return arr
 
 
-def _to_uint8(arr: np.ndarray) -> np.ndarray:
+def _to_uint8(arr: "np.ndarray") -> "np.ndarray":
     """Normalise array to 0-255 uint8."""
+    import numpy as np
+
     arr = arr.astype(np.float64)
     mn, mx = arr.min(), arr.max()
     if mx - mn == 0:

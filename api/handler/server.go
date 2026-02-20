@@ -73,6 +73,7 @@ func (s *Server) Healthz(w http.ResponseWriter, r *http.Request) {
 		"bids_service":   s.cfg.BidsServiceURL,
 		"classification": s.cfg.ClassificationServiceURL,
 		"protocol":       s.cfg.ProtocolServiceURL,
+		"dimse_receiver": s.cfg.DimseReceiverURL,
 	}
 	services := map[string]string{}
 	for name, url := range sidecars {
