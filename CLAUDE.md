@@ -888,6 +888,10 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 
 **API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
 
+Validation behavior:
+- `institution_id` (if provided) must reference an enabled institution with type `sender`/`both`, linked to the target project with role `sender`/`admin`.
+- Invalid directory/project/institution input now returns HTTP `400` from `/api/import/batch` (not `500`).
+
 ### Automated Processing Pipeline (`api/handler/pipeline.go`)
 
 After routing rules evaluate (upload complete, internal ingest, batch import), the pipeline orchestrator automatically dispatches all required processing services in the correct order. No manual button clicks needed — studies flow through the pipeline hands-free.
