@@ -16,6 +16,7 @@ from app.ingest import (
     retry_details,
     StudyAccumulator,
     process_retry_queue,
+    process_retry_study,
     reset_retry_state,
     retry_snapshot,
     submit_ingest,
@@ -256,6 +257,52 @@ def test_process_retry_queue_applies_backoff(monkeypatch):
     # First retry delay: 20s, second retry delay: 40s
     assert int(second_due - (first_due + 1)) == 20
     assert int(third_due - (second_due + 1)) == 40
+
+
+def test_process_retry_study_success(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+
+    with patch("app.ingest.trigger_ingest", return_value=True):
+        result = process_retry_study("1.2.3.4", now=123.0)
+
+    assert result["found"] is True
+    assert result["attempted"] is True
+    assert result["result"] == "ok"
+    assert result["snapshot"]["pending"] == 0
+
+
+def test_process_retry_study_requeued(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_MAX_ATTEMPTS", 5)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        result = process_retry_study("1.2.3.4", now=100.0)
+
+    assert result["found"] is True
+    assert result["result"] == "requeued"
+    assert result["snapshot"]["pending"] == 1
+
+
+def test_process_retry_study_dead_letter(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_MAX_ATTEMPTS", 1)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        result = process_retry_study("1.2.3.4", now=100.0)
+
+    assert result["found"] is True
+    assert result["result"] == "dead_letter"
+    assert result["snapshot"]["pending"] == 0
+    assert result["snapshot"]["dead_letter"] == 1
+
+
+def test_process_retry_study_not_found():
+    result = process_retry_study("missing-study")
+    assert result["found"] is False
+    assert result["attempted"] is False
+    assert result["result"] == "not_found"
 
 
 def test_submit_ingest_dead_letters_when_queue_full(monkeypatch):

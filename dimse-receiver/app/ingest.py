@@ -206,30 +206,67 @@ def process_retry_queue(now: float | None = None) -> int:
 
     for item in due:
         processed += 1
-        _metrics["retried_total"] += 1
-        ok = trigger_ingest(item.acc)
-        if ok:
-            _metrics["retried_ok_total"] += 1
-            continue
-
-        item.attempts += 1
-        if item.attempts > config.DIMSE_INGEST_MAX_ATTEMPTS:
-            item.last_error = "max_attempts_exceeded"
-            with _retry_lock:
-                _upsert_dead_letter(item)
-            log.error(
-                "Ingest dead-letter for %s after %d attempts",
-                item.acc.study_instance_uid,
-                item.attempts - 1,
-            )
-            continue
-
-        item.next_attempt_at = current + _retry_delay_seconds(item.attempts)
-        item.last_error = "retry_failed"
-        with _retry_lock:
-            _retry_queue.append(item)
+        _process_retry_item(item, current)
 
     return processed
+
+
+def _process_retry_item(item: QueuedIngest, current: float) -> str:
+    """Process one retry item. Returns 'ok', 'requeued', or 'dead_letter'."""
+    _metrics["retried_total"] += 1
+    ok = trigger_ingest(item.acc)
+    if ok:
+        _metrics["retried_ok_total"] += 1
+        return "ok"
+
+    item.attempts += 1
+    if item.attempts > config.DIMSE_INGEST_MAX_ATTEMPTS:
+        item.last_error = "max_attempts_exceeded"
+        with _retry_lock:
+            _upsert_dead_letter(item)
+        log.error(
+            "Ingest dead-letter for %s after %d attempts",
+            item.acc.study_instance_uid,
+            item.attempts - 1,
+        )
+        return "dead_letter"
+
+    item.next_attempt_at = current + _retry_delay_seconds(item.attempts)
+    item.last_error = "retry_failed"
+    with _retry_lock:
+        _retry_queue.append(item)
+    return "requeued"
+
+
+def process_retry_study(study_instance_uid: str, now: float | None = None) -> dict[str, object]:
+    """Immediately process one pending retry item by StudyInstanceUID."""
+    current = time.time() if now is None else now
+    item = None
+    with _retry_lock:
+        idx = next(
+            (i for i, item in enumerate(_retry_queue) if item.acc.study_instance_uid == study_instance_uid),
+            -1,
+        )
+        if idx >= 0:
+            item = _retry_queue.pop(idx)
+
+    if item is None:
+        return {
+            "snapshot": retry_snapshot(),
+            "study_instance_uid": study_instance_uid,
+            "found": False,
+            "attempted": False,
+            "result": "not_found",
+        }
+
+    result = _process_retry_item(item, current)
+    return {
+        "snapshot": retry_snapshot(),
+        "study_instance_uid": study_instance_uid,
+        "found": True,
+        "attempted": True,
+        "result": result,
+    }
 
 
 def retry_snapshot() -> dict[str, int]:
