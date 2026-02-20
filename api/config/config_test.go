@@ -14,7 +14,7 @@ func clearEnvVars(t *testing.T) {
 		"SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USERNAME", "SMTP_PASSWORD",
 		"PIPELINE_AUTO", "ALLOWED_ORIGINS",
 		"DEFACING_SERVICE_URL", "PHI_DETECTION_SERVICE_URL", "QC_SERVICE_URL",
-		"BIDS_SERVICE_URL", "CLASSIFICATION_SERVICE_URL", "PROTOCOL_SERVICE_URL",
+		"BIDS_SERVICE_URL", "CLASSIFICATION_SERVICE_URL", "PROTOCOL_SERVICE_URL", "DIMSE_RECEIVER_URL",
 		"GCP_PROJECT", "GCS_BUCKET", "S3_BUCKET", "S3_REGION", "S3_ENDPOINT",
 	} {
 		t.Setenv(key, "")
@@ -92,6 +92,7 @@ func TestLoad_SidecarURLs(t *testing.T) {
 	assert.Equal(t, "http://localhost:8081", cfg.DefacingServiceURL)
 	assert.Equal(t, "http://localhost:8083", cfg.QcServiceURL)
 	assert.Empty(t, cfg.PhiDetectionServiceURL)
+	assert.Empty(t, cfg.DimseReceiverURL)
 }
 
 func TestEnvOr(t *testing.T) {
