@@ -187,8 +187,22 @@ type AuthIdentity = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+  timeZoneName: 'short',
+})
+
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString()
+  if (!iso) return ''
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return iso
+  return DATE_TIME_FORMAT.format(dt)
 }
 
 function uidShort(uid: string) {
@@ -664,12 +678,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   }
 
   const handleShare = async () => {
-    const expires = new Date()
-    expires.setDate(expires.getDate() + shareDays)
+    const expiryHours = Math.max(1, shareDays * 24)
     const resp = await fetch(`/api/studies/${study.id}/share`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expires_at: expires.toISOString() }),
+      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expiry_hours: expiryHours }),
     })
     if (resp.ok) {
       const result = await resp.json()

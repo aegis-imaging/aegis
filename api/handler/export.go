@@ -123,7 +123,7 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt := time.Now().Add(time.Duration(req.ExpiryHours) * time.Hour)
+	expiresAt := time.Now().UTC().Add(time.Duration(req.ExpiryHours) * time.Hour)
 	share, err := model.CreateExportShare(r.Context(), s.db,
 		study.ID, tokenHash, req.RecipientEmail, req.Note, actorEmail(r), expiresAt)
 	if err != nil {
@@ -216,7 +216,7 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusGone, "share has been revoked")
 		return
 	}
-	if time.Now().After(share.ExpiresAt) {
+	if time.Now().UTC().After(share.ExpiresAt) {
 		s.writeError(w, http.StatusGone, "share has expired")
 		return
 	}

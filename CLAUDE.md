@@ -292,6 +292,7 @@ Returns all audit trail entries for a specific study (by `resource_id`). Used by
 Clicking a study UID in the studies table navigates to a dedicated detail view with:
 - **Header** — full study UID, status/source badges, description
 - **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
+- **Timestamp rendering** — all date/time values render with explicit timezone abbreviation in the UI (browser locale format + zone label)
 - **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
 - **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
 - **Share form** — inline share creation for approved studies (email, note, expiry)
@@ -938,6 +939,10 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - `GET /api/export/{token}/download` — token-authenticated zip download (no login required)
 - Same token validation as `GET /api/export/{token}` (SHA-256 hash, expiry, revocation)
 - Logs to `export_downloads` table + audit trail
+
+**Create share request** (`POST /api/studies/{id}/share`):
+- Uses `expiry_hours` (integer) to compute `expires_at`
+- Server computes expiry in UTC (`time.Now().UTC().Add(...)`)
 
 **Export share redemption** (`GET /api/export/{token}`) — enhanced response includes:
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`

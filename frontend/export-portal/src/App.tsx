@@ -25,6 +25,24 @@ type ErrorState = {
   message: string
 }
 
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+  timeZoneName: 'short',
+})
+
+function fmtDateTime(iso: string) {
+  if (!iso) return ''
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return iso
+  return DATE_TIME_FORMAT.format(dt)
+}
+
 export function App() {
   const [data, setData] = useState<ExportData | null>(null)
   const [error, setError] = useState<ErrorState | null>(null)
@@ -124,7 +142,7 @@ export function App() {
               <tr>
                 <td className="label">Expires</td>
                 <td className={isExpiringSoon ? 'expiring-soon' : ''}>
-                  {expiresDate.toLocaleDateString()} {expiresDate.toLocaleTimeString()}
+                  {fmtDateTime(data.expires_at)}
                   {isExpiringSoon && ' (expiring soon)'}
                 </td>
               </tr>
