@@ -202,6 +202,35 @@ Manual trigger via GitHub Actions:
 - Workflow: **Cloud Smoke** (`.github/workflows/cloud-smoke.yml`)
 - Set input `base_url` and (optional) repository secret `CLOUD_SMOKE_ADMIN_HEADER`
 
+## 4c. Terraform — AWS HTTPS + Cognito Edge/Auth
+
+- [ ] Copy `terraform/aws/terraform.tfvars.example` to `terraform/aws/terraform.tfvars`
+- [ ] Fill required values:
+  - `aws_region`, `environment`, `project_name`
+  - `acm_certificate_arn` (issued cert in the same region as ALB)
+  - `cognito_domain_prefix` (region-unique)
+  - optional callback/logout URL overrides
+- [ ] Run:
+  ```bash
+  terraform -chdir=terraform/aws init
+  terraform -chdir=terraform/aws fmt -check
+  terraform -chdir=terraform/aws validate
+  terraform -chdir=terraform/aws plan
+  terraform -chdir=terraform/aws apply
+  ```
+- [ ] Verify HTTP to HTTPS redirect:
+  ```bash
+  curl -I http://<alb_dns>
+  ```
+  - Expect `301` redirect to `https://...`
+- [ ] Verify unauthenticated protected path triggers Cognito auth:
+  - Open `https://<alb_dns>/api/studies` in an incognito browser
+  - Expect redirect/challenge to Cognito hosted UI
+- [ ] Verify public path bypass remains available (for system health):
+  ```bash
+  curl -f https://<alb_dns>/healthz
+  ```
+
 ## 5. Sample DICOM Data for Local Testing
 
 - [ ] Download sample brain MRI DICOM files for testing (options below):

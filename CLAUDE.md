@@ -1060,6 +1060,11 @@ Secrets posture:
 - GCP API runtime now reads DB credentials via Secret Manager reference (`DB_PASSWORD` from secret, not inline DSN).
 - AWS RDS now uses `manage_master_user_password = true`, with master credentials stored in AWS Secrets Manager.
 
+`terraform/aws` now includes edge/auth completion:
+- ACM-backed ALB HTTPS listener (`aws_lb_listener.https`)
+- Cognito user pool/client/domain resources
+- ALB `authenticate-cognito` default action with explicit public-path bypass rules (`/healthz`, upload/export/contact/project selector, DICOMweb)
+
 ## Key Architecture Decisions
 
 - Client-side DICOM tag anonymization in browser before upload (zero-install at sending sites)
