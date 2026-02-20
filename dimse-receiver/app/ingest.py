@@ -354,6 +354,29 @@ def retry_snapshot(now: float | None = None) -> dict[str, int]:
         }
 
 
+def retry_summary(now: float | None = None) -> dict[str, object]:
+    """Return retry summary with derived operational signals."""
+    current = time.time() if now is None else now
+    with _retry_lock:
+        pending_due_now = sum(1 for item in _retry_queue if item.next_attempt_at <= current)
+
+    snapshot = retry_snapshot(now=current)
+    queue_max = max(0, int(config.DIMSE_INGEST_QUEUE_MAX))
+    if queue_max <= 0:
+        queue_utilization_percent = 100.0 if snapshot["pending"] > 0 else 0.0
+    else:
+        queue_utilization_percent = round((snapshot["pending"] / queue_max) * 100, 2)
+
+    return {
+        "snapshot": snapshot,
+        "now": int(current),
+        "pending_due_now": pending_due_now,
+        "dead_letter_present": snapshot["dead_letter"] > 0,
+        "queue_max": queue_max,
+        "queue_utilization_percent": queue_utilization_percent,
+    }
+
+
 def retry_details(
     limit: int = 100,
     now: float | None = None,
