@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,6 +86,32 @@ func TestInternalIngest_AssignsInstitutionByID(t *testing.T) {
 	assert.Equal(t, inst.ID, *resp.Study.InstitutionID)
 }
 
+func TestInternalIngest_AssignsInstitutionBySlug(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	project := testutil.SeedProject(t, db)
+
+	inst := createInstitution(t, db, "sender", "PACS_ALPHA", true)
+	linkInstitutionToProject(t, db, inst.ID, project.ID, "sender")
+
+	payload := newIngestPayload(fmt.Sprintf("1.2.840.%d", time.Now().UnixNano()))
+	payload["institution_slug"] = strings.ToUpper(inst.Slug)
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/ingest", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.InternalIngest(rr, req)
+
+	require.Equal(t, http.StatusCreated, rr.Code)
+
+	var resp struct {
+		Study model.Study `json:"study"`
+	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	require.NotNil(t, resp.Study.InstitutionID)
+	assert.Equal(t, inst.ID, *resp.Study.InstitutionID)
+}
+
 func TestInternalIngest_AssignsInstitutionByAETitle(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
@@ -111,6 +138,27 @@ func TestInternalIngest_AssignsInstitutionByAETitle(t *testing.T) {
 	assert.Equal(t, inst.ID, *resp.Study.InstitutionID)
 }
 
+func TestInternalIngest_RejectsInstitutionIDAndSlugConflict(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	project := testutil.SeedProject(t, db)
+
+	inst := createInstitution(t, db, "sender", "PACS_CHARLIE", true)
+	linkInstitutionToProject(t, db, inst.ID, project.ID, "sender")
+
+	payload := newIngestPayload(fmt.Sprintf("1.2.840.%d", time.Now().UnixNano()))
+	payload["institution_id"] = inst.ID
+	payload["institution_slug"] = inst.Slug
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/ingest", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.InternalIngest(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "only one")
+}
+
 func TestInternalIngest_RejectsInstitutionNotLinkedToProject(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
@@ -120,6 +168,26 @@ func TestInternalIngest_RejectsInstitutionNotLinkedToProject(t *testing.T) {
 
 	payload := newIngestPayload(fmt.Sprintf("1.2.840.%d", time.Now().UnixNano()))
 	payload["institution_id"] = inst.ID
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/ingest", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.InternalIngest(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestInternalIngest_RejectsInstitutionSlugAETitleMismatch(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	project := testutil.SeedProject(t, db)
+
+	inst := createInstitution(t, db, "sender", "PACS_DELTA", true)
+	linkInstitutionToProject(t, db, inst.ID, project.ID, "sender")
+
+	payload := newIngestPayload(fmt.Sprintf("1.2.840.%d", time.Now().UnixNano()))
+	payload["institution_slug"] = inst.Slug
+	payload["institution_ae_title"] = "PACS_OTHER"
 
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest("POST", "/api/ingest", bytes.NewReader(body))

@@ -356,7 +356,7 @@ Institutions represent organisations that send or receive studies.
 
 Studies carry an `institution_id` FK (nullable) for full traceability.
 Internal ingest attribution order:
-1. Explicit `institution_id`/`institution_ae_title` from `POST /api/ingest`
+1. Explicit selector from `POST /api/ingest` (`institution_id`, `institution_slug`, or `institution_ae_title`)
 2. Fallback auto-match by request source IP against institution `ip_ranges` (most-specific CIDR wins)
 3. If source IP matches multiple institutions at the same most-specific prefix length, attribution is treated as ambiguous and no institution is assigned automatically.
 
@@ -830,7 +830,7 @@ uvicorn app.main:app --port 8086
 
 ### DIMSE Receiver Service (`dimse-receiver/`)
 
-Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` can also be set explicitly.
+Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
 
 **Running locally:**
 ```bash
@@ -850,6 +850,7 @@ uvicorn app.main:app --port 8087
 | `API_URL` | `http://api:8080` | Go API base URL for ingest calls |
 | `DIMSE_PROJECT_SLUG` | `default` | Project slug sent to `/api/ingest` |
 | `DIMSE_INSTITUTION_ID` | *(empty)* | Optional fixed institution UUID sent as `institution_id` |
+| `DIMSE_INSTITUTION_SLUG` | *(empty)* | Optional fixed institution slug sent as `institution_slug` (used when ID is empty) |
 | `DIMSE_INGEST_TIMEOUT` | `30` | HTTP timeout (seconds) for ingest call |
 | `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
 
