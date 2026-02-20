@@ -9,6 +9,8 @@ from app.ingest import (
     _retry_delay_seconds,
     clear_dead_letter,
     clear_dead_letter_study,
+    clear_pending,
+    clear_pending_study,
     replay_dead_letter,
     replay_dead_letter_study,
     retry_details,
@@ -392,5 +394,46 @@ def test_clear_dead_letter_study_found(monkeypatch):
 
 def test_clear_dead_letter_study_not_found():
     result = clear_dead_letter_study("missing-study")
+    assert result["found"] is False
+    assert result["cleared"] == 0
+
+
+def test_clear_pending_removes_items(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        acc2 = _acc()
+        acc2.study_instance_uid = "2.2.2.2"
+        submit_ingest(acc2)
+
+    before = retry_snapshot()
+    assert before["pending"] == 2
+
+    after = clear_pending(limit=1)
+    assert after["cleared_now"] == 1
+    assert after["pending"] == 1
+
+    after2 = clear_pending(limit=10)
+    assert after2["cleared_now"] == 1
+    assert after2["pending"] == 0
+    assert after2["cleared_pending_total"] == 2
+
+
+def test_clear_pending_study_found(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        acc2 = _acc()
+        acc2.study_instance_uid = "2.2.2.2"
+        submit_ingest(acc2)
+
+    result = clear_pending_study("2.2.2.2")
+    assert result["found"] is True
+    assert result["cleared"] == 1
+    assert result["snapshot"]["pending"] == 1
+
+
+def test_clear_pending_study_not_found():
+    result = clear_pending_study("missing-study")
     assert result["found"] is False
     assert result["cleared"] == 0

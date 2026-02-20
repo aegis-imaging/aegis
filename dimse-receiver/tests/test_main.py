@@ -287,6 +287,40 @@ def test_ingest_retry_clear_dead_letter_endpoint():
     mock_clear.assert_called_once_with(limit=3)
 
 
+def test_ingest_retry_clear_pending_endpoint():
+    from unittest.mock import patch
+
+    snap = {"pending": 0, "cleared_now": 3}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.clear_pending", return_value=snap) as mock_clear:
+        with TestClient(app) as client:
+            resp = client.post("/ingest/retry/clear-pending?limit=3")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": snap}
+    mock_clear.assert_called_once_with(limit=3)
+
+
+def test_ingest_retry_clear_pending_study_endpoint():
+    from unittest.mock import patch
+
+    result = {"study_instance_uid": "1.2.3.4", "found": True, "cleared": 1}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.clear_pending_study", return_value=result) as mock_clear:
+        with TestClient(app) as client:
+            resp = client.post("/ingest/retry/clear-pending/1.2.3.4")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": result}
+    mock_clear.assert_called_once_with(study_instance_uid="1.2.3.4")
+
+
 def test_ingest_retry_clear_dead_letter_study_endpoint():
     from unittest.mock import patch
 
@@ -316,6 +350,8 @@ def test_retry_control_endpoints_emit_action_records():
             client.post("/ingest/retry/replay/abc")
             client.post("/ingest/retry/clear-dead-letter?limit=1")
             client.post("/ingest/retry/clear-dead-letter/abc")
+            client.post("/ingest/retry/clear-pending?limit=1")
+            client.post("/ingest/retry/clear-pending/abc")
             actions_resp = client.get("/ingest/retry/actions?limit=10")
 
     assert actions_resp.status_code == 200
@@ -326,3 +362,5 @@ def test_retry_control_endpoints_emit_action_records():
     assert "retry_replay_study" in names
     assert "retry_clear_dead_letter" in names
     assert "retry_clear_dead_letter_study" in names
+    assert "retry_clear_pending" in names
+    assert "retry_clear_pending_study" in names
