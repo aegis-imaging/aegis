@@ -182,6 +182,9 @@ func (s *Server) resolveIngestInstitution(ctx context.Context, projectID, instit
 				if errors.Is(err, sql.ErrNoRows) {
 					return nil, fmt.Errorf("institution not found for ae_title %q", institutionAETitle)
 				}
+				if errors.Is(err, model.ErrInstitutionAETitleAmbiguous) {
+					return nil, fmt.Errorf("institution ae_title %q matched multiple enabled institutions; use institution_id or institution_slug", institutionAETitle)
+				}
 				return nil, fmt.Errorf("lookup institution by ae_title: %w", err)
 			}
 		} else if normalizeAETitle(inst.AETitle) != normalizeAETitle(institutionAETitle) {
