@@ -217,6 +217,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "db_password_secret_id" {
+  description = "Optional Secret Manager secret ID for API DB password (defaults to aegis-<env>-db-password)"
+  type        = string
+  default     = ""
+}
+
 variable "cloud_armor_allowed_ip_ranges" {
   description = "Allowed client IP ranges for API ingress (use [\"*\"] for open access)"
   type        = list(string)
@@ -271,7 +277,8 @@ provider "google" {
 }
 
 locals {
-  name_prefix = "aegis-${var.environment}"
+  name_prefix                    = "aegis-${var.environment}"
+  resolved_db_password_secret_id = var.db_password_secret_id != "" ? var.db_password_secret_id : "${local.name_prefix}-db-password"
 
   sidecar_services = {
     defacing               = var.defacing_image
@@ -462,6 +469,19 @@ resource "google_sql_user" "api" {
   password = var.db_password
 }
 
+resource "google_secret_manager_secret" "db_password" {
+  secret_id = local.resolved_db_password_secret_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "db_password" {
+  secret      = google_secret_manager_secret.db_password.id
+  secret_data = var.db_password
+}
+
 resource "google_bigquery_dataset" "aegis" {
   dataset_id = "aegis"
   location   = var.region
@@ -536,6 +556,12 @@ resource "google_storage_bucket_iam_member" "api_archive_rw" {
   member = "serviceAccount:${google_service_account.api.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "api_db_password_access" {
+  secret_id = google_secret_manager_secret.db_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.api.email}"
+}
+
 # --- Cloud Run sidecars ---
 
 resource "google_cloud_run_v2_service" "sidecars" {
@@ -604,6 +630,7 @@ resource "google_cloud_run_v2_service" "api" {
 
   depends_on = [
     google_sql_user.api,
+    google_secret_manager_secret_version.db_password,
     google_cloud_run_v2_service.sidecars,
   ]
 
@@ -630,8 +657,30 @@ resource "google_cloud_run_v2_service" "api" {
         value = "8080"
       }
       env {
-        name  = "DATABASE_URL"
-        value = "postgres://aegis-api:${urlencode(var.db_password)}@${google_sql_database_instance.aegis.private_ip_address}:5432/aegis?sslmode=disable"
+        name  = "DB_HOST"
+        value = google_sql_database_instance.aegis.private_ip_address
+      }
+      env {
+        name  = "DB_PORT"
+        value = "5432"
+      }
+      env {
+        name  = "DB_NAME"
+        value = google_sql_database.aegis.name
+      }
+      env {
+        name  = "DB_USER"
+        value = google_sql_user.api.name
+      }
+      env {
+        name = "DB_PASSWORD"
+
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_password.secret_id
+            version = "latest"
+          }
+        }
       }
       env {
         name  = "STORAGE_MODE"
@@ -1088,6 +1137,10 @@ output "postgres_connection" {
 
 output "postgres_private_ip" {
   value = google_sql_database_instance.aegis.private_ip_address
+}
+
+output "db_password_secret_id" {
+  value = google_secret_manager_secret.db_password.secret_id
 }
 
 output "bigquery_dataset" {

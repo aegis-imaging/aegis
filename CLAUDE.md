@@ -137,7 +137,12 @@ Core runtime env vars:
 | Var | Default | Notes |
 |-----|---------|-------|
 | `PORT` | `8080` | API listen port |
-| `DATABASE_URL` | `postgres://aegis:aegis@localhost:5432/aegis?sslmode=disable` | Postgres DSN |
+| `DATABASE_URL` | *(empty)* | Optional explicit Postgres DSN; if empty, API builds DSN from `DB_*` vars |
+| `DB_HOST` | `localhost` | Used when `DATABASE_URL` is empty |
+| `DB_PORT` | `5432` | Used when `DATABASE_URL` is empty |
+| `DB_NAME` | `aegis` | Used when `DATABASE_URL` is empty |
+| `DB_USER` | `aegis` | Used when `DATABASE_URL` is empty |
+| `DB_PASSWORD` | `aegis` | Used when `DATABASE_URL` is empty; in GCP Cloud Run this is injected from Secret Manager |
 | `APP_TIMEZONE` | `UTC` | Applies DB session timezone (`SET TimeZone`) and uses UTC log timestamps |
 
 Email is disabled by default (silent no-op). To enable locally, run [Mailpit](https://github.com/axllent/mailpit) and set `SMTP_HOST`:
@@ -1041,7 +1046,12 @@ Required infra tfvars include:
 - domains: `api_domain`, `admin_domain`
 - IAP OAuth credentials: `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
 - runtime images: API/admin/sidecar image URIs
-- database credential: `db_password`
+- database credential bootstrap: `db_password` (used to create Cloud SQL user + Secret Manager version)
+- optional secret naming: `db_password_secret_id` (default: `aegis-<env>-db-password`)
+
+Secrets posture:
+- GCP API runtime now reads DB credentials via Secret Manager reference (`DB_PASSWORD` from secret, not inline DSN).
+- AWS RDS now uses `manage_master_user_password = true`, with master credentials stored in AWS Secrets Manager.
 
 ## Key Architecture Decisions
 
@@ -1084,6 +1094,7 @@ git checkout develop && git pull
 |-----|---------------|
 | `go` | `go build ./...` + `go vet ./...` |
 | `go-test` | `go test -race -v -count=1 ./...` (~120 tests) |
+| `infra-guard` | `scripts/check-infra-placeholders.sh` blocks known credential placeholders in Terraform |
 | `python` (7× matrix) | `py_compile` on all `.py` files per service |
 | `python-test` (7× matrix) | `pytest -v --tb=short` per service (~206 tests total) |
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
