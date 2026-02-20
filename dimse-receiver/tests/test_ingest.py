@@ -422,6 +422,11 @@ def test_replay_dead_letter_moves_items_to_pending(monkeypatch):
     assert after["dead_letter"] == 0
     assert after["pending"] == 1
     assert after["replayed_total"] == 1
+    assert after["before_dead_letter"] == 1
+    assert after["after_dead_letter"] == 0
+    assert after["before_pending"] == 0
+    assert after["after_pending"] == 1
+    assert after["blocked_by_queue_full"] is False
 
 
 def test_replay_dead_letter_resets_pending_age(monkeypatch):
@@ -454,6 +459,21 @@ def test_replay_dead_letter_respects_limit(monkeypatch):
     assert after["replayed_now"] == 1
     assert after["dead_letter"] == 1
     assert after["pending"] == 1
+    assert after["before_dead_letter"] == 2
+    assert after["after_dead_letter"] == 1
+    assert after["blocked_by_queue_full"] is False
+
+
+def test_replay_dead_letter_reports_queue_full_block(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())  # goes to dead-letter
+
+    after = replay_dead_letter(limit=10, now=200.0)
+    assert after["replayed_now"] == 0
+    assert after["before_dead_letter"] == 1
+    assert after["after_dead_letter"] == 1
+    assert after["blocked_by_queue_full"] is True
 
 
 def test_retry_details_returns_pending_and_dead_letter(monkeypatch):
@@ -604,6 +624,10 @@ def test_replay_dead_letter_study_moves_matching_item(monkeypatch):
     assert result["found"] is True
     assert result["moved"] == 1
     assert result["blocked_by_queue_full"] is False
+    assert result["before_dead_letter"] == 1
+    assert result["after_dead_letter"] == 0
+    assert result["before_pending"] == 0
+    assert result["after_pending"] == 1
     assert result["snapshot"]["pending"] == 1
     assert result["snapshot"]["dead_letter"] == 0
 
@@ -613,6 +637,8 @@ def test_replay_dead_letter_study_not_found():
     assert result["found"] is False
     assert result["moved"] == 0
     assert result["blocked_by_queue_full"] is False
+    assert result["before_dead_letter"] == 0
+    assert result["after_dead_letter"] == 0
 
 
 def test_clear_dead_letter_study_found(monkeypatch):

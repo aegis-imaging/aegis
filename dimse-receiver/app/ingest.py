@@ -433,8 +433,15 @@ def replay_dead_letter(limit: int = 100, now: float | None = None) -> dict[str, 
     """
     current = time.time() if now is None else now
     moved = 0
+    before_pending = 0
+    before_dead_letter = 0
+    after_pending = 0
+    after_dead_letter = 0
+    blocked_by_queue_full = False
 
     with _retry_lock:
+        before_pending = len(_retry_queue)
+        before_dead_letter = len(_dead_letter)
         while moved < limit and _dead_letter and len(_retry_queue) < config.DIMSE_INGEST_QUEUE_MAX:
             item = _dead_letter.pop(0)
             item.next_attempt_at = current
@@ -444,9 +451,17 @@ def replay_dead_letter(limit: int = 100, now: float | None = None) -> dict[str, 
             _retry_queue.append(item)
             moved += 1
             _metrics["replayed_total"] += 1
+        blocked_by_queue_full = bool(_dead_letter and len(_retry_queue) >= config.DIMSE_INGEST_QUEUE_MAX and moved < limit)
+        after_pending = len(_retry_queue)
+        after_dead_letter = len(_dead_letter)
 
     snapshot = retry_snapshot()
     snapshot["replayed_now"] = moved
+    snapshot["before_pending"] = before_pending
+    snapshot["before_dead_letter"] = before_dead_letter
+    snapshot["after_pending"] = after_pending
+    snapshot["after_dead_letter"] = after_dead_letter
+    snapshot["blocked_by_queue_full"] = blocked_by_queue_full
     return snapshot
 
 
@@ -456,8 +471,14 @@ def replay_dead_letter_study(study_instance_uid: str, now: float | None = None) 
     found = False
     moved = 0
     blocked_by_queue_full = False
+    before_pending = 0
+    before_dead_letter = 0
+    after_pending = 0
+    after_dead_letter = 0
 
     with _retry_lock:
+        before_pending = len(_retry_queue)
+        before_dead_letter = len(_dead_letter)
         idx = next(
             (i for i, item in enumerate(_dead_letter) if item.acc.study_instance_uid == study_instance_uid),
             -1,
@@ -475,6 +496,8 @@ def replay_dead_letter_study(study_instance_uid: str, now: float | None = None) 
                 _retry_queue.append(item)
                 moved = 1
                 _metrics["replayed_total"] += 1
+        after_pending = len(_retry_queue)
+        after_dead_letter = len(_dead_letter)
 
     snapshot = retry_snapshot()
     return {
@@ -483,6 +506,10 @@ def replay_dead_letter_study(study_instance_uid: str, now: float | None = None) 
         "found": found,
         "moved": moved,
         "blocked_by_queue_full": blocked_by_queue_full,
+        "before_pending": before_pending,
+        "before_dead_letter": before_dead_letter,
+        "after_pending": after_pending,
+        "after_dead_letter": after_dead_letter,
     }
 
 
