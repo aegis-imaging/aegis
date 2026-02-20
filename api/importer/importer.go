@@ -182,6 +182,9 @@ func normalizeInstitutionSelectors(opts *Options) error {
 	opts.InstitutionID = strings.TrimSpace(opts.InstitutionID)
 	opts.InstitutionSlug = strings.ToLower(strings.TrimSpace(opts.InstitutionSlug))
 	opts.InstitutionAETitle = strings.TrimSpace(opts.InstitutionAETitle)
+	if opts.InstitutionAETitle != "" {
+		return validationErrorf("institution_ae_title is no longer supported for batch import; use institution_id or institution_slug")
+	}
 	if opts.InstitutionID != "" && opts.InstitutionSlug != "" {
 		return validationErrorf("provide only one of institution_id or institution_slug")
 	}
@@ -212,9 +215,6 @@ func validateSourceInstitutionPolicy(opts *Options) error {
 	if opts.Source != "external" {
 		return nil
 	}
-	if opts.InstitutionAETitle != "" {
-		return validationErrorf("institution_ae_title is not allowed when source is external; use institution_id or institution_slug")
-	}
 	if opts.InstitutionID == "" && opts.InstitutionSlug == "" {
 		return validationErrorf("institution_id or institution_slug required when source is external")
 	}
@@ -228,12 +228,8 @@ func normalizeProjectSlug(opts *Options) {
 	}
 }
 
-func normalizeAETitle(aeTitle string) string {
-	return strings.ToUpper(strings.TrimSpace(aeTitle))
-}
-
 func resolveImportInstitution(ctx context.Context, db *sql.DB, opts Options) (*model.Institution, error) {
-	if opts.InstitutionID == "" && opts.InstitutionSlug == "" && opts.InstitutionAETitle == "" {
+	if opts.InstitutionID == "" && opts.InstitutionSlug == "" {
 		return nil, nil
 	}
 	var (
@@ -255,29 +251,6 @@ func resolveImportInstitution(ctx context.Context, db *sql.DB, opts Options) (*m
 				return nil, validationErrorf("institution slug %q not found", opts.InstitutionSlug)
 			}
 			return nil, fmt.Errorf("lookup institution by slug: %w", err)
-		}
-	}
-
-	if opts.InstitutionAETitle != "" {
-		if institution == nil {
-			institution, err = model.GetInstitutionByAETitle(ctx, db, opts.InstitutionAETitle)
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					return nil, validationErrorf("institution ae_title %q not found", opts.InstitutionAETitle)
-				}
-				if errors.Is(err, model.ErrInstitutionAETitleAmbiguous) {
-					return nil, validationErrorf(
-						"institution ae_title %q matched multiple enabled institutions; use institution_id or institution_slug",
-						opts.InstitutionAETitle,
-					)
-				}
-				return nil, fmt.Errorf("lookup institution by ae_title: %w", err)
-			}
-		} else if normalizeAETitle(institution.AETitle) != normalizeAETitle(opts.InstitutionAETitle) {
-			if opts.InstitutionID != "" {
-				return nil, validationErrorf("institution_id and institution_ae_title do not match")
-			}
-			return nil, validationErrorf("institution_slug and institution_ae_title do not match")
 		}
 	}
 
