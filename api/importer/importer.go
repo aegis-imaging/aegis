@@ -27,12 +27,13 @@ import (
 
 // Options configures a batch import run.
 type Options struct {
-	Dir             string `json:"dir"`
-	ProjectSlug     string `json:"project_slug"`
-	InstitutionID   string `json:"institution_id"`
-	InstitutionSlug string `json:"institution_slug"`
-	Source          string `json:"source"`
-	DryRun          bool   `json:"dry_run"`
+	Dir                string `json:"dir"`
+	ProjectSlug        string `json:"project_slug"`
+	InstitutionID      string `json:"institution_id"`
+	InstitutionSlug    string `json:"institution_slug"`
+	InstitutionAETitle string `json:"institution_ae_title"`
+	Source             string `json:"source"`
+	DryRun             bool   `json:"dry_run"`
 }
 
 // Result reports the outcome of a batch import run.
@@ -176,33 +177,60 @@ func validateImportInstitution(inst *model.Institution) error {
 func normalizeInstitutionSelectors(opts *Options) error {
 	opts.InstitutionID = strings.TrimSpace(opts.InstitutionID)
 	opts.InstitutionSlug = strings.ToLower(strings.TrimSpace(opts.InstitutionSlug))
+	opts.InstitutionAETitle = strings.TrimSpace(opts.InstitutionAETitle)
 	if opts.InstitutionID != "" && opts.InstitutionSlug != "" {
 		return validationErrorf("provide only one of institution_id or institution_slug")
 	}
 	return nil
 }
 
+func normalizeAETitle(aeTitle string) string {
+	return strings.ToUpper(strings.TrimSpace(aeTitle))
+}
+
 func resolveImportInstitution(ctx context.Context, db *sql.DB, opts Options) (*model.Institution, error) {
-	if opts.InstitutionID == "" && opts.InstitutionSlug == "" {
+	if opts.InstitutionID == "" && opts.InstitutionSlug == "" && opts.InstitutionAETitle == "" {
 		return nil, nil
 	}
+	var (
+		institution *model.Institution
+		err         error
+	)
 	if opts.InstitutionID != "" {
-		institution, err := model.GetInstitutionByID(ctx, db, opts.InstitutionID)
+		institution, err = model.GetInstitutionByID(ctx, db, opts.InstitutionID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, validationErrorf("institution %q not found", opts.InstitutionID)
 			}
 			return nil, fmt.Errorf("lookup institution: %w", err)
 		}
-		return institution, nil
-	}
-	institution, err := model.GetInstitutionBySlug(ctx, db, opts.InstitutionSlug)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, validationErrorf("institution slug %q not found", opts.InstitutionSlug)
+	} else if opts.InstitutionSlug != "" {
+		institution, err = model.GetInstitutionBySlug(ctx, db, opts.InstitutionSlug)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, validationErrorf("institution slug %q not found", opts.InstitutionSlug)
+			}
+			return nil, fmt.Errorf("lookup institution by slug: %w", err)
 		}
-		return nil, fmt.Errorf("lookup institution by slug: %w", err)
 	}
+
+	if opts.InstitutionAETitle != "" {
+		if institution == nil {
+			institution, err = model.GetInstitutionByAETitle(ctx, db, opts.InstitutionAETitle)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return nil, validationErrorf("institution ae_title %q not found", opts.InstitutionAETitle)
+				}
+				return nil, fmt.Errorf("lookup institution by ae_title: %w", err)
+			}
+		} else if normalizeAETitle(institution.AETitle) != normalizeAETitle(opts.InstitutionAETitle) {
+			if opts.InstitutionID != "" {
+				return nil, validationErrorf("institution_id and institution_ae_title do not match")
+			}
+			return nil, validationErrorf("institution_slug and institution_ae_title do not match")
+		}
+	}
+
 	return institution, nil
 }
 
