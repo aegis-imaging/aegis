@@ -42,6 +42,10 @@ def trigger_ingest(acc: StudyAccumulator) -> bool:
             "instance_count": acc.file_count,
         },
     }
+    if config.DIMSE_INSTITUTION_ID:
+        payload["institution_id"] = config.DIMSE_INSTITUTION_ID
+    if acc.calling_ae_title:
+        payload["institution_ae_title"] = acc.calling_ae_title
 
     try:
         with httpx.Client(timeout=config.DIMSE_INGEST_TIMEOUT) as client:
