@@ -38,7 +38,7 @@ css: |
   <p style="font-size: 16px; color: #6b7280; margin: 0.5em 0;">A multi-cloud platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
   <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
   <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
-  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 18, 2026</p>
+  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 20, 2026</p>
 </div>
 
 ---
@@ -163,7 +163,7 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 | **Defacing** | DeepDefacer (default), mri_deface, mri_reface | Multiple backends with automatic fallback; see `docs/research/mri-defacing-tools-comparison.md` |
 | **DICOM Viewer** | OHIF Viewer (v3) | Open-source, browser-based, supports all modalities |
 | **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
-| **Processing Pipeline** | 6 Python FastAPI sidecars | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion — auto-dispatched in dependency order |
+| **Processing Pipeline** | 7 Python services (6 processing + 1 DIMSE receiver adapter) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion, plus DIMSE C-STORE ingress — auto-dispatched in dependency order |
 | **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
 
 **On the use of automated tools:** AEGIS uses automated tools to assist with — not replace — human review. Automated de-identification flags potential issues; a trained administrator reviews and approves every study before it is shared. Automated defacing quality is reviewed side-by-side against the original in the admin interface.
@@ -215,7 +215,7 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Phased Roadmap
 
-> **Development status note:** Phases 1–4 are **code-complete** — all features are implemented, compile, and pass CI. The platform has not yet been deployed to a cloud environment or tested with real clinical data. A test deployment on GCP or AWS is planned as the next milestone.
+> **Development status note:** Phases 1–4 are **code-complete** — all features are implemented, compile, and pass CI. Recent hardening shipped includes timezone-stable rendering controls across UIs and strict importer contract validation (canonical selectors, strict JSON, absolute-path requirement). The platform has not yet been deployed to a cloud environment or tested with real clinical data. A test deployment on GCP or AWS is planned as the next milestone.
 
 ### Phase 1 — Foundation (Code Complete)
 - Cloud infrastructure (Terraform for GCP and AWS)
@@ -250,7 +250,7 @@ XNAT and Flywheel serve research well but require software installation at sendi
 - Performance benchmarking and cost validation
 
 ### Phase 5 — Enterprise Radiology
-- DIMSE receive endpoint — hospitals push studies directly from PACS/VNA without browser upload
+- DIMSE service-class expansion — add C-FIND/C-MOVE workflows beyond current C-STORE ingest
 - DICOM tag standardization — normalize study/series descriptions across sites and scanners for consistent downstream processing
 - HL7 FHIR notifications — notify hospital EMR/RIS systems when studies are de-identified, approved, or exported
 - Reversible de-identification — organization-owned keys for internal use cases where re-identification may be required

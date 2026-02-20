@@ -1007,11 +1007,10 @@ cd terraform/infra && terraform init && terraform plan
 - Dual-ingress model: external-site browser upload and internal-enterprise ingestion both enter the same enterprise GCP tenancy and processing pipeline
 - Server-side defacing in separate Python Cloud Run service
 - Two DICOM stores: `raw` (tag-de-identified) and `clean` (fully processed including defacing)
-- Go for main API (minimal CVE surface, fast cold starts), Python only for defacing sidecar
+- Go for main API (minimal CVE surface, fast cold starts), Python for isolated processing sidecars and DIMSE ingress
 - DICOM PS3.15 Annex E Basic Profile for de-identification
-- Cloud SQL (PostgreSQL) for application state; Healthcare API for DICOM data
-- BigQuery for DICOM metadata analytics and audit reporting
-- Vertex AI for burned-in PHI detection and image QC (Phase 4)
+- Cloud SQL (PostgreSQL) for application state; cloud-neutral object storage (local/GCS/S3) for DICOM bytes
+- Optional cloud AI backends for PHI/classification: Google Cloud Vision + AWS Textract/Rekognition
 - Dual-path email: PSC→on-prem SMTP for internal, SendGrid for external (dev: standard SMTP)
 - Modality-agnostic de-identification; defacing only for head imaging
 
