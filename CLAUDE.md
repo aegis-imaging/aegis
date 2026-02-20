@@ -300,7 +300,7 @@ Returns all audit trail entries for a specific study (by `resource_id`). Used by
 Clicking a study UID in the studies table navigates to a dedicated detail view with:
 - **Header** — full study UID, status/source badges, description
 - **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
-- **Timestamp rendering** — all date/time values render with explicit timezone abbreviation in the UI (browser locale format + zone label)
+- **Timestamp rendering** — admin dashboard and export portal render timestamps in explicit UTC format: `YYYY-MM-DD HH:mm:ss UTC`
 - **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
 - **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
 - **Share form** — inline share creation for approved studies (email, note, expiry)
