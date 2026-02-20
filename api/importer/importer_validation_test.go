@@ -97,3 +97,32 @@ func TestRun_RejectsConflictingInstitutionSelectors(t *testing.T) {
 func TestNormalizeAETitle(t *testing.T) {
 	assert.Equal(t, "PACS_ALPHA", normalizeAETitle("  pacs_alpha  "))
 }
+
+func TestNormalizeImportSource_DefaultsToInternal(t *testing.T) {
+	opts := &Options{Source: "   "}
+	require.NoError(t, normalizeImportSource(opts))
+	assert.Equal(t, "internal", opts.Source)
+}
+
+func TestNormalizeImportSource_AllowsExternalAndNormalizes(t *testing.T) {
+	opts := &Options{Source: " EXTERNAL "}
+	require.NoError(t, normalizeImportSource(opts))
+	assert.Equal(t, "external", opts.Source)
+}
+
+func TestNormalizeImportSource_RejectsInvalidValue(t *testing.T) {
+	opts := &Options{Source: "partner"}
+	err := normalizeImportSource(opts)
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "source must be internal or external")
+}
+
+func TestRun_RejectsInvalidSource(t *testing.T) {
+	_, err := Run(context.Background(), nil, nil, Options{
+		Source: "partner",
+	})
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "source must be internal or external")
+}
