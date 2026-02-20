@@ -953,6 +953,7 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
 - `status` and `expires_in_seconds` (server-derived via UTC guard logic) for client clock-independent expiry UX
 - Used by the export portal to display study info and download link
+  - Export portal runs a live countdown from `expires_in_seconds` and disables downloads client-side once it reaches zero
 
 **Share listing** (`GET /api/studies/{id}/shares`):
 - Each share now includes server-derived `status` (`active` | `expired` | `revoked`) computed with UTC guard logic
