@@ -202,6 +202,35 @@ Manual trigger via GitHub Actions:
 - Workflow: **Cloud Smoke** (`.github/workflows/cloud-smoke.yml`)
 - Set input `base_url` and (optional) repository secret `CLOUD_SMOKE_ADMIN_HEADER`
 
+## 4c. Terraform — AWS HTTPS + Cognito Edge/Auth
+
+- [ ] Copy `terraform/aws/terraform.tfvars.example` to `terraform/aws/terraform.tfvars`
+- [ ] Fill required values:
+  - `aws_region`, `environment`, `project_name`
+  - `acm_certificate_arn` (issued cert in the same region as ALB)
+  - `cognito_domain_prefix` (region-unique)
+  - optional callback/logout URL overrides
+- [ ] Run:
+  ```bash
+  terraform -chdir=terraform/aws init
+  terraform -chdir=terraform/aws fmt -check
+  terraform -chdir=terraform/aws validate
+  terraform -chdir=terraform/aws plan
+  terraform -chdir=terraform/aws apply
+  ```
+- [ ] Verify HTTP to HTTPS redirect:
+  ```bash
+  curl -I http://<alb_dns>
+  ```
+  - Expect `301` redirect to `https://...`
+- [ ] Verify unauthenticated protected path triggers Cognito auth:
+  - Open `https://<alb_dns>/api/studies` in an incognito browser
+  - Expect redirect/challenge to Cognito hosted UI
+- [ ] Verify public path bypass remains available (for system health):
+  ```bash
+  curl -f https://<alb_dns>/healthz
+  ```
+
 ## 5. Sample DICOM Data for Local Testing
 
 - [ ] Download sample brain MRI DICOM files for testing (options below):
@@ -830,6 +859,40 @@ docker compose down -v           # stop + destroy volumes (fresh start)
 ```
 
 **Note:** The frontends (upload-portal on :3000, admin-dashboard on :3001) still run via `npm run dev` outside Docker, proxying `/api` to `localhost:8080`.
+
+## 8aa. DIMSE PACS E2E Validation Harness
+
+- [ ] Install DIMSE receiver dependencies:
+  ```bash
+  cd dimse-receiver && pip install -r requirements.txt -r requirements-test.txt
+  ```
+- [ ] Run harness:
+  ```bash
+  python3 scripts/dimse_pacs_e2e_harness.py
+  ```
+- [ ] Verify all four scenarios pass:
+  - `success_c_store_ingest`
+  - `transient_failure_to_retry_queue`
+  - `process_controls_restore_ingestion`
+  - `dead_letter_path_and_recovery`
+- [ ] Admin dashboard verification:
+  - Open Admin Dashboard → **DIMSE Ops** tab
+  - Verify summary cards show pending/dead-letter counters
+  - Trigger one control action (for example, `Process due`) and verify counters/actions refresh
+- [ ] Alerting verification (optional but recommended):
+  - Set `DIMSE_RETRY_ALERTS_ENABLED=true`
+  - Configure at least one threshold (`DIMSE_RETRY_ALERT_DEAD_LETTER_NONZERO=true` or age thresholds)
+  - Trigger threshold condition and verify `GET /ingest/retry/alerts` returns alert entries
+  - Verify Admin Dashboard **DIMSE Ops** tab shows **Recent Retry Alerts**
+- [ ] Verify durable retry state (restart-safe):
+  - Ensure `DIMSE_INGEST_DURABLE_STORE_ENABLED=true` (default in `docker-compose.yml`)
+  - Confirm state file path is on shared volume (`DIMSE_INGEST_DURABLE_STORE_PATH`, default `/app/data/dimse-ingest-retry-state.json`)
+  - Create at least one pending/dead-letter entry, restart `dimse-receiver`, and verify `/ingest/retry` counters persist
+- [ ] On failure, review printed `dimse-receiver` log tail and rerun with `--keep-logs`
+- [ ] Save run output as pilot evidence
+
+Runbook:
+- `docs/planning/dimse-pacs-e2e-validation-runbook.md`
 
 ## 8b. Email (Local Dev with Mailpit)
 

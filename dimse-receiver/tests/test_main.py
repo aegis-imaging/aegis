@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.ingest import reset_retry_state
 from app.main import app
 from app.operator_audit import reset_actions
+from app.retry_alerts import reset_alerts
 
 
 class _DummyAE:
@@ -19,13 +20,17 @@ class _DummyAE:
 
 
 def setup_function():
-    reset_retry_state()
-    reset_actions()
     import app.config as cfg
 
+    cfg.DIMSE_INGEST_DURABLE_STORE_ENABLED = False
+    cfg.DIMSE_INGEST_DURABLE_STORE_PATH = "/tmp/dimse-ingest-retry-state-test.json"
+    reset_retry_state()
+    reset_actions()
+    reset_alerts()
     cfg.DIMSE_OPERATOR_API_KEY = ""
     cfg.DIMSE_INGEST_PENDING_AGE_WARN_SECONDS = 0
     cfg.DIMSE_DEAD_LETTER_AGE_WARN_SECONDS = 0
+    cfg.DIMSE_RETRY_ALERTS_ENABLED = False
 
 
 def test_healthz_ok_with_running_scp():
@@ -303,6 +308,38 @@ def test_ingest_retry_actions_endpoint_with_action_filter():
     body = resp.json()
     assert body == {"status": "ok", "actions": actions}
     mock_get.assert_called_once_with(limit=5, action="retry_process")
+
+
+def test_ingest_retry_alerts_endpoint():
+    from unittest.mock import patch
+
+    alerts = {"total": 1, "items": [{"condition": "dead_letter_nonzero"}]}
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.get_alerts", return_value=alerts) as mock_get:
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry/alerts?limit=10")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "alerts": alerts}
+    mock_get.assert_called_once_with(limit=10, condition=None)
+
+
+def test_ingest_retry_alerts_endpoint_with_condition_filter():
+    from unittest.mock import patch
+
+    alerts = {"total": 1, "items": [{"condition": "pending_age_threshold_exceeded"}]}
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.get_alerts", return_value=alerts) as mock_get:
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry/alerts?limit=5&condition=pending_age_threshold_exceeded")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "alerts": alerts}
+    mock_get.assert_called_once_with(limit=5, condition="pending_age_threshold_exceeded")
 
 
 def test_ingest_retry_details_endpoint():

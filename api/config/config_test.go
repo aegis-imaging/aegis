@@ -16,7 +16,7 @@ func clearEnvVars(t *testing.T) {
 		"SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USERNAME", "SMTP_PASSWORD",
 		"PIPELINE_AUTO", "ALLOWED_ORIGINS",
 		"DEFACING_SERVICE_URL", "PHI_DETECTION_SERVICE_URL", "QC_SERVICE_URL",
-		"BIDS_SERVICE_URL", "CLASSIFICATION_SERVICE_URL", "PROTOCOL_SERVICE_URL", "DIMSE_RECEIVER_URL",
+		"BIDS_SERVICE_URL", "CLASSIFICATION_SERVICE_URL", "PROTOCOL_SERVICE_URL", "DIMSE_RECEIVER_URL", "DIMSE_OPERATOR_API_KEY",
 		"GCP_PROJECT", "GCS_BUCKET", "S3_BUCKET", "S3_REGION", "S3_ENDPOINT",
 	} {
 		t.Setenv(key, "")
@@ -91,12 +91,14 @@ func TestLoad_SidecarURLs(t *testing.T) {
 	clearEnvVars(t)
 	t.Setenv("DEFACING_SERVICE_URL", "http://localhost:8081")
 	t.Setenv("QC_SERVICE_URL", "http://localhost:8083")
+	t.Setenv("DIMSE_OPERATOR_API_KEY", "dimse-key")
 	cfg := Load()
 
 	assert.Equal(t, "http://localhost:8081", cfg.DefacingServiceURL)
 	assert.Equal(t, "http://localhost:8083", cfg.QcServiceURL)
 	assert.Empty(t, cfg.PhiDetectionServiceURL)
 	assert.Empty(t, cfg.DimseReceiverURL)
+	assert.Equal(t, "dimse-key", cfg.DimseOperatorAPIKey)
 }
 
 func TestLoad_AppTimezoneOverride(t *testing.T) {

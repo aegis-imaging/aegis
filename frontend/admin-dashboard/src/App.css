@@ -1266,3 +1266,33 @@
 .btn-link:hover {
   color: #1d4ed8;
 }
+
+.routing-section-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.routing-section-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.dimse-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.dimse-status-message {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #1f2937;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+}

@@ -52,6 +52,34 @@ variable "db_master_username" {
   default     = "aegis"
 }
 
+variable "acm_certificate_arn" {
+  description = "ACM certificate ARN for ALB HTTPS listener"
+  type        = string
+}
+
+variable "cognito_domain_prefix" {
+  description = "Unique Cognito hosted UI domain prefix (for example: aegis-dev-auth)"
+  type        = string
+}
+
+variable "cognito_callback_urls" {
+  description = "OAuth callback URLs for Cognito app client (defaults to ALB /oauth2/idpresponse)"
+  type        = list(string)
+  default     = []
+}
+
+variable "cognito_logout_urls" {
+  description = "OAuth logout URLs for Cognito app client (defaults to ALB /logout)"
+  type        = list(string)
+  default     = []
+}
+
+variable "cognito_allowed_oauth_scopes" {
+  description = "OAuth scopes requested by ALB authenticate-cognito action"
+  type        = list(string)
+  default     = ["openid", "email", "profile"]
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -279,6 +307,49 @@ resource "aws_db_instance" "main" {
 
 locals {
   services = ["api", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service"]
+
+  cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
+    "https://${aws_lb.main.dns_name}/oauth2/idpresponse"
+  ]
+
+  cognito_logout_urls = length(var.cognito_logout_urls) > 0 ? var.cognito_logout_urls : [
+    "https://${aws_lb.main.dns_name}/logout"
+  ]
+
+  public_path_rules = {
+    healthz = {
+      priority = 10
+      paths    = ["/healthz"]
+    }
+    upload = {
+      priority = 20
+      paths    = ["/api/upload/*"]
+    }
+    export = {
+      priority = 30
+      paths    = ["/api/export/*"]
+    }
+    contact = {
+      priority = 40
+      paths    = ["/api/contact"]
+    }
+    storage = {
+      priority = 50
+      paths    = ["/api/storage/*"]
+    }
+    projects = {
+      priority = 60
+      paths    = ["/api/projects"]
+    }
+    active_profile = {
+      priority = 70
+      paths    = ["/api/projects/*/active-anon-profile"]
+    }
+    dicomweb = {
+      priority = 80
+      paths    = ["/dicomweb*", "/dicomweb-raw*"]
+    }
+  }
 }
 
 resource "aws_ecr_repository" "services" {
@@ -413,13 +484,102 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# TODO: HTTPS listener (requires ACM certificate)
-# resource "aws_lb_listener" "https" { ... }
+# Cognito user pool for ALB authenticate-cognito action.
+resource "aws_cognito_user_pool" "admin" {
+  name = "${var.project_name}-${var.environment}-admin-users"
 
-# TODO: Cognito user pool for admin dashboard authentication
-# resource "aws_cognito_user_pool" "admin" { ... }
-# resource "aws_cognito_user_pool_client" "admin" { ... }
-# resource "aws_cognito_user_pool_domain" "admin" { ... }
+  username_attributes      = ["email"]
+  auto_verified_attributes = ["email"]
+
+  mfa_configuration = "OFF"
+
+  password_policy {
+    minimum_length                   = 12
+    require_lowercase                = true
+    require_uppercase                = true
+    require_numbers                  = true
+    require_symbols                  = false
+    temporary_password_validity_days = 7
+  }
+
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
+
+  tags = { Name = "${var.project_name}-admin-user-pool" }
+}
+
+resource "aws_cognito_user_pool_client" "admin" {
+  name         = "${var.project_name}-${var.environment}-alb-client"
+  user_pool_id = aws_cognito_user_pool.admin.id
+
+  generate_secret = true
+
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = var.cognito_allowed_oauth_scopes
+  supported_identity_providers         = ["COGNITO"]
+
+  callback_urls = local.cognito_callback_urls
+  logout_urls   = local.cognito_logout_urls
+}
+
+resource "aws_cognito_user_pool_domain" "admin" {
+  domain       = var.cognito_domain_prefix
+  user_pool_id = aws_cognito_user_pool.admin.id
+}
+
+# HTTPS listener with Cognito auth.
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.acm_certificate_arn
+
+  # Public routes remain unauthenticated via explicit higher-priority listener rules.
+  default_action {
+    type = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn              = aws_cognito_user_pool.admin.arn
+      user_pool_client_id        = aws_cognito_user_pool_client.admin.id
+      user_pool_domain           = aws_cognito_user_pool_domain.admin.domain
+      on_unauthenticated_request = "authenticate"
+      scope                      = join(" ", var.cognito_allowed_oauth_scopes)
+    }
+  }
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "https_public_paths" {
+  for_each = local.public_path_rules
+
+  listener_arn = aws_lb_listener.https.arn
+  priority     = each.value.priority
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = each.value.paths
+    }
+  }
+}
 
 # --- SNS + SQS (Event Notifications) ---
 
@@ -479,6 +639,22 @@ output "ecs_cluster" {
 
 output "alb_dns" {
   value = aws_lb.main.dns_name
+}
+
+output "alb_https_listener_arn" {
+  value = aws_lb_listener.https.arn
+}
+
+output "cognito_user_pool_id" {
+  value = aws_cognito_user_pool.admin.id
+}
+
+output "cognito_user_pool_client_id" {
+  value = aws_cognito_user_pool_client.admin.id
+}
+
+output "cognito_user_pool_domain" {
+  value = aws_cognito_user_pool_domain.admin.domain
 }
 
 output "ecr_repositories" {
