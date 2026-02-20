@@ -203,6 +203,9 @@ func normalizeImportDir(opts *Options) error {
 		return validationErrorf("dir is required")
 	}
 	opts.Dir = filepath.Clean(opts.Dir)
+	if !filepath.IsAbs(opts.Dir) {
+		return validationErrorf("dir must be an absolute path")
+	}
 	return nil
 }
 
