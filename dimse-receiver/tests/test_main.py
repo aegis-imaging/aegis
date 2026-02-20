@@ -201,6 +201,29 @@ def test_ingest_retry_status_endpoint():
     assert "ingest_retry" in body
 
 
+def test_ingest_retry_summary_endpoint():
+    from unittest.mock import patch
+
+    summary = {
+        "snapshot": {"pending": 0, "dead_letter": 0},
+        "pending_due_now": 0,
+        "dead_letter_present": False,
+        "queue_max": 1000,
+        "queue_utilization_percent": 0.0,
+    }
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.retry_summary", return_value=summary) as mock_summary:
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry/summary")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": summary}
+    mock_summary.assert_called_once_with()
+
+
 def test_retry_endpoints_require_operator_key_when_configured(monkeypatch):
     from unittest.mock import patch
 

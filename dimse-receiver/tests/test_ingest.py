@@ -14,6 +14,7 @@ from app.ingest import (
     replay_dead_letter,
     replay_dead_letter_study,
     retry_details,
+    retry_summary,
     StudyAccumulator,
     process_retry_queue,
     process_retry_all,
@@ -238,6 +239,41 @@ def test_retry_snapshot_reports_no_next_pending_attempt_when_empty():
     assert snap["pending"] == 0
     assert snap["pending_next_attempt_at"] == 0
     assert snap["pending_next_attempt_in_seconds"] == 0
+
+
+def test_retry_summary_reports_due_now_and_utilization(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 4)
+
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=100.0):
+        submit_ingest(_acc())
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=120.0):
+        acc2 = _acc()
+        acc2.study_instance_uid = "2.2.2.2"
+        submit_ingest(acc2)
+
+    # First item due now, second item not due.
+    ingest_module._retry_queue[0].next_attempt_at = 90.0
+    ingest_module._retry_queue[1].next_attempt_at = 999.0
+
+    summary = retry_summary(now=100.0)
+    assert summary["pending_due_now"] == 1
+    assert summary["queue_max"] == 4
+    assert summary["queue_utilization_percent"] == 50.0
+    assert summary["dead_letter_present"] is False
+    assert summary["snapshot"]["pending"] == 2
+
+
+def test_retry_summary_handles_zero_queue_max(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=100.0):
+        submit_ingest(_acc())  # dead-letter because queue max is 0
+
+    summary = retry_summary(now=100.0)
+    assert summary["queue_max"] == 0
+    assert summary["queue_utilization_percent"] == 0.0
+    assert summary["dead_letter_present"] is True
 
 
 def test_retry_delay_seconds_exponential_and_capped(monkeypatch):
