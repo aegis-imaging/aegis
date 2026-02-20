@@ -285,6 +285,40 @@ def replay_dead_letter(limit: int = 100, now: float | None = None) -> dict[str, 
     return snapshot
 
 
+def replay_dead_letter_study(study_instance_uid: str, now: float | None = None) -> dict[str, object]:
+    """Replay one dead-letter entry matching a specific StudyInstanceUID."""
+    current = time.time() if now is None else now
+    found = False
+    moved = 0
+    blocked_by_queue_full = False
+
+    with _retry_lock:
+        idx = next(
+            (i for i, item in enumerate(_dead_letter) if item.acc.study_instance_uid == study_instance_uid),
+            -1,
+        )
+        if idx >= 0:
+            found = True
+            if len(_retry_queue) >= config.DIMSE_INGEST_QUEUE_MAX:
+                blocked_by_queue_full = True
+            else:
+                item = _dead_letter.pop(idx)
+                item.next_attempt_at = current
+                item.last_error = "replayed_targeted"
+                _retry_queue.append(item)
+                moved = 1
+                _metrics["replayed_total"] += 1
+
+    snapshot = retry_snapshot()
+    return {
+        "snapshot": snapshot,
+        "study_instance_uid": study_instance_uid,
+        "found": found,
+        "moved": moved,
+        "blocked_by_queue_full": blocked_by_queue_full,
+    }
+
+
 def clear_dead_letter(limit: int = 10000) -> dict[str, int]:
     """Clear up to `limit` dead-letter items and return counters."""
     cleared = 0
