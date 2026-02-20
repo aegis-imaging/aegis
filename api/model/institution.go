@@ -8,18 +8,18 @@ import (
 
 // Institution represents an organisation that sends or receives studies.
 type Institution struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	Slug            string    `json:"slug"`
-	Description     string    `json:"description"`
-	Type            string    `json:"institution_type"` // sender | receiver | both
-	ContactName     string    `json:"contact_name"`
-	ContactEmail    string    `json:"contact_email"`
-	IPRanges        string    `json:"ip_ranges"`  // comma-separated CIDR blocks
-	AETitle         string    `json:"ae_title"`
-	Enabled         bool      `json:"enabled"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Slug         string    `json:"slug"`
+	Description  string    `json:"description"`
+	Type         string    `json:"institution_type"` // sender | receiver | both
+	ContactName  string    `json:"contact_name"`
+	ContactEmail string    `json:"contact_email"`
+	IPRanges     string    `json:"ip_ranges"` // comma-separated CIDR blocks
+	AETitle      string    `json:"ae_title"`
+	Enabled      bool      `json:"enabled"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // InstitutionProject links an institution to a project with a role.
@@ -62,6 +62,23 @@ func GetInstitutionByID(ctx context.Context, db *sql.DB, id string) (*Institutio
 	var inst Institution
 	err := scanInstitution(db.QueryRowContext(ctx,
 		`SELECT`+institutionColumns+` FROM institutions WHERE id = $1`, id), &inst)
+	if err != nil {
+		return nil, err
+	}
+	return &inst, nil
+}
+
+// GetInstitutionByAETitle returns the first enabled institution matching ae_title
+// (case-insensitive, trimmed). Used for DIMSE/internal ingest attribution.
+func GetInstitutionByAETitle(ctx context.Context, db *sql.DB, aeTitle string) (*Institution, error) {
+	var inst Institution
+	err := scanInstitution(db.QueryRowContext(ctx, `
+		SELECT`+institutionColumns+`
+		FROM institutions
+		WHERE enabled = TRUE
+		  AND lower(trim(ae_title)) = lower(trim($1))
+		ORDER BY created_at ASC
+		LIMIT 1`, aeTitle), &inst)
 	if err != nil {
 		return nil, err
 	}
@@ -175,4 +192,25 @@ func ListInstitutionsForProject(ctx context.Context, db *sql.DB, projectID strin
 		out = append(out, ip)
 	}
 	return out, rows.Err()
+}
+
+// InstitutionCanSendToProject returns true when the institution is enabled,
+// has type sender/both, and is linked to the project with sender/admin role.
+func InstitutionCanSendToProject(ctx context.Context, db *sql.DB, institutionID, projectID string) (bool, error) {
+	var allowed bool
+	err := db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM institutions i
+			JOIN institution_projects ip ON ip.institution_id = i.id
+			WHERE i.id = $1
+			  AND i.enabled = TRUE
+			  AND i.institution_type IN ('sender', 'both')
+			  AND ip.project_id = $2
+			  AND ip.role IN ('sender', 'admin')
+		)`, institutionID, projectID).Scan(&allowed)
+	if err != nil {
+		return false, err
+	}
+	return allowed, nil
 }

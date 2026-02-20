@@ -820,7 +820,7 @@ uvicorn app.main:app --port 8086
 
 ### DIMSE Receiver Service (`dimse-receiver/`)
 
-Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts.
+Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` can also be set explicitly.
 
 **Running locally:**
 ```bash
@@ -839,6 +839,7 @@ uvicorn app.main:app --port 8087
 | `DIMSE_DATA_DIR` | `/app/data` | Shared storage mount (same as Go API) |
 | `API_URL` | `http://api:8080` | Go API base URL for ingest calls |
 | `DIMSE_PROJECT_SLUG` | `default` | Project slug sent to `/api/ingest` |
+| `DIMSE_INSTITUTION_ID` | *(empty)* | Optional fixed institution UUID sent as `institution_id` |
 | `DIMSE_INGEST_TIMEOUT` | `30` | HTTP timeout (seconds) for ingest call |
 | `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
 
