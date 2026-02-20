@@ -164,3 +164,47 @@ func TestRun_DryRun_RejectsInstitutionIDAETitleMismatch(t *testing.T) {
 	assert.True(t, importer.IsValidationError(err))
 	assert.Contains(t, err.Error(), "do not match")
 }
+
+func TestRun_DryRun_RejectsAmbiguousInstitutionAETitle(t *testing.T) {
+	db := testutil.TestDB(t)
+	ctx := context.Background()
+
+	project, err := model.GetProjectBySlug(ctx, db, "default")
+	require.NoError(t, err)
+
+	instA := &model.Institution{
+		Name:    "Hospital Foxtrot",
+		Slug:    "hospital-foxtrot",
+		Type:    "sender",
+		AETitle: "PACS_DUP",
+		Enabled: true,
+	}
+	instB := &model.Institution{
+		Name:    "Hospital Golf",
+		Slug:    "hospital-golf",
+		Type:    "sender",
+		AETitle: "PACS_DUP",
+		Enabled: true,
+	}
+	require.NoError(t, model.CreateInstitution(ctx, db, instA))
+	require.NoError(t, model.CreateInstitution(ctx, db, instB))
+	require.NoError(t, model.AddInstitutionToProject(ctx, db, &model.InstitutionProject{
+		InstitutionID: instA.ID,
+		ProjectID:     project.ID,
+		Role:          "sender",
+	}))
+	require.NoError(t, model.AddInstitutionToProject(ctx, db, &model.InstitutionProject{
+		InstitutionID: instB.ID,
+		ProjectID:     project.ID,
+		Role:          "sender",
+	}))
+
+	_, err = importer.Run(ctx, db, nil, importer.Options{
+		Dir:                t.TempDir(),
+		DryRun:             true,
+		InstitutionAETitle: "pacs_dup",
+	})
+	require.Error(t, err)
+	assert.True(t, importer.IsValidationError(err))
+	assert.Contains(t, err.Error(), "matched multiple enabled institutions")
+}

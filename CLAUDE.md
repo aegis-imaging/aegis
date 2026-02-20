@@ -372,6 +372,7 @@ Network identity normalization and validation:
 - `ae_title` is trimmed and normalized to uppercase on create/update.
 - `ip_ranges` entries are trimmed, deduplicated, and validated (`CIDR` or single IP).
 - Invalid `ip_ranges` values are rejected with `400 Bad Request`.
+- `institution_ae_title` attribution must resolve to exactly one enabled institution; ambiguous AE title matches are rejected and require explicit `institution_id` or `institution_slug`.
 
 ### Anonymization Profiles (`api/handler/anon_profile.go`, `api/model/anon_profile.go`)
 
@@ -905,6 +906,7 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 Validation behavior:
 - `institution_id` and `institution_slug` are mutually exclusive (provide only one).
 - If `institution_ae_title` is provided alongside `institution_id` or `institution_slug`, they must resolve to the same institution.
+- `institution_ae_title` alone must resolve to exactly one enabled institution; ambiguous matches are rejected with a validation error.
 - Institution selector (ID or slug) must reference an enabled institution with type `sender`/`both`, linked to the target project with role `sender`/`admin`.
 - Invalid directory/project/institution input now returns HTTP `400` from `/api/import/batch` (not `500`).
 
