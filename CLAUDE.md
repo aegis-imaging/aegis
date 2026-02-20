@@ -943,6 +943,7 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 **Create share request** (`POST /api/studies/{id}/share`):
 - Uses `expiry_hours` (integer) to compute `expires_at`
 - Server computes expiry in UTC (`time.Now().UTC().Add(...)`)
+- Optionally accepts explicit `expires_at` in RFC3339 (timezone-aware) for backward compatibility
 
 **Export share redemption** (`GET /api/export/{token}`) — enhanced response includes:
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
