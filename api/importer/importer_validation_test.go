@@ -86,6 +86,7 @@ func TestNormalizeInstitutionSelectors_RejectsConflictingSelectors(t *testing.T)
 
 func TestRun_RejectsConflictingInstitutionSelectors(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
+		Dir:             "x",
 		InstitutionID:   "inst-1",
 		InstitutionSlug: "hospital-bravo",
 	})
@@ -96,6 +97,20 @@ func TestRun_RejectsConflictingInstitutionSelectors(t *testing.T) {
 
 func TestNormalizeAETitle(t *testing.T) {
 	assert.Equal(t, "PACS_ALPHA", normalizeAETitle("  pacs_alpha  "))
+}
+
+func TestNormalizeImportDir_Required(t *testing.T) {
+	opts := &Options{Dir: "   "}
+	err := normalizeImportDir(opts)
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "dir is required")
+}
+
+func TestNormalizeImportDir_TrimAndClean(t *testing.T) {
+	opts := &Options{Dir: " ./testdata/../testdata "}
+	require.NoError(t, normalizeImportDir(opts))
+	assert.Equal(t, "testdata", opts.Dir)
 }
 
 func TestNormalizeProjectSlug_DefaultsToDefault(t *testing.T) {
@@ -132,11 +147,21 @@ func TestNormalizeImportSource_RejectsInvalidValue(t *testing.T) {
 
 func TestRun_RejectsInvalidSource(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
+		Dir:    "x",
 		Source: "partner",
 	})
 	require.Error(t, err)
 	assert.True(t, IsValidationError(err))
 	assert.Contains(t, err.Error(), "source must be internal or external")
+}
+
+func TestRun_RejectsMissingDir(t *testing.T) {
+	_, err := Run(context.Background(), nil, nil, Options{
+		Dir: "   ",
+	})
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "dir is required")
 }
 
 func TestValidateSourceInstitutionPolicy_RequiresSelectorForExternalSource(t *testing.T) {
@@ -154,6 +179,7 @@ func TestValidateSourceInstitutionPolicy_AllowsExternalSourceWithSelector(t *tes
 
 func TestRun_RejectsExternalSourceWithoutInstitutionSelector(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
+		Dir:    "x",
 		Source: "external",
 	})
 	require.Error(t, err)
