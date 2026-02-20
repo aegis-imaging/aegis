@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"context"
 	"testing"
 
 	"github.com/msenjem/aegis/api/model"
@@ -55,4 +56,38 @@ func TestValidateImportInstitution_RejectsReceiverOnly(t *testing.T) {
 func TestValidationErrorMarker(t *testing.T) {
 	err := validationErrorf("invalid project")
 	assert.True(t, IsValidationError(err))
+}
+
+func TestNormalizeInstitutionSelectors_TrimAndLower(t *testing.T) {
+	opts := &Options{
+		InstitutionID:   "  ",
+		InstitutionSlug: "  Hospital-BRAVO  ",
+	}
+
+	err := normalizeInstitutionSelectors(opts)
+	require.NoError(t, err)
+	assert.Equal(t, "", opts.InstitutionID)
+	assert.Equal(t, "hospital-bravo", opts.InstitutionSlug)
+}
+
+func TestNormalizeInstitutionSelectors_RejectsConflictingSelectors(t *testing.T) {
+	opts := &Options{
+		InstitutionID:   "inst-1",
+		InstitutionSlug: "hospital-bravo",
+	}
+
+	err := normalizeInstitutionSelectors(opts)
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "only one")
+}
+
+func TestRun_RejectsConflictingInstitutionSelectors(t *testing.T) {
+	_, err := Run(context.Background(), nil, nil, Options{
+		InstitutionID:   "inst-1",
+		InstitutionSlug: "hospital-bravo",
+	})
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "only one")
 }
