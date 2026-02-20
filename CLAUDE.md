@@ -132,6 +132,14 @@ Integration tests are skipped with `-short` flag for fast local feedback.
 cd api && go run .          # runs on :8080
 ```
 
+Core runtime env vars:
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `PORT` | `8080` | API listen port |
+| `DATABASE_URL` | `postgres://aegis:aegis@localhost:5432/aegis?sslmode=disable` | Postgres DSN |
+| `APP_TIMEZONE` | `UTC` | Applies DB session timezone (`SET TimeZone`) and uses UTC log timestamps |
+
 Email is disabled by default (silent no-op). To enable locally, run [Mailpit](https://github.com/axllent/mailpit) and set `SMTP_HOST`:
 ```bash
 docker run -p 1025:1025 -p 8025:8025 axllent/mailpit
@@ -292,7 +300,7 @@ Returns all audit trail entries for a specific study (by `resource_id`). Used by
 Clicking a study UID in the studies table navigates to a dedicated detail view with:
 - **Header** — full study UID, status/source badges, description
 - **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
-- **Timestamp rendering** — all date/time values render with explicit timezone abbreviation in the UI (browser locale format + zone label)
+- **Timestamp rendering** — admin dashboard, export portal, and upload portal support user-selectable viewing time zones (`UTC`, browser local, or custom IANA zone like `America/Chicago`) for display-only conversion. Preference is synced across all three UIs via shared `localStorage` keys. Upload portal converts DICOM study date/time only when an offset is present (falls back to explicit floating-time text when offset is missing).
 - **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
 - **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
 - **Share form** — inline share creation for approved studies (email, note, expiry)
@@ -364,6 +372,7 @@ Network identity normalization and validation:
 - `ae_title` is trimmed and normalized to uppercase on create/update.
 - `ip_ranges` entries are trimmed, deduplicated, and validated (`CIDR` or single IP).
 - Invalid `ip_ranges` values are rejected with `400 Bad Request`.
+- `institution_ae_title` attribution must resolve to exactly one enabled institution; ambiguous AE title matches are rejected and require explicit `institution_id` or `institution_slug`.
 
 ### Anonymization Profiles (`api/handler/anon_profile.go`, `api/model/anon_profile.go`)
 
@@ -834,6 +843,8 @@ uvicorn app.main:app --port 8086
 
 Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
 
+If ingest calls fail (API temporary outage, network blip), failed studies are added to an in-memory retry queue. A background worker retries at `DIMSE_INGEST_RETRY_INTERVAL` until `DIMSE_INGEST_MAX_ATTEMPTS`; exhausted items are moved to dead-letter and surfaced in `/healthz` and `/ingest/retry`.
+
 **Running locally:**
 ```bash
 cd dimse-receiver
@@ -854,7 +865,19 @@ uvicorn app.main:app --port 8087
 | `DIMSE_INSTITUTION_ID` | *(empty)* | Optional fixed institution UUID sent as `institution_id` |
 | `DIMSE_INSTITUTION_SLUG` | *(empty)* | Optional fixed institution slug sent as `institution_slug` (used when ID is empty) |
 | `DIMSE_INGEST_TIMEOUT` | `30` | HTTP timeout (seconds) for ingest call |
+| `DIMSE_INGEST_RETRY_INTERVAL` | `15` | Retry worker interval (seconds) for queued ingest failures |
+| `DIMSE_INGEST_MAX_ATTEMPTS` | `5` | Maximum attempts before moving an ingest item to dead-letter |
+| `DIMSE_INGEST_QUEUE_MAX` | `1000` | Maximum in-memory queued ingest items before queue-full dead-letter |
 | `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
+
+**Operational endpoints:**
+- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total`) and returns `degraded` if SCP is down or dead-letter is non-zero.
+- `GET /ingest/retry` — returns retry/dead-letter counters for troubleshooting.
+- `GET /ingest/retry/details?limit=N` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, next retry timing, last_error).
+- `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
+- `POST /ingest/retry/replay?limit=N` — re-queues up to `N` dead-letter items for retry.
+- `POST /ingest/retry/replay/{study_instance_uid}` — targeted re-queue for a specific dead-letter study.
+- `POST /ingest/retry/clear-dead-letter?limit=N` — clears acknowledged dead-letter items.
 
 ### Batch Import CLI (`api/cmd/import/`)
 
@@ -879,11 +902,10 @@ cd api && go build -o aegis-import ./cmd/import
 | `--project` | `default` | Project slug |
 | `--institution` | *(empty)* | Institution UUID (optional) |
 | `--institution-slug` | *(empty)* | Institution slug (optional, case-insensitive) |
-| `--institution-ae-title` | *(empty)* | Institution AE Title (optional, case-insensitive) |
 | `--source` | `internal` | `internal` or `external` |
 | `--dry-run` | `false` | Scan and report without importing |
 
-Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DIR`).
+Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DIR`, `APP_TIMEZONE`).
 
 **How it works:**
 1. Recursively scans `--dir` for `.dcm` files
@@ -892,11 +914,15 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 4. For each study: creates upload session + study record, copies files to `dicom/raw/{studyUID}/`, evaluates routing rules
 5. Duplicate StudyInstanceUIDs are rejected (unique constraint) — safe to re-run
 
-**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","institution_slug","institution_ae_title","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
+**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","institution_slug","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
 
 Validation behavior:
+- `/api/import/batch` uses strict JSON decoding (`DisallowUnknownFields`); unknown/deprecated fields are rejected with HTTP `400`.
+- `dir` is required, trimmed, cleaned, and must be an absolute path.
+- `project_slug` is trimmed/lowercased; empty values default to `default`.
+- `source` is normalized and validated; only `internal` or `external` are accepted.
+- `source=external` requires canonical institution selector (`institution_id` or `institution_slug`) for provenance.
 - `institution_id` and `institution_slug` are mutually exclusive (provide only one).
-- If `institution_ae_title` is provided alongside `institution_id` or `institution_slug`, they must resolve to the same institution.
 - Institution selector (ID or slug) must reference an enabled institution with type `sender`/`both`, linked to the target project with role `sender`/`admin`.
 - Invalid directory/project/institution input now returns HTTP `400` from `/api/import/batch` (not `500`).
 
@@ -995,11 +1021,10 @@ cd terraform/infra && terraform init && terraform plan
 - Dual-ingress model: external-site browser upload and internal-enterprise ingestion both enter the same enterprise GCP tenancy and processing pipeline
 - Server-side defacing in separate Python Cloud Run service
 - Two DICOM stores: `raw` (tag-de-identified) and `clean` (fully processed including defacing)
-- Go for main API (minimal CVE surface, fast cold starts), Python only for defacing sidecar
+- Go for main API (minimal CVE surface, fast cold starts), Python for isolated processing sidecars and DIMSE ingress
 - DICOM PS3.15 Annex E Basic Profile for de-identification
-- Cloud SQL (PostgreSQL) for application state; Healthcare API for DICOM data
-- BigQuery for DICOM metadata analytics and audit reporting
-- Vertex AI for burned-in PHI detection and image QC (Phase 4)
+- Cloud SQL (PostgreSQL) for application state; cloud-neutral object storage (local/GCS/S3) for DICOM bytes
+- Optional cloud AI backends for PHI/classification: Google Cloud Vision + AWS Textract/Rekognition
 - Dual-path email: PSC→on-prem SMTP for internal, SendGrid for external (dev: standard SMTP)
 - Modality-agnostic de-identification; defacing only for head imaging
 
@@ -1047,7 +1072,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 22 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling |
+| dimse-receiver | 41 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication, retry status/details/process/replay/targeted-replay/clear endpoints |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |

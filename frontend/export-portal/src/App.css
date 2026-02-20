@@ -38,7 +38,43 @@ h1 {
 .subtitle {
   color: #666;
   margin-top: 4px;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
+}
+
+.tz-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.tz-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tz-select,
+.tz-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 13px;
+  background: #fff;
+  color: #111827;
+}
+
+.tz-input {
+  min-width: 180px;
+}
+
+.tz-warning {
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .loading {

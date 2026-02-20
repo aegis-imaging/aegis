@@ -138,6 +138,28 @@ func TestInternalIngest_AssignsInstitutionByAETitle(t *testing.T) {
 	assert.Equal(t, inst.ID, *resp.Study.InstitutionID)
 }
 
+func TestInternalIngest_RejectsAmbiguousInstitutionAETitle(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	project := testutil.SeedProject(t, db)
+
+	instA := createInstitution(t, db, "sender", "PACS_DUP", true)
+	instB := createInstitution(t, db, "sender", "PACS_DUP", true)
+	linkInstitutionToProject(t, db, instA.ID, project.ID, "sender")
+	linkInstitutionToProject(t, db, instB.ID, project.ID, "sender")
+
+	payload := newIngestPayload(fmt.Sprintf("1.2.840.%d", time.Now().UnixNano()))
+	payload["institution_ae_title"] = "pacs_dup"
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/ingest", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.InternalIngest(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "matched multiple enabled institutions")
+}
+
 func TestInternalIngest_RejectsInstitutionIDAndSlugConflict(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)

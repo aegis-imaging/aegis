@@ -16,6 +16,9 @@ export interface StudySummary {
   patientName: string
   patientId: string
   studyDate: string
+  studyTime: string
+  timezoneOffsetFromUtc: string
+  studyDateTimeIso: string
   studyDescription: string
   modality: string
   studyInstanceUid: string

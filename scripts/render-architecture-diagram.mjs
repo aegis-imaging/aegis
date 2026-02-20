@@ -20,12 +20,23 @@
 import puppeteer from 'puppeteer';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const htmlPath = path.join(__dirname, 'architecture-diagram.html');
 
-const browser = await puppeteer.launch({ headless: 'new' });
+const launchOptions = {
+  headless: true,
+  args: ['--no-sandbox', '--disable-setuid-sandbox'],
+};
+
+const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+if (fs.existsSync(chromePath)) {
+  launchOptions.executablePath = chromePath;
+}
+
+const browser = await puppeteer.launch(launchOptions);
 const page = await browser.newPage();
 await page.setViewport({ width: 1660, height: 1200, deviceScaleFactor: 2 });
 await page.goto(`file://${htmlPath}`, { waitUntil: 'networkidle0' });

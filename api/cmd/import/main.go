@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	aegis-import --dir /path/to/dicom [--project slug] [--institution uuid] [--institution-slug slug] [--institution-ae-title AE_TITLE] [--source internal] [--dry-run]
+//	aegis-import --dir /path/to/dicom [--project slug] [--institution uuid] [--institution-slug slug] [--source internal|external] [--dry-run]
 package main
 
 import (
@@ -25,11 +25,12 @@ import (
 )
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.LUTC)
+
 	dir := flag.String("dir", "", "Directory containing DICOM files to import (required)")
 	project := flag.String("project", "default", "Project slug to import into")
 	institution := flag.String("institution", "", "Institution UUID (optional)")
 	institutionSlug := flag.String("institution-slug", "", "Institution slug (optional)")
-	institutionAETitle := flag.String("institution-ae-title", "", "Institution AE Title (optional)")
 	source := flag.String("source", "internal", "Study source: internal or external")
 	dryRun := flag.Bool("dry-run", false, "Scan and report without importing")
 	flag.Parse()
@@ -53,6 +54,9 @@ func main() {
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatalf("database ping: %v", err)
 	}
+	if err := applyDBSessionTimezone(ctx, db, cfg.AppTimezone); err != nil {
+		log.Fatalf("database timezone setup (%s): %v", cfg.AppTimezone, err)
+	}
 
 	if err := migrate.Run(db); err != nil {
 		log.Fatalf("migrations: %v", err)
@@ -75,7 +79,6 @@ func main() {
 		ProjectSlug:        *project,
 		InstitutionID:      *institution,
 		InstitutionSlug:    *institutionSlug,
-		InstitutionAETitle: *institutionAETitle,
 		Source:             *source,
 		DryRun:             *dryRun,
 	}
@@ -97,4 +100,9 @@ func main() {
 			fmt.Printf("  - %s\n", e)
 		}
 	}
+}
+
+func applyDBSessionTimezone(ctx context.Context, db *sql.DB, timezone string) error {
+	var applied string
+	return db.QueryRowContext(ctx, `SELECT set_config('TimeZone', $1, false)`, timezone).Scan(&applied)
 }

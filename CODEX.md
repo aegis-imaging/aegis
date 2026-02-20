@@ -60,7 +60,8 @@ Use these files first before coding:
 
 ## Next Feature Note
 
-1. Time zone hardening is next after importer institution validation:
-   - standardize server/log timezone behavior (UTC default and explicit labels),
-   - make UI date/time displays explicit about timezone (or consistently UTC),
-   - verify share expiry and audit timestamps render consistently across admin dashboard and export portal.
+1. Timezone hardening and importer contract validation have shipped.
+2. Current focus should prioritize deployment readiness and enterprise ingress verification:
+   - first cloud test deployment (GCP or AWS) with full pipeline verification,
+   - DIMSE receiver end-to-end PACS connectivity validation,
+   - production auth/storage smoke tests before pilot rollout.
