@@ -9,11 +9,12 @@
 //   - auto_approve          — immediately approves (skips manual QC)
 //   - require_qa            — no-op; marks study for manual QC (default pipeline behaviour)
 //   - reject                — auto-rejects the study
-//   - route_to              — forwards DICOM files to an external DICOMweb destination via STOW-RS (async)
+//   - route_to              — forwards DICOM files to an external destination (DICOMweb STOW-RS or DIMSE C-STORE) (async)
 //   - require_export        — sets export_required=true (auto-forward on approval)
 package routing
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -23,12 +24,15 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/msenjem/aegis/api/model"
 	"github.com/msenjem/aegis/api/storage"
 )
+
+var dimseForwardHTTPClient = &http.Client{Timeout: 10 * time.Minute}
 
 // EvaluateRules loads all enabled routing rules and applies them to study.
 // It mutates the study record in-place (e.g. setting DefacingRequired, Status)
@@ -262,6 +266,33 @@ func applyRule(ctx context.Context, db *sql.DB, store storage.Storage, r *model.
 // streamed from storage via io.Pipe to avoid buffering entire studies in memory.
 // Returns nil on success (HTTP 2xx from destination) or an error.
 func ForwardStudy(ctx context.Context, db *sql.DB, store storage.Storage, s *model.Study, dest *model.Destination) error {
+	if dest.Type == "dimse" {
+		err := forwardStudyDIMSE(ctx, s, dest)
+		if err != nil {
+			log.Printf("routing: DIMSE forward failed (study=%s dest=%s): %v", s.ID, dest.ID, err)
+			model.CreateAuditEntry(ctx, db, "routing.forward_failed", "routing-engine", "study", s.ID, "", map[string]any{
+				"destination":      dest.Name,
+				"destination_type": "dimse",
+				"error":            err.Error(),
+			})
+			return err
+		}
+		model.CreateAuditEntry(ctx, db, "routing.forwarded", "routing-engine", "study", s.ID, "", map[string]any{
+			"destination":      dest.Name,
+			"destination_type": "dimse",
+			"status_code":      http.StatusOK,
+		})
+		log.Printf("routing: DIMSE forward complete (study=%s dest=%s)", s.ID, dest.ID)
+		return nil
+	}
+
+	if dest.Type != "dicomweb" {
+		return fmt.Errorf("unsupported destination type: %s", dest.Type)
+	}
+	if strings.TrimSpace(dest.DicomwebURL) == "" {
+		return fmt.Errorf("dicomweb_url required for dicomweb destination")
+	}
+
 	prefix := fmt.Sprintf("dicom/%s/%s", s.DicomStore, s.StudyInstanceUID)
 	keys, err := store.List(ctx, prefix)
 	if err != nil {
@@ -341,6 +372,72 @@ func ForwardStudy(ctx context.Context, db *sql.DB, store storage.Storage, s *mod
 
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("destination returned HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+type dimseForwardPayload struct {
+	StudyInstanceUID string `json:"study_instance_uid"`
+	DicomStore       string `json:"dicom_store"`
+	Destination      struct {
+		AETitle string `json:"ae_title"`
+		Host    string `json:"host"`
+		Port    int    `json:"port"`
+	} `json:"destination"`
+}
+
+func forwardStudyDIMSE(ctx context.Context, s *model.Study, dest *model.Destination) error {
+	if strings.TrimSpace(dest.AETitle) == "" {
+		return fmt.Errorf("ae_title required for dimse destination")
+	}
+	if strings.TrimSpace(dest.Host) == "" {
+		return fmt.Errorf("host required for dimse destination")
+	}
+	if dest.Port <= 0 {
+		return fmt.Errorf("port must be > 0 for dimse destination")
+	}
+
+	baseURL := strings.TrimRight(os.Getenv("DIMSE_RECEIVER_URL"), "/")
+	if baseURL == "" {
+		return fmt.Errorf("DIMSE_RECEIVER_URL not configured")
+	}
+
+	payload := dimseForwardPayload{
+		StudyInstanceUID: s.StudyInstanceUID,
+		DicomStore:       s.DicomStore,
+	}
+	payload.Destination.AETitle = dest.AETitle
+	payload.Destination.Host = dest.Host
+	payload.Destination.Port = dest.Port
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal dimse payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		baseURL+"/forward",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return fmt.Errorf("build dimse request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := dimseForwardHTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("dimse forward request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if len(msg) == 0 {
+			return fmt.Errorf("dimse receiver returned HTTP %d", resp.StatusCode)
+		}
+		return fmt.Errorf("dimse receiver returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
 	}
 	return nil
 }

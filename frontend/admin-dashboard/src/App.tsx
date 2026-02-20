@@ -1173,7 +1173,7 @@ function RoutingPanel({ isAdmin }: { isAdmin: boolean }) {
               <select className="form-select" aria-label="Type" value={destForm.type}
                 onChange={e => setDestForm(f => ({ ...f, type: e.target.value as 'dicomweb' | 'dimse' }))}>
                 <option value="dicomweb">DICOMweb (STOW-RS)</option>
-                <option value="dimse">DIMSE (future)</option>
+                <option value="dimse">DIMSE (C-STORE)</option>
               </select>
               <input className="form-input" placeholder="Description" value={destForm.description}
                 onChange={e => setDestForm(f => ({ ...f, description: e.target.value }))} />

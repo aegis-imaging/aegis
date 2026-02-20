@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -37,6 +38,10 @@ func (s *Server) CreateDestination(w http.ResponseWriter, r *http.Request) {
 	}
 	if d.Type != "dicomweb" && d.Type != "dimse" {
 		s.writeError(w, http.StatusBadRequest, "type must be dicomweb or dimse")
+		return
+	}
+	if err := validateDestination(&d); err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if d.Slug == "" {
@@ -80,6 +85,10 @@ func (s *Server) UpdateDestination(w http.ResponseWriter, r *http.Request) {
 	existing.Host = update.Host
 	existing.Port = update.Port
 	existing.Enabled = update.Enabled
+	if err := validateDestination(existing); err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	if err := model.UpdateDestination(r.Context(), s.db, existing); err != nil {
 		log.Printf("update destination %s: %v", id, err)
@@ -265,4 +274,26 @@ func slugify(name string) string {
 		return -1
 	}, lower)
 	return strings.Trim(result, "-")
+}
+
+func validateDestination(d *model.Destination) error {
+	if d.Type == "dicomweb" {
+		if strings.TrimSpace(d.DicomwebURL) == "" {
+			return fmt.Errorf("dicomweb_url is required for dicomweb destinations")
+		}
+		return nil
+	}
+	if d.Type == "dimse" {
+		if strings.TrimSpace(d.AETitle) == "" {
+			return fmt.Errorf("ae_title is required for dimse destinations")
+		}
+		if strings.TrimSpace(d.Host) == "" {
+			return fmt.Errorf("host is required for dimse destinations")
+		}
+		if d.Port <= 0 {
+			return fmt.Errorf("port must be > 0 for dimse destinations")
+		}
+		return nil
+	}
+	return fmt.Errorf("type must be dicomweb or dimse")
 }
