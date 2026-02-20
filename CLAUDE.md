@@ -948,6 +948,7 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - Uses `expiry_hours` (integer) to compute `expires_at`
 - Server computes expiry in UTC (`time.Now().UTC().Add(...)`)
 - Optionally accepts explicit `expires_at` in RFC3339 (timezone-aware) for backward compatibility
+- Response includes server-derived `status` and `expires_in_seconds` for immediate UI state consistency
 
 **Export share redemption** (`GET /api/export/{token}`) — enhanced response includes:
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
@@ -957,6 +958,7 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 
 **Share listing** (`GET /api/studies/{id}/shares`):
 - Each share now includes server-derived `status` (`active` | `expired` | `revoked`) computed with UTC guard logic
+- Each share now includes `expires_in_seconds` for server-clock anchored remaining-time display
 - Admin UI uses this status directly instead of client-side expiry math
 
 **Export forwarding** (`route_to` destinations):
