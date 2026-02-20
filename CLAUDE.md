@@ -346,14 +346,17 @@ Institutions represent organisations that send or receive studies.
 | Field | Notes |
 |-------|-------|
 | `institution_type` | `sender`, `receiver`, or `both` |
-| `ip_ranges` | Comma-separated CIDR blocks (future: auto-attribute uploads) |
-| `ae_title` | DICOM AE title (future: DIMSE sender identification) |
+| `ip_ranges` | Comma-separated CIDR blocks used for internal ingest IP auto-attribution |
+| `ae_title` | DICOM AE title used for DIMSE/internal ingest attribution (`institution_ae_title`) |
 
 **Institution-Project links** (`/api/institutions/{id}/projects`):
 - `POST` — link with role (`sender`, `receiver`, `admin`)
 - `DELETE /api/institutions/{id}/projects/{projectID}` — unlink
 
 Studies carry an `institution_id` FK (nullable) for full traceability.
+Internal ingest attribution order:
+1. Explicit `institution_id`/`institution_ae_title` from `POST /api/ingest`
+2. Fallback auto-match by request source IP against institution `ip_ranges` (most-specific CIDR wins)
 
 ### Anonymization Profiles (`api/handler/anon_profile.go`, `api/model/anon_profile.go`)
 
