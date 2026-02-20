@@ -2,8 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/msenjem/aegis/api/model"
 )
@@ -40,6 +43,10 @@ func (s *Server) CreateInstitution(w http.ResponseWriter, r *http.Request) {
 	}
 	if inst.Slug == "" {
 		inst.Slug = slugify(inst.Name)
+	}
+	if err := normalizeInstitutionNetworkIdentity(&inst); err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	inst.Enabled = true
 
@@ -88,6 +95,22 @@ func (s *Server) UpdateInstitution(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
+	if update.Name == "" {
+		s.writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	validTypes := map[string]bool{"sender": true, "receiver": true, "both": true}
+	if !validTypes[update.Type] {
+		s.writeError(w, http.StatusBadRequest, "institution_type must be sender, receiver, or both")
+		return
+	}
+	if update.Slug == "" {
+		update.Slug = slugify(update.Name)
+	}
+	if err := normalizeInstitutionNetworkIdentity(&update); err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	existing.Name = update.Name
 	existing.Slug = update.Slug
@@ -106,6 +129,58 @@ func (s *Server) UpdateInstitution(w http.ResponseWriter, r *http.Request) {
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "institution.updated", actorEmail(r), "institution", id, clientIP(r), nil)
 	s.writeJSON(w, http.StatusOK, existing)
+}
+
+func normalizeInstitutionNetworkIdentity(inst *model.Institution) error {
+	inst.AETitle = normalizeAETitle(inst.AETitle)
+	ranges, err := normalizeInstitutionIPRanges(inst.IPRanges)
+	if err != nil {
+		return err
+	}
+	inst.IPRanges = ranges
+	return nil
+}
+
+func normalizeInstitutionIPRanges(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+
+	parts := strings.Split(raw, ",")
+	normalized := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if strings.Contains(part, "/") {
+			_, network, err := net.ParseCIDR(part)
+			if err != nil {
+				return "", fmt.Errorf("invalid ip_ranges value %q", part)
+			}
+			value := network.String()
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			normalized = append(normalized, value)
+			continue
+		}
+
+		ip := net.ParseIP(part)
+		if ip == nil {
+			return "", fmt.Errorf("invalid ip_ranges value %q", part)
+		}
+		value := ip.String()
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return strings.Join(normalized, ","), nil
 }
 
 func (s *Server) DeleteInstitution(w http.ResponseWriter, r *http.Request) {
