@@ -44,6 +44,8 @@ def trigger_ingest(acc: StudyAccumulator) -> bool:
     }
     if config.DIMSE_INSTITUTION_ID:
         payload["institution_id"] = config.DIMSE_INSTITUTION_ID
+    elif config.DIMSE_INSTITUTION_SLUG:
+        payload["institution_slug"] = config.DIMSE_INSTITUTION_SLUG
     if acc.calling_ae_title:
         payload["institution_ae_title"] = acc.calling_ae_title
 
