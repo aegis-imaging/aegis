@@ -10,7 +10,7 @@ Endpoints:
   POST /detect          — scan a study for burned-in PHI (synchronous)
 
 Environment variables:
-  PHI_TOOL                  — "auto" | "tesseract" (default: auto)
+  PHI_TOOL                  — "auto" | "tesseract" | "google_vision" | "aws_textract"
   PHI_CONFIDENCE_THRESHOLD  — minimum OCR confidence 0.0–1.0 (default: 0.4)
   PHI_MIN_TEXT_LENGTH       — minimum text length to report (default: 3)
 """
@@ -26,6 +26,8 @@ from pydantic import BaseModel
 from .config import cfg
 from .backends.base import PHIDetectionBackend
 from .backends.tesseract import TesseractBackend
+from .backends.google_vision import GoogleVisionBackend
+from .backends.aws_textract import AWSTextractBackend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,12 +46,24 @@ def _select_backend() -> PHIDetectionBackend:
         confidence_threshold=cfg.confidence_threshold,
         min_text_length=cfg.min_text_length,
     )
+    google_vision = GoogleVisionBackend(
+        confidence_threshold=cfg.confidence_threshold,
+        min_text_length=cfg.min_text_length,
+    )
+    aws_textract = AWSTextractBackend(
+        confidence_threshold=cfg.confidence_threshold,
+        min_text_length=cfg.min_text_length,
+    )
 
     if cfg.phi_tool == "tesseract":
         candidates = [tesseract]
+    elif cfg.phi_tool == "google_vision":
+        candidates = [google_vision]
+    elif cfg.phi_tool == "aws_textract":
+        candidates = [aws_textract]
     else:  # "auto"
-        # Future: add VertexAI backend before tesseract in priority order.
-        candidates = [tesseract]
+        # Priority: cloud backends first, then offline fallback.
+        candidates = [google_vision, aws_textract, tesseract]
 
     for backend in candidates:
         if backend.available():
@@ -58,7 +72,7 @@ def _select_backend() -> PHIDetectionBackend:
 
     raise RuntimeError(
         "No PHI detection backend is available. "
-        "Install tesseract-ocr and pytesseract."
+        "Install tesseract-ocr+pytesseract, or google-cloud-vision, or boto3."
     )
 
 

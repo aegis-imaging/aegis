@@ -1,13 +1,14 @@
 """Unit tests for the Tesseract PHI detection backend.
 
-Tests the pure utility functions (_apply_windowing, _to_uint8) directly and
-mocks pytesseract for the OCR-dependent code paths.
+Tests the pixel_utils functions (windowing, uint8) and mocks pytesseract
+for the OCR-dependent code paths.
 """
 
 import numpy as np
 import pytest
 
 from app.backends.tesseract import TesseractBackend
+from app.backends.pixel_utils import _apply_windowing, _to_uint8
 from app.backends.base import Region, FileFinding
 
 
@@ -16,7 +17,7 @@ from app.backends.base import Region, FileFinding
 # ---------------------------------------------------------------------------
 
 class TestApplyWindowing:
-    """Tests for TesseractBackend._apply_windowing (static method)."""
+    """Tests for pixel_utils._apply_windowing."""
 
     def test_apply_windowing_basic(self):
         """Window center=500, width=1000 clips to [0, 1000]."""
@@ -27,7 +28,7 @@ class TestApplyWindowing:
         ds.WindowWidth = 1000
 
         arr = np.array([[-100, 0, 500], [1000, 1200, 2000]], dtype=np.float64)
-        result = TesseractBackend._apply_windowing(ds, arr, np)
+        result = _apply_windowing(ds, arr)
 
         # low = 500 - 500 = 0, high = 500 + 500 = 1000
         assert result[0, 0] == 0.0      # clipped from -100
@@ -45,7 +46,7 @@ class TestApplyWindowing:
         # No WindowCenter or WindowWidth set
 
         arr = np.array([[10, 20], [30, 40]], dtype=np.float64)
-        result = TesseractBackend._apply_windowing(ds, arr, np)
+        result = _apply_windowing(ds, arr)
 
         np.testing.assert_array_equal(result, arr)
 
@@ -59,9 +60,9 @@ class TestApplyWindowing:
         ds.WindowWidth = MultiValue(float, [400, 800])
 
         arr = np.array([[0, 200, 500]], dtype=np.float64)
-        result = TesseractBackend._apply_windowing(ds, arr, np)
+        result = _apply_windowing(ds, arr)
 
-        # Should use WC=200, WW=400 → low=0, high=400
+        # Should use WC=200, WW=400 -> low=0, high=400
         assert result[0, 0] == 0.0
         assert result[0, 1] == 200.0
         assert result[0, 2] == 400.0  # clipped from 500
@@ -75,7 +76,7 @@ class TestApplyWindowing:
         ds.WindowWidth = 0
 
         arr = np.array([[50, 100, 150]], dtype=np.float64)
-        result = TesseractBackend._apply_windowing(ds, arr, np)
+        result = _apply_windowing(ds, arr)
 
         np.testing.assert_array_equal(result, arr)
 
@@ -85,12 +86,12 @@ class TestApplyWindowing:
 # ---------------------------------------------------------------------------
 
 class TestToUint8:
-    """Tests for TesseractBackend._to_uint8 (static method)."""
+    """Tests for pixel_utils._to_uint8."""
 
     def test_to_uint8_normal(self):
         """Range 0-4095 maps to 0-255."""
         arr = np.array([[0, 2048, 4095]], dtype=np.float64)
-        result = TesseractBackend._to_uint8(arr, np)
+        result = _to_uint8(arr)
 
         assert result.dtype == np.uint8
         assert result[0, 0] == 0
@@ -101,7 +102,7 @@ class TestToUint8:
     def test_to_uint8_uniform(self):
         """All same value maps to all zeros (no contrast)."""
         arr = np.array([[42, 42], [42, 42]], dtype=np.float64)
-        result = TesseractBackend._to_uint8(arr, np)
+        result = _to_uint8(arr)
 
         assert result.dtype == np.uint8
         np.testing.assert_array_equal(result, np.zeros((2, 2), dtype=np.uint8))
@@ -118,20 +119,14 @@ class TestScanFile:
         """DICOM without PixelData returns empty list."""
         path = make_dicom_file(filename="no_pixels.dcm", include_pixel_data=False)
 
-        import pydicom
-        from PIL import Image
-
         backend = TesseractBackend(confidence_threshold=0.4, min_text_length=3)
-        # pytesseract won't be called, but pass a dummy
-        regions = backend._scan_file(path, pydicom, None, Image, np)
+        regions = backend._scan_file(path, None)  # pytesseract won't be called
         assert regions == []
 
     def test_scan_file_with_mock_tesseract(self, make_dicom_file):
         """Mock pytesseract.image_to_data and verify Region filtering."""
         path = make_dicom_file(filename="with_text.dcm", pixel_value=100)
 
-        import pydicom
-        from PIL import Image
         from unittest.mock import MagicMock
 
         mock_tesseract = MagicMock()
@@ -146,13 +141,13 @@ class TestScanFile:
         }
 
         backend = TesseractBackend(confidence_threshold=0.4, min_text_length=3)
-        regions = backend._scan_file(path, pydicom, mock_tesseract, Image, np)
+        regions = backend._scan_file(path, mock_tesseract)
 
-        # "PATIENT": conf=0.85 >= 0.4, len=7 >= 3 → included
-        # "ab":      conf=0.90 >= 0.4, len=2 < 3  → excluded (too short)
-        # "NAME":    conf=0.60 >= 0.4, len=4 >= 3 → included
-        # "12345":   conf=0.30 < 0.4              → excluded (low confidence)
-        # "":        conf=-1.0 < 0                 → excluded (non-text block)
+        # "PATIENT": conf=0.85 >= 0.4, len=7 >= 3 -> included
+        # "ab":      conf=0.90 >= 0.4, len=2 < 3  -> excluded (too short)
+        # "NAME":    conf=0.60 >= 0.4, len=4 >= 3 -> included
+        # "12345":   conf=0.30 < 0.4              -> excluded (low confidence)
+        # "":        conf=-1.0 < 0                 -> excluded (non-text block)
         assert len(regions) == 2
         assert regions[0].text == "PATIENT"
         assert regions[0].confidence == 0.85

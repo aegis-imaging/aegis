@@ -514,6 +514,74 @@ The defacing service supports multiple pluggable backends selected via the `DEFA
   ```
 - [ ] Verify via API health: `curl http://localhost:8080/healthz | python3 -m json.tool` → services.defacing shows healthy
 
+## 7q2. Cloud AI Backends (PHI Detection + Classification)
+
+Both the PHI detection and classification services support pluggable cloud AI backends. Cloud backends are optional — the services work with local-only backends (Tesseract, heuristic) by default. Cloud backends offer better accuracy for edge cases (burned-in text in poor image quality, missing DICOM tags).
+
+### GCP Cloud Vision setup
+
+- [ ] Enable the Cloud Vision API in your GCP project:
+  ```bash
+  gcloud services enable vision.googleapis.com
+  ```
+- [ ] Create a service account for AEGIS:
+  ```bash
+  gcloud iam service-accounts create aegis-vision \
+    --display-name="AEGIS Cloud Vision"
+  gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:aegis-vision@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/aiplatform.user"
+  ```
+- [ ] Download the key (local dev only — use workload identity in production):
+  ```bash
+  mkdir -p secrets
+  gcloud iam service-accounts keys create secrets/gcp-key.json \
+    --iam-account=aegis-vision@$PROJECT_ID.iam.gserviceaccount.com
+  ```
+- [ ] Set env var: `export GOOGLE_APPLICATION_CREDENTIALS=./secrets/gcp-key.json`
+- [ ] Build Docker images with Cloud Vision:
+  ```bash
+  INCLUDE_GOOGLE_VISION=true docker compose build phi-detection classification-service
+  ```
+- [ ] Start and verify:
+  ```bash
+  docker compose up -d phi-detection classification-service
+  curl -s http://localhost:8082/healthz | python3 -m json.tool  # → backend: google_vision
+  curl -s http://localhost:8085/healthz | python3 -m json.tool  # → backend: google_vision
+  ```
+
+### AWS Textract / Rekognition setup
+
+- [ ] Create an IAM user or role with these policies:
+  - PHI detection: `AmazonTextractFullAccess`
+  - Classification: `AmazonRekognitionReadOnlyAccess`
+- [ ] Set AWS credentials:
+  ```bash
+  export AWS_ACCESS_KEY_ID=<your-key>
+  export AWS_SECRET_ACCESS_KEY=<your-secret>
+  export AWS_DEFAULT_REGION=us-east-1
+  ```
+- [ ] Build Docker images with AWS backends:
+  ```bash
+  INCLUDE_AWS_TEXTRACT=true INCLUDE_AWS_REKOGNITION=true docker compose build phi-detection classification-service
+  ```
+- [ ] Override backend selection (if you want AWS instead of auto):
+  ```bash
+  PHI_TOOL=aws_textract CLASSIFY_TOOL=aws_rekognition docker compose up -d phi-detection classification-service
+  ```
+
+### Verify cloud backend selection
+
+- [ ] Check health endpoints after starting services:
+  ```bash
+  curl -s http://localhost:8082/healthz | python3 -m json.tool  # PHI detection
+  curl -s http://localhost:8085/healthz | python3 -m json.tool  # classification
+  ```
+- [ ] Backend field shows the active backend (`google_vision`, `aws_textract`, `aws_rekognition`, `tesseract`, or `heuristic`)
+- [ ] Auto mode selects: PHI: google_vision > aws_textract > tesseract. Classification: google_vision > aws_rekognition > heuristic.
+- [ ] Upload a study and trigger PHI scan / classification → results should come from the cloud backend
+- [ ] Test fallback: unset cloud credentials → restart → falls back to local backend
+
 ## 7r. Study Export & DICOM Download
 
 ### Admin DICOM Download
@@ -799,4 +867,4 @@ Use GitHub Organizations to separate codebases by company. One personal GitHub a
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-19. See AEGIS_Architecture.md for the full system design.*
+*Generated 2026-02-18. Updated 2026-02-19. See AEGIS_Architecture.md for the full system design. Cloud AI backends added 2026-02-19.*
