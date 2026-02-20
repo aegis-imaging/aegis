@@ -831,6 +831,27 @@ docker compose down -v           # stop + destroy volumes (fresh start)
 
 **Note:** The frontends (upload-portal on :3000, admin-dashboard on :3001) still run via `npm run dev` outside Docker, proxying `/api` to `localhost:8080`.
 
+## 8aa. DIMSE PACS E2E Validation Harness
+
+- [ ] Install DIMSE receiver dependencies:
+  ```bash
+  cd dimse-receiver && pip install -r requirements.txt -r requirements-test.txt
+  ```
+- [ ] Run harness:
+  ```bash
+  python3 scripts/dimse_pacs_e2e_harness.py
+  ```
+- [ ] Verify all four scenarios pass:
+  - `success_c_store_ingest`
+  - `transient_failure_to_retry_queue`
+  - `process_controls_restore_ingestion`
+  - `dead_letter_path_and_recovery`
+- [ ] On failure, review printed `dimse-receiver` log tail and rerun with `--keep-logs`
+- [ ] Save run output as pilot evidence
+
+Runbook:
+- `docs/planning/dimse-pacs-e2e-validation-runbook.md`
+
 ## 8b. Email (Local Dev with Mailpit)
 
 Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is unset.
