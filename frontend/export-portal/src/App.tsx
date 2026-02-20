@@ -85,14 +85,14 @@ export function App() {
         // Build download URL relative to current origin
         json.download_url = `/api/export/${token}/download`
         let nextExpiryEpochMs: number | null = null
-        const parsedExpiresAt = Date.parse(json.expires_at)
-        if (Number.isFinite(parsedExpiresAt)) {
-          nextExpiryEpochMs = parsedExpiresAt
-        }
         if (typeof json.expires_in_seconds === 'number') {
-          const relativeExpiryMs = Date.now() + (Math.max(0, Math.floor(json.expires_in_seconds)) * 1000)
-          if (nextExpiryEpochMs === null) {
-            nextExpiryEpochMs = relativeExpiryMs
+          // Anchor countdown to server-derived remaining seconds, then tick locally from epoch.
+          nextExpiryEpochMs = Date.now() + (Math.max(0, Math.floor(json.expires_in_seconds)) * 1000)
+        }
+        if (nextExpiryEpochMs === null) {
+          const parsedExpiresAt = Date.parse(json.expires_at)
+          if (Number.isFinite(parsedExpiresAt)) {
+            nextExpiryEpochMs = parsedExpiresAt
           }
         }
         setExpiryEpochMs(nextExpiryEpochMs)
