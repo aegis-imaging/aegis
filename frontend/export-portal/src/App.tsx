@@ -60,7 +60,8 @@ function fmtRemaining(seconds: number) {
 
 export function App() {
   const [data, setData] = useState<ExportData | null>(null)
-  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
+  const [expiryEpochMs, setExpiryEpochMs] = useState<number | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const [error, setError] = useState<ErrorState | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -83,11 +84,19 @@ export function App() {
         const json: ExportData = await resp.json()
         // Build download URL relative to current origin
         json.download_url = `/api/export/${token}/download`
-        if (typeof json.expires_in_seconds === 'number') {
-          setRemainingSeconds(Math.max(0, Math.floor(json.expires_in_seconds)))
-        } else {
-          setRemainingSeconds(null)
+        let nextExpiryEpochMs: number | null = null
+        const parsedExpiresAt = Date.parse(json.expires_at)
+        if (Number.isFinite(parsedExpiresAt)) {
+          nextExpiryEpochMs = parsedExpiresAt
         }
+        if (typeof json.expires_in_seconds === 'number') {
+          const relativeExpiryMs = Date.now() + (Math.max(0, Math.floor(json.expires_in_seconds)) * 1000)
+          if (nextExpiryEpochMs === null) {
+            nextExpiryEpochMs = relativeExpiryMs
+          }
+        }
+        setExpiryEpochMs(nextExpiryEpochMs)
+        setNowMs(Date.now())
         setData(json)
       })
       .catch(() => {
@@ -96,20 +105,15 @@ export function App() {
       .finally(() => setLoading(false))
   }, [])
 
+  const hasLiveCountdown = expiryEpochMs !== null && nowMs < expiryEpochMs
+
   useEffect(() => {
-    if (!data || remainingSeconds === null) return
+    if (!data || !hasLiveCountdown) return
     const id = window.setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev === null) return prev
-        if (prev <= 1) {
-          window.clearInterval(id)
-          return 0
-        }
-        return prev - 1
-      })
+      setNowMs(Date.now())
     }, 1000)
     return () => window.clearInterval(id)
-  }, [data?.share_id, remainingSeconds === null])
+  }, [data?.share_id, hasLiveCountdown])
 
   if (loading) {
     return (
@@ -153,10 +157,17 @@ export function App() {
   if (!data) return null
 
   const expiresDate = new Date(data.expires_at)
-  const fallbackSeconds = Math.floor((expiresDate.getTime() - Date.now()) / 1000)
-  const secondsUntilExpiry = remainingSeconds ?? fallbackSeconds
-  const isExpired = secondsUntilExpiry <= 0
-  const isExpiringSoon = !isExpired && secondsUntilExpiry < 24 * 60 * 60
+  const parsedExpiresMs = Number.isFinite(expiresDate.getTime()) ? expiresDate.getTime() : null
+  const effectiveExpiryMs = expiryEpochMs ?? parsedExpiresMs
+  const secondsUntilExpiry =
+    effectiveExpiryMs === null
+      ? null
+      : Math.max(0, Math.floor((effectiveExpiryMs - nowMs) / 1000))
+  const isExpiredByStatus = data.status === 'expired' || data.status === 'revoked'
+  const isExpiredByTime = secondsUntilExpiry !== null && secondsUntilExpiry <= 0
+  const isExpired = isExpiredByStatus || isExpiredByTime
+  const isExpiringSoon =
+    !isExpired && secondsUntilExpiry !== null && secondsUntilExpiry < 24 * 60 * 60
 
   return (
     <div className="container">
@@ -183,7 +194,7 @@ export function App() {
                 <td className={isExpiringSoon ? 'expiring-soon' : ''}>
                   {fmtDateTime(data.expires_at)}
                   {isExpired && ' (expired — refresh link)'}
-                  {!isExpired && ` (${fmtRemaining(secondsUntilExpiry)})`}
+                  {!isExpired && secondsUntilExpiry !== null && ` (${fmtRemaining(secondsUntilExpiry)})`}
                   {isExpiringSoon && ' (expiring soon)'}
                 </td>
               </tr>
