@@ -269,7 +269,12 @@ def test_ingest_retry_actions_endpoint():
 def test_ingest_retry_details_endpoint():
     from unittest.mock import patch
 
-    details = {"snapshot": {"pending": 0, "dead_letter": 0}, "pending_items": [], "dead_letter_items": []}
+    details = {
+        "snapshot": {"pending": 0, "dead_letter": 0},
+        "study_instance_uid": "",
+        "pending_items": [],
+        "dead_letter_items": [],
+    }
 
     with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
         "app.main.start_scp", return_value=None
@@ -280,7 +285,29 @@ def test_ingest_retry_details_endpoint():
     assert resp.status_code == 200
     body = resp.json()
     assert body == {"status": "ok", "ingest_retry": details}
-    mock_details.assert_called_once_with(limit=10)
+    mock_details.assert_called_once_with(limit=10, study_instance_uid=None)
+
+
+def test_ingest_retry_details_endpoint_with_study_filter():
+    from unittest.mock import patch
+
+    details = {
+        "snapshot": {"pending": 1, "dead_letter": 0},
+        "study_instance_uid": "1.2.3.4",
+        "pending_items": [{"study_instance_uid": "1.2.3.4"}],
+        "dead_letter_items": [],
+    }
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.retry_details", return_value=details) as mock_details:
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry/details?limit=10&study_instance_uid=1.2.3.4")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": details}
+    mock_details.assert_called_once_with(limit=10, study_instance_uid="1.2.3.4")
 
 
 def test_ingest_retry_process_endpoint():

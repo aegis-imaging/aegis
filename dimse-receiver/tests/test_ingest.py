@@ -502,6 +502,27 @@ def test_retry_details_reports_item_ages(monkeypatch):
     assert dead_item["dead_letter_age_seconds"] == 40
 
 
+def test_retry_details_filters_by_study_instance_uid(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 1)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+
+    acc_pending = _acc()
+    acc_dead = _acc()
+    acc_dead.study_instance_uid = "9.9.9.9"
+
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(acc_pending)  # queued
+        submit_ingest(acc_dead)  # dead-letter
+
+    details = retry_details(limit=10, now=200.0, study_instance_uid="9.9.9.9")
+    assert details["study_instance_uid"] == "9.9.9.9"
+    assert details["snapshot"]["pending"] == 1
+    assert details["snapshot"]["dead_letter"] == 1
+    assert details["pending_items"] == []
+    assert len(details["dead_letter_items"]) == 1
+    assert details["dead_letter_items"][0]["study_instance_uid"] == "9.9.9.9"
+
+
 def test_clear_dead_letter_removes_items(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
     acc2 = _acc()
