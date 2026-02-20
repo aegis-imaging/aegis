@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from app.ingest import StudyAccumulator, trigger_ingest
+import app.ingest as ingest_module
+from app.ingest import (
+    StudyAccumulator,
+    process_retry_queue,
+    reset_retry_state,
+    retry_snapshot,
+    submit_ingest,
+    trigger_ingest,
+)
 
 
 def _acc() -> StudyAccumulator:
@@ -17,6 +25,10 @@ def _acc() -> StudyAccumulator:
         file_count=5,
         calling_ae_title="PACS_AE",
     )
+
+
+def setup_function():
+    reset_retry_state()
 
 
 def test_trigger_ingest_success(monkeypatch):
@@ -134,3 +146,60 @@ def test_trigger_ingest_prefers_institution_id_over_slug(monkeypatch):
     called_json = mock_client.post.call_args.kwargs["json"]
     assert called_json["institution_id"] == "inst-123"
     assert "institution_slug" not in called_json
+
+
+def test_submit_ingest_queues_on_failure(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        ok = submit_ingest(_acc())
+
+    assert ok is False
+    snap = retry_snapshot()
+    assert snap["pending"] == 1
+    assert snap["queued_total"] == 1
+
+
+def test_process_retry_queue_retries_and_succeeds(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+
+    queued = ingest_module._retry_queue[0]
+    with patch("app.ingest.trigger_ingest", return_value=True):
+        processed = process_retry_queue(now=queued.next_attempt_at + 1)
+
+    assert processed == 1
+    snap = retry_snapshot()
+    assert snap["pending"] == 0
+    assert snap["retried_total"] == 1
+    assert snap["retried_ok_total"] == 1
+    assert snap["dead_letter"] == 0
+
+
+def test_process_retry_queue_moves_to_dead_letter_after_max_attempts(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 1)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_MAX_ATTEMPTS", 2)
+
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        queued = ingest_module._retry_queue[0]
+        process_retry_queue(now=queued.next_attempt_at + 1)  # attempt 2 fails, requeue
+        queued2 = ingest_module._retry_queue[0]
+        process_retry_queue(now=queued2.next_attempt_at + 1)  # attempt 3 -> dead letter
+
+    snap = retry_snapshot()
+    assert snap["pending"] == 0
+    assert snap["dead_letter"] == 1
+    assert snap["dead_letter_total"] == 1
+
+
+def test_submit_ingest_dead_letters_when_queue_full(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        ok = submit_ingest(_acc())
+    assert ok is False
+    snap = retry_snapshot()
+    assert snap["pending"] == 0
+    assert snap["dead_letter"] == 1
