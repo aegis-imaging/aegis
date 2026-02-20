@@ -63,6 +63,7 @@ type Share = {
   recipient_email: string
   note: string
   expires_at: string
+  expires_in_seconds?: number
   revoked_at?: string
   status?: 'active' | 'expired' | 'revoked'
   created_at: string
@@ -204,6 +205,22 @@ function fmtDate(iso: string) {
   const dt = new Date(iso)
   if (Number.isNaN(dt.getTime())) return iso
   return DATE_TIME_FORMAT.format(dt)
+}
+
+function fmtRemaining(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds))
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const mins = Math.floor((total % 3600) / 60)
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
+}
+
+function shareStatusLabel(share: Share): 'active' | 'expired' | 'revoked' {
+  if (share.status) return share.status
+  if (share.revoked_at) return 'revoked'
+  return new Date(share.expires_at) < new Date() ? 'expired' : 'active'
 }
 
 function uidShort(uid: string) {
@@ -546,15 +563,20 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
           </thead>
           <tbody>
             {shares.map(s => {
-              const shareStatus =
-                s.status ??
-                (s.revoked_at ? 'revoked' : (new Date(s.expires_at) < new Date() ? 'expired' : 'active'))
+              const shareStatus = shareStatusLabel(s)
               const rowClass = shareStatus !== 'active' ? 'share-row--inactive' : ''
               const statusClass = `share-status--${shareStatus}`
+              const remainingLabel =
+                shareStatus === 'active' && typeof s.expires_in_seconds === 'number'
+                  ? fmtRemaining(s.expires_in_seconds)
+                  : ''
               return (
                 <tr key={s.id} className={rowClass}>
                   <td>{s.recipient_email}</td>
-                  <td className="td-muted">{fmtDate(s.expires_at)}</td>
+                  <td className="td-muted">
+                    {fmtDate(s.expires_at)}
+                    {remainingLabel && <div className="td-subtle">({remainingLabel} remaining)</div>}
+                  </td>
                   <td className={statusClass}>{shareStatus}</td>
                   <td className="td-muted">{fmtDate(s.created_at)}</td>
                   <td>
@@ -838,15 +860,20 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             <tbody>
               {shares.length === 0 && <tr><td colSpan={5}>No shares.</td></tr>}
               {shares.map(s => {
-                const shareStatus =
-                  s.status ??
-                  (s.revoked_at ? 'revoked' : (new Date(s.expires_at) < new Date() ? 'expired' : 'active'))
+                const shareStatus = shareStatusLabel(s)
                 const statusClass = `share-status--${shareStatus}`
+                const remainingLabel =
+                  shareStatus === 'active' && typeof s.expires_in_seconds === 'number'
+                    ? fmtRemaining(s.expires_in_seconds)
+                    : ''
                 return (
                   <tr key={s.id}>
                     <td>{s.recipient_email}</td>
                     <td className="td-date">{fmtDate(s.created_at)}</td>
-                    <td className="td-date">{fmtDate(s.expires_at)}</td>
+                    <td className="td-date">
+                      {fmtDate(s.expires_at)}
+                      {remainingLabel && <div className="td-subtle">({remainingLabel} remaining)</div>}
+                    </td>
                     <td><span className={statusClass}>{shareStatus}</span></td>
                     <td>{s.note || '—'}</td>
                   </tr>
