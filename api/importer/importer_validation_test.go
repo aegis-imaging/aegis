@@ -84,7 +84,7 @@ func TestNormalizeInstitutionSelectors_RejectsConflictingSelectors(t *testing.T)
 
 func TestRun_RejectsConflictingInstitutionSelectors(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
-		Dir:             "x",
+		Dir:             "/tmp",
 		InstitutionID:   "inst-1",
 		InstitutionSlug: "hospital-bravo",
 	})
@@ -102,9 +102,17 @@ func TestNormalizeImportDir_Required(t *testing.T) {
 }
 
 func TestNormalizeImportDir_TrimAndClean(t *testing.T) {
-	opts := &Options{Dir: " ./testdata/../testdata "}
+	opts := &Options{Dir: " /tmp/../tmp "}
 	require.NoError(t, normalizeImportDir(opts))
-	assert.Equal(t, "testdata", opts.Dir)
+	assert.Equal(t, "/tmp", opts.Dir)
+}
+
+func TestNormalizeImportDir_RejectsRelativePath(t *testing.T) {
+	opts := &Options{Dir: " ./testdata "}
+	err := normalizeImportDir(opts)
+	require.Error(t, err)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "absolute path")
 }
 
 func TestNormalizeProjectSlug_DefaultsToDefault(t *testing.T) {
@@ -141,7 +149,7 @@ func TestNormalizeImportSource_RejectsInvalidValue(t *testing.T) {
 
 func TestRun_RejectsInvalidSource(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
-		Dir:    "x",
+		Dir:    "/tmp",
 		Source: "partner",
 	})
 	require.Error(t, err)
@@ -173,7 +181,7 @@ func TestValidateSourceInstitutionPolicy_AllowsExternalSourceWithSelector(t *tes
 
 func TestRun_RejectsExternalSourceWithoutCanonicalInstitutionSelector(t *testing.T) {
 	_, err := Run(context.Background(), nil, nil, Options{
-		Dir:    "x",
+		Dir:    "/tmp",
 		Source: "external",
 	})
 	require.Error(t, err)
