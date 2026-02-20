@@ -68,6 +68,17 @@ func GetInstitutionByID(ctx context.Context, db *sql.DB, id string) (*Institutio
 	return &inst, nil
 }
 
+// GetInstitutionBySlug returns an institution by slug (case-insensitive).
+func GetInstitutionBySlug(ctx context.Context, db *sql.DB, slug string) (*Institution, error) {
+	var inst Institution
+	err := scanInstitution(db.QueryRowContext(ctx,
+		`SELECT`+institutionColumns+` FROM institutions WHERE lower(slug) = lower($1)`, slug), &inst)
+	if err != nil {
+		return nil, err
+	}
+	return &inst, nil
+}
+
 // GetInstitutionByAETitle returns the first enabled institution matching ae_title
 // (case-insensitive, trimmed). Used for DIMSE/internal ingest attribution.
 func GetInstitutionByAETitle(ctx context.Context, db *sql.DB, aeTitle string) (*Institution, error) {
