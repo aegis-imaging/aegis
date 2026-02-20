@@ -46,6 +46,7 @@ _metrics = {
     "retried_total": 0,
     "retried_ok_total": 0,
     "dead_letter_total": 0,
+    "dead_letter_deduped_total": 0,
     "replayed_total": 0,
     "cleared_dead_letter_total": 0,
 }
@@ -76,6 +77,20 @@ def _merge_accumulator(existing: StudyAccumulator, incoming: StudyAccumulator) -
         existing.calling_ae_title = incoming.calling_ae_title
 
 
+def _upsert_dead_letter(item: QueuedIngest) -> None:
+    """Insert or merge a dead-letter item by StudyInstanceUID."""
+    for existing in _dead_letter:
+        if existing.acc.study_instance_uid == item.acc.study_instance_uid:
+            _merge_accumulator(existing.acc, item.acc)
+            existing.attempts = max(existing.attempts, item.attempts)
+            existing.last_error = item.last_error
+            _metrics["dead_letter_deduped_total"] += 1
+            return
+
+    _dead_letter.append(item)
+    _metrics["dead_letter_total"] += 1
+
+
 def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
     """Queue a study for retry if queue capacity permits."""
     with _retry_lock:
@@ -92,8 +107,7 @@ def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
                 config.DIMSE_INGEST_QUEUE_MAX,
                 acc.study_instance_uid,
             )
-            _metrics["dead_letter_total"] += 1
-            _dead_letter.append(
+            _upsert_dead_letter(
                 QueuedIngest(
                     acc=acc,
                     attempts=1,
@@ -201,8 +215,7 @@ def process_retry_queue(now: float | None = None) -> int:
         if item.attempts > config.DIMSE_INGEST_MAX_ATTEMPTS:
             item.last_error = "max_attempts_exceeded"
             with _retry_lock:
-                _dead_letter.append(item)
-                _metrics["dead_letter_total"] += 1
+                _upsert_dead_letter(item)
             log.error(
                 "Ingest dead-letter for %s after %d attempts",
                 item.acc.study_instance_uid,
@@ -229,6 +242,7 @@ def retry_snapshot() -> dict[str, int]:
             "retried_total": _metrics["retried_total"],
             "retried_ok_total": _metrics["retried_ok_total"],
             "dead_letter_total": _metrics["dead_letter_total"],
+            "dead_letter_deduped_total": _metrics["dead_letter_deduped_total"],
             "replayed_total": _metrics["replayed_total"],
             "cleared_dead_letter_total": _metrics["cleared_dead_letter_total"],
         }
@@ -354,5 +368,6 @@ def reset_retry_state() -> None:
         _metrics["retried_total"] = 0
         _metrics["retried_ok_total"] = 0
         _metrics["dead_letter_total"] = 0
+        _metrics["dead_letter_deduped_total"] = 0
         _metrics["replayed_total"] = 0
         _metrics["cleared_dead_letter_total"] = 0
