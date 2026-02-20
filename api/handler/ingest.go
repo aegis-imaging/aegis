@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -53,6 +54,14 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		institutionID = &inst.ID
+	} else {
+		sourceIP := clientIP(r)
+		inst, err := s.resolveIngestInstitutionFromSourceIP(r.Context(), project.ID, sourceIP)
+		if err != nil {
+			log.Printf("internal ingest: resolve institution by source IP (%s): %v", sourceIP, err)
+		} else if inst != nil {
+			institutionID = &inst.ID
+		}
 	}
 
 	studyUID := req.Metadata.StudyInstanceUID
@@ -96,6 +105,9 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	}
 	if institutionID != nil {
 		detail["institution_id"] = *institutionID
+	}
+	if strings.TrimSpace(req.InstitutionID) == "" && strings.TrimSpace(req.InstitutionAETitle) == "" {
+		detail["source_ip"] = clientIP(r)
 	}
 	if strings.TrimSpace(req.InstitutionAETitle) != "" {
 		detail["institution_ae_title"] = strings.TrimSpace(req.InstitutionAETitle)
@@ -164,4 +176,79 @@ func (s *Server) resolveIngestInstitution(ctx context.Context, projectID, instit
 		return nil, fmt.Errorf("institution is not linked to project as sender/admin")
 	}
 	return inst, nil
+}
+
+func (s *Server) resolveIngestInstitutionFromSourceIP(ctx context.Context, projectID, sourceIP string) (*model.Institution, error) {
+	sourceIP = strings.TrimSpace(sourceIP)
+	if sourceIP == "" {
+		return nil, nil
+	}
+	parsedSourceIP := net.ParseIP(sourceIP)
+	if parsedSourceIP == nil {
+		return nil, fmt.Errorf("invalid source IP %q", sourceIP)
+	}
+
+	institutions, err := model.ListInstitutions(ctx, s.db)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		bestInst      *model.Institution
+		bestPrefixLen = -1
+	)
+
+	for i := range institutions {
+		inst := &institutions[i]
+		if !inst.Enabled {
+			continue
+		}
+		if inst.Type != "sender" && inst.Type != "both" {
+			continue
+		}
+		allowed, err := model.InstitutionCanSendToProject(ctx, s.db, inst.ID, projectID)
+		if err != nil {
+			return nil, err
+		}
+		if !allowed {
+			continue
+		}
+
+		ranges := strings.Split(inst.IPRanges, ",")
+		for _, r := range ranges {
+			network := parseIPRange(strings.TrimSpace(r))
+			if network == nil || !network.Contains(parsedSourceIP) {
+				continue
+			}
+			prefixLen, _ := network.Mask.Size()
+			if prefixLen > bestPrefixLen {
+				bestInst = inst
+				bestPrefixLen = prefixLen
+			}
+		}
+	}
+
+	return bestInst, nil
+}
+
+func parseIPRange(value string) *net.IPNet {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if strings.Contains(value, "/") {
+		_, network, err := net.ParseCIDR(value)
+		if err != nil {
+			return nil
+		}
+		return network
+	}
+	ip := net.ParseIP(value)
+	if ip == nil {
+		return nil
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		return &net.IPNet{IP: ip4, Mask: net.CIDRMask(32, 32)}
+	}
+	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}
 }
