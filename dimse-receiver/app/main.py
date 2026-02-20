@@ -21,6 +21,7 @@ from app.ingest import (
     clear_dead_letter,
     clear_dead_letter_study,
     process_retry_queue,
+    process_retry_study,
     replay_dead_letter,
     replay_dead_letter_study,
     retry_details,
@@ -143,6 +144,20 @@ def ingest_retry_process(request: Request):
         dead_letter=snap["dead_letter"],
     )
     return {"status": "ok", "processed": processed, "ingest_retry": snap}
+
+
+@app.post("/ingest/retry/process/{study_instance_uid}")
+def ingest_retry_process_study(request: Request, study_instance_uid: str):
+    """Run an immediate retry attempt for one pending study."""
+    _require_operator_key(request)
+    result = process_retry_study(study_instance_uid=study_instance_uid)
+    record_action(
+        "retry_process_study",
+        study_instance_uid=study_instance_uid,
+        found=result.get("found", False),
+        result=result.get("result", "unknown"),
+    )
+    return {"status": "ok", "ingest_retry": result}
 
 
 @app.post("/ingest/retry/replay")
