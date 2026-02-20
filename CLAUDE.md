@@ -301,12 +301,14 @@ Clicking a study UID in the studies table navigates to a dedicated detail view w
 
 Routing rules are evaluated on every study ingest (upload complete + internal ingest). Rules are ordered by `priority` (lower = first); all matching rules fire.
 
-**Destinations** (`/api/destinations`) — external DICOMweb endpoints:
+**Destinations** (`/api/destinations`) — external forwarding endpoints:
 
 | Field | Notes |
 |-------|-------|
-| `type` | `dicomweb` or `dimse` (DIMSE is placeholder) |
-| `dicomweb_url` | Base URL for STOW-RS; auth via `dicomweb_auth_header` |
+| `type` | `dicomweb` or `dimse` |
+| `dicomweb_url` | Required when `type=dicomweb` (STOW-RS base URL) |
+| `dicomweb_auth_header` | Optional `Authorization` value for DICOMweb destinations |
+| `ae_title` / `host` / `port` | Required when `type=dimse` (remote DIMSE C-STORE destination) |
 
 **Routing Rules** (`/api/routing-rules`):
 
@@ -329,7 +331,7 @@ Routing rules are evaluated on every study ingest (upload complete + internal in
 | `auto_approve` | Skips manual QC, sets `status=approved` |
 | `require_qa` | No-op — holds for manual review (default) |
 | `reject` | Auto-rejects the study |
-| `route_to` | Async forward DICOM files to a Destination via DICOMweb STOW-RS (`multipart/related`) |
+| `route_to` | Async forward DICOM files to a Destination (`dicomweb` via STOW-RS or `dimse` via C-STORE adapter) |
 
 Other endpoints:
 - `POST /api/routing-rules/evaluate/{studyID}` — re-evaluate rules for an existing study
@@ -911,7 +913,7 @@ Phase 2: QC check + BIDS conversion (after defacing, final files)
 
 ### Study Export & DICOM Download (`api/handler/export.go`, `api/handler/dicom_download.go`, `api/handler/export_forward.go`)
 
-Full export workflow for approved studies: admin DICOM download, token-authenticated recipient download, and automated DICOMweb STOW-RS forwarding to external destinations.
+Full export workflow for approved studies: admin DICOM download, token-authenticated recipient download, and automated forwarding to external destinations.
 
 **DICOM Download (admin):**
 - `GET /api/studies/{studyUID}/dicom-download` — streams all DICOM files as a zip archive
@@ -927,11 +929,11 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
 - Used by the export portal to display study info and download link
 
-**Export forwarding** (DICOMweb STOW-RS):
+**Export forwarding** (`route_to` destinations):
 - `POST /api/studies/{studyUID}/trigger-export` — manual trigger (admin only, study must be approved + export_required)
 - Background goroutine finds matching `route_to` rules and forwards DICOM files to each destination
-- Files sent as `multipart/related; type="application/dicom"` per DICOM PS3.18 §10.5
-- Streamed via `io.Pipe()` (no full-study memory buffering); 10-minute timeout for large studies
+- `dicomweb` destinations: STOW-RS `multipart/related; type="application/dicom"` (streamed via `io.Pipe()`)
+- `dimse` destinations: calls `dimse-receiver` adapter, which sends C-STORE to remote AE Title/host/port
 - Auto-dispatches on study approval when `export_required=true` and `export_status=pending`
 
 **Study fields:**
@@ -993,7 +995,7 @@ git checkout develop && git pull
 | `go` | `go build ./...` + `go vet ./...` |
 | `go-test` | `go test -race -v -count=1 ./...` (~120 tests) |
 | `python` (7× matrix) | `py_compile` on all `.py` files per service |
-| `python-test` (7× matrix) | `pytest -v --tb=short` per service (~147 tests total) |
+| `python-test` (7× matrix) | `pytest -v --tb=short` per service (~206 tests total) |
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
 | `docker` (8× matrix) | `docker build` for all service images |
 
@@ -1008,7 +1010,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 14 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, health endpoint, ingest client payload/error handling |
+| dimse-receiver | 22 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
