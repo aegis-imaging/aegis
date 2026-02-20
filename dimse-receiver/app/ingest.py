@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 import threading
 import time
 
@@ -53,6 +55,181 @@ _metrics = {
     "cleared_dead_letter_total": 0,
     "cleared_pending_total": 0,
 }
+_STATE_VERSION = 1
+_METRIC_KEYS = tuple(_metrics.keys())
+
+
+def _state_file_path() -> Path:
+    return Path(config.DIMSE_INGEST_DURABLE_STORE_PATH)
+
+
+def _durable_store_enabled() -> bool:
+    return bool(config.DIMSE_INGEST_DURABLE_STORE_ENABLED)
+
+
+def _serialize_accumulator(acc: StudyAccumulator) -> dict[str, object]:
+    return {
+        "study_instance_uid": acc.study_instance_uid,
+        "modality": acc.modality,
+        "body_part": acc.body_part,
+        "study_description": acc.study_description,
+        "series_uids": sorted(str(uid) for uid in acc.series_uids),
+        "file_count": int(acc.file_count),
+        "calling_ae_title": acc.calling_ae_title,
+    }
+
+
+def _serialize_item(item: QueuedIngest) -> dict[str, object]:
+    return {
+        "acc": _serialize_accumulator(item.acc),
+        "attempts": int(item.attempts),
+        "next_attempt_at": float(item.next_attempt_at),
+        "last_error": item.last_error,
+        "queued_at": float(item.queued_at),
+        "dead_lettered_at": float(item.dead_lettered_at),
+    }
+
+
+def _serialize_state_locked() -> dict[str, object]:
+    return {
+        "version": _STATE_VERSION,
+        "updated_at": int(time.time()),
+        "retry_queue": [_serialize_item(item) for item in _retry_queue],
+        "dead_letter": [_serialize_item(item) for item in _dead_letter],
+        "metrics": {key: int(_metrics.get(key, 0)) for key in _METRIC_KEYS},
+    }
+
+
+def _persist_retry_state_locked() -> None:
+    if not _durable_store_enabled():
+        return
+
+    path = _state_file_path()
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _serialize_state_locked()
+        with tmp_path.open("w", encoding="utf-8") as fh:
+            json.dump(payload, fh, separators=(",", ":"), sort_keys=True)
+            fh.write("\n")
+        tmp_path.replace(path)
+    except Exception as exc:
+        log.error("Failed to persist DIMSE ingest retry state to %s: %s", path, exc)
+
+
+def _coerce_int(value: object, default: int = 0, minimum: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if minimum is not None:
+        parsed = max(minimum, parsed)
+    return parsed
+
+
+def _coerce_float(value: object, default: float = 0.0, minimum: float | None = None) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if minimum is not None:
+        parsed = max(minimum, parsed)
+    return parsed
+
+
+def _deserialize_accumulator(payload: object) -> StudyAccumulator | None:
+    if not isinstance(payload, dict):
+        return None
+
+    study_instance_uid = str(payload.get("study_instance_uid", "")).strip()
+    if not study_instance_uid:
+        return None
+
+    series_uids_raw = payload.get("series_uids", [])
+    if not isinstance(series_uids_raw, list):
+        series_uids_raw = []
+    series_uids = {str(uid).strip() for uid in series_uids_raw if str(uid).strip()}
+
+    return StudyAccumulator(
+        study_instance_uid=study_instance_uid,
+        modality=str(payload.get("modality", "")).strip(),
+        body_part=str(payload.get("body_part", "")).strip(),
+        study_description=str(payload.get("study_description", "")).strip(),
+        series_uids=series_uids,
+        file_count=_coerce_int(payload.get("file_count", 0), default=0, minimum=0),
+        calling_ae_title=str(payload.get("calling_ae_title", "")).strip(),
+    )
+
+
+def _deserialize_item(payload: object) -> QueuedIngest | None:
+    if not isinstance(payload, dict):
+        return None
+
+    acc = _deserialize_accumulator(payload.get("acc"))
+    if acc is None:
+        return None
+
+    return QueuedIngest(
+        acc=acc,
+        attempts=_coerce_int(payload.get("attempts", 1), default=1, minimum=1),
+        next_attempt_at=_coerce_float(payload.get("next_attempt_at", 0.0), default=0.0, minimum=0.0),
+        last_error=str(payload.get("last_error", "")).strip(),
+        queued_at=_coerce_float(payload.get("queued_at", 0.0), default=0.0, minimum=0.0),
+        dead_lettered_at=_coerce_float(payload.get("dead_lettered_at", 0.0), default=0.0, minimum=0.0),
+    )
+
+
+def load_retry_state() -> dict[str, int]:
+    """Load retry/dead-letter state from durable storage."""
+    if not _durable_store_enabled():
+        return {"loaded_pending": 0, "loaded_dead_letter": 0}
+
+    path = _state_file_path()
+    if not path.exists():
+        return {"loaded_pending": 0, "loaded_dead_letter": 0}
+
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except Exception as exc:
+        log.error("Failed to load DIMSE ingest retry state from %s: %s", path, exc)
+        return {"loaded_pending": 0, "loaded_dead_letter": 0}
+
+    if not isinstance(payload, dict):
+        log.error("Ignoring invalid DIMSE ingest retry state in %s: expected object root", path)
+        return {"loaded_pending": 0, "loaded_dead_letter": 0}
+
+    queue_payload = payload.get("retry_queue", [])
+    dead_payload = payload.get("dead_letter", [])
+    metrics_payload = payload.get("metrics", {})
+
+    queue_items: list[QueuedIngest] = []
+    dead_items: list[QueuedIngest] = []
+
+    if isinstance(queue_payload, list):
+        queue_items = [item for item in (_deserialize_item(entry) for entry in queue_payload) if item is not None]
+    if isinstance(dead_payload, list):
+        dead_items = [item for item in (_deserialize_item(entry) for entry in dead_payload) if item is not None]
+
+    loaded_metrics = {key: 0 for key in _METRIC_KEYS}
+    if isinstance(metrics_payload, dict):
+        for key in _METRIC_KEYS:
+            loaded_metrics[key] = _coerce_int(metrics_payload.get(key, 0), default=0, minimum=0)
+
+    with _retry_lock:
+        _retry_queue[:] = queue_items
+        _dead_letter[:] = dead_items
+        for key, value in loaded_metrics.items():
+            _metrics[key] = value
+
+    loaded = {"loaded_pending": len(queue_items), "loaded_dead_letter": len(dead_items)}
+    log.info(
+        "Loaded DIMSE ingest retry state from %s (%d pending, %d dead-letter)",
+        path,
+        loaded["loaded_pending"],
+        loaded["loaded_dead_letter"],
+    )
+    return loaded
 
 
 def _retry_delay_seconds(attempts: int) -> int:
@@ -94,10 +271,12 @@ def _upsert_dead_letter(item: QueuedIngest) -> None:
             ):
                 existing.dead_lettered_at = item.dead_lettered_at
             _metrics["dead_letter_deduped_total"] += 1
+            _persist_retry_state_locked()
             return
 
     _dead_letter.append(item)
     _metrics["dead_letter_total"] += 1
+    _persist_retry_state_locked()
 
 
 def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
@@ -109,6 +288,7 @@ def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
                 _merge_accumulator(item.acc, acc)
                 item.last_error = f"deduped: {reason}"
                 _metrics["deduped_total"] += 1
+                _persist_retry_state_locked()
                 return True
 
         if len(_retry_queue) >= config.DIMSE_INGEST_QUEUE_MAX:
@@ -139,6 +319,7 @@ def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
             )
         )
         _metrics["queued_total"] += 1
+        _persist_retry_state_locked()
     return True
 
 
@@ -215,6 +396,8 @@ def process_retry_queue(now: float | None = None) -> int:
     with _retry_lock:
         due = [item for item in _retry_queue if item.next_attempt_at <= current]
         _retry_queue[:] = [item for item in _retry_queue if item.next_attempt_at > current]
+        if due:
+            _persist_retry_state_locked()
 
     for item in due:
         processed += 1
@@ -251,6 +434,7 @@ def _process_retry_item(item: QueuedIngest, current: float) -> str:
     item.last_error = "retry_failed"
     with _retry_lock:
         _retry_queue.append(item)
+        _persist_retry_state_locked()
     return "requeued"
 
 
@@ -265,6 +449,7 @@ def process_retry_study(study_instance_uid: str, now: float | None = None) -> di
         )
         if idx >= 0:
             item = _retry_queue.pop(idx)
+            _persist_retry_state_locked()
 
     if item is None:
         return {
@@ -293,6 +478,8 @@ def process_retry_all(limit: int = 10000, now: float | None = None) -> dict[str,
         selected = ordered[:limit]
         selected_ids = {id(item) for item in selected}
         _retry_queue[:] = [item for item in _retry_queue if id(item) not in selected_ids]
+        if selected:
+            _persist_retry_state_locked()
 
     counts = {"ok": 0, "requeued": 0, "dead_letter": 0}
     for item in selected:
@@ -477,6 +664,8 @@ def replay_dead_letter(limit: int = 100, now: float | None = None) -> dict[str, 
         blocked_by_queue_full = bool(_dead_letter and len(_retry_queue) >= config.DIMSE_INGEST_QUEUE_MAX and moved < limit)
         after_pending = len(_retry_queue)
         after_dead_letter = len(_dead_letter)
+        if moved > 0:
+            _persist_retry_state_locked()
 
     snapshot = retry_snapshot()
     snapshot["replayed_now"] = moved
@@ -521,6 +710,8 @@ def replay_dead_letter_study(study_instance_uid: str, now: float | None = None) 
                 _metrics["replayed_total"] += 1
         after_pending = len(_retry_queue)
         after_dead_letter = len(_dead_letter)
+        if moved > 0:
+            _persist_retry_state_locked()
 
     snapshot = retry_snapshot()
     return {
@@ -548,6 +739,8 @@ def clear_dead_letter(limit: int = 10000) -> dict[str, int]:
             cleared += 1
         _metrics["cleared_dead_letter_total"] += cleared
         after_dead_letter = len(_dead_letter)
+        if cleared > 0:
+            _persist_retry_state_locked()
 
     snapshot = retry_snapshot()
     snapshot["cleared_now"] = cleared
@@ -574,6 +767,8 @@ def clear_dead_letter_study(study_instance_uid: str) -> dict[str, object]:
             cleared = 1
             _metrics["cleared_dead_letter_total"] += 1
         after_dead_letter = len(_dead_letter)
+        if cleared > 0:
+            _persist_retry_state_locked()
 
     return {
         "snapshot": retry_snapshot(),
@@ -597,6 +792,8 @@ def clear_pending(limit: int = 10000) -> dict[str, int]:
             cleared += 1
         _metrics["cleared_pending_total"] += cleared
         after_pending = len(_retry_queue)
+        if cleared > 0:
+            _persist_retry_state_locked()
 
     snapshot = retry_snapshot()
     snapshot["cleared_now"] = cleared
@@ -623,6 +820,8 @@ def clear_pending_study(study_instance_uid: str) -> dict[str, object]:
             cleared = 1
             _metrics["cleared_pending_total"] += 1
         after_pending = len(_retry_queue)
+        if cleared > 0:
+            _persist_retry_state_locked()
 
     return {
         "snapshot": retry_snapshot(),
@@ -648,3 +847,4 @@ def reset_retry_state() -> None:
         _metrics["replayed_total"] = 0
         _metrics["cleared_dead_letter_total"] = 0
         _metrics["cleared_pending_total"] = 0
+        _persist_retry_state_locked()

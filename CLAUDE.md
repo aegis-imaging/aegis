@@ -848,7 +848,7 @@ uvicorn app.main:app --port 8086
 
 Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
 
-If ingest calls fail (API temporary outage, network blip), failed studies are added to an in-memory retry queue. A background worker retries at `DIMSE_INGEST_RETRY_INTERVAL` until `DIMSE_INGEST_MAX_ATTEMPTS`; exhausted items are moved to dead-letter and surfaced in `/healthz` and `/ingest/retry`.
+If ingest calls fail (API temporary outage, network blip), failed studies are added to a retry queue. A background worker retries at `DIMSE_INGEST_RETRY_INTERVAL` until `DIMSE_INGEST_MAX_ATTEMPTS`; exhausted items are moved to dead-letter and surfaced in `/healthz` and `/ingest/retry`. Retry/dead-letter state is persisted to disk (enabled by default) and restored on service startup.
 
 **Running locally:**
 ```bash
@@ -857,6 +857,13 @@ pip install -r requirements.txt
 uvicorn app.main:app --port 8087
 # DICOM SCP listens on DIMSE_PORT (default 11112) in a background thread.
 ```
+
+**PACS E2E harness (automated):**
+```bash
+python3 scripts/dimse_pacs_e2e_harness.py
+```
+- Runs four scenarios end-to-end: successful C-STORE ingest, transient failure to retry queue, targeted process recovery, dead-letter replay/process recovery.
+- Detailed runbook: `docs/planning/dimse-pacs-e2e-validation-runbook.md`.
 
 **Env vars:**
 
@@ -875,6 +882,15 @@ uvicorn app.main:app --port 8087
 | `DIMSE_INGEST_RETRY_MAX_INTERVAL` | `300` | Max retry delay seconds cap for exponential backoff |
 | `DIMSE_INGEST_MAX_ATTEMPTS` | `5` | Maximum attempts before moving an ingest item to dead-letter |
 | `DIMSE_INGEST_QUEUE_MAX` | `1000` | Maximum in-memory queued ingest items before queue-full dead-letter |
+| `DIMSE_INGEST_DURABLE_STORE_ENABLED` | `true` | Enable on-disk persistence for retry/dead-letter state across restarts |
+| `DIMSE_INGEST_DURABLE_STORE_PATH` | `/app/data/dimse-ingest-retry-state.json` | JSON file path for durable retry/dead-letter state |
+| `DIMSE_RETRY_ALERTS_ENABLED` | `false` | Enable threshold-based retry alert event emission |
+| `DIMSE_RETRY_ALERT_MAX_EVENTS` | `200` | Max retained retry alert events in memory |
+| `DIMSE_RETRY_ALERT_COOLDOWN_SECONDS` | `300` | Per-condition cooldown between repeated alerts |
+| `DIMSE_RETRY_ALERT_PENDING_AGE_SECONDS` | `0` | Pending age alert threshold (fallback: `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS`) |
+| `DIMSE_RETRY_ALERT_DEAD_LETTER_AGE_SECONDS` | `0` | Dead-letter age alert threshold (fallback: `DIMSE_DEAD_LETTER_AGE_WARN_SECONDS`) |
+| `DIMSE_RETRY_ALERT_DEAD_LETTER_NONZERO` | `true` | Emit alert when dead-letter queue is non-zero |
+| `DIMSE_RETRY_ALERT_WEBHOOK_URL` | *(empty)* | Optional webhook URL for JSON alert delivery |
 | `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS` | `0` (disabled) | `/healthz` degrades when oldest pending retry age meets/exceeds this threshold |
 | `DIMSE_DEAD_LETTER_AGE_WARN_SECONDS` | `0` (disabled) | `/healthz` includes age-threshold degradation reason when oldest dead-letter age meets/exceeds this threshold |
 | `DIMSE_OPERATOR_AUDIT_MAX` | `500` | Max retained operator action records for retry control endpoints |
@@ -883,11 +899,15 @@ uvicorn app.main:app --port 8087
 
 **Operational endpoints:**
 - If `DIMSE_OPERATOR_API_KEY` is set, all `/ingest/retry*` endpoints require that key.
+- Admin dashboard/API integration: `/api/dimse/retry*` (admin-only) proxies to the DIMSE sidecar `/ingest/retry*` endpoints and forwards `DIMSE_OPERATOR_API_KEY` when configured.
 - `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total` and `dead_letter_deduped_total`) plus oldest-age metrics (`pending_oldest_age_seconds`, `dead_letter_oldest_age_seconds`) and next-due pending timing (`pending_next_attempt_at`, `pending_next_attempt_in_seconds`); returns `degraded` when SCP is down, dead-letter is non-zero, or pending age exceeds `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS`; includes `degraded_reasons`, `pending_age_warn_seconds`, and `dead_letter_age_warn_seconds` (with `dead_letter_age_threshold_exceeded` when configured).
 - Retry scheduling uses bounded exponential backoff (base interval, multiplier, max interval cap).
+- Durable retry state writes are atomic (`*.tmp` swap) and restored at startup when `DIMSE_INGEST_DURABLE_STORE_ENABLED=true`.
+- Retry alerts evaluate on each retry worker pass; active threshold conditions emit bounded in-memory alert events (`DIMSE_RETRY_ALERT_*`) with per-condition cooldown and optional webhook POST.
 - `GET /ingest/retry` — returns retry/dead-letter counters plus oldest-age and next-due pending timing metrics for troubleshooting.
 - `GET /ingest/retry/summary` — returns retry summary signals (`pending_due_now`, `queue_max`, `queue_utilization_percent`, `dead_letter_present`) plus full snapshot counters.
 - `GET /ingest/retry/actions?limit=N&action=...` — returns recent operator actions on retry controls (bounded in-memory audit log), optionally filtered to a specific action name.
+- `GET /ingest/retry/alerts?limit=N&condition=...` — returns recent retry threshold alerts (e.g., dead-letter non-zero, age threshold exceeded), optionally filtered by condition.
 - `GET /ingest/retry/details?limit=N&study_instance_uid=...&sort=next_attempt|age_desc` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, `queued_at`, next retry timing, age counters, dead-letter timing, last_error), plus list counters (`pending_total`, `dead_letter_total`, `pending_returned`, `dead_letter_returned`) and truncation flags; optional `study_instance_uid` filter scopes results to one study; `sort=age_desc` orders oldest items first.
 - `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
 - `POST /ingest/retry/process-all?limit=N` — processes pending retry entries immediately (ignores schedule), up to `N`.
@@ -1053,6 +1073,11 @@ Secrets posture:
 - GCP API runtime now reads DB credentials via Secret Manager reference (`DB_PASSWORD` from secret, not inline DSN).
 - AWS RDS now uses `manage_master_user_password = true`, with master credentials stored in AWS Secrets Manager.
 
+`terraform/aws` now includes edge/auth completion:
+- ACM-backed ALB HTTPS listener (`aws_lb_listener.https`)
+- Cognito user pool/client/domain resources
+- ALB `authenticate-cognito` default action with explicit public-path bypass rules (`/healthz`, upload/export/contact/project selector, DICOMweb)
+
 ## Key Architecture Decisions
 
 - Client-side DICOM tag anonymization in browser before upload (zero-install at sending sites)
@@ -1096,6 +1121,7 @@ git checkout develop && git pull
 | `go-test` | `go test -race -v -count=1 ./...` (~120 tests) |
 | `infra-guard` | `scripts/check-infra-placeholders.sh` blocks known credential placeholders in Terraform |
 | `python` (7× matrix) | `py_compile` on all `.py` files per service |
+| `python-scripts` | `py_compile` on smoke/DIMSE harness scripts in `scripts/` |
 | `python-test` (7× matrix) | `pytest -v --tb=short` per service (~206 tests total) |
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
 | `docker` (8× matrix) | `docker build` for all service images |
@@ -1138,6 +1164,7 @@ Common dev commands available via `make`:
 | `make lint` | Lint all languages (Go vet, Python py_compile, TypeScript tsc) |
 | `make check` | `curl /healthz` with pretty JSON output |
 | `make smoke` | Run cloud smoke harness (`BASE_URL=...`, optional `ADMIN_HEADER=...`) |
+| `make dimse-e2e` | Run DIMSE PACS E2E harness (mock ingest + retry/dead-letter scenarios) |
 | `make logs` | `docker compose logs -f` |
 
 ## Conventions

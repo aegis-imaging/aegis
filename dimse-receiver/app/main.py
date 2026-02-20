@@ -20,6 +20,7 @@ from app.ingest import (
     clear_pending_study,
     clear_dead_letter,
     clear_dead_letter_study,
+    load_retry_state,
     process_retry_queue,
     process_retry_all,
     process_retry_study,
@@ -30,6 +31,7 @@ from app.ingest import (
     retry_summary,
 )
 from app.operator_audit import get_actions, record_action
+from app.retry_alerts import evaluate_retry_alerts, get_alerts
 from app.scp import create_scp, start_scp
 from app.sender import forward_study
 
@@ -50,6 +52,15 @@ async def lifespan(app: FastAPI):
     global _ae, _stop_retry, _retry_thread
     import threading
 
+    loaded = load_retry_state()
+    if loaded["loaded_pending"] > 0 or loaded["loaded_dead_letter"] > 0:
+        log.info(
+            "Restored DIMSE retry state on startup (%d pending, %d dead-letter)",
+            loaded["loaded_pending"],
+            loaded["loaded_dead_letter"],
+        )
+    evaluate_retry_alerts(retry_snapshot())
+
     _ae = create_scp()
     scp_thread = threading.Thread(target=start_scp, args=(_ae,), daemon=True)
     scp_thread.start()
@@ -60,6 +71,7 @@ async def lifespan(app: FastAPI):
     def _retry_loop() -> None:
         while _stop_retry and not _stop_retry.wait(timeout=config.DIMSE_INGEST_RETRY_INTERVAL):
             process_retry_queue()
+            evaluate_retry_alerts(retry_snapshot())
 
     _retry_thread = threading.Thread(target=_retry_loop, daemon=True)
     _retry_thread.start()
@@ -162,6 +174,17 @@ def ingest_retry_actions(
     """Return recent operator retry-control actions."""
     _require_operator_key(request)
     return {"status": "ok", "actions": get_actions(limit=limit, action=action.strip() or None)}
+
+
+@app.get("/ingest/retry/alerts")
+def ingest_retry_alerts(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=10000),
+    condition: str = Query(default=""),
+):
+    """Return recent retry alert events (threshold-driven)."""
+    _require_operator_key(request)
+    return {"status": "ok", "alerts": get_alerts(limit=limit, condition=condition.strip() or None)}
 
 
 @app.get("/ingest/retry/details")

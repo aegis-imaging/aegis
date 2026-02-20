@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import app.ingest as ingest_module
@@ -11,6 +12,7 @@ from app.ingest import (
     clear_dead_letter_study,
     clear_pending,
     clear_pending_study,
+    load_retry_state,
     replay_dead_letter,
     replay_dead_letter_study,
     retry_details,
@@ -39,6 +41,10 @@ def _acc() -> StudyAccumulator:
 
 
 def setup_function():
+    import app.config as cfg
+
+    cfg.DIMSE_INGEST_DURABLE_STORE_ENABLED = False
+    cfg.DIMSE_INGEST_DURABLE_STORE_PATH = "/tmp/dimse-ingest-retry-state-test.json"
     reset_retry_state()
 
 
@@ -748,3 +754,79 @@ def test_clear_pending_study_not_found():
     assert result["cleared"] == 0
     assert result["before_pending"] == 0
     assert result["after_pending"] == 0
+
+
+def test_retry_state_persists_and_reloads(monkeypatch, tmp_path):
+    state_path = tmp_path / "retry-state.json"
+    monkeypatch.setattr("app.config.DIMSE_INGEST_DURABLE_STORE_ENABLED", True)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_DURABLE_STORE_PATH", str(state_path))
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 1)
+
+    reset_retry_state()
+    acc_pending = _acc()
+    acc_dead = _acc()
+    acc_dead.study_instance_uid = "9.9.9.9"
+
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=100.0):
+        submit_ingest(acc_pending)
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=120.0):
+        submit_ingest(acc_dead)
+
+    before = retry_snapshot(now=160.0)
+    assert before["pending"] == 1
+    assert before["dead_letter"] == 1
+    assert state_path.exists()
+
+    with ingest_module._retry_lock:
+        ingest_module._retry_queue.clear()
+        ingest_module._dead_letter.clear()
+        for key in ingest_module._metrics:
+            ingest_module._metrics[key] = 0
+
+    loaded = load_retry_state()
+    assert loaded == {"loaded_pending": 1, "loaded_dead_letter": 1}
+
+    after = retry_snapshot(now=160.0)
+    assert after["pending"] == 1
+    assert after["dead_letter"] == 1
+    assert after["queued_total"] == 1
+    assert after["dead_letter_total"] == 1
+    assert ingest_module._retry_queue[0].acc.study_instance_uid == "1.2.3.4"
+    assert ingest_module._dead_letter[0].acc.study_instance_uid == "9.9.9.9"
+
+
+def test_load_retry_state_ignores_invalid_json(monkeypatch, tmp_path):
+    state_path = tmp_path / "retry-state.json"
+    monkeypatch.setattr("app.config.DIMSE_INGEST_DURABLE_STORE_ENABLED", True)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_DURABLE_STORE_PATH", str(state_path))
+
+    state_path.write_text("{not-valid-json", encoding="utf-8")
+    loaded = load_retry_state()
+    assert loaded == {"loaded_pending": 0, "loaded_dead_letter": 0}
+    assert retry_snapshot()["pending"] == 0
+    assert retry_snapshot()["dead_letter"] == 0
+
+
+def test_load_retry_state_ignores_invalid_item_shape(monkeypatch, tmp_path):
+    state_path = tmp_path / "retry-state.json"
+    monkeypatch.setattr("app.config.DIMSE_INGEST_DURABLE_STORE_ENABLED", True)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_DURABLE_STORE_PATH", str(state_path))
+
+    payload = {
+        "version": 1,
+        "retry_queue": [
+            {"acc": {"study_instance_uid": ""}},
+            {"acc": {"study_instance_uid": "1.2.3.4", "series_uids": ["a", "b"]}, "attempts": "2"},
+        ],
+        "dead_letter": [{"acc": "invalid"}],
+        "metrics": {"queued_total": "7"},
+    }
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = load_retry_state()
+    assert loaded == {"loaded_pending": 1, "loaded_dead_letter": 0}
+    snap = retry_snapshot()
+    assert snap["pending"] == 1
+    assert snap["dead_letter"] == 0
+    assert snap["queued_total"] == 7
