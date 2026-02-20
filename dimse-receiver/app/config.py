@@ -25,5 +25,14 @@ DIMSE_INSTITUTION_SLUG: str = os.getenv("DIMSE_INSTITUTION_SLUG", "")
 # HTTP client settings
 DIMSE_INGEST_TIMEOUT: int = int(os.getenv("DIMSE_INGEST_TIMEOUT", "30"))
 DIMSE_INGEST_RETRY_INTERVAL: int = int(os.getenv("DIMSE_INGEST_RETRY_INTERVAL", "15"))
+DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER: float = float(
+    os.getenv("DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER", "2.0")
+)
+DIMSE_INGEST_RETRY_MAX_INTERVAL: int = int(os.getenv("DIMSE_INGEST_RETRY_MAX_INTERVAL", "300"))
 DIMSE_INGEST_MAX_ATTEMPTS: int = int(os.getenv("DIMSE_INGEST_MAX_ATTEMPTS", "5"))
 DIMSE_INGEST_QUEUE_MAX: int = int(os.getenv("DIMSE_INGEST_QUEUE_MAX", "1000"))
+
+# In-memory operator action audit (retry control endpoints)
+DIMSE_OPERATOR_AUDIT_MAX: int = int(os.getenv("DIMSE_OPERATOR_AUDIT_MAX", "500"))
+# Optional API key for retry-control endpoints (/ingest/retry*)
+DIMSE_OPERATOR_API_KEY: str = os.getenv("DIMSE_OPERATOR_API_KEY", "")

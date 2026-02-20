@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.ingest import reset_retry_state
 from app.main import app
+from app.operator_audit import reset_actions
 
 
 class _DummyAE:
@@ -19,6 +20,10 @@ class _DummyAE:
 
 def setup_function():
     reset_retry_state()
+    reset_actions()
+    import app.config as cfg
+
+    cfg.DIMSE_OPERATOR_API_KEY = ""
 
 
 def test_healthz_ok_with_running_scp():
@@ -129,6 +134,71 @@ def test_ingest_retry_status_endpoint():
     assert "ingest_retry" in body
 
 
+def test_retry_endpoints_require_operator_key_when_configured(monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.setattr("app.config.DIMSE_OPERATOR_API_KEY", "secret")
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ):
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry")
+
+    assert resp.status_code == 401
+    assert "operator auth required" in resp.json()["detail"]
+
+
+def test_retry_endpoints_accept_operator_key_header(monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.setattr("app.config.DIMSE_OPERATOR_API_KEY", "secret")
+    actions = {"total": 1, "items": [{"action": "retry_process"}]}
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.get_actions", return_value=actions):
+        with TestClient(app) as client:
+            resp = client.get(
+                "/ingest/retry/actions?limit=1",
+                headers={"x-aegis-operator-key": "secret"},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "actions": actions}
+
+
+def test_retry_endpoints_accept_operator_bearer(monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.setattr("app.config.DIMSE_OPERATOR_API_KEY", "secret")
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ):
+        with TestClient(app) as client:
+            resp = client.get(
+                "/ingest/retry",
+                headers={"authorization": "Bearer secret"},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
+def test_ingest_retry_actions_endpoint():
+    from unittest.mock import patch
+
+    actions = {"total": 1, "items": [{"action": "retry_process"}]}
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.get_actions", return_value=actions) as mock_get:
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry/actions?limit=5")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "actions": actions}
+    mock_get.assert_called_once_with(limit=5)
+
+
 def test_ingest_retry_details_endpoint():
     from unittest.mock import patch
 
@@ -149,9 +219,12 @@ def test_ingest_retry_details_endpoint():
 def test_ingest_retry_process_endpoint():
     from unittest.mock import patch
 
+    snap = {"pending": 0, "dead_letter": 0}
     with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
         "app.main.start_scp", return_value=None
-    ), patch("app.main.process_retry_queue", return_value=2):
+    ), patch("app.main.process_retry_queue", return_value=2), patch(
+        "app.main.retry_snapshot", return_value=snap
+    ), patch("app.main.record_action") as mock_record:
         with TestClient(app) as client:
             resp = client.post("/ingest/retry/process")
 
@@ -160,6 +233,7 @@ def test_ingest_retry_process_endpoint():
     assert body["status"] == "ok"
     assert body["processed"] == 2
     assert "ingest_retry" in body
+    mock_record.assert_called_once()
 
 
 def test_ingest_retry_replay_endpoint():
@@ -211,3 +285,44 @@ def test_ingest_retry_clear_dead_letter_endpoint():
     body = resp.json()
     assert body == {"status": "ok", "ingest_retry": snap}
     mock_clear.assert_called_once_with(limit=3)
+
+
+def test_ingest_retry_clear_dead_letter_study_endpoint():
+    from unittest.mock import patch
+
+    result = {"study_instance_uid": "1.2.3.4", "found": True, "cleared": 1}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.clear_dead_letter_study", return_value=result) as mock_clear:
+        with TestClient(app) as client:
+            resp = client.post("/ingest/retry/clear-dead-letter/1.2.3.4")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": result}
+    mock_clear.assert_called_once_with(study_instance_uid="1.2.3.4")
+
+
+def test_retry_control_endpoints_emit_action_records():
+    from unittest.mock import patch
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ):
+        with TestClient(app) as client:
+            client.post("/ingest/retry/process")
+            client.post("/ingest/retry/replay?limit=1")
+            client.post("/ingest/retry/replay/abc")
+            client.post("/ingest/retry/clear-dead-letter?limit=1")
+            client.post("/ingest/retry/clear-dead-letter/abc")
+            actions_resp = client.get("/ingest/retry/actions?limit=10")
+
+    assert actions_resp.status_code == 200
+    items = actions_resp.json()["actions"]["items"]
+    names = [x["action"] for x in items]
+    assert "retry_process" in names
+    assert "retry_replay_bulk" in names
+    assert "retry_replay_study" in names
+    assert "retry_clear_dead_letter" in names
+    assert "retry_clear_dead_letter_study" in names
