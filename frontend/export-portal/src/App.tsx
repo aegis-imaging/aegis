@@ -27,14 +27,83 @@ type ErrorState = {
   message: string
 }
 
+type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
+
+const DISPLAY_TZ_MODE_KEY = 'aegis.export.display_timezone_mode'
+const DISPLAY_TZ_CUSTOM_KEY = 'aegis.export.display_timezone_custom'
+let displayTimezoneModeForFormat: DisplayTimezoneMode = 'utc'
+let displayTimezoneCustomForFormat = ''
+
 function pad2(n: number) {
   return String(n).padStart(2, '0')
 }
 
-function fmtDateTime(iso: string) {
-  if (!iso) return ''
-  const dt = new Date(iso)
-  if (Number.isNaN(dt.getTime())) return iso
+function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local'
+  } catch {
+    return 'Local'
+  }
+}
+
+function normalizeIanaTimeZone(value: string): string | null {
+  const candidate = value.trim()
+  if (!candidate) return null
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: candidate }).resolvedOptions().timeZone
+  } catch {
+    return null
+  }
+}
+
+function readDisplayTimezone(): { mode: DisplayTimezoneMode; customTimeZone: string } {
+  if (typeof window === 'undefined') {
+    return { mode: 'utc', customTimeZone: '' }
+  }
+  const storedMode = window.localStorage.getItem(DISPLAY_TZ_MODE_KEY)
+  const mode: DisplayTimezoneMode =
+    storedMode === 'local' || storedMode === 'custom' ? storedMode : 'utc'
+  const customTimeZone = window.localStorage.getItem(DISPLAY_TZ_CUSTOM_KEY) ?? ''
+  return { mode, customTimeZone }
+}
+
+function writeDisplayTimezone(mode: DisplayTimezoneMode, customTimeZone: string) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(DISPLAY_TZ_MODE_KEY, mode)
+  window.localStorage.setItem(DISPLAY_TZ_CUSTOM_KEY, customTimeZone)
+}
+
+function setDisplayTimezoneForFormatting(mode: DisplayTimezoneMode, customTimeZone: string) {
+  displayTimezoneModeForFormat = mode
+  displayTimezoneCustomForFormat = customTimeZone
+}
+
+function fmtDateWithIntl(dt: Date, timeZone?: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    hourCycle: 'h23',
+    timeZoneName: 'short',
+    ...(timeZone ? { timeZone } : {}),
+  })
+  const parts = formatter.formatToParts(dt)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  const y = get('year')
+  const m = get('month')
+  const d = get('day')
+  const hh = get('hour')
+  const mm = get('minute')
+  const ss = get('second')
+  const tz = get('timeZoneName') || (timeZone ?? browserTimeZone())
+  return `${y}-${m}-${d} ${hh}:${mm}:${ss} ${tz}`
+}
+
+function fmtDateUtc(dt: Date) {
   const y = dt.getUTCFullYear()
   const m = pad2(dt.getUTCMonth() + 1)
   const d = pad2(dt.getUTCDate())
@@ -42,6 +111,19 @@ function fmtDateTime(iso: string) {
   const mm = pad2(dt.getUTCMinutes())
   const ss = pad2(dt.getUTCSeconds())
   return `${y}-${m}-${d} ${hh}:${mm}:${ss} UTC`
+}
+
+function fmtDateTime(iso: string) {
+  if (!iso) return ''
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return iso
+  if (displayTimezoneModeForFormat === 'local') {
+    return fmtDateWithIntl(dt)
+  }
+  if (displayTimezoneModeForFormat === 'custom' && displayTimezoneCustomForFormat) {
+    return fmtDateWithIntl(dt, displayTimezoneCustomForFormat)
+  }
+  return fmtDateUtc(dt)
 }
 
 function fmtRemaining(seconds: number) {
@@ -58,11 +140,21 @@ function fmtRemaining(seconds: number) {
 }
 
 export function App() {
+  const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
+  const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
   const [data, setData] = useState<ExportData | null>(null)
   const [expiryEpochMs, setExpiryEpochMs] = useState<number | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [error, setError] = useState<ErrorState | null>(null)
   const [loading, setLoading] = useState(true)
+  const validCustomTimeZone = normalizeIanaTimeZone(displayTimezoneCustom) ?? ''
+  const localTimeZone = browserTimeZone()
+
+  setDisplayTimezoneForFormatting(displayTimezoneMode, validCustomTimeZone)
+
+  useEffect(() => {
+    writeDisplayTimezone(displayTimezoneMode, displayTimezoneCustom)
+  }, [displayTimezoneMode, displayTimezoneCustom])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -173,6 +265,33 @@ export function App() {
       <div className="card">
         <h1>AEGIS</h1>
         <p className="subtitle">Secure Study Download</p>
+        <div className="tz-control">
+          <label className="tz-label" htmlFor="export-display-timezone-mode">Time Zone</label>
+          <select
+            id="export-display-timezone-mode"
+            className="tz-select"
+            value={displayTimezoneMode}
+            onChange={(e) => setDisplayTimezoneMode(e.target.value as DisplayTimezoneMode)}
+          >
+            <option value="utc">UTC</option>
+            <option value="local">Local ({localTimeZone})</option>
+            <option value="custom">Custom</option>
+          </select>
+          {displayTimezoneMode === 'custom' && (
+            <>
+              <input
+                className="tz-input"
+                type="text"
+                placeholder="America/Chicago"
+                value={displayTimezoneCustom}
+                onChange={(e) => setDisplayTimezoneCustom(e.target.value)}
+              />
+              {!validCustomTimeZone && displayTimezoneCustom.trim() && (
+                <span className="tz-warning">Invalid IANA time zone</span>
+              )}
+            </>
+          )}
+        </div>
 
         <div className="study-info">
           <h2>Study Details</h2>
