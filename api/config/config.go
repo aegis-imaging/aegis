@@ -53,6 +53,8 @@ type Config struct {
 
 	// DIMSE receiver service (Python sidecar) — accepts DICOM C-STORE from PACS systems.
 	DimseReceiverURL string
+	// Optional operator key used by API when proxying DIMSE retry-control endpoints.
+	DimseOperatorAPIKey string
 
 	// CORS
 	AllowedOrigins []string
@@ -122,6 +124,7 @@ func Load() *Config {
 		ClassificationServiceURL: os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
 		ProtocolServiceURL:       os.Getenv("PROTOCOL_SERVICE_URL"),       // e.g. http://localhost:8086
 		DimseReceiverURL:         os.Getenv("DIMSE_RECEIVER_URL"),         // e.g. http://localhost:8087
+		DimseOperatorAPIKey:      os.Getenv("DIMSE_OPERATOR_API_KEY"),
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 

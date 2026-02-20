@@ -193,6 +193,12 @@ func main() {
 	mux.HandleFunc("POST /api/routing-rules/evaluate/{studyID}", adminOnly(srv.EvaluateRoutingRules))
 	mux.HandleFunc("GET /api/studies/{studyID}/routing-log", auth(srv.GetStudyRoutingLog))
 
+	// DIMSE retry control proxy — admin-only API façade over sidecar /ingest/retry* endpoints.
+	mux.HandleFunc("GET /api/dimse/retry", adminOnly(srv.DimseRetryProxy))
+	mux.HandleFunc("GET /api/dimse/retry/{path...}", adminOnly(srv.DimseRetryProxy))
+	mux.HandleFunc("POST /api/dimse/retry", adminOnly(srv.DimseRetryProxy))
+	mux.HandleFunc("POST /api/dimse/retry/{path...}", adminOnly(srv.DimseRetryProxy))
+
 	// Email digest subscriptions — periodic summary emails per project.
 	mux.HandleFunc("GET /api/digest-subscriptions", auth(srv.ListDigestSubscriptions))
 	mux.HandleFunc("GET /api/projects/{projectID}/digest-subscriptions", auth(srv.ListDigestSubscriptions))

@@ -57,6 +57,7 @@ services:
       CLASSIFICATION_SERVICE_URL: "http://classification-service:8080"
       PROTOCOL_SERVICE_URL: "http://protocol-service:8080"
       DIMSE_RECEIVER_URL: "http://dimse-receiver:8080"
+      DIMSE_OPERATOR_API_KEY: "${DIMSE_OPERATOR_API_KEY:-}"
     volumes:
       - aegis-data:/app/data
     depends_on:

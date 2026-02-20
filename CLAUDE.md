@@ -892,6 +892,7 @@ python3 scripts/dimse_pacs_e2e_harness.py
 
 **Operational endpoints:**
 - If `DIMSE_OPERATOR_API_KEY` is set, all `/ingest/retry*` endpoints require that key.
+- Admin dashboard/API integration: `/api/dimse/retry*` (admin-only) proxies to the DIMSE sidecar `/ingest/retry*` endpoints and forwards `DIMSE_OPERATOR_API_KEY` when configured.
 - `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total` and `dead_letter_deduped_total`) plus oldest-age metrics (`pending_oldest_age_seconds`, `dead_letter_oldest_age_seconds`) and next-due pending timing (`pending_next_attempt_at`, `pending_next_attempt_in_seconds`); returns `degraded` when SCP is down, dead-letter is non-zero, or pending age exceeds `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS`; includes `degraded_reasons`, `pending_age_warn_seconds`, and `dead_letter_age_warn_seconds` (with `dead_letter_age_threshold_exceeded` when configured).
 - Retry scheduling uses bounded exponential backoff (base interval, multiplier, max interval cap).
 - Durable retry state writes are atomic (`*.tmp` swap) and restored at startup when `DIMSE_INGEST_DURABLE_STORE_ENABLED=true`.

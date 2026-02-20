@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
+type AppTab = 'studies' | 'audit' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
 
 type AuditEntry = {
   id: string
@@ -187,6 +187,78 @@ type AuthIdentity = {
   email: string
   name: string
   role: string
+}
+
+type DimseRetrySnapshot = {
+  pending: number
+  dead_letter: number
+  queued_total: number
+  deduped_total: number
+  retried_total: number
+  retried_ok_total: number
+  dead_letter_total: number
+  dead_letter_deduped_total: number
+  replayed_total: number
+  cleared_dead_letter_total: number
+  cleared_pending_total: number
+  pending_oldest_age_seconds: number
+  dead_letter_oldest_age_seconds: number
+  pending_next_attempt_at: number
+  pending_next_attempt_in_seconds: number
+}
+
+type DimseRetrySummary = {
+  snapshot: DimseRetrySnapshot
+  now: number
+  pending_due_now: number
+  dead_letter_present: boolean
+  queue_max: number
+  queue_utilization_percent: number
+}
+
+type DimseRetryPendingItem = {
+  study_instance_uid: string
+  attempts: number
+  next_attempt_at: number
+  seconds_until_next_attempt: number
+  queued_at: number
+  age_seconds: number
+  file_count: number
+  series_count: number
+  last_error: string
+}
+
+type DimseRetryDeadLetterItem = {
+  study_instance_uid: string
+  attempts: number
+  queued_at: number
+  dead_lettered_at: number
+  dead_letter_age_seconds: number
+  file_count: number
+  series_count: number
+  last_error: string
+}
+
+type DimseRetryDetails = {
+  snapshot: DimseRetrySnapshot
+  now: number
+  limit: number
+  study_instance_uid: string
+  sort: string
+  pending_total: number
+  dead_letter_total: number
+  pending_returned: number
+  dead_letter_returned: number
+  pending_truncated: boolean
+  dead_letter_truncated: boolean
+  pending_items: DimseRetryPendingItem[]
+  dead_letter_items: DimseRetryDeadLetterItem[]
+}
+
+type DimseOperatorAction = {
+  action: string
+  created_at: string
+  detail?: Record<string, unknown>
 }
 
 type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
@@ -2931,6 +3003,385 @@ function UsersPanel() {
   )
 }
 
+function DimseOpsPanel() {
+  const [summary, setSummary] = useState<DimseRetrySummary | null>(null)
+  const [details, setDetails] = useState<DimseRetryDetails | null>(null)
+  const [actions, setActions] = useState<DimseOperatorAction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState('')
+  const [busyAction, setBusyAction] = useState('')
+  const [studyFilter, setStudyFilter] = useState('')
+  const [bulkLimit, setBulkLimit] = useState(100)
+
+  const readErrorBody = useCallback(async (res: Response) => {
+    try {
+      const body = await res.json()
+      if (typeof body?.error === 'string') return body.error
+      if (typeof body?.detail === 'string') return body.detail
+      if (typeof body?.message === 'string') return body.message
+    } catch {
+      // ignore json parse failures
+    }
+    return `HTTP ${res.status}`
+  }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({ limit: '200', sort: 'age_desc' })
+      if (studyFilter.trim()) params.set('study_instance_uid', studyFilter.trim())
+      const [summaryRes, detailsRes, actionsRes] = await Promise.all([
+        fetch('/api/dimse/retry/summary'),
+        fetch(`/api/dimse/retry/details?${params.toString()}`),
+        fetch('/api/dimse/retry/actions?limit=20'),
+      ])
+
+      if (!summaryRes.ok) throw new Error(await readErrorBody(summaryRes))
+      if (!detailsRes.ok) throw new Error(await readErrorBody(detailsRes))
+      if (!actionsRes.ok) throw new Error(await readErrorBody(actionsRes))
+
+      const summaryBody = await summaryRes.json()
+      const detailsBody = await detailsRes.json()
+      const actionsBody = await actionsRes.json()
+      setSummary(summaryBody.ingest_retry as DimseRetrySummary)
+      setDetails(detailsBody.ingest_retry as DimseRetryDetails)
+      setActions((actionsBody.actions?.items ?? []) as DimseOperatorAction[])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load DIMSE retry state')
+    } finally {
+      setLoading(false)
+    }
+  }, [readErrorBody, studyFilter])
+
+  useEffect(() => { load() }, [load])
+
+  const runAction = useCallback(async (
+    label: string,
+    path: string,
+    confirmMessage?: string,
+  ) => {
+    if (confirmMessage && !confirm(confirmMessage)) return
+    setBusyAction(label)
+    setStatusMessage('')
+    try {
+      const res = await fetch(path, { method: 'POST' })
+      if (!res.ok) throw new Error(await readErrorBody(res))
+      setStatusMessage(`${label} completed`)
+      await load()
+    } catch (err) {
+      setStatusMessage(`${label} failed: ${err instanceof Error ? err.message : 'unknown error'}`)
+    } finally {
+      setBusyAction('')
+    }
+  }, [load, readErrorBody])
+
+  const disableBulk = busyAction.length > 0
+  const limit = Math.max(1, bulkLimit)
+  const snapshot = summary?.snapshot
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">DIMSE Retry Operations</div>
+            <div className="routing-section-sub">
+              Monitor and control DIMSE ingest pending/dead-letter queues.
+            </div>
+          </div>
+          <button type="button" className="btn-refresh" onClick={load} disabled={loading || disableBulk}>
+            Refresh
+          </button>
+        </div>
+
+        <p className="routing-hint">
+          This panel proxies <code>/ingest/retry*</code> controls from the DIMSE sidecar through the API.
+        </p>
+
+        {error && <div className="state-error">{error}</div>}
+        {loading && <div className="state-loading">Loading DIMSE operations…</div>}
+
+        {!loading && summary && (
+          <>
+            <div className="dimse-stats-grid">
+              <div className="stat-card">
+                <div className="stat-number stat-number--neutral">{snapshot?.pending ?? 0}</div>
+                <div className="stat-label">Pending</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-number stat-number--error">{snapshot?.dead_letter ?? 0}</div>
+                <div className="stat-label">Dead-letter</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-number stat-number--warning">{summary.pending_due_now}</div>
+                <div className="stat-label">Due now</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-number stat-number--success">{summary.queue_utilization_percent}%</div>
+                <div className="stat-label">Queue usage</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-number stat-number--neutral">{snapshot?.pending_oldest_age_seconds ?? 0}s</div>
+                <div className="stat-label">Oldest pending age</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-number stat-number--neutral">{snapshot?.dead_letter_oldest_age_seconds ?? 0}s</div>
+                <div className="stat-label">Oldest dead-letter age</div>
+              </div>
+            </div>
+
+            <div className="routing-form">
+              <h3>Bulk Controls</h3>
+              <div className="form-grid">
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="Filter by StudyInstanceUID (optional)"
+                  value={studyFilter}
+                  onChange={(e) => setStudyFilter(e.target.value)}
+                />
+                <input
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  max={50000}
+                  value={bulkLimit}
+                  onChange={(e) => setBulkLimit(Number(e.target.value) || 1)}
+                />
+              </div>
+              <div className="form-row form-row--actions">
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={disableBulk}
+                  onClick={() => runAction('Process due', '/api/dimse/retry/process')}
+                >
+                  {busyAction === 'Process due' ? 'Processing…' : 'Process due'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={disableBulk}
+                  onClick={() => runAction('Process all', `/api/dimse/retry/process-all?limit=${limit}`)}
+                >
+                  {busyAction === 'Process all' ? 'Processing…' : `Process all (${limit})`}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={disableBulk}
+                  onClick={() => runAction('Replay dead-letter', `/api/dimse/retry/replay?limit=${limit}`)}
+                >
+                  {busyAction === 'Replay dead-letter' ? 'Replaying…' : `Replay dead-letter (${limit})`}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={disableBulk}
+                  onClick={() => runAction(
+                    'Clear pending',
+                    `/api/dimse/retry/clear-pending?limit=${limit}`,
+                    `Clear up to ${limit} pending retry entries?`,
+                  )}
+                >
+                  {busyAction === 'Clear pending' ? 'Clearing…' : `Clear pending (${limit})`}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--revoke"
+                  disabled={disableBulk}
+                  onClick={() => runAction(
+                    'Clear dead-letter',
+                    `/api/dimse/retry/clear-dead-letter?limit=${limit}`,
+                    `Clear up to ${limit} dead-letter entries?`,
+                  )}
+                >
+                  {busyAction === 'Clear dead-letter' ? 'Clearing…' : `Clear dead-letter (${limit})`}
+                </button>
+                <button type="button" className="btn btn--secondary" onClick={load} disabled={disableBulk}>
+                  Apply filter
+                </button>
+              </div>
+              {statusMessage && <div className="dimse-status-message">{statusMessage}</div>}
+            </div>
+          </>
+        )}
+      </div>
+
+      {!loading && details && (
+        <div className="routing-section">
+          <div className="routing-section-header">
+            <div>
+              <div className="routing-section-title">Pending Queue ({details.pending_total})</div>
+            </div>
+          </div>
+
+          {details.pending_items.length === 0 ? (
+            <div className="state-empty">No pending retry items.</div>
+          ) : (
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>Study UID</th>
+                  <th>Attempts</th>
+                  <th>Next attempt</th>
+                  <th>Age</th>
+                  <th>Counts</th>
+                  <th>Last error</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {details.pending_items.map(item => (
+                  <tr key={`pending-${item.study_instance_uid}`}>
+                    <td><code>{uidShort(item.study_instance_uid)}</code></td>
+                    <td>{item.attempts}</td>
+                    <td>
+                      {item.next_attempt_at > 0 ? `${item.seconds_until_next_attempt}s` : 'n/a'}
+                      {item.next_attempt_at > 0 && (
+                        <div className="routing-desc">{fmtDate(new Date(item.next_attempt_at * 1000).toISOString())}</div>
+                      )}
+                    </td>
+                    <td>{item.age_seconds}s</td>
+                    <td>{item.file_count} files / {item.series_count} series</td>
+                    <td><code>{item.last_error || '—'}</code></td>
+                    <td>
+                      <div className="actions-cell">
+                        <button
+                          type="button"
+                          className="btn btn--secondary"
+                          disabled={disableBulk}
+                          onClick={() => runAction(
+                            'Process study',
+                            `/api/dimse/retry/process/${encodeURIComponent(item.study_instance_uid)}`,
+                          )}
+                        >
+                          Process
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--revoke"
+                          disabled={disableBulk}
+                          onClick={() => runAction(
+                            'Clear pending study',
+                            `/api/dimse/retry/clear-pending/${encodeURIComponent(item.study_instance_uid)}`,
+                            `Clear pending entry for ${item.study_instance_uid}?`,
+                          )}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {!loading && details && (
+        <div className="routing-section">
+          <div className="routing-section-header">
+            <div>
+              <div className="routing-section-title">Dead-letter Queue ({details.dead_letter_total})</div>
+            </div>
+          </div>
+
+          {details.dead_letter_items.length === 0 ? (
+            <div className="state-empty">No dead-letter items.</div>
+          ) : (
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>Study UID</th>
+                  <th>Attempts</th>
+                  <th>Dead-letter age</th>
+                  <th>Counts</th>
+                  <th>Last error</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {details.dead_letter_items.map(item => (
+                  <tr key={`dead-${item.study_instance_uid}`}>
+                    <td><code>{uidShort(item.study_instance_uid)}</code></td>
+                    <td>{item.attempts}</td>
+                    <td>{item.dead_letter_age_seconds}s</td>
+                    <td>{item.file_count} files / {item.series_count} series</td>
+                    <td><code>{item.last_error || '—'}</code></td>
+                    <td>
+                      <div className="actions-cell">
+                        <button
+                          type="button"
+                          className="btn btn--secondary"
+                          disabled={disableBulk}
+                          onClick={() => runAction(
+                            'Replay dead-letter study',
+                            `/api/dimse/retry/replay/${encodeURIComponent(item.study_instance_uid)}`,
+                          )}
+                        >
+                          Replay
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--revoke"
+                          disabled={disableBulk}
+                          onClick={() => runAction(
+                            'Clear dead-letter study',
+                            `/api/dimse/retry/clear-dead-letter/${encodeURIComponent(item.study_instance_uid)}`,
+                            `Clear dead-letter entry for ${item.study_instance_uid}?`,
+                          )}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {!loading && (
+        <div className="routing-section">
+          <div className="routing-section-header">
+            <div className="routing-section-title">Recent Operator Actions</div>
+          </div>
+          {actions.length === 0 ? (
+            <div className="state-empty">No recent retry-control actions.</div>
+          ) : (
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Action</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {actions.map((action, idx) => (
+                  <tr key={`${action.action}-${action.created_at}-${idx}`}>
+                    <td className="td-date">{fmtDate(action.created_at)}</td>
+                    <td><code className={`routing-action routing-action--${action.action}`}>{action.action}</code></td>
+                    <td>
+                      <pre className="detail-json">{JSON.stringify(action.detail ?? {}, null, 2)}</pre>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 type StudiesState = 'loading' | 'loaded' | 'error'
@@ -3107,6 +3558,15 @@ export function App() {
         >
           Routing
         </button>
+        {isAdmin && (
+          <button
+            type="button"
+            className={`tab-btn${tab === 'dimse_ops' ? ' tab-btn--active' : ''}`}
+            onClick={() => setTab('dimse_ops')}
+          >
+            DIMSE Ops
+          </button>
+        )}
         <button
           type="button"
           className={`tab-btn${tab === 'institutions' ? ' tab-btn--active' : ''}`}
@@ -3288,6 +3748,9 @@ export function App() {
 
       {/* Routing tab */}
       {tab === 'routing' && <RoutingPanel isAdmin={isAdmin} />}
+
+      {/* DIMSE operations tab — admin only */}
+      {tab === 'dimse_ops' && isAdmin && <DimseOpsPanel />}
 
       {/* Institutions tab */}
       {tab === 'institutions' && <InstitutionsPanel isAdmin={isAdmin} />}
