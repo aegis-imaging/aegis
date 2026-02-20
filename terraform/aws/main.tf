@@ -46,6 +46,12 @@ variable "project_name" {
   default     = "aegis"
 }
 
+variable "db_master_username" {
+  description = "RDS master username (password is generated and rotated in AWS Secrets Manager)"
+  type        = string
+  default     = "aegis"
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -252,17 +258,18 @@ resource "aws_db_instance" "main" {
   storage_encrypted     = true
   kms_key_id            = aws_kms_key.main.arn
 
-  db_name  = "aegis"
-  username = "aegis"
-  password = "CHANGE_ME" # Use AWS Secrets Manager in production
+  db_name                       = "aegis"
+  username                      = var.db_master_username
+  manage_master_user_password   = true
+  master_user_secret_kms_key_id = aws_kms_key.main.arn
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
 
-  backup_retention_period = 7
-  multi_az                = false # Enable for production HA
-  deletion_protection     = true
-  skip_final_snapshot     = false
+  backup_retention_period   = 7
+  multi_az                  = false # Enable for production HA
+  deletion_protection       = true
+  skip_final_snapshot       = false
   final_snapshot_identifier = "${var.project_name}-final-snapshot"
 
   tags = { Name = "${var.project_name}-postgres" }
@@ -316,10 +323,10 @@ resource "aws_security_group" "ecs_tasks" {
 
   # Allow inter-service communication within private subnets.
   ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    self        = true
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1"
+    self      = true
   }
 
   egress {
@@ -458,6 +465,11 @@ output "s3_bucket" {
 
 output "rds_endpoint" {
   value     = aws_db_instance.main.endpoint
+  sensitive = true
+}
+
+output "rds_master_user_secret_arn" {
+  value     = aws_db_instance.main.master_user_secret[0].secret_arn
   sensitive = true
 }
 

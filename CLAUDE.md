@@ -137,7 +137,12 @@ Core runtime env vars:
 | Var | Default | Notes |
 |-----|---------|-------|
 | `PORT` | `8080` | API listen port |
-| `DATABASE_URL` | `postgres://aegis:aegis@localhost:5432/aegis?sslmode=disable` | Postgres DSN |
+| `DATABASE_URL` | *(empty)* | Optional explicit Postgres DSN; if empty, API builds DSN from `DB_*` vars |
+| `DB_HOST` | `localhost` | Used when `DATABASE_URL` is empty |
+| `DB_PORT` | `5432` | Used when `DATABASE_URL` is empty |
+| `DB_NAME` | `aegis` | Used when `DATABASE_URL` is empty |
+| `DB_USER` | `aegis` | Used when `DATABASE_URL` is empty |
+| `DB_PASSWORD` | `aegis` | Used when `DATABASE_URL` is empty; in GCP Cloud Run this is injected from Secret Manager |
 | `APP_TIMEZONE` | `UTC` | Applies DB session timezone (`SET TimeZone`) and uses UTC log timestamps |
 
 Email is disabled by default (silent no-op). To enable locally, run [Mailpit](https://github.com/axllent/mailpit) and set `SMTP_HOST`:
@@ -870,21 +875,28 @@ uvicorn app.main:app --port 8087
 | `DIMSE_INGEST_RETRY_MAX_INTERVAL` | `300` | Max retry delay seconds cap for exponential backoff |
 | `DIMSE_INGEST_MAX_ATTEMPTS` | `5` | Maximum attempts before moving an ingest item to dead-letter |
 | `DIMSE_INGEST_QUEUE_MAX` | `1000` | Maximum in-memory queued ingest items before queue-full dead-letter |
+| `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS` | `0` (disabled) | `/healthz` degrades when oldest pending retry age meets/exceeds this threshold |
+| `DIMSE_DEAD_LETTER_AGE_WARN_SECONDS` | `0` (disabled) | `/healthz` includes age-threshold degradation reason when oldest dead-letter age meets/exceeds this threshold |
 | `DIMSE_OPERATOR_AUDIT_MAX` | `500` | Max retained operator action records for retry control endpoints |
 | `DIMSE_OPERATOR_API_KEY` | *(empty)* | Optional API key for `/ingest/retry*` endpoints via `X-AEGIS-Operator-Key` or `Authorization: Bearer` |
 | `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
 
 **Operational endpoints:**
 - If `DIMSE_OPERATOR_API_KEY` is set, all `/ingest/retry*` endpoints require that key.
-- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total` and `dead_letter_deduped_total`) and returns `degraded` if SCP is down or dead-letter is non-zero.
+- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total` and `dead_letter_deduped_total`) plus oldest-age metrics (`pending_oldest_age_seconds`, `dead_letter_oldest_age_seconds`) and next-due pending timing (`pending_next_attempt_at`, `pending_next_attempt_in_seconds`); returns `degraded` when SCP is down, dead-letter is non-zero, or pending age exceeds `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS`; includes `degraded_reasons`, `pending_age_warn_seconds`, and `dead_letter_age_warn_seconds` (with `dead_letter_age_threshold_exceeded` when configured).
 - Retry scheduling uses bounded exponential backoff (base interval, multiplier, max interval cap).
-- `GET /ingest/retry` — returns retry/dead-letter counters for troubleshooting.
-- `GET /ingest/retry/actions?limit=N` — returns recent operator actions on retry controls (bounded in-memory audit log).
-- `GET /ingest/retry/details?limit=N` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, next retry timing, last_error).
+- `GET /ingest/retry` — returns retry/dead-letter counters plus oldest-age and next-due pending timing metrics for troubleshooting.
+- `GET /ingest/retry/summary` — returns retry summary signals (`pending_due_now`, `queue_max`, `queue_utilization_percent`, `dead_letter_present`) plus full snapshot counters.
+- `GET /ingest/retry/actions?limit=N&action=...` — returns recent operator actions on retry controls (bounded in-memory audit log), optionally filtered to a specific action name.
+- `GET /ingest/retry/details?limit=N&study_instance_uid=...&sort=next_attempt|age_desc` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, `queued_at`, next retry timing, age counters, dead-letter timing, last_error), plus list counters (`pending_total`, `dead_letter_total`, `pending_returned`, `dead_letter_returned`) and truncation flags; optional `study_instance_uid` filter scopes results to one study; `sort=age_desc` orders oldest items first.
 - `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
-- `POST /ingest/retry/replay?limit=N` — re-queues up to `N` dead-letter items for retry.
-- `POST /ingest/retry/replay/{study_instance_uid}` — targeted re-queue for a specific dead-letter study.
-- `POST /ingest/retry/clear-dead-letter?limit=N` — clears acknowledged dead-letter items.
+- `POST /ingest/retry/process-all?limit=N` — processes pending retry entries immediately (ignores schedule), up to `N`.
+- `POST /ingest/retry/process/{study_instance_uid}` — immediate retry attempt for one pending study.
+- `POST /ingest/retry/replay?limit=N` — re-queues up to `N` dead-letter items for retry; returns before/after pending/dead-letter counts and `blocked_by_queue_full` when capacity prevents replay.
+- `POST /ingest/retry/replay/{study_instance_uid}` — targeted re-queue for a specific dead-letter study with before/after queue counters.
+- `POST /ingest/retry/clear-pending?limit=N` — clears pending retry queue entries and returns before/after pending counts.
+- `POST /ingest/retry/clear-pending/{study_instance_uid}` — targeted pending-queue clear for a specific study.
+- `POST /ingest/retry/clear-dead-letter?limit=N` — clears acknowledged dead-letter items and returns before/after dead-letter counts.
 - `POST /ingest/retry/clear-dead-letter/{study_instance_uid}` — targeted dead-letter clear for a specific study.
 
 ### Batch Import CLI (`api/cmd/import/`)
@@ -1023,6 +1035,24 @@ cd terraform/project && terraform init && terraform plan
 cd terraform/infra && terraform init && terraform plan
 ```
 
+`terraform/infra` now provisions production-baseline GCP infra:
+- custom VPC + subnet + private-service networking + Cloud NAT (SMTP egress via static NAT IP),
+- Artifact Registry, Cloud SQL private IP, Healthcare API dataset/stores, GCS buckets, Pub/Sub, BigQuery,
+- Cloud Run services (API + admin dashboard + processing sidecars),
+- HTTPS load balancer with Cloud Armor on API backend and IAP on admin backend,
+- baseline monitoring notification channel + alert policies.
+
+Required infra tfvars include:
+- domains: `api_domain`, `admin_domain`
+- IAP OAuth credentials: `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
+- runtime images: API/admin/sidecar image URIs
+- database credential bootstrap: `db_password` (used to create Cloud SQL user + Secret Manager version)
+- optional secret naming: `db_password_secret_id` (default: `aegis-<env>-db-password`)
+
+Secrets posture:
+- GCP API runtime now reads DB credentials via Secret Manager reference (`DB_PASSWORD` from secret, not inline DSN).
+- AWS RDS now uses `manage_master_user_password = true`, with master credentials stored in AWS Secrets Manager.
+
 ## Key Architecture Decisions
 
 - Client-side DICOM tag anonymization in browser before upload (zero-install at sending sites)
@@ -1064,10 +1094,15 @@ git checkout develop && git pull
 |-----|---------------|
 | `go` | `go build ./...` + `go vet ./...` |
 | `go-test` | `go test -race -v -count=1 ./...` (~120 tests) |
+| `infra-guard` | `scripts/check-infra-placeholders.sh` blocks known credential placeholders in Terraform |
 | `python` (7× matrix) | `py_compile` on all `.py` files per service |
 | `python-test` (7× matrix) | `pytest -v --tb=short` per service (~206 tests total) |
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
 | `docker` (8× matrix) | `docker build` for all service images |
+
+Manual workflow:
+- `.github/workflows/cloud-smoke.yml` (`workflow_dispatch`) runs `scripts/cloud_smoke_test.py` against a deployed environment.
+- Optional repo secret `CLOUD_SMOKE_ADMIN_HEADER` provides the admin auth header for protected endpoints.
 
 ### Python Sidecar Testing
 
@@ -1080,7 +1115,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 55 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication (queue + dead-letter), bounded exponential backoff, operator action audit logging, optional API-key protection, retry status/actions/details/process/replay/targeted-replay/clear/targeted-clear endpoints |
+| dimse-receiver | 68 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication (queue + dead-letter), bounded exponential backoff, operator action audit logging, optional API-key protection, retry status/actions/details/process/process-all/targeted-process/replay/targeted-replay/clear-pending/targeted-pending-clear/clear-dead-letter/targeted-dead-letter-clear endpoints |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
@@ -1102,6 +1137,7 @@ Common dev commands available via `make`:
 | `make api` | Run Go API locally (`go run .`) |
 | `make lint` | Lint all languages (Go vet, Python py_compile, TypeScript tsc) |
 | `make check` | `curl /healthz` with pretty JSON output |
+| `make smoke` | Run cloud smoke harness (`BASE_URL=...`, optional `ADMIN_HEADER=...`) |
 | `make logs` | `docker compose logs -f` |
 
 ## Conventions

@@ -16,13 +16,18 @@ from pydantic import BaseModel, Field
 
 from app import config
 from app.ingest import (
+    clear_pending,
+    clear_pending_study,
     clear_dead_letter,
     clear_dead_letter_study,
     process_retry_queue,
+    process_retry_all,
+    process_retry_study,
     replay_dead_letter,
     replay_dead_letter_study,
     retry_details,
     retry_snapshot,
+    retry_summary,
 )
 from app.operator_audit import get_actions, record_action
 from app.scp import create_scp, start_scp
@@ -94,15 +99,42 @@ def _require_operator_key(request: Request) -> None:
     raise HTTPException(status_code=401, detail="operator auth required")
 
 
+def _health_degraded_reasons(scp_running: bool, retry: dict[str, int]) -> list[str]:
+    """Derive health degradation reasons from SCP state and retry backlog."""
+    reasons: list[str] = []
+    if not scp_running:
+        reasons.append("scp_not_running")
+    if retry.get("dead_letter", 0) > 0:
+        reasons.append("dead_letter_nonzero")
+
+    pending_age_warn = max(0, int(config.DIMSE_INGEST_PENDING_AGE_WARN_SECONDS))
+    pending_oldest_age = max(0, int(retry.get("pending_oldest_age_seconds", 0)))
+    if pending_age_warn > 0 and pending_oldest_age >= pending_age_warn:
+        reasons.append("pending_age_threshold_exceeded")
+
+    dead_letter_age_warn = max(0, int(config.DIMSE_DEAD_LETTER_AGE_WARN_SECONDS))
+    dead_letter_oldest_age = max(0, int(retry.get("dead_letter_oldest_age_seconds", 0)))
+    if dead_letter_age_warn > 0 and dead_letter_oldest_age >= dead_letter_age_warn:
+        reasons.append("dead_letter_age_threshold_exceeded")
+
+    return reasons
+
+
 @app.get("/healthz")
 def healthz():
     """Health check endpoint."""
     scp_running = _ae is not None and _ae.active_associations is not None
     retry = retry_snapshot()
-    status = "ok" if scp_running and retry["dead_letter"] == 0 else "degraded"
+    pending_age_warn = max(0, int(config.DIMSE_INGEST_PENDING_AGE_WARN_SECONDS))
+    dead_letter_age_warn = max(0, int(config.DIMSE_DEAD_LETTER_AGE_WARN_SECONDS))
+    degraded_reasons = _health_degraded_reasons(scp_running, retry)
+    status = "degraded" if degraded_reasons else "ok"
     return {
         "status": status,
         "scp": "running" if scp_running else "not_running",
+        "degraded_reasons": degraded_reasons,
+        "pending_age_warn_seconds": pending_age_warn,
+        "dead_letter_age_warn_seconds": dead_letter_age_warn,
         "ingest_retry": retry,
     }
 
@@ -114,18 +146,41 @@ def ingest_retry_status(request: Request):
     return {"status": "ok", "ingest_retry": retry_snapshot()}
 
 
+@app.get("/ingest/retry/summary")
+def ingest_retry_summary(request: Request):
+    """Return retry queue summary with derived operational signals."""
+    _require_operator_key(request)
+    return {"status": "ok", "ingest_retry": retry_summary()}
+
+
 @app.get("/ingest/retry/actions")
-def ingest_retry_actions(request: Request, limit: int = Query(default=100, ge=1, le=10000)):
+def ingest_retry_actions(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=10000),
+    action: str = Query(default=""),
+):
     """Return recent operator retry-control actions."""
     _require_operator_key(request)
-    return {"status": "ok", "actions": get_actions(limit=limit)}
+    return {"status": "ok", "actions": get_actions(limit=limit, action=action.strip() or None)}
 
 
 @app.get("/ingest/retry/details")
-def ingest_retry_details(request: Request, limit: int = Query(default=100, ge=1, le=10000)):
+def ingest_retry_details(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=10000),
+    study_instance_uid: str = Query(default=""),
+    sort: str = Query(default="next_attempt"),
+):
     """Return detailed pending/dead-letter retry items (capped by limit)."""
     _require_operator_key(request)
-    return {"status": "ok", "ingest_retry": retry_details(limit=limit)}
+    return {
+        "status": "ok",
+        "ingest_retry": retry_details(
+            limit=limit,
+            study_instance_uid=study_instance_uid.strip() or None,
+            sort=sort.strip() or "next_attempt",
+        ),
+    }
 
 
 @app.post("/ingest/retry/process")
@@ -141,6 +196,36 @@ def ingest_retry_process(request: Request):
         dead_letter=snap["dead_letter"],
     )
     return {"status": "ok", "processed": processed, "ingest_retry": snap}
+
+
+@app.post("/ingest/retry/process-all")
+def ingest_retry_process_all(request: Request, limit: int = Query(default=10000, ge=1, le=50000)):
+    """Immediately process pending retries up to limit, ignoring schedule."""
+    _require_operator_key(request)
+    result = process_retry_all(limit=limit)
+    record_action(
+        "retry_process_all",
+        limit=limit,
+        processed=result.get("processed", 0),
+        ok=result.get("ok", 0),
+        requeued=result.get("requeued", 0),
+        dead_letter=result.get("dead_letter", 0),
+    )
+    return {"status": "ok", "ingest_retry": result}
+
+
+@app.post("/ingest/retry/process/{study_instance_uid}")
+def ingest_retry_process_study(request: Request, study_instance_uid: str):
+    """Run an immediate retry attempt for one pending study."""
+    _require_operator_key(request)
+    result = process_retry_study(study_instance_uid=study_instance_uid)
+    record_action(
+        "retry_process_study",
+        study_instance_uid=study_instance_uid,
+        found=result.get("found", False),
+        result=result.get("result", "unknown"),
+    )
+    return {"status": "ok", "ingest_retry": result}
 
 
 @app.post("/ingest/retry/replay")
@@ -185,6 +270,34 @@ def ingest_retry_clear_dead_letter(request: Request, limit: int = Query(default=
         dead_letter=snap["dead_letter"],
     )
     return {"status": "ok", "ingest_retry": snap}
+
+
+@app.post("/ingest/retry/clear-pending")
+def ingest_retry_clear_pending(request: Request, limit: int = Query(default=10000, ge=1, le=50000)):
+    """Clear pending retry queue items after operator acknowledgement."""
+    _require_operator_key(request)
+    snap = clear_pending(limit=limit)
+    record_action(
+        "retry_clear_pending",
+        limit=limit,
+        cleared_now=snap.get("cleared_now", 0),
+        pending=snap["pending"],
+    )
+    return {"status": "ok", "ingest_retry": snap}
+
+
+@app.post("/ingest/retry/clear-pending/{study_instance_uid}")
+def ingest_retry_clear_pending_study(request: Request, study_instance_uid: str):
+    """Clear one pending retry study by StudyInstanceUID."""
+    _require_operator_key(request)
+    result = clear_pending_study(study_instance_uid=study_instance_uid)
+    record_action(
+        "retry_clear_pending_study",
+        study_instance_uid=study_instance_uid,
+        found=result.get("found", False),
+        cleared=result.get("cleared", 0),
+    )
+    return {"status": "ok", "ingest_retry": result}
 
 
 @app.post("/ingest/retry/clear-dead-letter/{study_instance_uid}")
