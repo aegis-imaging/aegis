@@ -35,6 +35,8 @@ class QueuedIngest:
     attempts: int = 1
     next_attempt_at: float = 0.0
     last_error: str = ""
+    queued_at: float = 0.0
+    dead_lettered_at: float = 0.0
 
 
 _retry_queue: list[QueuedIngest] = []
@@ -85,6 +87,12 @@ def _upsert_dead_letter(item: QueuedIngest) -> None:
             _merge_accumulator(existing.acc, item.acc)
             existing.attempts = max(existing.attempts, item.attempts)
             existing.last_error = item.last_error
+            if item.queued_at > 0 and (existing.queued_at <= 0 or item.queued_at < existing.queued_at):
+                existing.queued_at = item.queued_at
+            if item.dead_lettered_at > 0 and (
+                existing.dead_lettered_at <= 0 or item.dead_lettered_at < existing.dead_lettered_at
+            ):
+                existing.dead_lettered_at = item.dead_lettered_at
             _metrics["dead_letter_deduped_total"] += 1
             return
 
@@ -94,6 +102,7 @@ def _upsert_dead_letter(item: QueuedIngest) -> None:
 
 def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
     """Queue a study for retry if queue capacity permits."""
+    current = time.time()
     with _retry_lock:
         for item in _retry_queue:
             if item.acc.study_instance_uid == acc.study_instance_uid:
@@ -112,8 +121,10 @@ def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
                 QueuedIngest(
                     acc=acc,
                     attempts=1,
-                    next_attempt_at=time.time(),
+                    next_attempt_at=current,
                     last_error=f"queue_full: {reason}",
+                    queued_at=current,
+                    dead_lettered_at=current,
                 )
             )
             return False
@@ -122,8 +133,9 @@ def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
             QueuedIngest(
                 acc=acc,
                 attempts=1,
-                next_attempt_at=time.time() + _retry_delay_seconds(1),
+                next_attempt_at=current + _retry_delay_seconds(1),
                 last_error=reason,
+                queued_at=current,
             )
         )
         _metrics["queued_total"] += 1
@@ -213,6 +225,9 @@ def process_retry_queue(now: float | None = None) -> int:
 
 def _process_retry_item(item: QueuedIngest, current: float) -> str:
     """Process one retry item. Returns 'ok', 'requeued', or 'dead_letter'."""
+    if item.queued_at <= 0:
+        item.queued_at = current
+
     _metrics["retried_total"] += 1
     ok = trigger_ingest(item.acc)
     if ok:
@@ -222,6 +237,7 @@ def _process_retry_item(item: QueuedIngest, current: float) -> str:
     item.attempts += 1
     if item.attempts > config.DIMSE_INGEST_MAX_ATTEMPTS:
         item.last_error = "max_attempts_exceeded"
+        item.dead_lettered_at = current
         with _retry_lock:
             _upsert_dead_letter(item)
         log.error(
@@ -293,9 +309,23 @@ def process_retry_all(limit: int = 10000, now: float | None = None) -> dict[str,
     }
 
 
-def retry_snapshot() -> dict[str, int]:
+def _oldest_age_seconds(items: list[QueuedIngest], current: float, timestamp_attr: str) -> int:
+    """Return whole-second age of the oldest item in a queue-like collection."""
+    oldest = min(
+        (int(getattr(item, timestamp_attr)) for item in items if getattr(item, timestamp_attr) > 0),
+        default=0,
+    )
+    if oldest <= 0:
+        return 0
+    return max(0, int(current) - oldest)
+
+
+def retry_snapshot(now: float | None = None) -> dict[str, int]:
     """Return queue/dead-letter counters for health/status endpoints."""
+    current = time.time() if now is None else now
     with _retry_lock:
+        pending_oldest_age_seconds = _oldest_age_seconds(_retry_queue, current, "queued_at")
+        dead_letter_oldest_age_seconds = _oldest_age_seconds(_dead_letter, current, "dead_lettered_at")
         return {
             "pending": len(_retry_queue),
             "dead_letter": len(_dead_letter),
@@ -308,6 +338,8 @@ def retry_snapshot() -> dict[str, int]:
             "replayed_total": _metrics["replayed_total"],
             "cleared_dead_letter_total": _metrics["cleared_dead_letter_total"],
             "cleared_pending_total": _metrics["cleared_pending_total"],
+            "pending_oldest_age_seconds": pending_oldest_age_seconds,
+            "dead_letter_oldest_age_seconds": dead_letter_oldest_age_seconds,
         }
 
 
@@ -364,6 +396,8 @@ def replay_dead_letter(limit: int = 100, now: float | None = None) -> dict[str, 
             item = _dead_letter.pop(0)
             item.next_attempt_at = current
             item.last_error = "replayed"
+            item.queued_at = current
+            item.dead_lettered_at = 0.0
             _retry_queue.append(item)
             moved += 1
             _metrics["replayed_total"] += 1
@@ -393,6 +427,8 @@ def replay_dead_letter_study(study_instance_uid: str, now: float | None = None) 
                 item = _dead_letter.pop(idx)
                 item.next_attempt_at = current
                 item.last_error = "replayed_targeted"
+                item.queued_at = current
+                item.dead_lettered_at = 0.0
                 _retry_queue.append(item)
                 moved = 1
                 _metrics["replayed_total"] += 1

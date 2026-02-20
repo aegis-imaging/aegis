@@ -196,6 +196,25 @@ def test_submit_ingest_dedupes_same_study_uid(monkeypatch):
     assert queued.acc.series_uids == {"1", "2", "3"}
 
 
+def test_retry_snapshot_reports_oldest_queue_ages(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=100.0):
+        submit_ingest(_acc())
+
+    acc2 = _acc()
+    acc2.study_instance_uid = "9.9.9.9"
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=120.0):
+        submit_ingest(acc2)
+
+    snap = retry_snapshot(now=160.0)
+    assert snap["pending"] == 1
+    assert snap["dead_letter"] == 1
+    assert snap["pending_oldest_age_seconds"] == 60
+    assert snap["dead_letter_oldest_age_seconds"] == 40
+
+
 def test_retry_delay_seconds_exponential_and_capped(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
     monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER", 2.0)
@@ -378,6 +397,22 @@ def test_replay_dead_letter_moves_items_to_pending(monkeypatch):
     assert after["dead_letter"] == 0
     assert after["pending"] == 1
     assert after["replayed_total"] == 1
+
+
+def test_replay_dead_letter_resets_pending_age(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=100.0):
+        submit_ingest(_acc())
+
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 10)
+    with patch("app.ingest.time.time", return_value=130.0):
+        replay_dead_letter(limit=1)
+
+    snap = retry_snapshot(now=160.0)
+    assert snap["pending"] == 1
+    assert snap["dead_letter"] == 0
+    assert snap["pending_oldest_age_seconds"] == 30
+    assert snap["dead_letter_oldest_age_seconds"] == 0
 
 
 def test_replay_dead_letter_respects_limit(monkeypatch):
