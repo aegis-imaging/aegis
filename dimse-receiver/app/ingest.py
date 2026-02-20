@@ -357,6 +357,8 @@ def retry_details(limit: int = 100, now: float | None = None) -> dict[str, objec
             "attempts": item.attempts,
             "next_attempt_at": int(item.next_attempt_at),
             "seconds_until_next_attempt": max(0, int(item.next_attempt_at - current)),
+            "queued_at": int(item.queued_at) if item.queued_at > 0 else 0,
+            "age_seconds": max(0, int(current - item.queued_at)) if item.queued_at > 0 else 0,
             "file_count": item.acc.file_count,
             "series_count": len(item.acc.series_uids),
             "last_error": item.last_error,
@@ -367,6 +369,11 @@ def retry_details(limit: int = 100, now: float | None = None) -> dict[str, objec
         {
             "study_instance_uid": item.acc.study_instance_uid,
             "attempts": item.attempts,
+            "queued_at": int(item.queued_at) if item.queued_at > 0 else 0,
+            "dead_lettered_at": int(item.dead_lettered_at) if item.dead_lettered_at > 0 else 0,
+            "dead_letter_age_seconds": (
+                max(0, int(current - item.dead_lettered_at)) if item.dead_lettered_at > 0 else 0
+            ),
             "file_count": item.acc.file_count,
             "series_count": len(item.acc.series_uids),
             "last_error": item.last_error,

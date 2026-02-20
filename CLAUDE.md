@@ -880,7 +880,7 @@ uvicorn app.main:app --port 8087
 - Retry scheduling uses bounded exponential backoff (base interval, multiplier, max interval cap).
 - `GET /ingest/retry` — returns retry/dead-letter counters plus oldest-age metrics for troubleshooting.
 - `GET /ingest/retry/actions?limit=N` — returns recent operator actions on retry controls (bounded in-memory audit log).
-- `GET /ingest/retry/details?limit=N` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, next retry timing, last_error).
+- `GET /ingest/retry/details?limit=N` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, `queued_at`, next retry timing, age counters, dead-letter timing, last_error).
 - `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
 - `POST /ingest/retry/process-all?limit=N` — processes pending retry entries immediately (ignores schedule), up to `N`.
 - `POST /ingest/retry/process/{study_instance_uid}` — immediate retry attempt for one pending study.
