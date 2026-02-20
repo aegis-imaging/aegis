@@ -489,14 +489,20 @@ def replay_dead_letter_study(study_instance_uid: str, now: float | None = None) 
 def clear_dead_letter(limit: int = 10000) -> dict[str, int]:
     """Clear up to `limit` dead-letter items and return counters."""
     cleared = 0
+    before_dead_letter = 0
+    after_dead_letter = 0
     with _retry_lock:
+        before_dead_letter = len(_dead_letter)
         while cleared < limit and _dead_letter:
             _dead_letter.pop(0)
             cleared += 1
         _metrics["cleared_dead_letter_total"] += cleared
+        after_dead_letter = len(_dead_letter)
 
     snapshot = retry_snapshot()
     snapshot["cleared_now"] = cleared
+    snapshot["before_dead_letter"] = before_dead_letter
+    snapshot["after_dead_letter"] = after_dead_letter
     return snapshot
 
 
@@ -504,7 +510,10 @@ def clear_dead_letter_study(study_instance_uid: str) -> dict[str, object]:
     """Clear one dead-letter entry by StudyInstanceUID."""
     cleared = 0
     found = False
+    before_dead_letter = 0
+    after_dead_letter = 0
     with _retry_lock:
+        before_dead_letter = len(_dead_letter)
         idx = next(
             (i for i, item in enumerate(_dead_letter) if item.acc.study_instance_uid == study_instance_uid),
             -1,
@@ -514,26 +523,35 @@ def clear_dead_letter_study(study_instance_uid: str) -> dict[str, object]:
             _dead_letter.pop(idx)
             cleared = 1
             _metrics["cleared_dead_letter_total"] += 1
+        after_dead_letter = len(_dead_letter)
 
     return {
         "snapshot": retry_snapshot(),
         "study_instance_uid": study_instance_uid,
         "found": found,
         "cleared": cleared,
+        "before_dead_letter": before_dead_letter,
+        "after_dead_letter": after_dead_letter,
     }
 
 
 def clear_pending(limit: int = 10000) -> dict[str, int]:
     """Clear up to `limit` pending retry queue items and return counters."""
     cleared = 0
+    before_pending = 0
+    after_pending = 0
     with _retry_lock:
+        before_pending = len(_retry_queue)
         while cleared < limit and _retry_queue:
             _retry_queue.pop(0)
             cleared += 1
         _metrics["cleared_pending_total"] += cleared
+        after_pending = len(_retry_queue)
 
     snapshot = retry_snapshot()
     snapshot["cleared_now"] = cleared
+    snapshot["before_pending"] = before_pending
+    snapshot["after_pending"] = after_pending
     return snapshot
 
 
@@ -541,7 +559,10 @@ def clear_pending_study(study_instance_uid: str) -> dict[str, object]:
     """Clear one pending retry entry by StudyInstanceUID."""
     cleared = 0
     found = False
+    before_pending = 0
+    after_pending = 0
     with _retry_lock:
+        before_pending = len(_retry_queue)
         idx = next(
             (i for i, item in enumerate(_retry_queue) if item.acc.study_instance_uid == study_instance_uid),
             -1,
@@ -551,12 +572,15 @@ def clear_pending_study(study_instance_uid: str) -> dict[str, object]:
             _retry_queue.pop(idx)
             cleared = 1
             _metrics["cleared_pending_total"] += 1
+        after_pending = len(_retry_queue)
 
     return {
         "snapshot": retry_snapshot(),
         "study_instance_uid": study_instance_uid,
         "found": found,
         "cleared": cleared,
+        "before_pending": before_pending,
+        "after_pending": after_pending,
     }
 
 
