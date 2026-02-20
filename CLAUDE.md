@@ -904,6 +904,7 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 **API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","institution_slug","institution_ae_title","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
 
 Validation behavior:
+- `dir` is required and trimmed before validation/scanning.
 - `project_slug` is trimmed/lowercased; empty values default to `default`.
 - `source` is normalized and validated; only `internal` or `external` are accepted.
 - `source=external` requires explicit institution selector (`institution_id`, `institution_slug`, or `institution_ae_title`) for provenance.

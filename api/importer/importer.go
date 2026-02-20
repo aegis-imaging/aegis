@@ -77,6 +77,9 @@ type StudyGroup struct {
 
 // Run executes the batch import.
 func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (*Result, error) {
+	if err := normalizeImportDir(&opts); err != nil {
+		return nil, err
+	}
 	normalizeProjectSlug(&opts)
 	if err := normalizeImportSource(&opts); err != nil {
 		return nil, err
@@ -193,6 +196,15 @@ func normalizeImportSource(opts *Options) error {
 	if opts.Source != "internal" && opts.Source != "external" {
 		return validationErrorf("source must be internal or external")
 	}
+	return nil
+}
+
+func normalizeImportDir(opts *Options) error {
+	opts.Dir = strings.TrimSpace(opts.Dir)
+	if opts.Dir == "" {
+		return validationErrorf("dir is required")
+	}
+	opts.Dir = filepath.Clean(opts.Dir)
 	return nil
 }
 
