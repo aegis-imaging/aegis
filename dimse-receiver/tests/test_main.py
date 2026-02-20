@@ -129,6 +129,23 @@ def test_ingest_retry_status_endpoint():
     assert "ingest_retry" in body
 
 
+def test_ingest_retry_details_endpoint():
+    from unittest.mock import patch
+
+    details = {"snapshot": {"pending": 0, "dead_letter": 0}, "pending_items": [], "dead_letter_items": []}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.retry_details", return_value=details) as mock_details:
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry/details?limit=10")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": details}
+    mock_details.assert_called_once_with(limit=10)
+
+
 def test_ingest_retry_process_endpoint():
     from unittest.mock import patch
 
@@ -160,3 +177,20 @@ def test_ingest_retry_replay_endpoint():
     body = resp.json()
     assert body == {"status": "ok", "ingest_retry": snap}
     mock_replay.assert_called_once_with(limit=5)
+
+
+def test_ingest_retry_clear_dead_letter_endpoint():
+    from unittest.mock import patch
+
+    snap = {"dead_letter": 0, "cleared_now": 3}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.clear_dead_letter", return_value=snap) as mock_clear:
+        with TestClient(app) as client:
+            resp = client.post("/ingest/retry/clear-dead-letter?limit=3")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": snap}
+    mock_clear.assert_called_once_with(limit=3)
