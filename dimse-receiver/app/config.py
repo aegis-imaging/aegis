@@ -30,3 +30,5 @@ DIMSE_INGEST_QUEUE_MAX: int = int(os.getenv("DIMSE_INGEST_QUEUE_MAX", "1000"))
 
 # In-memory operator action audit (retry control endpoints)
 DIMSE_OPERATOR_AUDIT_MAX: int = int(os.getenv("DIMSE_OPERATOR_AUDIT_MAX", "500"))
+# Optional API key for retry-control endpoints (/ingest/retry*)
+DIMSE_OPERATOR_API_KEY: str = os.getenv("DIMSE_OPERATOR_API_KEY", "")
