@@ -391,7 +391,7 @@ Weekly or monthly plain-text summary emails per project. No PHI — only study c
 - `POST /api/projects/{projectID}/digest-subscriptions` — create (`email`, `frequency: weekly|monthly`)
 - `DELETE /api/digest-subscriptions/{id}`
 
-**Scheduler**: goroutine started from `main.go` on startup; `time.Ticker` fires every hour; queries `digest_subscriptions` where digest is due (7 days for weekly, 30 for monthly since `last_sent_at`); sends email; updates `last_sent_at`. Silent no-op when `SMTP_HOST` is unset.
+**Scheduler**: goroutine started from `main.go` on startup; `time.Ticker` fires every hour; loads enabled subscriptions and evaluates due status in Go using one UTC reference timestamp per cycle (weekly: 7 days, monthly: 1 calendar month since `last_sent_at`); sends email; updates `last_sent_at`. Silent no-op when `SMTP_HOST` is unset.
 
 **Digest content**: project name, period label, received/approved/rejected/pending study counts, export shares created. No study UIDs or identifiers.
 
