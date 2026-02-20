@@ -98,15 +98,35 @@ def _require_operator_key(request: Request) -> None:
     raise HTTPException(status_code=401, detail="operator auth required")
 
 
+def _health_degraded_reasons(scp_running: bool, retry: dict[str, int]) -> list[str]:
+    """Derive health degradation reasons from SCP state and retry backlog."""
+    reasons: list[str] = []
+    if not scp_running:
+        reasons.append("scp_not_running")
+    if retry.get("dead_letter", 0) > 0:
+        reasons.append("dead_letter_nonzero")
+
+    pending_age_warn = max(0, int(config.DIMSE_INGEST_PENDING_AGE_WARN_SECONDS))
+    pending_oldest_age = max(0, int(retry.get("pending_oldest_age_seconds", 0)))
+    if pending_age_warn > 0 and pending_oldest_age >= pending_age_warn:
+        reasons.append("pending_age_threshold_exceeded")
+
+    return reasons
+
+
 @app.get("/healthz")
 def healthz():
     """Health check endpoint."""
     scp_running = _ae is not None and _ae.active_associations is not None
     retry = retry_snapshot()
-    status = "ok" if scp_running and retry["dead_letter"] == 0 else "degraded"
+    pending_age_warn = max(0, int(config.DIMSE_INGEST_PENDING_AGE_WARN_SECONDS))
+    degraded_reasons = _health_degraded_reasons(scp_running, retry)
+    status = "degraded" if degraded_reasons else "ok"
     return {
         "status": status,
         "scp": "running" if scp_running else "not_running",
+        "degraded_reasons": degraded_reasons,
+        "pending_age_warn_seconds": pending_age_warn,
         "ingest_retry": retry,
     }
 
