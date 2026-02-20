@@ -77,8 +77,8 @@ type StudyGroup struct {
 
 // Run executes the batch import.
 func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (*Result, error) {
-	if opts.Source == "" {
-		opts.Source = "internal"
+	if err := normalizeImportSource(&opts); err != nil {
+		return nil, err
 	}
 	if opts.ProjectSlug == "" {
 		opts.ProjectSlug = "default"
@@ -180,6 +180,17 @@ func normalizeInstitutionSelectors(opts *Options) error {
 	opts.InstitutionAETitle = strings.TrimSpace(opts.InstitutionAETitle)
 	if opts.InstitutionID != "" && opts.InstitutionSlug != "" {
 		return validationErrorf("provide only one of institution_id or institution_slug")
+	}
+	return nil
+}
+
+func normalizeImportSource(opts *Options) error {
+	opts.Source = strings.ToLower(strings.TrimSpace(opts.Source))
+	if opts.Source == "" {
+		opts.Source = "internal"
+	}
+	if opts.Source != "internal" && opts.Source != "external" {
+		return validationErrorf("source must be internal or external")
 	}
 	return nil
 }
