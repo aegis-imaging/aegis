@@ -395,6 +395,8 @@ Weekly or monthly plain-text summary emails per project. No PHI — only study c
 
 **Digest content**: project name, period label, received/approved/rejected/pending study counts, export shares created. No study UIDs or identifiers.
 
+Digest period labels are UTC-explicit (for example `2026-02-13 22:45 UTC – 2026-02-20 22:45 UTC`) so summaries are timezone-stable across regions.
+
 ### Admin Users (`api/handler/admin_user.go`, `api/model/admin_user.go`)
 
 Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production; this table is a registry for access control and auditing.
