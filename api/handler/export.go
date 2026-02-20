@@ -226,12 +226,14 @@ type exportFile struct {
 
 type redeemResponse struct {
 	ShareID          string       `json:"share_id"`
+	Status           string       `json:"status"`
 	StudyUID         string       `json:"study_uid"`
 	Modality         string       `json:"modality"`
 	BodyPart         string       `json:"body_part"`
 	StudyDescription string       `json:"study_description"`
 	InstanceCount    int          `json:"instance_count"`
 	ExpiresAt        time.Time    `json:"expires_at"`
+	ExpiresInSeconds int64        `json:"expires_in_seconds"`
 	Note             string       `json:"note"`
 	CreatedBy        string       `json:"created_by"`
 	DownloadURL      string       `json:"download_url"`
@@ -255,7 +257,8 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusNotFound, "share not found")
 		return
 	}
-	if gone := shareGoneMessage(share, time.Now()); gone != "" {
+	now := time.Now().UTC()
+	if gone := shareGoneMessage(share, now); gone != "" {
 		s.writeError(w, http.StatusGone, gone)
 		return
 	}
@@ -298,12 +301,14 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 
 	s.writeJSON(w, http.StatusOK, redeemResponse{
 		ShareID:          share.ID,
+		Status:           shareStatus(share, now),
 		StudyUID:         study.StudyInstanceUID,
 		Modality:         study.Modality,
 		BodyPart:         study.BodyPart,
 		StudyDescription: study.StudyDescription,
 		InstanceCount:    study.InstanceCount,
 		ExpiresAt:        share.ExpiresAt,
+		ExpiresInSeconds: shareExpiresInSeconds(share, now),
 		Note:             share.Note,
 		CreatedBy:        share.CreatedBy,
 		DownloadURL:      downloadURL,
