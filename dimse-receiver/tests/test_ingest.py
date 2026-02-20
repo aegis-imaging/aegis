@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import app.ingest as ingest_module
 from app.ingest import (
+    _retry_delay_seconds,
     clear_dead_letter,
     replay_dead_letter,
     replay_dead_letter_study,
@@ -190,6 +191,16 @@ def test_submit_ingest_dedupes_same_study_uid(monkeypatch):
     assert queued.acc.series_uids == {"1", "2", "3"}
 
 
+def test_retry_delay_seconds_exponential_and_capped(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER", 2.0)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_MAX_INTERVAL", 25)
+
+    assert _retry_delay_seconds(1) == 10
+    assert _retry_delay_seconds(2) == 20
+    assert _retry_delay_seconds(3) == 25  # capped from 40
+
+
 def test_process_retry_queue_retries_and_succeeds(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
 
@@ -223,6 +234,25 @@ def test_process_retry_queue_moves_to_dead_letter_after_max_attempts(monkeypatch
     assert snap["pending"] == 0
     assert snap["dead_letter"] == 1
     assert snap["dead_letter_total"] == 1
+
+
+def test_process_retry_queue_applies_backoff(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER", 2.0)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_MAX_INTERVAL", 300)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_MAX_ATTEMPTS", 10)
+
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        first_due = ingest_module._retry_queue[0].next_attempt_at
+        process_retry_queue(now=first_due + 1)
+        second_due = ingest_module._retry_queue[0].next_attempt_at
+        process_retry_queue(now=second_due + 1)
+        third_due = ingest_module._retry_queue[0].next_attempt_at
+
+    # First retry delay: 20s, second retry delay: 40s
+    assert int(second_due - (first_due + 1)) == 20
+    assert int(third_due - (second_due + 1)) == 40
 
 
 def test_submit_ingest_dead_letters_when_queue_full(monkeypatch):
