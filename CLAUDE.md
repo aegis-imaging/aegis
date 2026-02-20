@@ -843,6 +843,8 @@ uvicorn app.main:app --port 8086
 
 Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
 
+If ingest calls fail (API temporary outage, network blip), failed studies are added to an in-memory retry queue. A background worker retries at `DIMSE_INGEST_RETRY_INTERVAL` until `DIMSE_INGEST_MAX_ATTEMPTS`; exhausted items are moved to dead-letter and surfaced in `/healthz` and `/ingest/retry`.
+
 **Running locally:**
 ```bash
 cd dimse-receiver
@@ -863,7 +865,14 @@ uvicorn app.main:app --port 8087
 | `DIMSE_INSTITUTION_ID` | *(empty)* | Optional fixed institution UUID sent as `institution_id` |
 | `DIMSE_INSTITUTION_SLUG` | *(empty)* | Optional fixed institution slug sent as `institution_slug` (used when ID is empty) |
 | `DIMSE_INGEST_TIMEOUT` | `30` | HTTP timeout (seconds) for ingest call |
+| `DIMSE_INGEST_RETRY_INTERVAL` | `15` | Retry worker interval (seconds) for queued ingest failures |
+| `DIMSE_INGEST_MAX_ATTEMPTS` | `5` | Maximum attempts before moving an ingest item to dead-letter |
+| `DIMSE_INGEST_QUEUE_MAX` | `1000` | Maximum in-memory queued ingest items before queue-full dead-letter |
 | `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
+
+**Operational endpoints:**
+- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals) and returns `degraded` if SCP is down or dead-letter is non-zero.
+- `GET /ingest/retry` — returns retry/dead-letter counters for troubleshooting.
 
 ### Batch Import CLI (`api/cmd/import/`)
 
@@ -1058,7 +1067,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 22 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling |
+| dimse-receiver | 30 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry status endpoint |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
