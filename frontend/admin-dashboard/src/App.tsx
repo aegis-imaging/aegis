@@ -223,6 +223,20 @@ function shareStatusLabel(share: Share): 'active' | 'expired' | 'revoked' {
   return new Date(share.expires_at) < new Date() ? 'expired' : 'active'
 }
 
+function tickShareCountdown(share: Share): Share {
+  const status = shareStatusLabel(share)
+  if (status !== 'active') return share
+  if (typeof share.expires_in_seconds !== 'number') return share
+
+  const next = Math.max(0, Math.floor(share.expires_in_seconds) - 1)
+  if (next === share.expires_in_seconds) return share
+  return {
+    ...share,
+    expires_in_seconds: next,
+    status: next <= 0 ? 'expired' : 'active',
+  }
+}
+
 function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
@@ -448,6 +462,17 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
 
   useEffect(() => { fetchShares() }, [fetchShares])
 
+  const hasLiveCountdown = shares.some(
+    s => shareStatusLabel(s) === 'active' && typeof s.expires_in_seconds === 'number',
+  )
+  useEffect(() => {
+    if (!hasLiveCountdown) return
+    const id = window.setInterval(() => {
+      setShares(prev => prev.map(tickShareCountdown))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [hasLiveCountdown])
+
   const handleCreate = async () => {
     if (!email) { setError('Recipient email is required'); return }
     setError(null)
@@ -507,6 +532,9 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
           </div>
           <div className="share-url-meta">
             Expires {fmtDate(newShare.expires_at)} · Recipient: {newShare.recipient_email}
+            {newShare.status === 'active' && typeof newShare.expires_in_seconds === 'number' && (
+              <> · {fmtRemaining(newShare.expires_in_seconds)} remaining</>
+            )}
           </div>
         </div>
       )}
@@ -669,6 +697,17 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   }, [studyId])
 
   useEffect(() => { loadData() }, [loadData])
+
+  const hasLiveShareCountdown = shares.some(
+    s => shareStatusLabel(s) === 'active' && typeof s.expires_in_seconds === 'number',
+  )
+  useEffect(() => {
+    if (!hasLiveShareCountdown) return
+    const id = window.setInterval(() => {
+      setShares(prev => prev.map(tickShareCountdown))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [hasLiveShareCountdown])
 
   if (loading) return <div className="state-loading">Loading study details…</div>
   if (!study) return <div className="state-error">Study not found. <button type="button" className="btn btn--secondary" onClick={onBack}>Back</button></div>
