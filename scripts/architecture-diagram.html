@@ -177,7 +177,7 @@ body {
   <img src="../logo-small.png" alt="AEGIS Logo" />
   <h1>AEGIS Architecture</h1>
   <div class="subtitle">Anonymization & Exchange Gateway for Imaging Studies</div>
-  <div class="author">Matthew L. Senjem, M.S. — February 18, 2026</div>
+  <div class="author">Matthew L. Senjem, M.S. — February 20, 2026</div>
 </div>
 
 <div class="section-label">Sending Sources (External Browser + Internal Enterprise)</div>
@@ -211,6 +211,7 @@ body {
       <li>Groups files by StudyInstanceUID</li>
       <li>Dry-run mode for preview</li>
       <li>Duplicate detection (safe re-run)</li>
+      <li>Institution selector + strict validation</li>
     </ul>
   </div>
   <div class="card gray">
@@ -238,7 +239,8 @@ body {
         <li>Study, project, institution management</li>
         <li>Routing rules engine (priority-ordered, all matching fire)</li>
         <li>DICOMweb proxy (QIDO-RS + WADO-RS for OHIF)</li>
-        <li>Async dispatch to 6 Python sidecar services</li>
+        <li>Async dispatch to 6 processing sidecars</li>
+        <li>DIMSE route forwarding via dimse-receiver</li>
         <li>PostgreSQL migrations (goose)</li>
         <li>Export shares with time-limited tokens</li>
         <li>Centralized audit trail (every action logged)</li>
@@ -275,7 +277,7 @@ body {
     </div>
   </div>
 
-  <div class="section-label" style="margin-top: 14px;">Python Sidecar Services (FastAPI, async dispatch from Go API)</div>
+  <div class="section-label" style="margin-top: 14px;">Python Services (FastAPI sidecars + DIMSE adapter)</div>
   <div class="row stretch">
     <div class="card red">
       <h3>Defacing Service</h3>
@@ -290,6 +292,7 @@ body {
       <h3>PHI Detection</h3>
       <ul>
         <li>Tesseract OCR on pixel data</li>
+        <li>Google Vision + AWS Textract backends</li>
         <li>Detects burned-in text overlays</li>
         <li>Confidence threshold filtering</li>
         <li>Findings → audit trail</li>
@@ -317,9 +320,19 @@ body {
       <h3>Classification</h3>
       <ul>
         <li>Heuristic DICOM tag analysis</li>
+        <li>Google Vision + AWS Rekognition augmentation</li>
         <li>Modality + body part detection</li>
         <li>Re-evaluates routing rules</li>
         <li>SOP Class / description matching</li>
+      </ul>
+    </div>
+    <div class="card blue">
+      <h3>DIMSE Receiver</h3>
+      <ul>
+        <li>pynetdicom C-STORE SCP on port 11112</li>
+        <li>Accepts C-ECHO verification</li>
+        <li>Writes files to dicom/raw/{studyUID}/</li>
+        <li>Calls POST /api/ingest on association release</li>
       </ul>
     </div>
     <div class="card pink">
@@ -341,6 +354,7 @@ body {
         <li>OHIF Viewer integration (embedded iframe + new tab)</li>
         <li>Side-by-side defacing review (raw vs clean data source)</li>
         <li>Pipeline badges: PHI scan, QC, BIDS, Classification, Protocol</li>
+        <li>User-selectable display timezone (view-only)</li>
         <li>9 tabs: Studies, Audit Log, Routing, Institutions, Profiles, Protocol Templates, Notifications, Projects, Users</li>
         <li>RBAC: admin (full) / viewer (read-only), Users tab hidden for viewers</li>
       </ul>
@@ -362,7 +376,7 @@ body {
       <ul>
         <li>Conditions: project, modality, body part, source</li>
         <li>Actions: require_defacing, require_phi_scan, require_qc_check, require_bids_conversion, require_classification, require_protocol_check</li>
-        <li>auto_approve, reject, route_to destination</li>
+        <li>auto_approve, reject, route_to (DICOMweb or DIMSE)</li>
         <li>Priority-ordered, all matching rules fire</li>
         <li>Re-evaluation after classification</li>
       </ul>
@@ -392,7 +406,7 @@ body {
       <li>Application Load Balancer</li>
       <li>Cognito user pool</li>
       <li>VPC (2 AZ, public + private subnets)</li>
-      <li>ECR repositories (7 services)</li>
+      <li>ECR repositories (per-service images)</li>
       <li>SNS + SQS event bus</li>
     </ul>
   </div>
@@ -400,7 +414,7 @@ body {
     <h3>Local Development (Docker Compose)</h3>
     <ul>
       <li>PostgreSQL + Mailpit + OHIF Viewer</li>
-      <li>Go API + 6 Python sidecars</li>
+      <li>Go API + 7 Python services</li>
       <li>Shared aegis-data volume</li>
       <li>Health checks on all services</li>
       <li>Makefile: up, down, clean, build, check, logs</li>
@@ -411,9 +425,9 @@ body {
     <h3>Key Open-Source Dependencies</h3>
     <ul>
       <li><strong>Go:</strong> suyashkumar/dicom, goose, pgx</li>
-      <li><strong>DICOM:</strong> dcmjs, dicomParser, dcm2niix</li>
+      <li><strong>DICOM:</strong> dcmjs, dicomParser, dcm2niix, pynetdicom</li>
       <li><strong>Defacing:</strong> DeepDefacer, mri_deface, nibabel, pydicom</li>
-      <li><strong>PHI:</strong> Tesseract OCR, Pillow</li>
+      <li><strong>PHI/Classification:</strong> Tesseract, Google Vision, AWS Textract/Rekognition</li>
       <li><strong>Viewer:</strong> OHIF Viewer v3</li>
       <li><strong>Infra:</strong> Terraform, Docker, GitHub Actions</li>
     </ul>
@@ -436,7 +450,7 @@ body {
   </div>
   <div class="phase done">
     <div class="phase-title">Phase 4: Advanced Processing <span class="badge badge-green">Code Complete</span></div>
-    PHI detection, QC, BIDS, classification, protocol compliance, batch import, multi-cloud
+    PHI detection, QC, BIDS, classification, protocol compliance, batch import, DIMSE adapter
   </div>
   <div class="phase next">
     <div class="phase-title">Next: Test Deployment <span class="badge badge-yellow">Planned</span></div>
@@ -444,7 +458,7 @@ body {
   </div>
   <div class="phase future">
     <div class="phase-title">Phase 5: Enterprise <span class="badge badge-gray">Future</span></div>
-    DIMSE receive, HL7/FHIR, tag standardization, reversible de-id, multi-tenant SaaS
+    HL7/FHIR integration, tag standardization, reversible de-id, multi-tenant SaaS
   </div>
 </div>
 

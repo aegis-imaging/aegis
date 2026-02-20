@@ -81,6 +81,10 @@ For internal-origin studies (already inside enterprise network), plan an intake 
 
 - Define intake mechanism: API endpoint, DICOMweb STOW-RS bridge, or scheduled batch ingest
 - Tag internal-ingest studies with source metadata (`source = internal`) for audit and policy decisions
+- Batch import API contract (`POST /api/import/batch`) is strict:
+  - unknown fields are rejected (`DisallowUnknownFields`)
+  - `dir` must be an absolute path
+  - `source=external` requires canonical institution selector (`institution_id` or `institution_slug`)
 - Apply same downstream checks: server-side de-id validation, optional defacing, QC approval
 - Enforce approval gate before any external sharing/export
 - Log every outbound download/export event to audit trail

@@ -1,7 +1,7 @@
 # AEGIS — Architecture Plan
 *Anonymization & Exchange Gateway for Imaging Studies*
 
-**Matthew L. Senjem, M.S.** | February 18, 2026
+**Matthew L. Senjem, M.S.** | February 20, 2026
 
 ### Why "AEGIS"?
 The name **AEGIS** serves double duty. As an acronym, it describes exactly what the system does: an **A**nonymization & **E**xchange **G**ateway for **I**maging **S**tudies. The word itself comes from Greek mythology — the aegis was the shield of Zeus and Athena, a symbol of protection. This captures the platform's core mission: shielding patient identity while enabling the free flow of medical imaging data for research and clinical care.
@@ -39,7 +39,7 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
 
 ### Future Scope
 - Non-DICOM formats (pathology whole-slide imaging, electron microscopy)
-- DIMSE (non-web) protocol support for legacy PACS integration
+- Extended DIMSE service classes (C-FIND/C-MOVE) for advanced legacy PACS workflows
 
 ### Design Principles
 - **Open source** tools and libraries wherever possible
@@ -84,13 +84,14 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
 │  └──────┬───────────────────────────────────────────────┘       │
 │         │                                                        │
 │  ┌──────▼────────────────────────────────────────────┐          │
-│  │  6 Python Sidecar Services (FastAPI)               │          │
-│  │  ├── Defacing (DeepDefacer / mri_deface)           │          │
-│  │  ├── PHI Detection (Tesseract OCR)                 │          │
-│  │  ├── QC Automation (pydicom + numpy)               │          │
+│  │  7 Python Services (FastAPI)                      │          │
+│  │  ├── Defacing (DeepDefacer / mri_deface)          │          │
+│  │  ├── PHI Detection (Tesseract / Vision / Textract)│          │
+│  │  ├── QC Automation (pydicom + numpy)              │          │
 │  │  ├── NIfTI/BIDS Conversion (dcm2niix)             │          │
-│  │  ├── Metadata Classification (DICOM heuristics)    │          │
-│  │  └── Protocol Compliance (parameter validation)    │          │
+│  │  ├── Metadata Classification (heuristic + cloud)  │          │
+│  │  ├── Protocol Compliance (parameter validation)    │          │
+│  │  └── DIMSE Receiver (C-STORE SCP ingress)         │          │
 │  └───────────────────────────────────────────────────┘          │
 │                                                                  │
 │  ┌──────────────┐  ┌────────────────────────┐                   │
@@ -154,6 +155,7 @@ aegis/
 ├── bids-service/               # Python FastAPI — dcm2niix DICOM→NIfTI/BIDS conversion
 ├── classification-service/     # Python FastAPI — DICOM header heuristic classification
 ├── protocol-service/           # Python FastAPI — MRI parameter compliance checking
+├── dimse-receiver/             # Python FastAPI — DIMSE C-STORE SCP ingest adapter
 └── docs/                       # Shared research and documentation
 ```
 
@@ -195,14 +197,15 @@ Reusable library for browser-based DICOM anonymization and upload. Core modules:
 - **Fewer CVEs**: Go stdlib covers HTTP, JSON, crypto, TLS. No equivalent of the constant Python/Alpine package churn
 - **Cloud Run fit**: ~100ms cold starts vs ~2-5s for Python, lower memory
 - **Concurrency**: Goroutines for concurrent upload handling without GIL
-- **DICOM library**: [suyashkumar/dicom](https://github.com/suyashkumar/dicom) for validation/metadata. The **Healthcare API handles heavy DICOM processing**, so the Go library only needs basic parsing
+- **DICOM library**: [suyashkumar/dicom](https://github.com/suyashkumar/dicom) for validation/metadata and batch-import header parsing
 - **GCP SDK**: First-class Go SDK (`cloud.google.com/go/healthcare`, `cloud.google.com/go/storage`)
 
-**Python sidecars (6 services):**
+**Python services (7 total; 6 processing + 1 ingress adapter):**
 - All ML/imaging tools (DeepDefacer, Tesseract, dcm2niix, pydicom) are Python or C with Python bindings
 - Isolated containers with their own dependency trees and update cycles
 - Keeps Python dependency surface completely separate from the Go API
-- Services: defacing, PHI detection, QC automation, BIDS conversion, classification, protocol compliance
+- Processing services: defacing, PHI detection, QC automation, BIDS conversion, classification, protocol compliance
+- Ingress adapter service: DIMSE receiver (pynetdicom C-STORE SCP)
 
 ### Frontend: React + TypeScript
 - **Key libraries**:
@@ -215,7 +218,7 @@ Reusable library for browser-based DICOM anonymization and upload. Core modules:
 - **GCP**: `terraform/project/` (bootstrap) + `terraform/infra/` (Cloud Run, Healthcare API, Cloud SQL, GCS)
 - **AWS**: `terraform/aws/` (VPC, ECS Fargate, RDS, S3, ALB, ECR, KMS, SNS/SQS)
 - **Azure**: Planned
-- **Local dev**: `docker-compose.yml` (PostgreSQL, Mailpit, OHIF, Go API, 6 Python sidecars)
+- **Local dev**: `docker-compose.yml` (PostgreSQL, Mailpit, OHIF, Go API, 7 Python services)
 - CI/CD: GitHub Actions (Go build+vet+test, Python syntax, TypeScript type check, Docker build)
 
 ### DICOM Storage: Cloud-Neutral File Storage
@@ -251,16 +254,16 @@ Hosted on Cloud SQL (GCP), RDS (AWS), or Docker postgres (local dev). CMEK encry
 
 ### AI/ML: Pluggable Backends
 
-Each processing service supports local backends for development and cloud AI backends for production:
+Each processing service supports local backends for development and optional cloud AI backends where they provide meaningful accuracy gains:
 
-| Service | Local Backend | Cloud Backend (planned) |
-|---------|--------------|------------------------|
-| PHI Detection | Tesseract OCR | Vertex AI Document AI / AWS Textract |
-| Classification | DICOM header heuristics | Vertex AI / SageMaker |
-| QC Automation | pydicom + numpy | Vertex AI custom models |
-| Protocol Compliance | pydicom parameter extraction | — (local backend sufficient) |
-| Defacing | DeepDefacer / mri_deface | — (local backend sufficient) |
-| BIDS Conversion | dcm2niix | — (local backend sufficient) |
+| Service | Local Backend | Cloud Backend |
+|---------|--------------|---------------|
+| PHI Detection | Tesseract OCR | Google Cloud Vision `text_detection`, AWS Textract `detect_document_text` |
+| Classification | DICOM header heuristics | Google Cloud Vision `label_detection`, AWS Rekognition `detect_labels` |
+| QC Automation | pydicom + numpy | — (local backend currently sufficient) |
+| Protocol Compliance | pydicom parameter extraction | — (local backend currently sufficient) |
+| Defacing | DeepDefacer / mri_deface | — (local backend currently sufficient) |
+| BIDS Conversion | dcm2niix | — (local backend currently sufficient) |
 
 ### Email Notifications
 
@@ -410,9 +413,9 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 |--------|-------------|------|----------|----------|----------|
 | **Hosting** | Multi-cloud (GCP, AWS, Azure) | Self-hosted | Commercial SaaS | On-prem | On-prem gateway |
 | **Client de-id** | Browser (zero install) | Electron desktop app | CLI / Edge connector | Java desktop app | On-site Java app |
-| **Server de-id** | Healthcare API + defacing svc | DicomEdit scripts | Built-in | Post-upload | Pipeline stages |
+| **Server de-id** | Defacing + PHI detection services | DicomEdit scripts | Built-in | Post-upload | Pipeline stages |
 | **Defacing** | Automated server-side | Manual or plugin | Built-in | Separate | Not included |
-| **DICOM store** | Healthcare API (DICOMweb) | PostgreSQL + filesystem | MongoDB + S3 | MySQL + Isilon | Filesystem |
+| **DICOM store** | Cloud-neutral storage (local/S3/GCS) + built-in DICOMweb proxy | PostgreSQL + filesystem | MongoDB + S3 | MySQL + Isilon | Filesystem |
 | **Viewer** | OHIF (embedded) | Built-in viewer | Built-in viewer | Web viewer | None |
 | **Open source** | Yes | Yes | No | Partial | Yes |
 | **Install at site** | None | Desktop client (optional) | CLI (optional) | Java app (required) | Java app (required) |
@@ -423,7 +426,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 2. Modality-agnostic: works with any DICOM data, not limited to a single specialty
 3. Multi-cloud — runs on GCP, AWS, or Azure with Terraform modules for each; no cloud lock-in
 4. Automated server-side defacing pipeline for head imaging
-5. Pluggable AI backends — local (Tesseract, pydicom) for dev, cloud AI (Vertex AI, SageMaker) for production
+5. Pluggable AI backends — local (Tesseract, pydicom) for dev, optional cloud AI (Google Cloud Vision, AWS Textract/Rekognition) for production edge cases
 6. Minimal vulnerability surface (Go backend, distroless containers)
 
 ---
@@ -455,20 +458,24 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 18. ✅ **Project settings UI**: `GET/PUT /api/projects/{id}`; slug auto-generation on create; admin Projects tab with create/edit; `project.created`/`project.updated` audit entries (PR #21)
 19. ✅ **Upload portal QoL**: `onFileStart` callback in `@aegis/client`; per-file filename display below progress bar; per-file PUT auto-retry (3× with exponential backoff) (PR #22)
 
-### Phase 4: Advanced Processing (Vertex AI)
-20. ✅ **Burned-in PHI detection**: Python OCR service (`phi-detection/`) with Tesseract backend (local dev) and Vertex AI Document AI (production); `require_phi_scan` routing rule action; `phi_scan_required`/`phi_scan_status` study fields; async dispatch from Go API; admin dashboard PHI scan badge + scan button (PR #29)
-21. ✅ **QC automation**: Python QC service (`qc-service/`) with pydicom+numpy backend (local dev) and Vertex AI (production); `require_qc_check` routing rule action; `qc_required`/`qc_status` study fields; 5 automated checks (file integrity, slice consistency, SNR, coverage, missing slices); async dispatch from Go API; admin dashboard QC badge + Run QC button (PR #32)
-22. ✅ **Smart routing**: Python classification service (`classification-service/`) with heuristic DICOM tag analysis backend (local dev) and Vertex AI (production); `require_classification` routing rule action; `classification_required`/`classification_status` study fields; classifies modality + body_part from DICOM headers (SOP Class UID, SeriesDescription, BodyPartExamined patterns); updates study metadata and **re-evaluates routing rules** so downstream rules fire correctly; admin dashboard Classification badge + Classify button (PR #34)
+### Phase 4: Advanced Processing (Pluggable Cloud AI)
+20. ✅ **Burned-in PHI detection**: Python OCR service (`phi-detection/`) with Tesseract backend (local) and optional Google Cloud Vision / AWS Textract cloud backends; `require_phi_scan` routing rule action; `phi_scan_required`/`phi_scan_status` study fields; async dispatch from Go API; admin dashboard PHI scan badge + scan button (PR #29, PR #83)
+21. ✅ **QC automation**: Python QC service (`qc-service/`) with pydicom+numpy backend; `require_qc_check` routing rule action; `qc_required`/`qc_status` study fields; 5 automated checks (file integrity, slice consistency, SNR, coverage, missing slices); async dispatch from Go API; admin dashboard QC badge + Run QC button (PR #32)
+22. ✅ **Smart routing**: Python classification service (`classification-service/`) with heuristic DICOM tag analysis backend and optional Google Cloud Vision / AWS Rekognition cloud augmentation; `require_classification` routing rule action; `classification_required`/`classification_status` study fields; classifies modality + body_part from DICOM headers (SOP Class UID, SeriesDescription, BodyPartExamined patterns); updates study metadata and **re-evaluates routing rules** so downstream rules fire correctly; admin dashboard Classification badge + Classify button (PR #34, PR #83)
 23. ✅ **NIfTI/BIDS conversion**: Python BIDS service (`bids-service/`) with dcm2niix backend; `require_bids_conversion` routing rule action; `bids_required`/`bids_status` study fields; DICOM→NIfTI conversion with BIDS-compliant directory structure + JSON sidecars; series-to-datatype classification; zip download endpoint; admin dashboard BIDS badge + Convert/Download buttons (PR #33)
-24. ✅ **Batch import tools**: `api/cmd/import/` CLI + `POST /api/import/batch` API; recursive DICOM directory scan with `suyashkumar/dicom` header parsing; groups files by StudyInstanceUID; creates upload sessions + study records; evaluates routing rules; `--dry-run` mode (PR #31)
+24. ✅ **Batch import tools + contract hardening**: `api/cmd/import/` CLI + `POST /api/import/batch` API; recursive DICOM directory scan with `suyashkumar/dicom` header parsing; groups files by StudyInstanceUID; creates upload sessions + study records; evaluates routing rules; `--dry-run` mode. Hardening shipped: canonical institution selectors, strict JSON contract (`DisallowUnknownFields`), required absolute `dir` path, strict `source` validation (PR #31, PR #116–#125)
 25. ✅ **MRI protocol compliance**: Python protocol service (`protocol-service/`) with pydicom-based parameter extraction for both Classic and Enhanced DICOM; `protocol_templates` table for per-project, per-manufacturer/model/software-version/sequence-type parameter rules with configurable tolerances and severity levels (critical/warning/info); `require_protocol_check` routing rule action; `protocol_required`/`protocol_status` study fields; async dispatch from Go API; admin dashboard Protocol badge + Check Protocol button + Protocol Templates CRUD tab (PR #41)
 26. ✅ **Defacing tool upgrades**: DeepDefacer added as pluggable backend (`defacing/app/backends/deepdefacer_backend.py`); 3D U-Net deep learning defacing ~90% faster than registration-based tools; pip-installable with no external binaries beyond dcm2niix; `INCLUDE_DEEPDEFACER` Dockerfile build arg; auto-selection priority updated: mri_reface > deepdefacer > mri_deface > nibabel; `DEEPDEFACER_GPU` env var for CUDA support; `docs/research/mri-defacing-tools-comparison.md` with 5 peer-reviewed citations (PR #54)
 26. ✅ **Authentication middleware**: Per-route auth middleware (`api/middleware/auth.go`) supporting GCP IAP and Azure AD Easy Auth; `RequireAuth` wrapper for admin routes; `RequireRole` for future viewer enforcement; `GET /api/auth/me` identity endpoint; `admin_users` lookup with case-insensitive email; dev mode auto-auth via `DEV_USER_EMAIL`; all audit entries now record real user email; admin dashboard shows current user and handles 401/403 errors (PR #36)
 27. ✅ **Multi-cloud AWS support**: S3 storage backend (`api/storage/s3.go`) implementing the Storage interface with presigned URLs, copy-based move, and S3-compatible endpoint support (MinIO/LocalStack); AWS ALB + Cognito auth provider in middleware (JWT email extraction from `X-Amzn-Oidc-Data` header); `S3_BUCKET`/`S3_REGION`/`S3_ENDPOINT` config; `terraform/aws/main.tf` with VPC, RDS PostgreSQL 15, S3, ECS Fargate cluster, ALB, ECR, KMS, SNS/SQS, CloudWatch (PR #50)
 28. ✅ **Study export workflow**: DICOM zip download for admins (`GET /api/studies/{studyUID}/dicom-download`) and share recipients (`GET /api/export/{token}/download`) using cloud-agnostic storage interface; export portal (`frontend/export-portal/`) React app for share recipients with study info display + ZIP download; DICOMweb STOW-RS forwarding (`multipart/related; type="application/dicom"`) with `io.Pipe()` streaming and 10-minute timeout; `require_export` routing rule action; `export_required`/`export_status` study fields; auto-dispatch on study approval; admin dashboard Export column + badge + trigger button (PR #56)
 
+### Post-Phase 4 Shipped Enhancements (2026)
+29. ✅ **DIMSE receiver service**: `dimse-receiver/` Python sidecar with pynetdicom C-STORE SCP ingress on port `11112`; supports C-ECHO, writes to shared `dicom/raw/{studyUID}/`, triggers `POST /api/ingest` on association release, and reports health through API `/healthz` sidecar map.
+30. ✅ **Timezone hardening + UI controls**: UTC-stable backend date logic and digest windows, epoch-based share countdowns, explicit timezone labels, and user-selectable display timezone controls synchronized across admin, upload, and export portals.
+31. ✅ **Batch importer contract hardening**: strict input normalization/validation (`source`, `project_slug`, absolute `dir`), canonical institution selectors for external provenance, strict JSON decoding on `/api/import/batch`, and removal of deprecated importer AE-title selector inputs.
+
 ### Future Ideas (not planned)
-- DIMSE adapter for sites that can run an edge connector
 - Non-DICOM formats: pathology whole-slide imaging, electron microscopy
 - Client-side defacing preview via NiiVue (WebGL volume rendering)
 - Modality-specific processing plugins (e.g., mammography CAD, cardiac segmentation)
@@ -510,4 +517,4 @@ After each phase, verify:
 4. **Admin Dashboard**: View uploaded study in OHIF, verify de-identified tags, verify pipeline auto-dispatches processing
 5. **Defacing**: Upload a head MRI with `require_defacing` routing rule → pipeline triggers defacing → compare original vs defaced in OHIF side-by-side
 6. **End-to-end**: External browser → upload → de-id → ingest → classify → deface → QC → review → approve → export
-7. **Docker Compose**: `docker compose up -d` → all 10 services healthy → full pipeline works
+7. **Docker Compose**: `docker compose up -d` → all 11 services healthy → full pipeline works
