@@ -38,9 +38,11 @@ func run(ctx context.Context, db *sql.DB, mailer *email.Client) {
 }
 
 func send(ctx context.Context, db *sql.DB, mailer *email.Client) {
-	subs, err := model.ListDueSubscriptions(ctx, db)
+	nowUTC := time.Now().UTC()
+
+	subs, err := model.ListEnabledDigestSubscriptions(ctx, db)
 	if err != nil {
-		log.Printf("digest: list due subscriptions: %v", err)
+		log.Printf("digest: list enabled subscriptions: %v", err)
 		return
 	}
 	if len(subs) == 0 {
@@ -48,7 +50,10 @@ func send(ctx context.Context, db *sql.DB, mailer *email.Client) {
 	}
 
 	for _, sub := range subs {
-		if err := sendOne(ctx, db, mailer, sub); err != nil {
+		if !isDigestDue(sub.Frequency, sub.LastSentAt, nowUTC) {
+			continue
+		}
+		if err := sendOne(ctx, db, mailer, sub, nowUTC); err != nil {
 			log.Printf("digest: send to %s (project %s): %v", sub.Email, sub.ProjectName, err)
 			// Continue processing remaining subscriptions even if one fails.
 			continue
@@ -59,8 +64,7 @@ func send(ctx context.Context, db *sql.DB, mailer *email.Client) {
 	}
 }
 
-func sendOne(ctx context.Context, db *sql.DB, mailer *email.Client, sub model.DigestSubscription) error {
-	nowUTC := time.Now().UTC()
+func sendOne(ctx context.Context, db *sql.DB, mailer *email.Client, sub model.DigestSubscription, nowUTC time.Time) error {
 	sinceUTC, _, period := periodRange(sub.Frequency, nowUTC)
 	stats, err := model.GetDigestStats(ctx, db, sub.ProjectID, sinceUTC)
 	if err != nil {
@@ -78,6 +82,38 @@ func sendOne(ctx context.Context, db *sql.DB, mailer *email.Client, sub model.Di
 	return nil
 }
 
+func isDigestDue(frequency string, lastSentAt *time.Time, nowUTC time.Time) bool {
+	if lastSentAt == nil {
+		return true
+	}
+	nowUTC = nowUTC.UTC()
+	lastUTC := lastSentAt.UTC()
+	switch frequency {
+	case "monthly":
+		return lastUTC.Before(monthlyCutoffUTC(nowUTC))
+	default: // weekly
+		return lastUTC.Before(nowUTC.AddDate(0, 0, -7))
+	}
+}
+
+// monthlyCutoffUTC returns the same day/time in the previous month, clamping to
+// the last day when the previous month is shorter (e.g., Mar 31 -> Feb 28/29).
+func monthlyCutoffUTC(nowUTC time.Time) time.Time {
+	nowUTC = nowUTC.UTC()
+	year, month, day := nowUTC.Date()
+	hour, minute, second := nowUTC.Clock()
+	nsec := nowUTC.Nanosecond()
+
+	prevMonthStart := time.Date(year, month, 1, hour, minute, second, nsec, time.UTC).AddDate(0, -1, 0)
+	thisMonthStart := time.Date(year, month, 1, hour, minute, second, nsec, time.UTC)
+	lastDayPrevMonth := thisMonthStart.AddDate(0, 0, -1).Day()
+	if day > lastDayPrevMonth {
+		day = lastDayPrevMonth
+	}
+
+	return time.Date(prevMonthStart.Year(), prevMonthStart.Month(), day, hour, minute, second, nsec, time.UTC)
+}
+
 // periodRange returns [since, until] for the digest frequency, plus a UTC label.
 // The label always includes explicit UTC timestamps to avoid timezone ambiguity.
 func periodRange(frequency string, nowUTC time.Time) (sinceUTC, untilUTC time.Time, label string) {
@@ -86,7 +122,7 @@ func periodRange(frequency string, nowUTC time.Time) (sinceUTC, untilUTC time.Ti
 
 	switch frequency {
 	case "monthly":
-		sinceUTC = nowUTC.AddDate(0, -1, 0)
+		sinceUTC = monthlyCutoffUTC(nowUTC)
 	default: // weekly
 		sinceUTC = nowUTC.AddDate(0, 0, -7)
 	}

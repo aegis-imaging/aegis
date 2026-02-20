@@ -94,6 +94,32 @@ func ListAllDigestSubscriptions(ctx context.Context, db *sql.DB) ([]DigestSubscr
 	return out, rows.Err()
 }
 
+// ListEnabledDigestSubscriptions returns enabled subscriptions with project names.
+func ListEnabledDigestSubscriptions(ctx context.Context, db *sql.DB) ([]DigestSubscription, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT ds.id, ds.email, ds.project_id, p.name,
+		       ds.frequency, ds.enabled, ds.last_sent_at, ds.created_at, ds.updated_at
+		FROM digest_subscriptions ds
+		JOIN projects p ON p.id = ds.project_id
+		WHERE ds.enabled = TRUE
+		ORDER BY p.name, ds.email`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []DigestSubscription
+	for rows.Next() {
+		var s DigestSubscription
+		if err := rows.Scan(&s.ID, &s.Email, &s.ProjectID, &s.ProjectName,
+			&s.Frequency, &s.Enabled, &s.LastSentAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 func DeleteDigestSubscription(ctx context.Context, db *sql.DB, id string) error {
 	_, err := db.ExecContext(ctx, `DELETE FROM digest_subscriptions WHERE id = $1`, id)
 	return err
@@ -101,7 +127,7 @@ func DeleteDigestSubscription(ctx context.Context, db *sql.DB, id string) error 
 
 // ListDueSubscriptions returns enabled subscriptions whose digest is due to be sent.
 // Weekly: not sent in the last 7 days.
-// Monthly: not sent in the last 30 days.
+// Monthly: not sent in the last 1 month.
 func ListDueSubscriptions(ctx context.Context, db *sql.DB) ([]DigestSubscription, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT ds.id, ds.email, ds.project_id, p.name,
@@ -111,7 +137,7 @@ func ListDueSubscriptions(ctx context.Context, db *sql.DB) ([]DigestSubscription
 		WHERE ds.enabled = TRUE
 		  AND (
 		    (ds.frequency = 'weekly'  AND (ds.last_sent_at IS NULL OR ds.last_sent_at < now() - INTERVAL '7 days'))
-		 OR (ds.frequency = 'monthly' AND (ds.last_sent_at IS NULL OR ds.last_sent_at < now() - INTERVAL '30 days'))
+		 OR (ds.frequency = 'monthly' AND (ds.last_sent_at IS NULL OR ds.last_sent_at < now() - INTERVAL '1 month'))
 		  )
 		ORDER BY p.name, ds.email`)
 	if err != nil {
@@ -140,12 +166,12 @@ func UpdateDigestLastSent(ctx context.Context, db *sql.DB, id string) error {
 
 // DigestStats holds aggregate study counts for a project over a time window.
 type DigestStats struct {
-	ProjectID    string
-	ProjectName  string
-	Received     int
-	Approved     int
-	Rejected     int
-	Pending      int
+	ProjectID     string
+	ProjectName   string
+	Received      int
+	Approved      int
+	Rejected      int
+	Pending       int
 	SharesCreated int
 }
 
