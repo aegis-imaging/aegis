@@ -54,6 +54,17 @@ jobs:
       - name: Syntax check
         run: find ${{ matrix.service }} -name '*.py' -exec python -m py_compile {} +
 
+  python-scripts:
+    name: Python script check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax check (harness scripts)
+        run: python -m py_compile scripts/cloud_smoke_test.py scripts/dimse_pacs_e2e_harness.py
+
   python-test:
     name: "Python tests (${{ matrix.service }})"
     runs-on: ubuntu-latest

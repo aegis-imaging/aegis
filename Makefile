@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -64,3 +64,10 @@ smoke:
 	@CMD="python3 scripts/cloud_smoke_test.py --base-url $(BASE_URL) --project-slug $${PROJECT_SLUG:-default}"; \
 	if [ -n "$$ADMIN_HEADER" ]; then CMD="$$CMD --admin-header '$$ADMIN_HEADER'"; fi; \
 	eval "$$CMD"
+
+dimse-e2e:
+	@if [ -x ".venv/bin/python" ]; then \
+		.venv/bin/python scripts/dimse_pacs_e2e_harness.py; \
+	else \
+		python3 scripts/dimse_pacs_e2e_harness.py; \
+	fi
