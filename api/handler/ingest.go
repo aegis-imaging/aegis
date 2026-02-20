@@ -19,6 +19,7 @@ import (
 type ingestRequest struct {
 	ProjectSlug        string        `json:"project_slug"`
 	InstitutionID      string        `json:"institution_id,omitempty"`
+	InstitutionSlug    string        `json:"institution_slug,omitempty"`
 	InstitutionAETitle string        `json:"institution_ae_title,omitempty"`
 	Metadata           studyMetadata `json:"study_metadata"`
 }
@@ -54,8 +55,8 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	var institutionID *string
 	sourceIP := ""
 	sourceIPAttributionError := ""
-	if strings.TrimSpace(req.InstitutionID) != "" || strings.TrimSpace(req.InstitutionAETitle) != "" {
-		inst, err := s.resolveIngestInstitution(r.Context(), project.ID, req.InstitutionID, req.InstitutionAETitle)
+	if strings.TrimSpace(req.InstitutionID) != "" || strings.TrimSpace(req.InstitutionSlug) != "" || strings.TrimSpace(req.InstitutionAETitle) != "" {
+		inst, err := s.resolveIngestInstitution(r.Context(), project.ID, req.InstitutionID, req.InstitutionSlug, req.InstitutionAETitle)
 		if err != nil {
 			s.writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -114,11 +115,14 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	if institutionID != nil {
 		detail["institution_id"] = *institutionID
 	}
-	if strings.TrimSpace(req.InstitutionID) == "" && strings.TrimSpace(req.InstitutionAETitle) == "" {
+	if strings.TrimSpace(req.InstitutionID) == "" && strings.TrimSpace(req.InstitutionSlug) == "" && strings.TrimSpace(req.InstitutionAETitle) == "" {
 		detail["source_ip"] = sourceIP
 		if sourceIPAttributionError != "" {
 			detail["source_ip_attribution_error"] = sourceIPAttributionError
 		}
+	}
+	if strings.TrimSpace(req.InstitutionSlug) != "" {
+		detail["institution_slug"] = strings.TrimSpace(req.InstitutionSlug)
 	}
 	if strings.TrimSpace(req.InstitutionAETitle) != "" {
 		detail["institution_ae_title"] = strings.TrimSpace(req.InstitutionAETitle)
@@ -136,14 +140,22 @@ func normalizeAETitle(aeTitle string) string {
 	return strings.ToUpper(strings.TrimSpace(aeTitle))
 }
 
-func (s *Server) resolveIngestInstitution(ctx context.Context, projectID, institutionID, institutionAETitle string) (*model.Institution, error) {
+func (s *Server) resolveIngestInstitution(ctx context.Context, projectID, institutionID, institutionSlug, institutionAETitle string) (*model.Institution, error) {
 	var (
 		inst *model.Institution
 		err  error
 	)
 
 	institutionID = strings.TrimSpace(institutionID)
+	institutionSlug = strings.TrimSpace(institutionSlug)
 	institutionAETitle = strings.TrimSpace(institutionAETitle)
+	if institutionSlug != "" {
+		institutionSlug = strings.ToLower(institutionSlug)
+	}
+
+	if institutionID != "" && institutionSlug != "" {
+		return nil, fmt.Errorf("provide only one of institution_id or institution_slug")
+	}
 
 	if institutionID != "" {
 		inst, err = model.GetInstitutionByID(ctx, s.db, institutionID)
@@ -152,6 +164,14 @@ func (s *Server) resolveIngestInstitution(ctx context.Context, projectID, instit
 				return nil, fmt.Errorf("institution not found")
 			}
 			return nil, fmt.Errorf("lookup institution: %w", err)
+		}
+	} else if institutionSlug != "" {
+		inst, err = model.GetInstitutionBySlug(ctx, s.db, institutionSlug)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("institution not found for slug %q", institutionSlug)
+			}
+			return nil, fmt.Errorf("lookup institution by slug: %w", err)
 		}
 	}
 
@@ -170,7 +190,7 @@ func (s *Server) resolveIngestInstitution(ctx context.Context, projectID, instit
 	}
 
 	if inst == nil {
-		return nil, fmt.Errorf("institution_id or institution_ae_title required")
+		return nil, fmt.Errorf("institution_id, institution_slug, or institution_ae_title required")
 	}
 	if !inst.Enabled {
 		return nil, fmt.Errorf("institution is disabled")
