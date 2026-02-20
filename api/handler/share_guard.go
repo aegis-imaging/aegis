@@ -20,6 +20,19 @@ func shareStatus(share *model.ExportShare, now time.Time) string {
 	return "active"
 }
 
+// shareExpiresInSeconds returns the remaining lifetime from now until expiry.
+// Values are clamped at 0 once expired.
+func shareExpiresInSeconds(share *model.ExportShare, now time.Time) int64 {
+	if share == nil {
+		return 0
+	}
+	remaining := share.ExpiresAt.UTC().Sub(now.UTC())
+	if remaining <= 0 {
+		return 0
+	}
+	return int64(remaining / time.Second)
+}
+
 // shareGoneMessage returns the public-facing reason when a share token is no
 // longer usable. Empty string means the share is still active.
 func shareGoneMessage(share *model.ExportShare, now time.Time) string {
