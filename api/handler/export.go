@@ -81,7 +81,8 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 type createShareRequest struct {
 	RecipientEmail string `json:"recipient_email"`
 	Note           string `json:"note"`
-	ExpiryHours    int    `json:"expiry_hours"` // default 168 (7 days)
+	ExpiryHours    int    `json:"expiry_hours"`         // default 168 (7 days)
+	ExpiresAt      string `json:"expires_at,omitempty"` // optional RFC3339 timestamp
 }
 
 type createShareResponse struct {
@@ -112,8 +113,11 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "recipient_email is required")
 		return
 	}
-	if req.ExpiryHours <= 0 {
-		req.ExpiryHours = 168 // 7 days
+
+	expiresAt, err := resolveShareExpiry(req, time.Now().UTC())
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	rawToken, tokenHash, err := generateShareToken()
@@ -123,7 +127,6 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt := time.Now().UTC().Add(time.Duration(req.ExpiryHours) * time.Hour)
 	share, err := model.CreateExportShare(r.Context(), s.db,
 		study.ID, tokenHash, req.RecipientEmail, req.Note, actorEmail(r), expiresAt)
 	if err != nil {
@@ -149,6 +152,30 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 		ExportShare: share,
 		ExportURL:   exportURL,
 	})
+}
+
+func resolveShareExpiry(req createShareRequest, nowUTC time.Time) (time.Time, error) {
+	nowUTC = nowUTC.UTC()
+
+	// Backward-compatible explicit expiry support. Must be RFC3339 with timezone.
+	if req.ExpiresAt != "" {
+		expiresAt, err := time.Parse(time.RFC3339, req.ExpiresAt)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("expires_at must be RFC3339 (example: 2026-03-01T12:00:00Z)")
+		}
+		expiresAt = expiresAt.UTC()
+		if !expiresAt.After(nowUTC) {
+			return time.Time{}, fmt.Errorf("expires_at must be in the future")
+		}
+		return expiresAt, nil
+	}
+
+	// Default when explicit expiry isn't provided.
+	expiryHours := req.ExpiryHours
+	if expiryHours <= 0 {
+		expiryHours = 168 // 7 days
+	}
+	return nowUTC.Add(time.Duration(expiryHours) * time.Hour), nil
 }
 
 // ListShares returns all export shares for a study.
