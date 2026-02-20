@@ -20,6 +20,7 @@ from app.ingest import (
     clear_pending_study,
     clear_dead_letter,
     clear_dead_letter_study,
+    load_retry_state,
     process_retry_queue,
     process_retry_all,
     process_retry_study,
@@ -49,6 +50,14 @@ async def lifespan(app: FastAPI):
     """Start the DICOM SCP in a daemon thread alongside FastAPI."""
     global _ae, _stop_retry, _retry_thread
     import threading
+
+    loaded = load_retry_state()
+    if loaded["loaded_pending"] > 0 or loaded["loaded_dead_letter"] > 0:
+        log.info(
+            "Restored DIMSE retry state on startup (%d pending, %d dead-letter)",
+            loaded["loaded_pending"],
+            loaded["loaded_dead_letter"],
+        )
 
     _ae = create_scp()
     scp_thread = threading.Thread(target=start_scp, args=(_ae,), daemon=True)

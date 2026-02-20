@@ -875,6 +875,10 @@ docker compose down -v           # stop + destroy volumes (fresh start)
   - `transient_failure_to_retry_queue`
   - `process_controls_restore_ingestion`
   - `dead_letter_path_and_recovery`
+- [ ] Verify durable retry state (restart-safe):
+  - Ensure `DIMSE_INGEST_DURABLE_STORE_ENABLED=true` (default in `docker-compose.yml`)
+  - Confirm state file path is on shared volume (`DIMSE_INGEST_DURABLE_STORE_PATH`, default `/app/data/dimse-ingest-retry-state.json`)
+  - Create at least one pending/dead-letter entry, restart `dimse-receiver`, and verify `/ingest/retry` counters persist
 - [ ] On failure, review printed `dimse-receiver` log tail and rerun with `--keep-logs`
 - [ ] Save run output as pilot evidence
 
