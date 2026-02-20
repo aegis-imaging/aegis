@@ -884,6 +884,13 @@ python3 scripts/dimse_pacs_e2e_harness.py
 | `DIMSE_INGEST_QUEUE_MAX` | `1000` | Maximum in-memory queued ingest items before queue-full dead-letter |
 | `DIMSE_INGEST_DURABLE_STORE_ENABLED` | `true` | Enable on-disk persistence for retry/dead-letter state across restarts |
 | `DIMSE_INGEST_DURABLE_STORE_PATH` | `/app/data/dimse-ingest-retry-state.json` | JSON file path for durable retry/dead-letter state |
+| `DIMSE_RETRY_ALERTS_ENABLED` | `false` | Enable threshold-based retry alert event emission |
+| `DIMSE_RETRY_ALERT_MAX_EVENTS` | `200` | Max retained retry alert events in memory |
+| `DIMSE_RETRY_ALERT_COOLDOWN_SECONDS` | `300` | Per-condition cooldown between repeated alerts |
+| `DIMSE_RETRY_ALERT_PENDING_AGE_SECONDS` | `0` | Pending age alert threshold (fallback: `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS`) |
+| `DIMSE_RETRY_ALERT_DEAD_LETTER_AGE_SECONDS` | `0` | Dead-letter age alert threshold (fallback: `DIMSE_DEAD_LETTER_AGE_WARN_SECONDS`) |
+| `DIMSE_RETRY_ALERT_DEAD_LETTER_NONZERO` | `true` | Emit alert when dead-letter queue is non-zero |
+| `DIMSE_RETRY_ALERT_WEBHOOK_URL` | *(empty)* | Optional webhook URL for JSON alert delivery |
 | `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS` | `0` (disabled) | `/healthz` degrades when oldest pending retry age meets/exceeds this threshold |
 | `DIMSE_DEAD_LETTER_AGE_WARN_SECONDS` | `0` (disabled) | `/healthz` includes age-threshold degradation reason when oldest dead-letter age meets/exceeds this threshold |
 | `DIMSE_OPERATOR_AUDIT_MAX` | `500` | Max retained operator action records for retry control endpoints |
@@ -896,9 +903,11 @@ python3 scripts/dimse_pacs_e2e_harness.py
 - `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total` and `dead_letter_deduped_total`) plus oldest-age metrics (`pending_oldest_age_seconds`, `dead_letter_oldest_age_seconds`) and next-due pending timing (`pending_next_attempt_at`, `pending_next_attempt_in_seconds`); returns `degraded` when SCP is down, dead-letter is non-zero, or pending age exceeds `DIMSE_INGEST_PENDING_AGE_WARN_SECONDS`; includes `degraded_reasons`, `pending_age_warn_seconds`, and `dead_letter_age_warn_seconds` (with `dead_letter_age_threshold_exceeded` when configured).
 - Retry scheduling uses bounded exponential backoff (base interval, multiplier, max interval cap).
 - Durable retry state writes are atomic (`*.tmp` swap) and restored at startup when `DIMSE_INGEST_DURABLE_STORE_ENABLED=true`.
+- Retry alerts evaluate on each retry worker pass; active threshold conditions emit bounded in-memory alert events (`DIMSE_RETRY_ALERT_*`) with per-condition cooldown and optional webhook POST.
 - `GET /ingest/retry` — returns retry/dead-letter counters plus oldest-age and next-due pending timing metrics for troubleshooting.
 - `GET /ingest/retry/summary` — returns retry summary signals (`pending_due_now`, `queue_max`, `queue_utilization_percent`, `dead_letter_present`) plus full snapshot counters.
 - `GET /ingest/retry/actions?limit=N&action=...` — returns recent operator actions on retry controls (bounded in-memory audit log), optionally filtered to a specific action name.
+- `GET /ingest/retry/alerts?limit=N&condition=...` — returns recent retry threshold alerts (e.g., dead-letter non-zero, age threshold exceeded), optionally filtered by condition.
 - `GET /ingest/retry/details?limit=N&study_instance_uid=...&sort=next_attempt|age_desc` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, `queued_at`, next retry timing, age counters, dead-letter timing, last_error), plus list counters (`pending_total`, `dead_letter_total`, `pending_returned`, `dead_letter_returned`) and truncation flags; optional `study_instance_uid` filter scopes results to one study; `sort=age_desc` orders oldest items first.
 - `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
 - `POST /ingest/retry/process-all?limit=N` — processes pending retry entries immediately (ignores schedule), up to `N`.

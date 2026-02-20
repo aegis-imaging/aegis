@@ -879,6 +879,11 @@ docker compose down -v           # stop + destroy volumes (fresh start)
   - Open Admin Dashboard → **DIMSE Ops** tab
   - Verify summary cards show pending/dead-letter counters
   - Trigger one control action (for example, `Process due`) and verify counters/actions refresh
+- [ ] Alerting verification (optional but recommended):
+  - Set `DIMSE_RETRY_ALERTS_ENABLED=true`
+  - Configure at least one threshold (`DIMSE_RETRY_ALERT_DEAD_LETTER_NONZERO=true` or age thresholds)
+  - Trigger threshold condition and verify `GET /ingest/retry/alerts` returns alert entries
+  - Verify Admin Dashboard **DIMSE Ops** tab shows **Recent Retry Alerts**
 - [ ] Verify durable retry state (restart-safe):
   - Ensure `DIMSE_INGEST_DURABLE_STORE_ENABLED=true` (default in `docker-compose.yml`)
   - Confirm state file path is on shared volume (`DIMSE_INGEST_DURABLE_STORE_PATH`, default `/app/data/dimse-ingest-retry-state.json`)
