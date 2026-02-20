@@ -161,6 +161,7 @@ def ingest_retry_details(
     request: Request,
     limit: int = Query(default=100, ge=1, le=10000),
     study_instance_uid: str = Query(default=""),
+    sort: str = Query(default="next_attempt"),
 ):
     """Return detailed pending/dead-letter retry items (capped by limit)."""
     _require_operator_key(request)
@@ -169,6 +170,7 @@ def ingest_retry_details(
         "ingest_retry": retry_details(
             limit=limit,
             study_instance_uid=study_instance_uid.strip() or None,
+            sort=sort.strip() or "next_attempt",
         ),
     }
 
