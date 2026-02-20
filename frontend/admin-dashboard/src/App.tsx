@@ -64,6 +64,8 @@ type Share = {
   note: string
   expires_at: string
   expires_in_seconds?: number
+  // Client-only epoch anchor used for drift-resistant countdowns from server remaining seconds.
+  expires_anchor_epoch_ms?: number
   revoked_at?: string
   status?: 'active' | 'expired' | 'revoked'
   created_at: string
@@ -222,7 +224,31 @@ function parseExpiresEpochMs(iso: string): number | null {
   return Number.isFinite(ms) ? ms : null
 }
 
+function withShareExpiryAnchor<T extends Share>(share: T, nowMs = Date.now()): T {
+  const anchoredFromRemaining =
+    typeof share.expires_in_seconds === 'number'
+      ? nowMs + (Math.max(0, Math.floor(share.expires_in_seconds)) * 1000)
+      : null
+  if (anchoredFromRemaining !== null) {
+    return {
+      ...share,
+      expires_anchor_epoch_ms: anchoredFromRemaining,
+    }
+  }
+  const parsedExpiresAt = parseExpiresEpochMs(share.expires_at)
+  if (parsedExpiresAt !== null) {
+    return {
+      ...share,
+      expires_anchor_epoch_ms: parsedExpiresAt,
+    }
+  }
+  return share
+}
+
 function shareRemainingSeconds(share: Share, nowMs: number): number | null {
+  if (typeof share.expires_anchor_epoch_ms === 'number') {
+    return Math.max(0, Math.floor((share.expires_anchor_epoch_ms - nowMs) / 1000))
+  }
   const expiresAtMs = parseExpiresEpochMs(share.expires_at)
   if (expiresAtMs !== null) {
     return Math.max(0, Math.floor((expiresAtMs - nowMs) / 1000))
@@ -456,9 +482,10 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const fetchShares = useCallback(async () => {
     try {
       const res = await fetch(`/api/studies/${study.id}/shares`)
-      const data = await res.json()
-      setShares(data)
-      setNowMs(Date.now())
+      const now = Date.now()
+      const data = (await res.json()) as Share[]
+      setShares(data.map(s => withShareExpiryAnchor(s, now)))
+      setNowMs(now)
     } catch {
       // non-fatal
     } finally {
@@ -496,9 +523,10 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
         const body = await res.json()
         throw new Error(body.error ?? 'Failed to create share')
       }
+      const now = Date.now()
       const data = await res.json() as NewShareResult
-      setNewShare(data)
-      setNowMs(Date.now())
+      setNewShare(withShareExpiryAnchor(data, now))
+      setNowMs(now)
       setEmail('')
       setNote('')
       fetchShares()
@@ -703,11 +731,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/routing-log`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/shares`).then(r => r.ok ? r.json() : []),
     ]).then(([s, a, rl, sh]) => {
+      const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
       setRoutingLog(rl ?? [])
-      setShares(sh ?? [])
-      setNowMs(Date.now())
+      const shareRows = (sh ?? []) as Share[]
+      setShares(shareRows.map(row => withShareExpiryAnchor(row, now)))
+      setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [studyId])
