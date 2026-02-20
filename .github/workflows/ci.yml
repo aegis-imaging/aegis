@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service]
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service]
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -99,6 +99,7 @@ jobs:
           - { context: bids-service, name: bids-service }
           - { context: classification-service, name: classification-service }
           - { context: protocol-service, name: protocol-service }
+          - { context: dimse-receiver, name: dimse-receiver }
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
