@@ -469,6 +469,12 @@ def test_retry_details_returns_pending_and_dead_letter(monkeypatch):
 
     details = retry_details(limit=10, now=100.0)
     assert details["limit"] == 10
+    assert details["pending_total"] == 1
+    assert details["dead_letter_total"] == 1
+    assert details["pending_returned"] == 1
+    assert details["dead_letter_returned"] == 1
+    assert details["pending_truncated"] is False
+    assert details["dead_letter_truncated"] is False
     assert details["snapshot"]["pending"] == 1
     assert details["snapshot"]["dead_letter"] == 1
     assert len(details["pending_items"]) == 1
@@ -516,11 +522,29 @@ def test_retry_details_filters_by_study_instance_uid(monkeypatch):
 
     details = retry_details(limit=10, now=200.0, study_instance_uid="9.9.9.9")
     assert details["study_instance_uid"] == "9.9.9.9"
+    assert details["pending_total"] == 0
+    assert details["dead_letter_total"] == 1
+    assert details["pending_returned"] == 0
+    assert details["dead_letter_returned"] == 1
     assert details["snapshot"]["pending"] == 1
     assert details["snapshot"]["dead_letter"] == 1
     assert details["pending_items"] == []
     assert len(details["dead_letter_items"]) == 1
     assert details["dead_letter_items"][0]["study_instance_uid"] == "9.9.9.9"
+
+
+def test_retry_details_reports_truncation_when_limited(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        acc2 = _acc()
+        acc2.study_instance_uid = "2.2.2.2"
+        submit_ingest(acc2)
+
+    details = retry_details(limit=1, now=100.0)
+    assert details["pending_total"] == 2
+    assert details["pending_returned"] == 1
+    assert details["pending_truncated"] is True
 
 
 def test_clear_dead_letter_removes_items(monkeypatch):
