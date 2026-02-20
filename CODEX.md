@@ -58,10 +58,27 @@ Use these files first before coding:
 3. Keep changes scoped to the requested feature.
 4. Prefer reproducible, automated verification over manual claims.
 
-## Next Feature Note
+## Next Feature Queue
 
-1. Timezone hardening and importer contract validation have shipped.
-2. Current focus should prioritize deployment readiness and enterprise ingress verification:
-   - first cloud test deployment (GCP or AWS) with full pipeline verification,
-   - DIMSE receiver end-to-end PACS connectivity validation,
-   - production auth/storage smoke tests before pilot rollout.
+Use this as the default execution order unless priorities change. Detailed scope/acceptance/test plans live in `docs/planning/next-feature-shortlist-sprint-ready.md`.
+Next session start point (when unblocked): begin with `feature/terraform-gcp-prod-completion`.
+
+1. `feature/terraform-gcp-prod-completion`
+   - Complete GCP production Terraform module (Cloud Run services, Artifact Registry, networking, Cloud Armor, IAP, monitoring).
+2. `feature/secrets-hardening-infra`
+   - Remove static credential placeholders and enforce secret-manager patterns for deployed environments.
+3. `feature/cloud-smoke-test-suite`
+   - Implement automated cloud smoke tests for auth, health, upload, pipeline, and export baseline.
+4. `feature/dimse-pacs-e2e-validation`
+   - Build DIMSE PACS end-to-end validation harness + runbook (success, retry, dead-letter, recovery flows).
+5. `feature/terraform-aws-https-cognito`
+   - Complete AWS edge/auth hardening (ACM HTTPS listener + Cognito integration).
+
+After this top-5 queue:
+6. `feature/dimse-retry-durable-store`
+7. `feature/admin-dimse-ops-panel`
+8. `feature/dimse-alerting-thresholds`
+9. `feature/study-diagnostics-summary`
+10. `feature/dev-ci-parity-lint-checks`
+11. `feature/mcp-server-readonly-mvp`
+12. `feature/mcp-server-guarded-write-tools`
