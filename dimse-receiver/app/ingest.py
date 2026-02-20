@@ -320,12 +320,21 @@ def _oldest_age_seconds(items: list[QueuedIngest], current: float, timestamp_att
     return max(0, int(current) - oldest)
 
 
+def _pending_next_attempt(items: list[QueuedIngest], current: float) -> tuple[int, int]:
+    """Return epoch seconds for next due pending retry and seconds until due."""
+    next_due = min((int(item.next_attempt_at) for item in items), default=0)
+    if next_due <= 0:
+        return 0, 0
+    return next_due, max(0, next_due - int(current))
+
+
 def retry_snapshot(now: float | None = None) -> dict[str, int]:
     """Return queue/dead-letter counters for health/status endpoints."""
     current = time.time() if now is None else now
     with _retry_lock:
         pending_oldest_age_seconds = _oldest_age_seconds(_retry_queue, current, "queued_at")
         dead_letter_oldest_age_seconds = _oldest_age_seconds(_dead_letter, current, "dead_lettered_at")
+        pending_next_attempt_at, pending_next_attempt_in_seconds = _pending_next_attempt(_retry_queue, current)
         return {
             "pending": len(_retry_queue),
             "dead_letter": len(_dead_letter),
@@ -340,6 +349,8 @@ def retry_snapshot(now: float | None = None) -> dict[str, int]:
             "cleared_pending_total": _metrics["cleared_pending_total"],
             "pending_oldest_age_seconds": pending_oldest_age_seconds,
             "dead_letter_oldest_age_seconds": dead_letter_oldest_age_seconds,
+            "pending_next_attempt_at": pending_next_attempt_at,
+            "pending_next_attempt_in_seconds": pending_next_attempt_in_seconds,
         }
 
 
