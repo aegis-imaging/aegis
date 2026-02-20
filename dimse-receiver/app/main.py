@@ -7,10 +7,11 @@ Dual-protocol service:
 
 from __future__ import annotations
 
+import hmac
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app import config
@@ -77,6 +78,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AEGIS DIMSE Receiver", lifespan=lifespan)
 
 
+def _require_operator_key(request: Request) -> None:
+    """Require API key for retry-control endpoints when configured."""
+    required = config.DIMSE_OPERATOR_API_KEY
+    if not required:
+        return
+
+    presented = request.headers.get("x-aegis-operator-key", "")
+    auth = request.headers.get("authorization", "")
+    bearer = auth[7:] if auth.lower().startswith("bearer ") else ""
+    if hmac.compare_digest(presented, required) or hmac.compare_digest(bearer, required):
+        return
+
+    raise HTTPException(status_code=401, detail="operator auth required")
+
+
 @app.get("/healthz")
 def healthz():
     """Health check endpoint."""
@@ -91,26 +107,30 @@ def healthz():
 
 
 @app.get("/ingest/retry")
-def ingest_retry_status():
+def ingest_retry_status(request: Request):
     """Return ingest retry queue/dead-letter counters."""
+    _require_operator_key(request)
     return {"status": "ok", "ingest_retry": retry_snapshot()}
 
 
 @app.get("/ingest/retry/actions")
-def ingest_retry_actions(limit: int = Query(default=100, ge=1, le=10000)):
+def ingest_retry_actions(request: Request, limit: int = Query(default=100, ge=1, le=10000)):
     """Return recent operator retry-control actions."""
+    _require_operator_key(request)
     return {"status": "ok", "actions": get_actions(limit=limit)}
 
 
 @app.get("/ingest/retry/details")
-def ingest_retry_details(limit: int = Query(default=100, ge=1, le=10000)):
+def ingest_retry_details(request: Request, limit: int = Query(default=100, ge=1, le=10000)):
     """Return detailed pending/dead-letter retry items (capped by limit)."""
+    _require_operator_key(request)
     return {"status": "ok", "ingest_retry": retry_details(limit=limit)}
 
 
 @app.post("/ingest/retry/process")
-def ingest_retry_process():
+def ingest_retry_process(request: Request):
     """Run one immediate retry processing pass."""
+    _require_operator_key(request)
     processed = process_retry_queue()
     snap = retry_snapshot()
     record_action(
@@ -123,8 +143,9 @@ def ingest_retry_process():
 
 
 @app.post("/ingest/retry/replay")
-def ingest_retry_replay(limit: int = Query(default=100, ge=1, le=10000)):
+def ingest_retry_replay(request: Request, limit: int = Query(default=100, ge=1, le=10000)):
     """Replay dead-letter items back into the retry queue."""
+    _require_operator_key(request)
     snap = replay_dead_letter(limit=limit)
     record_action(
         "retry_replay_bulk",
@@ -137,8 +158,9 @@ def ingest_retry_replay(limit: int = Query(default=100, ge=1, le=10000)):
 
 
 @app.post("/ingest/retry/replay/{study_instance_uid}")
-def ingest_retry_replay_study(study_instance_uid: str):
+def ingest_retry_replay_study(request: Request, study_instance_uid: str):
     """Replay a specific dead-letter study by StudyInstanceUID."""
+    _require_operator_key(request)
     result = replay_dead_letter_study(study_instance_uid=study_instance_uid)
     record_action(
         "retry_replay_study",
@@ -151,8 +173,9 @@ def ingest_retry_replay_study(study_instance_uid: str):
 
 
 @app.post("/ingest/retry/clear-dead-letter")
-def ingest_retry_clear_dead_letter(limit: int = Query(default=10000, ge=1, le=50000)):
+def ingest_retry_clear_dead_letter(request: Request, limit: int = Query(default=10000, ge=1, le=50000)):
     """Clear dead-letter items after operator acknowledgement."""
+    _require_operator_key(request)
     snap = clear_dead_letter(limit=limit)
     record_action(
         "retry_clear_dead_letter",
