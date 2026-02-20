@@ -27,11 +27,12 @@ import (
 
 // Options configures a batch import run.
 type Options struct {
-	Dir           string `json:"dir"`
-	ProjectSlug   string `json:"project_slug"`
-	InstitutionID string `json:"institution_id"`
-	Source        string `json:"source"`
-	DryRun        bool   `json:"dry_run"`
+	Dir             string `json:"dir"`
+	ProjectSlug     string `json:"project_slug"`
+	InstitutionID   string `json:"institution_id"`
+	InstitutionSlug string `json:"institution_slug"`
+	Source          string `json:"source"`
+	DryRun          bool   `json:"dry_run"`
 }
 
 // Result reports the outcome of a batch import run.
@@ -81,6 +82,9 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	if opts.ProjectSlug == "" {
 		opts.ProjectSlug = "default"
 	}
+	if err := normalizeInstitutionSelectors(&opts); err != nil {
+		return nil, err
+	}
 
 	// Validate directory exists.
 	info, err := os.Stat(opts.Dir)
@@ -97,15 +101,11 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 		return nil, validationErrorf("project %q not found", opts.ProjectSlug)
 	}
 
-	opts.InstitutionID = strings.TrimSpace(opts.InstitutionID)
-	if opts.InstitutionID != "" {
-		institution, err := model.GetInstitutionByID(ctx, db, opts.InstitutionID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, validationErrorf("institution %q not found", opts.InstitutionID)
-			}
-			return nil, fmt.Errorf("lookup institution: %w", err)
-		}
+	institution, err := resolveImportInstitution(ctx, db, opts)
+	if err != nil {
+		return nil, err
+	}
+	if institution != nil {
 		if err := validateImportInstitution(institution); err != nil {
 			return nil, err
 		}
@@ -116,6 +116,7 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 		if !allowed {
 			return nil, validationErrorf("institution %q is not linked to project %q as sender/admin", institution.ID, opts.ProjectSlug)
 		}
+		opts.InstitutionID = institution.ID
 	}
 
 	// Scan and group DICOM files.
@@ -170,6 +171,39 @@ func validateImportInstitution(inst *model.Institution) error {
 		return validationErrorf("institution %q type must be sender or both", inst.ID)
 	}
 	return nil
+}
+
+func normalizeInstitutionSelectors(opts *Options) error {
+	opts.InstitutionID = strings.TrimSpace(opts.InstitutionID)
+	opts.InstitutionSlug = strings.ToLower(strings.TrimSpace(opts.InstitutionSlug))
+	if opts.InstitutionID != "" && opts.InstitutionSlug != "" {
+		return validationErrorf("provide only one of institution_id or institution_slug")
+	}
+	return nil
+}
+
+func resolveImportInstitution(ctx context.Context, db *sql.DB, opts Options) (*model.Institution, error) {
+	if opts.InstitutionID == "" && opts.InstitutionSlug == "" {
+		return nil, nil
+	}
+	if opts.InstitutionID != "" {
+		institution, err := model.GetInstitutionByID(ctx, db, opts.InstitutionID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, validationErrorf("institution %q not found", opts.InstitutionID)
+			}
+			return nil, fmt.Errorf("lookup institution: %w", err)
+		}
+		return institution, nil
+	}
+	institution, err := model.GetInstitutionBySlug(ctx, db, opts.InstitutionSlug)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, validationErrorf("institution slug %q not found", opts.InstitutionSlug)
+		}
+		return nil, fmt.Errorf("lookup institution by slug: %w", err)
+	}
+	return institution, nil
 }
 
 // scanDirectory walks dir recursively, finds DICOM files, parses headers,

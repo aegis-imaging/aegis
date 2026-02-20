@@ -875,6 +875,7 @@ cd api && go build -o aegis-import ./cmd/import
 | `--dir` | *(required)* | Directory containing DICOM files to import |
 | `--project` | `default` | Project slug |
 | `--institution` | *(empty)* | Institution UUID (optional) |
+| `--institution-slug` | *(empty)* | Institution slug (optional, case-insensitive) |
 | `--source` | `internal` | `internal` or `external` |
 | `--dry-run` | `false` | Scan and report without importing |
 
@@ -887,10 +888,11 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 4. For each study: creates upload session + study record, copies files to `dicom/raw/{studyUID}/`, evaluates routing rules
 5. Duplicate StudyInstanceUIDs are rejected (unique constraint) — safe to re-run
 
-**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
+**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","institution_slug","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
 
 Validation behavior:
-- `institution_id` (if provided) must reference an enabled institution with type `sender`/`both`, linked to the target project with role `sender`/`admin`.
+- `institution_id` and `institution_slug` are mutually exclusive (provide only one).
+- Institution selector (ID or slug) must reference an enabled institution with type `sender`/`both`, linked to the target project with role `sender`/`admin`.
 - Invalid directory/project/institution input now returns HTTP `400` from `/api/import/batch` (not `500`).
 
 ### Automated Processing Pipeline (`api/handler/pipeline.go`)
