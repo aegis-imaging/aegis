@@ -5,6 +5,14 @@ on:
     branches: [develop, main]
 
 jobs:
+  infra-guard:
+    name: Infra placeholder guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Terraform credential placeholders
+        run: ./scripts/check-infra-placeholders.sh
+
   go:
     name: Go build & vet
     runs-on: ubuntu-latest
