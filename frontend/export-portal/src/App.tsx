@@ -8,12 +8,14 @@ type ExportFile = {
 
 type ExportData = {
   share_id: string
+  status?: 'active' | 'expired' | 'revoked'
   study_uid: string
   modality: string
   body_part: string
   study_description: string
   instance_count: number
   expires_at: string
+  expires_in_seconds?: number
   note: string
   created_by: string
   download_url: string
@@ -117,7 +119,11 @@ export function App() {
   if (!data) return null
 
   const expiresDate = new Date(data.expires_at)
-  const isExpiringSoon = expiresDate.getTime() - Date.now() < 24 * 60 * 60 * 1000
+  const secondsUntilExpiry =
+    typeof data.expires_in_seconds === 'number'
+      ? data.expires_in_seconds
+      : Math.floor((expiresDate.getTime() - Date.now()) / 1000)
+  const isExpiringSoon = secondsUntilExpiry > 0 && secondsUntilExpiry < 24 * 60 * 60
 
   return (
     <div className="container">

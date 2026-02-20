@@ -951,6 +951,7 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 
 **Export share redemption** (`GET /api/export/{token}`) — enhanced response includes:
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
+- `status` and `expires_in_seconds` (server-derived via UTC guard logic) for client clock-independent expiry UX
 - Used by the export portal to display study info and download link
 
 **Share listing** (`GET /api/studies/{id}/shares`):
