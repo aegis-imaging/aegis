@@ -153,10 +153,20 @@ def ingest_retry_actions(request: Request, limit: int = Query(default=100, ge=1,
 
 
 @app.get("/ingest/retry/details")
-def ingest_retry_details(request: Request, limit: int = Query(default=100, ge=1, le=10000)):
+def ingest_retry_details(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=10000),
+    study_instance_uid: str = Query(default=""),
+):
     """Return detailed pending/dead-letter retry items (capped by limit)."""
     _require_operator_key(request)
-    return {"status": "ok", "ingest_retry": retry_details(limit=limit)}
+    return {
+        "status": "ok",
+        "ingest_retry": retry_details(
+            limit=limit,
+            study_instance_uid=study_instance_uid.strip() or None,
+        ),
+    }
 
 
 @app.post("/ingest/retry/process")
