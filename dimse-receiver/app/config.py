@@ -18,6 +18,8 @@ API_URL: str = os.getenv("API_URL", "http://api:8080")
 
 # Default project for ingested studies
 DIMSE_PROJECT_SLUG: str = os.getenv("DIMSE_PROJECT_SLUG", "default")
+# Optional explicit institution attribution override
+DIMSE_INSTITUTION_ID: str = os.getenv("DIMSE_INSTITUTION_ID", "")
 
 # HTTP client settings
 DIMSE_INGEST_TIMEOUT: int = int(os.getenv("DIMSE_INGEST_TIMEOUT", "30"))
