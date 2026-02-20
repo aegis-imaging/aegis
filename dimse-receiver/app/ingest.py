@@ -45,6 +45,7 @@ _metrics = {
     "retried_total": 0,
     "retried_ok_total": 0,
     "dead_letter_total": 0,
+    "replayed_total": 0,
 }
 
 
@@ -193,7 +194,30 @@ def retry_snapshot() -> dict[str, int]:
             "retried_total": _metrics["retried_total"],
             "retried_ok_total": _metrics["retried_ok_total"],
             "dead_letter_total": _metrics["dead_letter_total"],
+            "replayed_total": _metrics["replayed_total"],
         }
+
+
+def replay_dead_letter(limit: int = 100, now: float | None = None) -> dict[str, int]:
+    """Move dead-letter items back into the retry queue.
+
+    Items are re-queued for immediate processing. Returns counters including moved count.
+    """
+    current = time.time() if now is None else now
+    moved = 0
+
+    with _retry_lock:
+        while moved < limit and _dead_letter and len(_retry_queue) < config.DIMSE_INGEST_QUEUE_MAX:
+            item = _dead_letter.pop(0)
+            item.next_attempt_at = current
+            item.last_error = "replayed"
+            _retry_queue.append(item)
+            moved += 1
+            _metrics["replayed_total"] += 1
+
+    snapshot = retry_snapshot()
+    snapshot["replayed_now"] = moved
+    return snapshot
 
 
 def reset_retry_state() -> None:
@@ -205,3 +229,4 @@ def reset_retry_state() -> None:
         _metrics["retried_total"] = 0
         _metrics["retried_ok_total"] = 0
         _metrics["dead_letter_total"] = 0
+        _metrics["replayed_total"] = 0

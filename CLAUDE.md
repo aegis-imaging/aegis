@@ -873,6 +873,8 @@ uvicorn app.main:app --port 8087
 **Operational endpoints:**
 - `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals) and returns `degraded` if SCP is down or dead-letter is non-zero.
 - `GET /ingest/retry` — returns retry/dead-letter counters for troubleshooting.
+- `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
+- `POST /ingest/retry/replay?limit=N` — re-queues up to `N` dead-letter items for retry.
 
 ### Batch Import CLI (`api/cmd/import/`)
 
@@ -1067,7 +1069,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 30 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry status endpoint |
+| dimse-receiver | 34 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry status/process/replay endpoints |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
