@@ -8,6 +8,7 @@ package importer
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -26,11 +27,13 @@ import (
 
 // Options configures a batch import run.
 type Options struct {
-	Dir           string `json:"dir"`
-	ProjectSlug   string `json:"project_slug"`
-	InstitutionID string `json:"institution_id"`
-	Source        string `json:"source"`
-	DryRun        bool   `json:"dry_run"`
+	Dir                string `json:"dir"`
+	ProjectSlug        string `json:"project_slug"`
+	InstitutionID      string `json:"institution_id"`
+	InstitutionSlug    string `json:"institution_slug"`
+	InstitutionAETitle string `json:"institution_ae_title"`
+	Source             string `json:"source"`
+	DryRun             bool   `json:"dry_run"`
 }
 
 // Result reports the outcome of a batch import run.
@@ -41,6 +44,25 @@ type Result struct {
 	StudiesFailed  int      `json:"studies_failed"`
 	Errors         []string `json:"errors,omitempty"`
 	StudyIDs       []string `json:"study_ids,omitempty"` // IDs of successfully created studies
+}
+
+// ValidationError marks user input errors (bad dir/project/institution/options).
+// Handlers should map these to HTTP 400.
+type ValidationError struct {
+	msg string
+}
+
+func (e *ValidationError) Error() string {
+	return e.msg
+}
+
+func validationErrorf(format string, args ...any) error {
+	return &ValidationError{msg: fmt.Sprintf(format, args...)}
+}
+
+func IsValidationError(err error) bool {
+	var vErr *ValidationError
+	return errors.As(err, &vErr)
 }
 
 // StudyGroup holds DICOM files grouped by StudyInstanceUID.
@@ -61,20 +83,41 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	if opts.ProjectSlug == "" {
 		opts.ProjectSlug = "default"
 	}
+	if err := normalizeInstitutionSelectors(&opts); err != nil {
+		return nil, err
+	}
 
 	// Validate directory exists.
 	info, err := os.Stat(opts.Dir)
 	if err != nil {
-		return nil, fmt.Errorf("directory %q: %w", opts.Dir, err)
+		return nil, validationErrorf("directory %q: %v", opts.Dir, err)
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%q is not a directory", opts.Dir)
+		return nil, validationErrorf("%q is not a directory", opts.Dir)
 	}
 
 	// Resolve project.
 	project, err := model.GetProjectBySlug(ctx, db, opts.ProjectSlug)
 	if err != nil {
-		return nil, fmt.Errorf("project %q not found: %w", opts.ProjectSlug, err)
+		return nil, validationErrorf("project %q not found", opts.ProjectSlug)
+	}
+
+	institution, err := resolveImportInstitution(ctx, db, opts)
+	if err != nil {
+		return nil, err
+	}
+	if institution != nil {
+		if err := validateImportInstitution(institution); err != nil {
+			return nil, err
+		}
+		allowed, err := model.InstitutionCanSendToProject(ctx, db, institution.ID, project.ID)
+		if err != nil {
+			return nil, fmt.Errorf("validate institution project link: %w", err)
+		}
+		if !allowed {
+			return nil, validationErrorf("institution %q is not linked to project %q as sender/admin", institution.ID, opts.ProjectSlug)
+		}
+		opts.InstitutionID = institution.ID
 	}
 
 	// Scan and group DICOM files.
@@ -116,6 +159,79 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	log.Printf("aegis-import: complete — %d studies created, %d failed, %d files imported",
 		result.StudiesCreated, result.StudiesFailed, result.FilesScanned-result.FilesSkipped)
 	return result, nil
+}
+
+func validateImportInstitution(inst *model.Institution) error {
+	if inst == nil {
+		return validationErrorf("institution is required")
+	}
+	if !inst.Enabled {
+		return validationErrorf("institution %q is disabled", inst.ID)
+	}
+	if inst.Type != "sender" && inst.Type != "both" {
+		return validationErrorf("institution %q type must be sender or both", inst.ID)
+	}
+	return nil
+}
+
+func normalizeInstitutionSelectors(opts *Options) error {
+	opts.InstitutionID = strings.TrimSpace(opts.InstitutionID)
+	opts.InstitutionSlug = strings.ToLower(strings.TrimSpace(opts.InstitutionSlug))
+	opts.InstitutionAETitle = strings.TrimSpace(opts.InstitutionAETitle)
+	if opts.InstitutionID != "" && opts.InstitutionSlug != "" {
+		return validationErrorf("provide only one of institution_id or institution_slug")
+	}
+	return nil
+}
+
+func normalizeAETitle(aeTitle string) string {
+	return strings.ToUpper(strings.TrimSpace(aeTitle))
+}
+
+func resolveImportInstitution(ctx context.Context, db *sql.DB, opts Options) (*model.Institution, error) {
+	if opts.InstitutionID == "" && opts.InstitutionSlug == "" && opts.InstitutionAETitle == "" {
+		return nil, nil
+	}
+	var (
+		institution *model.Institution
+		err         error
+	)
+	if opts.InstitutionID != "" {
+		institution, err = model.GetInstitutionByID(ctx, db, opts.InstitutionID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, validationErrorf("institution %q not found", opts.InstitutionID)
+			}
+			return nil, fmt.Errorf("lookup institution: %w", err)
+		}
+	} else if opts.InstitutionSlug != "" {
+		institution, err = model.GetInstitutionBySlug(ctx, db, opts.InstitutionSlug)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, validationErrorf("institution slug %q not found", opts.InstitutionSlug)
+			}
+			return nil, fmt.Errorf("lookup institution by slug: %w", err)
+		}
+	}
+
+	if opts.InstitutionAETitle != "" {
+		if institution == nil {
+			institution, err = model.GetInstitutionByAETitle(ctx, db, opts.InstitutionAETitle)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return nil, validationErrorf("institution ae_title %q not found", opts.InstitutionAETitle)
+				}
+				return nil, fmt.Errorf("lookup institution by ae_title: %w", err)
+			}
+		} else if normalizeAETitle(institution.AETitle) != normalizeAETitle(opts.InstitutionAETitle) {
+			if opts.InstitutionID != "" {
+				return nil, validationErrorf("institution_id and institution_ae_title do not match")
+			}
+			return nil, validationErrorf("institution_slug and institution_ae_title do not match")
+		}
+	}
+
+	return institution, nil
 }
 
 // scanDirectory walks dir recursively, finds DICOM files, parses headers,

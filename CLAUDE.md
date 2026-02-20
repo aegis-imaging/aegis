@@ -292,6 +292,7 @@ Returns all audit trail entries for a specific study (by `resource_id`). Used by
 Clicking a study UID in the studies table navigates to a dedicated detail view with:
 - **Header** — full study UID, status/source badges, description
 - **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
+- **Timestamp rendering** — all date/time values render with explicit timezone abbreviation in the UI (browser locale format + zone label)
 - **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
 - **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
 - **Share form** — inline share creation for approved studies (email, note, expiry)
@@ -346,14 +347,23 @@ Institutions represent organisations that send or receive studies.
 | Field | Notes |
 |-------|-------|
 | `institution_type` | `sender`, `receiver`, or `both` |
-| `ip_ranges` | Comma-separated CIDR blocks (future: auto-attribute uploads) |
-| `ae_title` | DICOM AE title (future: DIMSE sender identification) |
+| `ip_ranges` | Comma-separated CIDR blocks used for internal ingest IP auto-attribution |
+| `ae_title` | DICOM AE title used for DIMSE/internal ingest attribution (`institution_ae_title`) |
 
 **Institution-Project links** (`/api/institutions/{id}/projects`):
 - `POST` — link with role (`sender`, `receiver`, `admin`)
 - `DELETE /api/institutions/{id}/projects/{projectID}` — unlink
 
 Studies carry an `institution_id` FK (nullable) for full traceability.
+Internal ingest attribution order:
+1. Explicit selector from `POST /api/ingest` (`institution_id`, `institution_slug`, or `institution_ae_title`)
+2. Fallback auto-match by request source IP against institution `ip_ranges` (most-specific CIDR wins)
+3. If source IP matches multiple institutions at the same most-specific prefix length, attribution is treated as ambiguous and no institution is assigned automatically.
+
+Network identity normalization and validation:
+- `ae_title` is trimmed and normalized to uppercase on create/update.
+- `ip_ranges` entries are trimmed, deduplicated, and validated (`CIDR` or single IP).
+- Invalid `ip_ranges` values are rejected with `400 Bad Request`.
 
 ### Anonymization Profiles (`api/handler/anon_profile.go`, `api/model/anon_profile.go`)
 
@@ -381,9 +391,11 @@ Weekly or monthly plain-text summary emails per project. No PHI — only study c
 - `POST /api/projects/{projectID}/digest-subscriptions` — create (`email`, `frequency: weekly|monthly`)
 - `DELETE /api/digest-subscriptions/{id}`
 
-**Scheduler**: goroutine started from `main.go` on startup; `time.Ticker` fires every hour; queries `digest_subscriptions` where digest is due (7 days for weekly, 30 for monthly since `last_sent_at`); sends email; updates `last_sent_at`. Silent no-op when `SMTP_HOST` is unset.
+**Scheduler**: goroutine started from `main.go` on startup; `time.Ticker` fires every hour; loads enabled subscriptions and evaluates due status in Go using one UTC reference timestamp per cycle (weekly: 7 days, monthly: 1 calendar month since `last_sent_at`); sends email; updates `last_sent_at`. Silent no-op when `SMTP_HOST` is unset.
 
 **Digest content**: project name, period label, received/approved/rejected/pending study counts, export shares created. No study UIDs or identifiers.
+
+Digest period labels are UTC-explicit (for example `2026-02-13 22:45 UTC – 2026-02-20 22:45 UTC`) so summaries are timezone-stable across regions.
 
 ### Admin Users (`api/handler/admin_user.go`, `api/model/admin_user.go`)
 
@@ -820,7 +832,7 @@ uvicorn app.main:app --port 8086
 
 ### DIMSE Receiver Service (`dimse-receiver/`)
 
-Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` can also be set explicitly.
+Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
 
 **Running locally:**
 ```bash
@@ -840,6 +852,7 @@ uvicorn app.main:app --port 8087
 | `API_URL` | `http://api:8080` | Go API base URL for ingest calls |
 | `DIMSE_PROJECT_SLUG` | `default` | Project slug sent to `/api/ingest` |
 | `DIMSE_INSTITUTION_ID` | *(empty)* | Optional fixed institution UUID sent as `institution_id` |
+| `DIMSE_INSTITUTION_SLUG` | *(empty)* | Optional fixed institution slug sent as `institution_slug` (used when ID is empty) |
 | `DIMSE_INGEST_TIMEOUT` | `30` | HTTP timeout (seconds) for ingest call |
 | `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
 
@@ -865,6 +878,8 @@ cd api && go build -o aegis-import ./cmd/import
 | `--dir` | *(required)* | Directory containing DICOM files to import |
 | `--project` | `default` | Project slug |
 | `--institution` | *(empty)* | Institution UUID (optional) |
+| `--institution-slug` | *(empty)* | Institution slug (optional, case-insensitive) |
+| `--institution-ae-title` | *(empty)* | Institution AE Title (optional, case-insensitive) |
 | `--source` | `internal` | `internal` or `external` |
 | `--dry-run` | `false` | Scan and report without importing |
 
@@ -877,7 +892,13 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 4. For each study: creates upload session + study record, copies files to `dicom/raw/{studyUID}/`, evaluates routing rules
 5. Duplicate StudyInstanceUIDs are rejected (unique constraint) — safe to re-run
 
-**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
+**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","institution_slug","institution_ae_title","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
+
+Validation behavior:
+- `institution_id` and `institution_slug` are mutually exclusive (provide only one).
+- If `institution_ae_title` is provided alongside `institution_id` or `institution_slug`, they must resolve to the same institution.
+- Institution selector (ID or slug) must reference an enabled institution with type `sender`/`both`, linked to the target project with role `sender`/`admin`.
+- Invalid directory/project/institution input now returns HTTP `400` from `/api/import/batch` (not `500`).
 
 ### Automated Processing Pipeline (`api/handler/pipeline.go`)
 
@@ -924,11 +945,26 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 **DICOM Download (export share):**
 - `GET /api/export/{token}/download` — token-authenticated zip download (no login required)
 - Same token validation as `GET /api/export/{token}` (SHA-256 hash, expiry, revocation)
+- Share expiry/revocation checks are centralized and evaluated against UTC to keep both token endpoints consistent
 - Logs to `export_downloads` table + audit trail
+
+**Create share request** (`POST /api/studies/{id}/share`):
+- Uses `expiry_hours` (integer) to compute `expires_at`
+- Server computes expiry in UTC (`time.Now().UTC().Add(...)`)
+- Optionally accepts explicit `expires_at` in RFC3339 (timezone-aware) for backward compatibility
+- Response includes server-derived `status` and `expires_in_seconds` for immediate UI state consistency
 
 **Export share redemption** (`GET /api/export/{token}`) — enhanced response includes:
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
+- `status` and `expires_in_seconds` (server-derived via UTC guard logic) for client clock-independent expiry UX
 - Used by the export portal to display study info and download link
+  - Export portal anchors countdown epoch from server `expires_in_seconds`, then ticks locally from that epoch to avoid both tab-throttle drift and client clock skew
+
+**Share listing** (`GET /api/studies/{id}/shares`):
+- Each share now includes server-derived `status` (`active` | `expired` | `revoked`) computed with UTC guard logic
+- Each share now includes `expires_in_seconds` for server-clock anchored remaining-time display
+- Admin UI uses this status directly instead of client-side expiry math
+  - Admin share tables anchor per-row countdown epoch from server `expires_in_seconds` and auto-transition rows to `expired` without refresh
 
 **Export forwarding** (`route_to` destinations):
 - `POST /api/studies/{studyUID}/trigger-export` — manual trigger (admin only, study must be approved + export_required)

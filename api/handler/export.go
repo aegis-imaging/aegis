@@ -81,12 +81,21 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 type createShareRequest struct {
 	RecipientEmail string `json:"recipient_email"`
 	Note           string `json:"note"`
-	ExpiryHours    int    `json:"expiry_hours"` // default 168 (7 days)
+	ExpiryHours    int    `json:"expiry_hours"`         // default 168 (7 days)
+	ExpiresAt      string `json:"expires_at,omitempty"` // optional RFC3339 timestamp
 }
 
 type createShareResponse struct {
 	*model.ExportShare
-	ExportURL string `json:"export_url"`
+	Status           string `json:"status"`
+	ExpiresInSeconds int64  `json:"expires_in_seconds"`
+	ExportURL        string `json:"export_url"`
+}
+
+type listShareResponse struct {
+	model.ExportShare
+	Status           string `json:"status"`
+	ExpiresInSeconds int64  `json:"expires_in_seconds"`
 }
 
 // CreateShare creates a time-limited, revocable export share for an approved study.
@@ -112,8 +121,11 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "recipient_email is required")
 		return
 	}
-	if req.ExpiryHours <= 0 {
-		req.ExpiryHours = 168 // 7 days
+
+	expiresAt, err := resolveShareExpiry(req, time.Now().UTC())
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	rawToken, tokenHash, err := generateShareToken()
@@ -123,7 +135,6 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt := time.Now().Add(time.Duration(req.ExpiryHours) * time.Hour)
 	share, err := model.CreateExportShare(r.Context(), s.db,
 		study.ID, tokenHash, req.RecipientEmail, req.Note, actorEmail(r), expiresAt)
 	if err != nil {
@@ -144,11 +155,38 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 	if err := s.mailer.Send(r.Context(), share.RecipientEmail, subject, body); err != nil {
 		log.Printf("share email to %s: %v", share.RecipientEmail, err)
 	}
+	now := time.Now().UTC()
 
 	s.writeJSON(w, http.StatusCreated, createShareResponse{
-		ExportShare: share,
-		ExportURL:   exportURL,
+		ExportShare:      share,
+		Status:           shareStatus(share, now),
+		ExpiresInSeconds: shareExpiresInSeconds(share, now),
+		ExportURL:        exportURL,
 	})
+}
+
+func resolveShareExpiry(req createShareRequest, nowUTC time.Time) (time.Time, error) {
+	nowUTC = nowUTC.UTC()
+
+	// Backward-compatible explicit expiry support. Must be RFC3339 with timezone.
+	if req.ExpiresAt != "" {
+		expiresAt, err := time.Parse(time.RFC3339, req.ExpiresAt)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("expires_at must be RFC3339 (example: 2026-03-01T12:00:00Z)")
+		}
+		expiresAt = expiresAt.UTC()
+		if !expiresAt.After(nowUTC) {
+			return time.Time{}, fmt.Errorf("expires_at must be in the future")
+		}
+		return expiresAt, nil
+	}
+
+	// Default when explicit expiry isn't provided.
+	expiryHours := req.ExpiryHours
+	if expiryHours <= 0 {
+		expiryHours = 168 // 7 days
+	}
+	return nowUTC.Add(time.Duration(expiryHours) * time.Hour), nil
 }
 
 // ListShares returns all export shares for a study.
@@ -162,7 +200,21 @@ func (s *Server) ListShares(w http.ResponseWriter, r *http.Request) {
 	if shares == nil {
 		shares = []model.ExportShare{}
 	}
-	s.writeJSON(w, http.StatusOK, shares)
+	out := buildListShareResponses(shares, time.Now().UTC())
+	s.writeJSON(w, http.StatusOK, out)
+}
+
+func buildListShareResponses(shares []model.ExportShare, now time.Time) []listShareResponse {
+	out := make([]listShareResponse, 0, len(shares))
+	for i := range shares {
+		share := shares[i]
+		out = append(out, listShareResponse{
+			ExportShare:      share,
+			Status:           shareStatus(&share, now),
+			ExpiresInSeconds: shareExpiresInSeconds(&share, now),
+		})
+	}
+	return out
 }
 
 // RevokeShare immediately revokes an export share.
@@ -183,12 +235,14 @@ type exportFile struct {
 
 type redeemResponse struct {
 	ShareID          string       `json:"share_id"`
+	Status           string       `json:"status"`
 	StudyUID         string       `json:"study_uid"`
 	Modality         string       `json:"modality"`
 	BodyPart         string       `json:"body_part"`
 	StudyDescription string       `json:"study_description"`
 	InstanceCount    int          `json:"instance_count"`
 	ExpiresAt        time.Time    `json:"expires_at"`
+	ExpiresInSeconds int64        `json:"expires_in_seconds"`
 	Note             string       `json:"note"`
 	CreatedBy        string       `json:"created_by"`
 	DownloadURL      string       `json:"download_url"`
@@ -212,12 +266,9 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusNotFound, "share not found")
 		return
 	}
-	if share.RevokedAt != nil {
-		s.writeError(w, http.StatusGone, "share has been revoked")
-		return
-	}
-	if time.Now().After(share.ExpiresAt) {
-		s.writeError(w, http.StatusGone, "share has expired")
+	now := time.Now().UTC()
+	if gone := shareGoneMessage(share, now); gone != "" {
+		s.writeError(w, http.StatusGone, gone)
 		return
 	}
 
@@ -259,12 +310,14 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 
 	s.writeJSON(w, http.StatusOK, redeemResponse{
 		ShareID:          share.ID,
+		Status:           shareStatus(share, now),
 		StudyUID:         study.StudyInstanceUID,
 		Modality:         study.Modality,
 		BodyPart:         study.BodyPart,
 		StudyDescription: study.StudyDescription,
 		InstanceCount:    study.InstanceCount,
 		ExpiresAt:        share.ExpiresAt,
+		ExpiresInSeconds: shareExpiresInSeconds(share, now),
 		Note:             share.Note,
 		CreatedBy:        share.CreatedBy,
 		DownloadURL:      downloadURL,

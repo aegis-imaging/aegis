@@ -8,12 +8,14 @@ type ExportFile = {
 
 type ExportData = {
   share_id: string
+  status?: 'active' | 'expired' | 'revoked'
   study_uid: string
   modality: string
   body_part: string
   study_description: string
   instance_count: number
   expires_at: string
+  expires_in_seconds?: number
   note: string
   created_by: string
   download_url: string
@@ -25,8 +27,41 @@ type ErrorState = {
   message: string
 }
 
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+  timeZoneName: 'short',
+})
+
+function fmtDateTime(iso: string) {
+  if (!iso) return ''
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return iso
+  return DATE_TIME_FORMAT.format(dt)
+}
+
+function fmtRemaining(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds))
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const mins = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+
+  if (days > 0) return `${days}d ${hours}h remaining`
+  if (hours > 0) return `${hours}h ${mins}m remaining`
+  if (mins > 0) return `${mins}m ${secs}s remaining`
+  return `${secs}s remaining`
+}
+
 export function App() {
   const [data, setData] = useState<ExportData | null>(null)
+  const [expiryEpochMs, setExpiryEpochMs] = useState<number | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const [error, setError] = useState<ErrorState | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -49,6 +84,19 @@ export function App() {
         const json: ExportData = await resp.json()
         // Build download URL relative to current origin
         json.download_url = `/api/export/${token}/download`
+        let nextExpiryEpochMs: number | null = null
+        if (typeof json.expires_in_seconds === 'number') {
+          // Anchor countdown to server-derived remaining seconds, then tick locally from epoch.
+          nextExpiryEpochMs = Date.now() + (Math.max(0, Math.floor(json.expires_in_seconds)) * 1000)
+        }
+        if (nextExpiryEpochMs === null) {
+          const parsedExpiresAt = Date.parse(json.expires_at)
+          if (Number.isFinite(parsedExpiresAt)) {
+            nextExpiryEpochMs = parsedExpiresAt
+          }
+        }
+        setExpiryEpochMs(nextExpiryEpochMs)
+        setNowMs(Date.now())
         setData(json)
       })
       .catch(() => {
@@ -56,6 +104,16 @@ export function App() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  const hasLiveCountdown = expiryEpochMs !== null && nowMs < expiryEpochMs
+
+  useEffect(() => {
+    if (!data || !hasLiveCountdown) return
+    const id = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [data?.share_id, hasLiveCountdown])
 
   if (loading) {
     return (
@@ -99,7 +157,17 @@ export function App() {
   if (!data) return null
 
   const expiresDate = new Date(data.expires_at)
-  const isExpiringSoon = expiresDate.getTime() - Date.now() < 24 * 60 * 60 * 1000
+  const parsedExpiresMs = Number.isFinite(expiresDate.getTime()) ? expiresDate.getTime() : null
+  const effectiveExpiryMs = expiryEpochMs ?? parsedExpiresMs
+  const secondsUntilExpiry =
+    effectiveExpiryMs === null
+      ? null
+      : Math.max(0, Math.floor((effectiveExpiryMs - nowMs) / 1000))
+  const isExpiredByStatus = data.status === 'expired' || data.status === 'revoked'
+  const isExpiredByTime = secondsUntilExpiry !== null && secondsUntilExpiry <= 0
+  const isExpired = isExpiredByStatus || isExpiredByTime
+  const isExpiringSoon =
+    !isExpired && secondsUntilExpiry !== null && secondsUntilExpiry < 24 * 60 * 60
 
   return (
     <div className="container">
@@ -124,7 +192,9 @@ export function App() {
               <tr>
                 <td className="label">Expires</td>
                 <td className={isExpiringSoon ? 'expiring-soon' : ''}>
-                  {expiresDate.toLocaleDateString()} {expiresDate.toLocaleTimeString()}
+                  {fmtDateTime(data.expires_at)}
+                  {isExpired && ' (expired — refresh link)'}
+                  {!isExpired && secondsUntilExpiry !== null && ` (${fmtRemaining(secondsUntilExpiry)})`}
                   {isExpiringSoon && ' (expiring soon)'}
                 </td>
               </tr>
@@ -141,9 +211,13 @@ export function App() {
         </div>
 
         <div className="download-section">
-          <a href={data.download_url} className="btn-download" download>
-            Download All ({data.files.length} file{data.files.length !== 1 ? 's' : ''}) as ZIP
-          </a>
+          {!isExpired ? (
+            <a href={data.download_url} className="btn-download" download>
+              Download All ({data.files.length} file{data.files.length !== 1 ? 's' : ''}) as ZIP
+            </a>
+          ) : (
+            <p className="download-disabled">This share has expired. Please request a new link.</p>
+          )}
         </div>
 
         <details className="file-list">
@@ -154,7 +228,11 @@ export function App() {
               const filename = parts[parts.length - 1]
               return (
                 <li key={i}>
-                  <a href={f.url} download={filename}>{filename}</a>
+                  {!isExpired ? (
+                    <a href={f.url} download={filename}>{filename}</a>
+                  ) : (
+                    <span className="file-link-disabled">{filename}</span>
+                  )}
                 </li>
               )
             })}
