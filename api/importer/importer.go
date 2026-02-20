@@ -27,13 +27,12 @@ import (
 
 // Options configures a batch import run.
 type Options struct {
-	Dir                string `json:"dir"`
-	ProjectSlug        string `json:"project_slug"`
-	InstitutionID      string `json:"institution_id"`
-	InstitutionSlug    string `json:"institution_slug"`
-	InstitutionAETitle string `json:"institution_ae_title"`
-	Source             string `json:"source"`
-	DryRun             bool   `json:"dry_run"`
+	Dir             string `json:"dir"`
+	ProjectSlug     string `json:"project_slug"`
+	InstitutionID   string `json:"institution_id"`
+	InstitutionSlug string `json:"institution_slug"`
+	Source          string `json:"source"`
+	DryRun          bool   `json:"dry_run"`
 }
 
 // Result reports the outcome of a batch import run.
@@ -181,10 +180,6 @@ func validateImportInstitution(inst *model.Institution) error {
 func normalizeInstitutionSelectors(opts *Options) error {
 	opts.InstitutionID = strings.TrimSpace(opts.InstitutionID)
 	opts.InstitutionSlug = strings.ToLower(strings.TrimSpace(opts.InstitutionSlug))
-	opts.InstitutionAETitle = strings.TrimSpace(opts.InstitutionAETitle)
-	if opts.InstitutionAETitle != "" {
-		return validationErrorf("institution_ae_title is no longer supported for batch import; use institution_id or institution_slug")
-	}
 	if opts.InstitutionID != "" && opts.InstitutionSlug != "" {
 		return validationErrorf("provide only one of institution_id or institution_slug")
 	}
