@@ -127,3 +127,36 @@ def test_ingest_retry_status_endpoint():
     body = resp.json()
     assert body["status"] == "ok"
     assert "ingest_retry" in body
+
+
+def test_ingest_retry_process_endpoint():
+    from unittest.mock import patch
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.process_retry_queue", return_value=2):
+        with TestClient(app) as client:
+            resp = client.post("/ingest/retry/process")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["processed"] == 2
+    assert "ingest_retry" in body
+
+
+def test_ingest_retry_replay_endpoint():
+    from unittest.mock import patch
+
+    snap = {"pending": 1, "dead_letter": 0, "replayed_now": 1}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.replay_dead_letter", return_value=snap) as mock_replay:
+        with TestClient(app) as client:
+            resp = client.post("/ingest/retry/replay?limit=5")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": snap}
+    mock_replay.assert_called_once_with(limit=5)
