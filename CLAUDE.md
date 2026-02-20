@@ -358,6 +358,11 @@ Internal ingest attribution order:
 1. Explicit `institution_id`/`institution_ae_title` from `POST /api/ingest`
 2. Fallback auto-match by request source IP against institution `ip_ranges` (most-specific CIDR wins)
 
+Network identity normalization and validation:
+- `ae_title` is trimmed and normalized to uppercase on create/update.
+- `ip_ranges` entries are trimmed, deduplicated, and validated (`CIDR` or single IP).
+- Invalid `ip_ranges` values are rejected with `400 Bad Request`.
+
 ### Anonymization Profiles (`api/handler/anon_profile.go`, `api/model/anon_profile.go`)
 
 Named per-project overrides for the client-side DICOM PS3.15 Basic Profile de-identification.
