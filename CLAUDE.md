@@ -858,6 +858,13 @@ uvicorn app.main:app --port 8087
 # DICOM SCP listens on DIMSE_PORT (default 11112) in a background thread.
 ```
 
+**PACS E2E harness (automated):**
+```bash
+python3 scripts/dimse_pacs_e2e_harness.py
+```
+- Runs four scenarios end-to-end: successful C-STORE ingest, transient failure to retry queue, targeted process recovery, dead-letter replay/process recovery.
+- Detailed runbook: `docs/planning/dimse-pacs-e2e-validation-runbook.md`.
+
 **Env vars:**
 
 | Var | Default | Notes |
@@ -1096,6 +1103,7 @@ git checkout develop && git pull
 | `go-test` | `go test -race -v -count=1 ./...` (~120 tests) |
 | `infra-guard` | `scripts/check-infra-placeholders.sh` blocks known credential placeholders in Terraform |
 | `python` (7× matrix) | `py_compile` on all `.py` files per service |
+| `python-scripts` | `py_compile` on smoke/DIMSE harness scripts in `scripts/` |
 | `python-test` (7× matrix) | `pytest -v --tb=short` per service (~206 tests total) |
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
 | `docker` (8× matrix) | `docker build` for all service images |
@@ -1138,6 +1146,7 @@ Common dev commands available via `make`:
 | `make lint` | Lint all languages (Go vet, Python py_compile, TypeScript tsc) |
 | `make check` | `curl /healthz` with pretty JSON output |
 | `make smoke` | Run cloud smoke harness (`BASE_URL=...`, optional `ADMIN_HEADER=...`) |
+| `make dimse-e2e` | Run DIMSE PACS E2E harness (mock ingest + retry/dead-letter scenarios) |
 | `make logs` | `docker compose logs -f` |
 
 ## Conventions
