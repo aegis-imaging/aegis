@@ -886,8 +886,8 @@ uvicorn app.main:app --port 8087
 - `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
 - `POST /ingest/retry/process-all?limit=N` — processes pending retry entries immediately (ignores schedule), up to `N`.
 - `POST /ingest/retry/process/{study_instance_uid}` — immediate retry attempt for one pending study.
-- `POST /ingest/retry/replay?limit=N` — re-queues up to `N` dead-letter items for retry.
-- `POST /ingest/retry/replay/{study_instance_uid}` — targeted re-queue for a specific dead-letter study.
+- `POST /ingest/retry/replay?limit=N` — re-queues up to `N` dead-letter items for retry; returns before/after pending/dead-letter counts and `blocked_by_queue_full` when capacity prevents replay.
+- `POST /ingest/retry/replay/{study_instance_uid}` — targeted re-queue for a specific dead-letter study with before/after queue counters.
 - `POST /ingest/retry/clear-pending?limit=N` — clears pending retry queue entries and returns before/after pending counts.
 - `POST /ingest/retry/clear-pending/{study_instance_uid}` — targeted pending-queue clear for a specific study.
 - `POST /ingest/retry/clear-dead-letter?limit=N` — clears acknowledged dead-letter items and returns before/after dead-letter counts.
