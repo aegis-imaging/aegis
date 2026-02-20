@@ -57,3 +57,10 @@ Use these files first before coding:
 2. Avoid destructive git/file commands unless explicitly requested.
 3. Keep changes scoped to the requested feature.
 4. Prefer reproducible, automated verification over manual claims.
+
+## Next Feature Note
+
+1. Time zone hardening is next after importer institution validation:
+   - standardize server/log timezone behavior (UTC default and explicit labels),
+   - make UI date/time displays explicit about timezone (or consistently UTC),
+   - verify share expiry and audit timestamps render consistently across admin dashboard and export portal.
