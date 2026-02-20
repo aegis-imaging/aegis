@@ -120,6 +120,24 @@ export async function isDicomFile(file: File): Promise<boolean> {
          magic[2] === 0x43 && magic[3] === 0x4D // "DICM"
 }
 
+/**
+ * Group parsed DICOM files by StudyInstanceUID.
+ * Returns a Map where keys are study UIDs and values are arrays of files.
+ */
+export function groupByStudy(files: ParsedDicomFile[]): Map<string, ParsedDicomFile[]> {
+  const groups = new Map<string, ParsedDicomFile[]>()
+  for (const file of files) {
+    const uid = file.studyInstanceUid
+    const group = groups.get(uid)
+    if (group) {
+      group.push(file)
+    } else {
+      groups.set(uid, [file])
+    }
+  }
+  return groups
+}
+
 function formatValue(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined
   if (typeof value === 'string') return value
