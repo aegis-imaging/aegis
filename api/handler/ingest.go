@@ -23,6 +23,11 @@ type ingestRequest struct {
 	Metadata           studyMetadata `json:"study_metadata"`
 }
 
+type ipInstitutionMatch struct {
+	Institution *model.Institution
+	PrefixLen   int
+}
+
 // InternalIngest accepts studies originating inside the enterprise network.
 // It tags the study as source="internal" and enters the same processing pipeline
 // as externally-uploaded studies (de-id validation, defacing gate, QC, approval).
@@ -47,6 +52,8 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var institutionID *string
+	sourceIP := ""
+	sourceIPAttributionError := ""
 	if strings.TrimSpace(req.InstitutionID) != "" || strings.TrimSpace(req.InstitutionAETitle) != "" {
 		inst, err := s.resolveIngestInstitution(r.Context(), project.ID, req.InstitutionID, req.InstitutionAETitle)
 		if err != nil {
@@ -55,10 +62,11 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		}
 		institutionID = &inst.ID
 	} else {
-		sourceIP := clientIP(r)
+		sourceIP = clientIP(r)
 		inst, err := s.resolveIngestInstitutionFromSourceIP(r.Context(), project.ID, sourceIP)
 		if err != nil {
 			log.Printf("internal ingest: resolve institution by source IP (%s): %v", sourceIP, err)
+			sourceIPAttributionError = err.Error()
 		} else if inst != nil {
 			institutionID = &inst.ID
 		}
@@ -107,7 +115,10 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		detail["institution_id"] = *institutionID
 	}
 	if strings.TrimSpace(req.InstitutionID) == "" && strings.TrimSpace(req.InstitutionAETitle) == "" {
-		detail["source_ip"] = clientIP(r)
+		detail["source_ip"] = sourceIP
+		if sourceIPAttributionError != "" {
+			detail["source_ip_attribution_error"] = sourceIPAttributionError
+		}
 	}
 	if strings.TrimSpace(req.InstitutionAETitle) != "" {
 		detail["institution_ae_title"] = strings.TrimSpace(req.InstitutionAETitle)
@@ -193,10 +204,7 @@ func (s *Server) resolveIngestInstitutionFromSourceIP(ctx context.Context, proje
 		return nil, err
 	}
 
-	var (
-		bestInst      *model.Institution
-		bestPrefixLen = -1
-	)
+	matches := make([]ipInstitutionMatch, 0)
 
 	for i := range institutions {
 		inst := &institutions[i]
@@ -221,14 +229,13 @@ func (s *Server) resolveIngestInstitutionFromSourceIP(ctx context.Context, proje
 				continue
 			}
 			prefixLen, _ := network.Mask.Size()
-			if prefixLen > bestPrefixLen {
-				bestInst = inst
-				bestPrefixLen = prefixLen
-			}
+			matches = append(matches, ipInstitutionMatch{
+				Institution: inst,
+				PrefixLen:   prefixLen,
+			})
 		}
 	}
-
-	return bestInst, nil
+	return selectBestInstitutionFromIPMatches(matches)
 }
 
 func parseIPRange(value string) *net.IPNet {
@@ -251,4 +258,30 @@ func parseIPRange(value string) *net.IPNet {
 		return &net.IPNet{IP: ip4, Mask: net.CIDRMask(32, 32)}
 	}
 	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}
+}
+
+func selectBestInstitutionFromIPMatches(matches []ipInstitutionMatch) (*model.Institution, error) {
+	if len(matches) == 0 {
+		return nil, nil
+	}
+
+	best := matches[0]
+	ambiguous := false
+
+	for i := 1; i < len(matches); i++ {
+		candidate := matches[i]
+		if candidate.PrefixLen > best.PrefixLen {
+			best = candidate
+			ambiguous = false
+			continue
+		}
+		if candidate.PrefixLen == best.PrefixLen && candidate.Institution.ID != best.Institution.ID {
+			ambiguous = true
+		}
+	}
+
+	if ambiguous {
+		return nil, fmt.Errorf("ambiguous source IP match for prefix length /%d", best.PrefixLen)
+	}
+	return best.Institution, nil
 }

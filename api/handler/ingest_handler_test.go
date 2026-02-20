@@ -243,3 +243,29 @@ func TestInternalIngest_DoesNotFailWhenNoIPMatch(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
 	assert.Nil(t, resp.Study.InstitutionID)
 }
+
+func TestInternalIngest_DoesNotAssignWhenIPMatchIsAmbiguous(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	project := testutil.SeedProject(t, db)
+
+	instA := createInstitutionWithIPRanges(t, db, "sender", "PACS_JULIET", "10.77.0.0/16", true)
+	instB := createInstitutionWithIPRanges(t, db, "sender", "PACS_KILO", "10.77.0.0/16", true)
+	linkInstitutionToProject(t, db, instA.ID, project.ID, "sender")
+	linkInstitutionToProject(t, db, instB.ID, project.ID, "sender")
+
+	payload := newIngestPayload(fmt.Sprintf("1.2.840.%d", time.Now().UnixNano()))
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/ingest", bytes.NewReader(body))
+	req.Header.Set("X-Forwarded-For", "10.77.42.9")
+	rr := httptest.NewRecorder()
+	srv.InternalIngest(rr, req)
+
+	require.Equal(t, http.StatusCreated, rr.Code)
+
+	var resp struct {
+		Study model.Study `json:"study"`
+	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	assert.Nil(t, resp.Study.InstitutionID)
+}
