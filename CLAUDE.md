@@ -357,6 +357,7 @@ Studies carry an `institution_id` FK (nullable) for full traceability.
 Internal ingest attribution order:
 1. Explicit `institution_id`/`institution_ae_title` from `POST /api/ingest`
 2. Fallback auto-match by request source IP against institution `ip_ranges` (most-specific CIDR wins)
+3. If source IP matches multiple institutions at the same most-specific prefix length, attribution is treated as ambiguous and no institution is assigned automatically.
 
 Network identity normalization and validation:
 - `ae_title` is trimmed and normalized to uppercase on create/update.
