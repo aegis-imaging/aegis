@@ -941,6 +941,7 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 **DICOM Download (export share):**
 - `GET /api/export/{token}/download` — token-authenticated zip download (no login required)
 - Same token validation as `GET /api/export/{token}` (SHA-256 hash, expiry, revocation)
+- Share expiry/revocation checks are centralized and evaluated against UTC to keep both token endpoints consistent
 - Logs to `export_downloads` table + audit trail
 
 **Create share request** (`POST /api/studies/{id}/share`):
