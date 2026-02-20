@@ -953,6 +953,10 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
 - Used by the export portal to display study info and download link
 
+**Share listing** (`GET /api/studies/{id}/shares`):
+- Each share now includes server-derived `status` (`active` | `expired` | `revoked`) computed with UTC guard logic
+- Admin UI uses this status directly instead of client-side expiry math
+
 **Export forwarding** (`route_to` destinations):
 - `POST /api/studies/{studyUID}/trigger-export` — manual trigger (admin only, study must be approved + export_required)
 - Background goroutine finds matching `route_to` rules and forwards DICOM files to each destination

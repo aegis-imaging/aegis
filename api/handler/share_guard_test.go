@@ -17,12 +17,28 @@ func TestShareGoneMessage_Active(t *testing.T) {
 	assert.Equal(t, "", shareGoneMessage(share, now))
 }
 
+func TestShareStatus_Active(t *testing.T) {
+	now := time.Date(2026, 2, 20, 12, 0, 0, 0, time.UTC)
+	share := &model.ExportShare{
+		ExpiresAt: now.Add(2 * time.Hour),
+	}
+	assert.Equal(t, "active", shareStatus(share, now))
+}
+
 func TestShareGoneMessage_Expired(t *testing.T) {
 	now := time.Date(2026, 2, 20, 12, 0, 0, 0, time.UTC)
 	share := &model.ExportShare{
 		ExpiresAt: now.Add(-1 * time.Minute),
 	}
 	assert.Equal(t, "share has expired", shareGoneMessage(share, now))
+}
+
+func TestShareStatus_Expired(t *testing.T) {
+	now := time.Date(2026, 2, 20, 12, 0, 0, 0, time.UTC)
+	share := &model.ExportShare{
+		ExpiresAt: now.Add(-1 * time.Minute),
+	}
+	assert.Equal(t, "expired", shareStatus(share, now))
 }
 
 func TestShareGoneMessage_ExpiredWithDifferentTimeZones(t *testing.T) {
@@ -35,6 +51,16 @@ func TestShareGoneMessage_ExpiredWithDifferentTimeZones(t *testing.T) {
 		ExpiresAt: time.Date(2026, 2, 20, 6, 59, 59, 0, loc),
 	}
 	assert.Equal(t, "share has expired", shareGoneMessage(share, now))
+}
+
+func TestShareStatus_RevokedWinsOverExpiry(t *testing.T) {
+	now := time.Date(2026, 2, 20, 12, 0, 0, 0, time.UTC)
+	revokedAt := now.Add(-3 * time.Hour)
+	share := &model.ExportShare{
+		ExpiresAt: now.Add(-1 * time.Hour),
+		RevokedAt: &revokedAt,
+	}
+	assert.Equal(t, "revoked", shareStatus(share, now))
 }
 
 func TestShareGoneMessage_RevokedWinsOverExpiry(t *testing.T) {

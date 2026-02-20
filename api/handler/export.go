@@ -87,7 +87,13 @@ type createShareRequest struct {
 
 type createShareResponse struct {
 	*model.ExportShare
+	Status    string `json:"status"`
 	ExportURL string `json:"export_url"`
+}
+
+type listShareResponse struct {
+	model.ExportShare
+	Status string `json:"status"`
 }
 
 // CreateShare creates a time-limited, revocable export share for an approved study.
@@ -150,6 +156,7 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 
 	s.writeJSON(w, http.StatusCreated, createShareResponse{
 		ExportShare: share,
+		Status:      "active",
 		ExportURL:   exportURL,
 	})
 }
@@ -189,7 +196,16 @@ func (s *Server) ListShares(w http.ResponseWriter, r *http.Request) {
 	if shares == nil {
 		shares = []model.ExportShare{}
 	}
-	s.writeJSON(w, http.StatusOK, shares)
+	now := time.Now()
+	out := make([]listShareResponse, 0, len(shares))
+	for i := range shares {
+		share := shares[i]
+		out = append(out, listShareResponse{
+			ExportShare: share,
+			Status:      shareStatus(&share, now),
+		})
+	}
+	s.writeJSON(w, http.StatusOK, out)
 }
 
 // RevokeShare immediately revokes an export share.
