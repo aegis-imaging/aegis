@@ -954,13 +954,13 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - `body_part`, `study_description`, `instance_count`, `note`, `created_by`, `download_url`
 - `status` and `expires_in_seconds` (server-derived via UTC guard logic) for client clock-independent expiry UX
 - Used by the export portal to display study info and download link
-  - Export portal runs a live countdown from `expires_in_seconds` and disables downloads client-side once it reaches zero
+  - Export portal runs a live countdown from absolute expiry epoch (`expires_at`), not decrement-by-1 state, so countdown stays accurate through tab sleep/throttling
 
 **Share listing** (`GET /api/studies/{id}/shares`):
 - Each share now includes server-derived `status` (`active` | `expired` | `revoked`) computed with UTC guard logic
 - Each share now includes `expires_in_seconds` for server-clock anchored remaining-time display
 - Admin UI uses this status directly instead of client-side expiry math
-  - Admin share tables run a live countdown from `expires_in_seconds` and auto-transition rows to `expired` without refresh
+  - Admin share tables compute remaining time from `expires_at - Date.now()` and auto-transition rows to `expired` without refresh
 
 **Export forwarding** (`route_to` destinations):
 - `POST /api/studies/{studyUID}/trigger-export` — manual trigger (admin only, study must be approved + export_required)
