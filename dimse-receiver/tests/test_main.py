@@ -263,7 +263,23 @@ def test_ingest_retry_actions_endpoint():
     assert resp.status_code == 200
     body = resp.json()
     assert body == {"status": "ok", "actions": actions}
-    mock_get.assert_called_once_with(limit=5)
+    mock_get.assert_called_once_with(limit=5, action=None)
+
+
+def test_ingest_retry_actions_endpoint_with_action_filter():
+    from unittest.mock import patch
+
+    actions = {"total": 1, "items": [{"action": "retry_process"}]}
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.get_actions", return_value=actions) as mock_get:
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry/actions?limit=5&action=retry_process")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "actions": actions}
+    mock_get.assert_called_once_with(limit=5, action="retry_process")
 
 
 def test_ingest_retry_details_endpoint():

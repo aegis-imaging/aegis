@@ -146,10 +146,14 @@ def ingest_retry_status(request: Request):
 
 
 @app.get("/ingest/retry/actions")
-def ingest_retry_actions(request: Request, limit: int = Query(default=100, ge=1, le=10000)):
+def ingest_retry_actions(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=10000),
+    action: str = Query(default=""),
+):
     """Return recent operator retry-control actions."""
     _require_operator_key(request)
-    return {"status": "ok", "actions": get_actions(limit=limit)}
+    return {"status": "ok", "actions": get_actions(limit=limit, action=action.strip() or None)}
 
 
 @app.get("/ingest/retry/details")
