@@ -450,6 +450,31 @@ def test_retry_details_returns_pending_and_dead_letter(monkeypatch):
     assert len(details["dead_letter_items"]) == 1
     assert details["pending_items"][0]["study_instance_uid"] == "1.2.3.4"
     assert "seconds_until_next_attempt" in details["pending_items"][0]
+    assert "queued_at" in details["pending_items"][0]
+    assert "age_seconds" in details["pending_items"][0]
+    assert "dead_lettered_at" in details["dead_letter_items"][0]
+    assert "dead_letter_age_seconds" in details["dead_letter_items"][0]
+
+
+def test_retry_details_reports_item_ages(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 1)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+
+    acc2 = _acc()
+    acc2.study_instance_uid = "9.9.9.9"
+
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=100.0):
+        submit_ingest(_acc())
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=120.0):
+        submit_ingest(acc2)
+
+    details = retry_details(limit=10, now=160.0)
+    pending_item = details["pending_items"][0]
+    dead_item = details["dead_letter_items"][0]
+    assert pending_item["queued_at"] == 100
+    assert pending_item["age_seconds"] == 60
+    assert dead_item["dead_lettered_at"] == 120
+    assert dead_item["dead_letter_age_seconds"] == 40
 
 
 def test_clear_dead_letter_removes_items(monkeypatch):
