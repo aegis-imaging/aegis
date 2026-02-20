@@ -8,6 +8,7 @@ package importer
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -43,6 +44,25 @@ type Result struct {
 	StudyIDs       []string `json:"study_ids,omitempty"` // IDs of successfully created studies
 }
 
+// ValidationError marks user input errors (bad dir/project/institution/options).
+// Handlers should map these to HTTP 400.
+type ValidationError struct {
+	msg string
+}
+
+func (e *ValidationError) Error() string {
+	return e.msg
+}
+
+func validationErrorf(format string, args ...any) error {
+	return &ValidationError{msg: fmt.Sprintf(format, args...)}
+}
+
+func IsValidationError(err error) bool {
+	var vErr *ValidationError
+	return errors.As(err, &vErr)
+}
+
 // StudyGroup holds DICOM files grouped by StudyInstanceUID.
 type StudyGroup struct {
 	StudyInstanceUID string
@@ -65,16 +85,37 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	// Validate directory exists.
 	info, err := os.Stat(opts.Dir)
 	if err != nil {
-		return nil, fmt.Errorf("directory %q: %w", opts.Dir, err)
+		return nil, validationErrorf("directory %q: %v", opts.Dir, err)
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%q is not a directory", opts.Dir)
+		return nil, validationErrorf("%q is not a directory", opts.Dir)
 	}
 
 	// Resolve project.
 	project, err := model.GetProjectBySlug(ctx, db, opts.ProjectSlug)
 	if err != nil {
-		return nil, fmt.Errorf("project %q not found: %w", opts.ProjectSlug, err)
+		return nil, validationErrorf("project %q not found", opts.ProjectSlug)
+	}
+
+	opts.InstitutionID = strings.TrimSpace(opts.InstitutionID)
+	if opts.InstitutionID != "" {
+		institution, err := model.GetInstitutionByID(ctx, db, opts.InstitutionID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, validationErrorf("institution %q not found", opts.InstitutionID)
+			}
+			return nil, fmt.Errorf("lookup institution: %w", err)
+		}
+		if err := validateImportInstitution(institution); err != nil {
+			return nil, err
+		}
+		allowed, err := model.InstitutionCanSendToProject(ctx, db, institution.ID, project.ID)
+		if err != nil {
+			return nil, fmt.Errorf("validate institution project link: %w", err)
+		}
+		if !allowed {
+			return nil, validationErrorf("institution %q is not linked to project %q as sender/admin", institution.ID, opts.ProjectSlug)
+		}
 	}
 
 	// Scan and group DICOM files.
@@ -116,6 +157,19 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	log.Printf("aegis-import: complete — %d studies created, %d failed, %d files imported",
 		result.StudiesCreated, result.StudiesFailed, result.FilesScanned-result.FilesSkipped)
 	return result, nil
+}
+
+func validateImportInstitution(inst *model.Institution) error {
+	if inst == nil {
+		return validationErrorf("institution is required")
+	}
+	if !inst.Enabled {
+		return validationErrorf("institution %q is disabled", inst.ID)
+	}
+	if inst.Type != "sender" && inst.Type != "both" {
+		return validationErrorf("institution %q type must be sender or both", inst.ID)
+	}
+	return nil
 }
 
 // scanDirectory walks dir recursively, finds DICOM files, parses headers,

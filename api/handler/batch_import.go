@@ -22,6 +22,10 @@ func (s *Server) BatchImport(w http.ResponseWriter, r *http.Request) {
 
 	result, err := importer.Run(r.Context(), s.db, s.store, req)
 	if err != nil {
+		if importer.IsValidationError(err) {
+			s.writeError(w, http.StatusBadRequest, "import failed: "+err.Error())
+			return
+		}
 		s.writeError(w, http.StatusInternalServerError, "import failed: "+err.Error())
 		return
 	}
