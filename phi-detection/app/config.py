@@ -2,9 +2,9 @@ import os
 
 
 class Config:
-    # Which OCR tool to use. Options: "auto", "tesseract"
-    # "auto" tries each in priority order and uses the first available.
-    # Future: add "vertex_ai" for production Document AI backend.
+    # Which OCR tool to use.
+    # Options: "auto", "tesseract", "google_vision", "aws_textract"
+    # "auto" tries each in priority order: google_vision > aws_textract > tesseract
     phi_tool: str = os.environ.get("PHI_TOOL", "auto")
 
     # Minimum OCR confidence to report a detection (0.0–1.0).

@@ -3,7 +3,8 @@ AEGIS Metadata Classification Service
 
 Classifies DICOM study modality and body part by reading DICOM headers.
 Uses heuristic analysis (DICOM tags, SOP Class UID, description patterns)
-for local dev; Vertex AI backend planned for production.
+for local dev; Google Cloud Vision and AWS Rekognition backends available
+for production (augment heuristics with image-based label inference).
 
 Endpoints:
     GET  /healthz   — liveness/readiness probe
@@ -19,6 +20,8 @@ from pydantic import BaseModel
 from .config import cfg
 from .backends.base import ClassificationBackend
 from .backends.heuristic import HeuristicBackend
+from .backends.google_vision import GoogleVisionClassificationBackend
+from .backends.aws_rekognition import AWSRekognitionClassificationBackend
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -28,6 +31,9 @@ app = FastAPI(title="AEGIS Metadata Classification Service")
 # ── Backend selection ────────────────────────────────────────────────────────
 
 _BACKENDS: list[ClassificationBackend] = [
+    # Priority order: cloud backends first, then offline fallback.
+    GoogleVisionClassificationBackend(confidence_threshold=cfg.confidence_threshold),
+    AWSRekognitionClassificationBackend(confidence_threshold=cfg.confidence_threshold),
     HeuristicBackend(),
 ]
 

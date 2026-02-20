@@ -23,6 +23,7 @@ terraform/**/.terraform.lock.hcl
 .env.*.local
 *.tfvars
 !*.tfvars.example
+secrets/
 
 # IDE
 .vscode/
