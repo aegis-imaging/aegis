@@ -84,6 +84,9 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	if err := normalizeInstitutionSelectors(&opts); err != nil {
 		return nil, err
 	}
+	if err := validateSourceInstitutionPolicy(&opts); err != nil {
+		return nil, err
+	}
 
 	// Validate directory exists.
 	info, err := os.Stat(opts.Dir)
@@ -189,6 +192,16 @@ func normalizeImportSource(opts *Options) error {
 	}
 	if opts.Source != "internal" && opts.Source != "external" {
 		return validationErrorf("source must be internal or external")
+	}
+	return nil
+}
+
+func validateSourceInstitutionPolicy(opts *Options) error {
+	if opts.Source != "external" {
+		return nil
+	}
+	if opts.InstitutionID == "" && opts.InstitutionSlug == "" && opts.InstitutionAETitle == "" {
+		return validationErrorf("institution selector required when source is external")
 	}
 	return nil
 }
