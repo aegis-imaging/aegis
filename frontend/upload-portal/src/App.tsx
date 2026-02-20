@@ -26,8 +26,18 @@ interface StudyGroup {
 type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const DISPLAY_TZ_MODE_KEY = 'aegis.upload.display_timezone_mode'
-const DISPLAY_TZ_CUSTOM_KEY = 'aegis.upload.display_timezone_custom'
+const GLOBAL_DISPLAY_TZ_MODE_KEY = 'aegis.ui.display_timezone_mode'
+const GLOBAL_DISPLAY_TZ_CUSTOM_KEY = 'aegis.ui.display_timezone_custom'
+const LEGACY_DISPLAY_TZ_MODE_KEYS = [
+  'aegis.display_timezone_mode',
+  'aegis.export.display_timezone_mode',
+  'aegis.upload.display_timezone_mode',
+]
+const LEGACY_DISPLAY_TZ_CUSTOM_KEYS = [
+  'aegis.display_timezone_custom',
+  'aegis.export.display_timezone_custom',
+  'aegis.upload.display_timezone_custom',
+]
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -54,21 +64,37 @@ function normalizeIanaTimeZone(value: string): string | null {
   }
 }
 
+function readFromLocalStorage(keys: string[]): string | null {
+  if (typeof window === 'undefined') return null
+  for (const key of keys) {
+    const value = window.localStorage.getItem(key)
+    if (value !== null) return value
+  }
+  return null
+}
+
+function writeToLocalStorage(keys: string[], value: string) {
+  if (typeof window === 'undefined') return
+  for (const key of keys) {
+    window.localStorage.setItem(key, value)
+  }
+}
+
 function readDisplayTimezone(): { mode: DisplayTimezoneMode; customTimeZone: string } {
   if (typeof window === 'undefined') {
     return { mode: 'utc', customTimeZone: '' }
   }
-  const storedMode = window.localStorage.getItem(DISPLAY_TZ_MODE_KEY)
+  const storedMode = readFromLocalStorage([GLOBAL_DISPLAY_TZ_MODE_KEY, ...LEGACY_DISPLAY_TZ_MODE_KEYS])
   const mode: DisplayTimezoneMode =
     storedMode === 'local' || storedMode === 'custom' ? storedMode : 'utc'
-  const customTimeZone = window.localStorage.getItem(DISPLAY_TZ_CUSTOM_KEY) ?? ''
+  const customTimeZone = readFromLocalStorage([GLOBAL_DISPLAY_TZ_CUSTOM_KEY, ...LEGACY_DISPLAY_TZ_CUSTOM_KEYS]) ?? ''
   return { mode, customTimeZone }
 }
 
 function writeDisplayTimezone(mode: DisplayTimezoneMode, customTimeZone: string) {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(DISPLAY_TZ_MODE_KEY, mode)
-  window.localStorage.setItem(DISPLAY_TZ_CUSTOM_KEY, customTimeZone)
+  writeToLocalStorage([GLOBAL_DISPLAY_TZ_MODE_KEY, ...LEGACY_DISPLAY_TZ_MODE_KEYS], mode)
+  writeToLocalStorage([GLOBAL_DISPLAY_TZ_CUSTOM_KEY, ...LEGACY_DISPLAY_TZ_CUSTOM_KEYS], customTimeZone)
 }
 
 export function App() {
