@@ -179,6 +179,23 @@ def test_ingest_retry_replay_endpoint():
     mock_replay.assert_called_once_with(limit=5)
 
 
+def test_ingest_retry_replay_study_endpoint():
+    from unittest.mock import patch
+
+    result = {"study_instance_uid": "1.2.3.4", "found": True, "moved": 1, "blocked_by_queue_full": False}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.replay_dead_letter_study", return_value=result) as mock_replay:
+        with TestClient(app) as client:
+            resp = client.post("/ingest/retry/replay/1.2.3.4")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": result}
+    mock_replay.assert_called_once_with(study_instance_uid="1.2.3.4")
+
+
 def test_ingest_retry_clear_dead_letter_endpoint():
     from unittest.mock import patch
 
