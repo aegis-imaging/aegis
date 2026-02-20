@@ -46,6 +46,7 @@ services:
       STORAGE_MODE: "local"
       LOCAL_STORAGE_DIR: "/app/data"
       API_BASE_URL: "http://localhost:8080"
+      APP_TIMEZONE: "UTC"
       ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
       SMTP_HOST: "mailpit"
       SMTP_PORT: "1025"
@@ -178,6 +179,9 @@ services:
       API_URL: "http://api:8080"
       DIMSE_PROJECT_SLUG: "${DIMSE_PROJECT_SLUG:-default}"
       DIMSE_INGEST_TIMEOUT: "${DIMSE_INGEST_TIMEOUT:-30}"
+      DIMSE_INGEST_RETRY_INTERVAL: "${DIMSE_INGEST_RETRY_INTERVAL:-15}"
+      DIMSE_INGEST_MAX_ATTEMPTS: "${DIMSE_INGEST_MAX_ATTEMPTS:-5}"
+      DIMSE_INGEST_QUEUE_MAX: "${DIMSE_INGEST_QUEUE_MAX:-1000}"
       DIMSE_MAX_ASSOCIATIONS: "${DIMSE_MAX_ASSOCIATIONS:-10}"
     volumes:
       - aegis-data:/app/data

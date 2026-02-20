@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app import config
-from app.ingest import StudyAccumulator, trigger_ingest
+from app.ingest import StudyAccumulator, submit_ingest
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ def handle_release(event: Any) -> None:
             acc.calling_ae_title,
         )
         try:
-            trigger_ingest(acc)
+            submit_ingest(acc)
         except Exception as e:
             log.error("Ingest trigger failed for %s: %s", study_uid, e)
 

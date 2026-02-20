@@ -27,13 +27,12 @@ import (
 
 // Options configures a batch import run.
 type Options struct {
-	Dir                string `json:"dir"`
-	ProjectSlug        string `json:"project_slug"`
-	InstitutionID      string `json:"institution_id"`
-	InstitutionSlug    string `json:"institution_slug"`
-	InstitutionAETitle string `json:"institution_ae_title"`
-	Source             string `json:"source"`
-	DryRun             bool   `json:"dry_run"`
+	Dir             string `json:"dir"`
+	ProjectSlug     string `json:"project_slug"`
+	InstitutionID   string `json:"institution_id"`
+	InstitutionSlug string `json:"institution_slug"`
+	Source          string `json:"source"`
+	DryRun          bool   `json:"dry_run"`
 }
 
 // Result reports the outcome of a batch import run.
@@ -77,13 +76,17 @@ type StudyGroup struct {
 
 // Run executes the batch import.
 func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (*Result, error) {
-	if opts.Source == "" {
-		opts.Source = "internal"
+	if err := normalizeImportDir(&opts); err != nil {
+		return nil, err
 	}
-	if opts.ProjectSlug == "" {
-		opts.ProjectSlug = "default"
+	normalizeProjectSlug(&opts)
+	if err := normalizeImportSource(&opts); err != nil {
+		return nil, err
 	}
 	if err := normalizeInstitutionSelectors(&opts); err != nil {
+		return nil, err
+	}
+	if err := validateSourceInstitutionPolicy(&opts); err != nil {
 		return nil, err
 	}
 
@@ -177,19 +180,54 @@ func validateImportInstitution(inst *model.Institution) error {
 func normalizeInstitutionSelectors(opts *Options) error {
 	opts.InstitutionID = strings.TrimSpace(opts.InstitutionID)
 	opts.InstitutionSlug = strings.ToLower(strings.TrimSpace(opts.InstitutionSlug))
-	opts.InstitutionAETitle = strings.TrimSpace(opts.InstitutionAETitle)
 	if opts.InstitutionID != "" && opts.InstitutionSlug != "" {
 		return validationErrorf("provide only one of institution_id or institution_slug")
 	}
 	return nil
 }
 
-func normalizeAETitle(aeTitle string) string {
-	return strings.ToUpper(strings.TrimSpace(aeTitle))
+func normalizeImportSource(opts *Options) error {
+	opts.Source = strings.ToLower(strings.TrimSpace(opts.Source))
+	if opts.Source == "" {
+		opts.Source = "internal"
+	}
+	if opts.Source != "internal" && opts.Source != "external" {
+		return validationErrorf("source must be internal or external")
+	}
+	return nil
+}
+
+func normalizeImportDir(opts *Options) error {
+	opts.Dir = strings.TrimSpace(opts.Dir)
+	if opts.Dir == "" {
+		return validationErrorf("dir is required")
+	}
+	opts.Dir = filepath.Clean(opts.Dir)
+	if !filepath.IsAbs(opts.Dir) {
+		return validationErrorf("dir must be an absolute path")
+	}
+	return nil
+}
+
+func validateSourceInstitutionPolicy(opts *Options) error {
+	if opts.Source != "external" {
+		return nil
+	}
+	if opts.InstitutionID == "" && opts.InstitutionSlug == "" {
+		return validationErrorf("institution_id or institution_slug required when source is external")
+	}
+	return nil
+}
+
+func normalizeProjectSlug(opts *Options) {
+	opts.ProjectSlug = strings.ToLower(strings.TrimSpace(opts.ProjectSlug))
+	if opts.ProjectSlug == "" {
+		opts.ProjectSlug = "default"
+	}
 }
 
 func resolveImportInstitution(ctx context.Context, db *sql.DB, opts Options) (*model.Institution, error) {
-	if opts.InstitutionID == "" && opts.InstitutionSlug == "" && opts.InstitutionAETitle == "" {
+	if opts.InstitutionID == "" && opts.InstitutionSlug == "" {
 		return nil, nil
 	}
 	var (
@@ -211,23 +249,6 @@ func resolveImportInstitution(ctx context.Context, db *sql.DB, opts Options) (*m
 				return nil, validationErrorf("institution slug %q not found", opts.InstitutionSlug)
 			}
 			return nil, fmt.Errorf("lookup institution by slug: %w", err)
-		}
-	}
-
-	if opts.InstitutionAETitle != "" {
-		if institution == nil {
-			institution, err = model.GetInstitutionByAETitle(ctx, db, opts.InstitutionAETitle)
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					return nil, validationErrorf("institution ae_title %q not found", opts.InstitutionAETitle)
-				}
-				return nil, fmt.Errorf("lookup institution by ae_title: %w", err)
-			}
-		} else if normalizeAETitle(institution.AETitle) != normalizeAETitle(opts.InstitutionAETitle) {
-			if opts.InstitutionID != "" {
-				return nil, validationErrorf("institution_id and institution_ae_title do not match")
-			}
-			return nil, validationErrorf("institution_slug and institution_ae_title do not match")
 		}
 	}
 

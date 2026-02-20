@@ -11,7 +11,7 @@ The name carries a double meaning. As an acronym it describes exactly what the s
 ## What It Does
 
 - **Browser-based anonymization** — DICOM tag-level de-identification happens in the browser before data leaves the hospital network. No software installation required. Works with any DICOM modality.
-- **Internal enterprise ingress** — Studies originating inside the enterprise can be ingested directly via API or batch import CLI and routed through the same processing pipeline.
+- **Internal enterprise ingress** — Studies originating inside the enterprise can be ingested via API, batch import CLI, or DIMSE C-STORE receiver and routed through the same processing pipeline.
 - **Server-side defacing** — Automated facial feature removal from 3D head scans (DeepDefacer, mri_deface, mri_reface). Non-head modalities bypass defacing automatically.
 - **Automated processing pipeline** — Classification, PHI detection, protocol compliance, QC, defacing, and BIDS conversion run automatically in dependency order after upload.
 - **Cloud-neutral storage** — DICOM files stored in local filesystem, S3, or GCS with a built-in DICOMweb proxy.
@@ -47,6 +47,7 @@ aegis/
 ├── bids-service/               # Python NIfTI/BIDS conversion service (dcm2niix)
 ├── classification-service/     # Python metadata classification service
 ├── protocol-service/           # Python MRI protocol compliance service
+├── dimse-receiver/             # Python DIMSE adapter (pynetdicom C-STORE SCP + ingest trigger)
 └── docs/                       # Shared research and documentation
 ```
 
@@ -56,8 +57,8 @@ aegis/
 - **Database**: PostgreSQL 15 (Cloud SQL on GCP, RDS on AWS, Docker for local dev)
 - **Frontend**: React 19 + TypeScript + Vite (4 apps)
 - **DICOM Storage**: Cloud-neutral file storage (local, GCS, or S3) with built-in DICOMweb proxy
-- **Processing**: 6 Python FastAPI sidecars (defacing, PHI detection, QC, BIDS, classification, protocol)
-- **AI/ML**: Pluggable — local backends (Tesseract, pydicom heuristics) or cloud AI (Vertex AI, SageMaker)
+- **Processing**: 7 Python services (6 processing sidecars + 1 DIMSE receiver adapter)
+- **AI/ML**: Pluggable — local backends (Tesseract, pydicom heuristics) or cloud AI (Google Cloud Vision, AWS Textract/Rekognition)
 - **Defacing**: DeepDefacer (default), mri_deface (fallback), mri_reface (research)
 - **Viewer**: OHIF Viewer v3 (embedded in admin dashboard)
 - **Auth**: Multi-provider — GCP IAP, Azure AD Easy Auth, AWS ALB + Cognito

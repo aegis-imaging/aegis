@@ -40,7 +40,7 @@ Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC a
 
 ## 1. Local Development Environment
 
-- [ ] Install Go 1.23+ (`brew install go`)
+- [ ] Install Go 1.24+ (`brew install go`)
 - [ ] Install Terraform 1.5+ (`brew install terraform`)
 - [ ] Verify Node.js 20+ and npm are installed (`node --version`)
 - [ ] Install Docker Desktop (for building/testing containers locally)
@@ -233,12 +233,14 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 ## 7i. Batch Import CLI
 
 - [ ] Build the CLI: `cd api && go build -o aegis-import ./cmd/import`
-- [ ] Dry run: `./aegis-import --dir ../test-data/brain-mri --project default --dry-run`
+- [ ] Dry run (absolute path required): `./aegis-import --dir /absolute/path/to/test-data/brain-mri --project default --dry-run`
 - [ ] Verify dry run output shows study count, modality, body part for each study
-- [ ] Full import: `./aegis-import --dir ../test-data/brain-mri --project default`
+- [ ] Full import: `./aegis-import --dir /absolute/path/to/test-data/brain-mri --project default`
 - [ ] Verify studies appear in admin dashboard with `source=internal`
 - [ ] Verify `import.batch` entries in Audit Log tab
 - [ ] Re-run the same import → should report duplicate errors (StudyInstanceUID unique constraint)
+- [ ] External provenance test: `source=external` requires canonical institution selector (`institution_id` or `institution_slug`)
+- [ ] Deprecated field test: posting unknown fields (for example `institution_ae_title`) to `/api/import/batch` returns HTTP 400
 - [ ] Test API endpoint:
   ```bash
   curl -X POST http://localhost:8080/api/import/batch \
@@ -681,17 +683,17 @@ make test-race   # full suite with race detector
 ## 8. Go API
 
 - [ ] `cd api && go run .` — verify health endpoint at http://localhost:8080/healthz
-- [ ] Add GCP SDK dependencies: `go get cloud.google.com/go/storage cloud.google.com/go/healthcare`
+- [ ] Add required Go dependencies as needed (storage SDKs, auth providers)
 - [ ] Implement signed URL generation endpoint
 - [ ] Test upload flow: browser → signed URL → GCS staging bucket
 
 ## 8a. Local Services (Docker Compose)
 
-`docker-compose.yml` starts the **full platform stack** — database, email, viewer, Go API, and all Python sidecar services:
+`docker-compose.yml` starts the **full platform stack** — database, email, viewer, Go API, and all Python services:
 
-- [ ] `docker compose up -d` — builds and starts all 10 services
+- [ ] `docker compose up -d` — builds and starts all 11 services
 - [ ] Verify API health: `curl http://localhost:8080/healthz | python3 -m json.tool`
-  - Should show `"status":"ok"`, `"database":"healthy"`, `"storage":"healthy"`, and all 6 sidecar services as `"healthy"`
+  - Should show `"status":"ok"`, `"database":"healthy"`, `"storage":"healthy"`, and all configured sidecar services as `"healthy"`
 - [ ] Verify OHIF loads at http://localhost:3002 (shows the AEGIS data source)
 - [ ] Verify Mailpit web UI at http://localhost:8025
 
@@ -709,6 +711,7 @@ Services started by `docker compose up`:
 | bids-service | (internal) | NIfTI/BIDS conversion |
 | classification-service | (internal) | Metadata classification |
 | protocol-service | (internal) | MRI protocol compliance |
+| dimse-receiver | 11112 (DICOM), 8080 (internal health) | DIMSE C-STORE ingress adapter |
 
 Start individual services:
 ```bash
@@ -853,7 +856,7 @@ Use GitHub Organizations to separate codebases by company. One personal GitHub a
   - Branch name patterns: `main` and `develop`
   - Enable: "Require a pull request before merging", "Do not allow deletions"
 - [ ] CI is configured: `.github/workflows/ci.yml` runs automatically on PRs to `develop` and `main`
-  - Go build + vet, Python syntax check (6 services), TypeScript type check (5 apps), Docker build (7 images)
+  - Go build + vet, Python syntax check (7 services), TypeScript type check (5 apps), Docker build (8 images)
 - [ ] Verify CI passes: open a test PR and check the Actions tab
 - [ ] Run `make lint` locally to validate before pushing
 
@@ -867,4 +870,4 @@ Use GitHub Organizations to separate codebases by company. One personal GitHub a
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-19. See AEGIS_Architecture.md for the full system design. Cloud AI backends added 2026-02-19.*
+*Generated 2026-02-18. Updated 2026-02-20. See AEGIS_Architecture.md for the full system design. Cloud AI backends and importer contract hardening reflected through 2026-02-20.*
