@@ -19,10 +19,12 @@ class _DummyAE:
 
 
 def setup_function():
-    reset_retry_state()
-    reset_actions()
     import app.config as cfg
 
+    cfg.DIMSE_INGEST_DURABLE_STORE_ENABLED = False
+    cfg.DIMSE_INGEST_DURABLE_STORE_PATH = "/tmp/dimse-ingest-retry-state-test.json"
+    reset_retry_state()
+    reset_actions()
     cfg.DIMSE_OPERATOR_API_KEY = ""
     cfg.DIMSE_INGEST_PENDING_AGE_WARN_SECONDS = 0
     cfg.DIMSE_DEAD_LETTER_AGE_WARN_SECONDS = 0
