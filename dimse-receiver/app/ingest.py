@@ -358,6 +358,29 @@ def clear_dead_letter(limit: int = 10000) -> dict[str, int]:
     return snapshot
 
 
+def clear_dead_letter_study(study_instance_uid: str) -> dict[str, object]:
+    """Clear one dead-letter entry by StudyInstanceUID."""
+    cleared = 0
+    found = False
+    with _retry_lock:
+        idx = next(
+            (i for i, item in enumerate(_dead_letter) if item.acc.study_instance_uid == study_instance_uid),
+            -1,
+        )
+        if idx >= 0:
+            found = True
+            _dead_letter.pop(idx)
+            cleared = 1
+            _metrics["cleared_dead_letter_total"] += 1
+
+    return {
+        "snapshot": retry_snapshot(),
+        "study_instance_uid": study_instance_uid,
+        "found": found,
+        "cleared": cleared,
+    }
+
+
 def reset_retry_state() -> None:
     """Reset in-memory retry state (tests only)."""
     with _retry_lock:
