@@ -903,10 +903,10 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 **API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","institution_slug","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
 
 Validation behavior:
+- `/api/import/batch` uses strict JSON decoding (`DisallowUnknownFields`); unknown/deprecated fields are rejected with HTTP `400`.
 - `dir` is required and trimmed before validation/scanning.
 - `project_slug` is trimmed/lowercased; empty values default to `default`.
 - `source` is normalized and validated; only `internal` or `external` are accepted.
-- `institution_ae_title` is no longer supported for batch import; use `institution_id` or `institution_slug`.
 - `source=external` requires canonical institution selector (`institution_id` or `institution_slug`) for provenance.
 - `institution_id` and `institution_slug` are mutually exclusive (provide only one).
 - Institution selector (ID or slug) must reference an enabled institution with type `sender`/`both`, linked to the target project with role `sender`/`admin`.

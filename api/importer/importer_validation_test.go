@@ -70,17 +70,6 @@ func TestNormalizeInstitutionSelectors_TrimAndLower(t *testing.T) {
 	assert.Equal(t, "hospital-bravo", opts.InstitutionSlug)
 }
 
-func TestNormalizeInstitutionSelectors_RejectsAETitle(t *testing.T) {
-	opts := &Options{
-		InstitutionAETitle: "PACS_ALPHA",
-	}
-
-	err := normalizeInstitutionSelectors(opts)
-	require.Error(t, err)
-	assert.True(t, IsValidationError(err))
-	assert.Contains(t, err.Error(), "institution_ae_title is no longer supported")
-}
-
 func TestNormalizeInstitutionSelectors_RejectsConflictingSelectors(t *testing.T) {
 	opts := &Options{
 		InstitutionID:   "inst-1",
@@ -190,15 +179,4 @@ func TestRun_RejectsExternalSourceWithoutCanonicalInstitutionSelector(t *testing
 	require.Error(t, err)
 	assert.True(t, IsValidationError(err))
 	assert.Contains(t, err.Error(), "institution_id or institution_slug required when source is external")
-}
-
-func TestRun_RejectsAnySourceUsingAETitle(t *testing.T) {
-	_, err := Run(context.Background(), nil, nil, Options{
-		Dir:                "x",
-		Source:             "internal",
-		InstitutionAETitle: "PACS_ALPHA",
-	})
-	require.Error(t, err)
-	assert.True(t, IsValidationError(err))
-	assert.Contains(t, err.Error(), "institution_ae_title is no longer supported")
 }

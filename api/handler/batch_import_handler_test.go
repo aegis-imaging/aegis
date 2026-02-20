@@ -27,3 +27,18 @@ func TestBatchImport_ReturnsBadRequestOnValidationError(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
+
+func TestBatchImport_RejectsUnknownJSONFields(t *testing.T) {
+	body, _ := json.Marshal(map[string]any{
+		"dir":                  "/tmp",
+		"institution_ae_title": "PACS_ALPHA",
+	})
+
+	req := httptest.NewRequest("POST", "/api/import/batch", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	srv := handler.NewServer(nil, nil, &config.Config{})
+	srv.BatchImport(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}

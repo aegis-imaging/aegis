@@ -11,7 +11,9 @@ import (
 // POST /api/import/batch
 func (s *Server) BatchImport(w http.ResponseWriter, r *http.Request) {
 	var req importer.Options
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
