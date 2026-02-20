@@ -46,7 +46,7 @@ Fill in:
 - `project_id`, `region`, `environment`
 - `api_domain`, `admin_domain`
 - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
-- `db_password`
+- `db_password`, `db_password_secret_id`
 - image URIs for API, admin dashboard, and all sidecars
 
 ## 5) Create Artifact Registry first
@@ -108,3 +108,13 @@ Then:
 - open `https://<admin_domain>` in incognito,
 - confirm IAP login challenge,
 - confirm unauthorized user access is denied.
+
+## 11) Secret rotation drill (recommended before pilot)
+
+```bash
+export NEW_DB_PASSWORD='<new-strong-password>'
+gcloud secrets versions add <db_password_secret_id> --data-file=- <<<"$NEW_DB_PASSWORD"
+gcloud sql users set-password aegis-api --instance=aegis-dev-postgres --password="$NEW_DB_PASSWORD"
+gcloud run services update aegis-api --region="$REGION" --update-env-vars=ROTATION_EPOCH=$(date +%s)
+curl -f https://<api_domain>/healthz
+```
