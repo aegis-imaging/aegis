@@ -239,12 +239,8 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusNotFound, "share not found")
 		return
 	}
-	if share.RevokedAt != nil {
-		s.writeError(w, http.StatusGone, "share has been revoked")
-		return
-	}
-	if time.Now().UTC().After(share.ExpiresAt) {
-		s.writeError(w, http.StatusGone, "share has expired")
+	if gone := shareGoneMessage(share, time.Now()); gone != "" {
+		s.writeError(w, http.StatusGone, gone)
 		return
 	}
 

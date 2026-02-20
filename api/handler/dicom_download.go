@@ -52,12 +52,8 @@ func (s *Server) ServeDicomDownloadByToken(w http.ResponseWriter, r *http.Reques
 		s.writeError(w, http.StatusNotFound, "share not found")
 		return
 	}
-	if share.RevokedAt != nil {
-		s.writeError(w, http.StatusGone, "share has been revoked")
-		return
-	}
-	if time.Now().After(share.ExpiresAt) {
-		s.writeError(w, http.StatusGone, "share has expired")
+	if gone := shareGoneMessage(share, time.Now()); gone != "" {
+		s.writeError(w, http.StatusGone, gone)
 		return
 	}
 
