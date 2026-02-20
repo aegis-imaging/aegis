@@ -51,6 +51,17 @@ _metrics = {
 }
 
 
+def _retry_delay_seconds(attempts: int) -> int:
+    """Return retry delay using bounded exponential backoff."""
+    base = max(1, int(config.DIMSE_INGEST_RETRY_INTERVAL))
+    multiplier = max(1.0, float(config.DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER))
+    max_interval = max(base, int(config.DIMSE_INGEST_RETRY_MAX_INTERVAL))
+
+    exponent = max(0, attempts - 1)
+    delay = int(base * (multiplier ** exponent))
+    return min(delay, max_interval)
+
+
 def _merge_accumulator(existing: StudyAccumulator, incoming: StudyAccumulator) -> None:
     """Merge incoming study metadata into an existing queued accumulator."""
     existing.file_count = max(existing.file_count, incoming.file_count)
@@ -96,7 +107,7 @@ def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
             QueuedIngest(
                 acc=acc,
                 attempts=1,
-                next_attempt_at=time.time() + config.DIMSE_INGEST_RETRY_INTERVAL,
+                next_attempt_at=time.time() + _retry_delay_seconds(1),
                 last_error=reason,
             )
         )
@@ -199,7 +210,7 @@ def process_retry_queue(now: float | None = None) -> int:
             )
             continue
 
-        item.next_attempt_at = current + config.DIMSE_INGEST_RETRY_INTERVAL
+        item.next_attempt_at = current + _retry_delay_seconds(item.attempts)
         item.last_error = "retry_failed"
         with _retry_lock:
             _retry_queue.append(item)

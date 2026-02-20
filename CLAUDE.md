@@ -866,6 +866,8 @@ uvicorn app.main:app --port 8087
 | `DIMSE_INSTITUTION_SLUG` | *(empty)* | Optional fixed institution slug sent as `institution_slug` (used when ID is empty) |
 | `DIMSE_INGEST_TIMEOUT` | `30` | HTTP timeout (seconds) for ingest call |
 | `DIMSE_INGEST_RETRY_INTERVAL` | `15` | Retry worker interval (seconds) for queued ingest failures |
+| `DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER` | `2.0` | Exponential backoff multiplier applied after each failed retry |
+| `DIMSE_INGEST_RETRY_MAX_INTERVAL` | `300` | Max retry delay seconds cap for exponential backoff |
 | `DIMSE_INGEST_MAX_ATTEMPTS` | `5` | Maximum attempts before moving an ingest item to dead-letter |
 | `DIMSE_INGEST_QUEUE_MAX` | `1000` | Maximum in-memory queued ingest items before queue-full dead-letter |
 | `DIMSE_OPERATOR_AUDIT_MAX` | `500` | Max retained operator action records for retry control endpoints |
@@ -875,6 +877,7 @@ uvicorn app.main:app --port 8087
 **Operational endpoints:**
 - If `DIMSE_OPERATOR_API_KEY` is set, all `/ingest/retry*` endpoints require that key.
 - `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total`) and returns `degraded` if SCP is down or dead-letter is non-zero.
+- Retry scheduling uses bounded exponential backoff (base interval, multiplier, max interval cap).
 - `GET /ingest/retry` — returns retry/dead-letter counters for troubleshooting.
 - `GET /ingest/retry/actions?limit=N` — returns recent operator actions on retry controls (bounded in-memory audit log).
 - `GET /ingest/retry/details?limit=N` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, next retry timing, last_error).
@@ -1076,7 +1079,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 49 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication, operator action audit logging, optional API-key protection, retry status/actions/details/process/replay/targeted-replay/clear endpoints |
+| dimse-receiver | 51 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication, bounded exponential backoff, operator action audit logging, optional API-key protection, retry status/actions/details/process/replay/targeted-replay/clear endpoints |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
