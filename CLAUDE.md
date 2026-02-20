@@ -876,7 +876,7 @@ uvicorn app.main:app --port 8087
 
 **Operational endpoints:**
 - If `DIMSE_OPERATOR_API_KEY` is set, all `/ingest/retry*` endpoints require that key.
-- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total`) and returns `degraded` if SCP is down or dead-letter is non-zero.
+- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total` and `dead_letter_deduped_total`) and returns `degraded` if SCP is down or dead-letter is non-zero.
 - Retry scheduling uses bounded exponential backoff (base interval, multiplier, max interval cap).
 - `GET /ingest/retry` — returns retry/dead-letter counters for troubleshooting.
 - `GET /ingest/retry/actions?limit=N` — returns recent operator actions on retry controls (bounded in-memory audit log).
@@ -1079,7 +1079,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 51 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication, bounded exponential backoff, operator action audit logging, optional API-key protection, retry status/actions/details/process/replay/targeted-replay/clear endpoints |
+| dimse-receiver | 52 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication (queue + dead-letter), bounded exponential backoff, operator action audit logging, optional API-key protection, retry status/actions/details/process/replay/targeted-replay/clear endpoints |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |

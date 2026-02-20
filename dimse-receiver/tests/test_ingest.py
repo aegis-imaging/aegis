@@ -265,6 +265,18 @@ def test_submit_ingest_dead_letters_when_queue_full(monkeypatch):
     assert snap["dead_letter"] == 1
 
 
+def test_submit_ingest_dead_letter_dedupes_same_study(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        submit_ingest(_acc())
+
+    snap = retry_snapshot()
+    assert snap["dead_letter"] == 1
+    assert snap["dead_letter_total"] == 1
+    assert snap["dead_letter_deduped_total"] == 1
+
+
 def test_replay_dead_letter_moves_items_to_pending(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 10)
 
@@ -286,10 +298,12 @@ def test_replay_dead_letter_moves_items_to_pending(monkeypatch):
 
 def test_replay_dead_letter_respects_limit(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 10)
+    acc2 = _acc()
+    acc2.study_instance_uid = "2.2.2.2"
     with patch("app.ingest.trigger_ingest", return_value=False):
         monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
         submit_ingest(_acc())
-        submit_ingest(_acc())
+        submit_ingest(acc2)
         monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 10)
 
     after = replay_dead_letter(limit=1, now=123.0)
@@ -321,9 +335,11 @@ def test_retry_details_returns_pending_and_dead_letter(monkeypatch):
 
 def test_clear_dead_letter_removes_items(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    acc2 = _acc()
+    acc2.study_instance_uid = "2.2.2.2"
     with patch("app.ingest.trigger_ingest", return_value=False):
         submit_ingest(_acc())
-        submit_ingest(_acc())
+        submit_ingest(acc2)
 
     before = retry_snapshot()
     assert before["dead_letter"] == 2
