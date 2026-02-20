@@ -132,6 +132,14 @@ Integration tests are skipped with `-short` flag for fast local feedback.
 cd api && go run .          # runs on :8080
 ```
 
+Core runtime env vars:
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `PORT` | `8080` | API listen port |
+| `DATABASE_URL` | `postgres://aegis:aegis@localhost:5432/aegis?sslmode=disable` | Postgres DSN |
+| `APP_TIMEZONE` | `UTC` | Applies DB session timezone (`SET TimeZone`) and uses UTC log timestamps |
+
 Email is disabled by default (silent no-op). To enable locally, run [Mailpit](https://github.com/axllent/mailpit) and set `SMTP_HOST`:
 ```bash
 docker run -p 1025:1025 -p 8025:8025 axllent/mailpit
@@ -883,7 +891,7 @@ cd api && go build -o aegis-import ./cmd/import
 | `--source` | `internal` | `internal` or `external` |
 | `--dry-run` | `false` | Scan and report without importing |
 
-Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DIR`).
+Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DIR`, `APP_TIMEZONE`).
 
 **How it works:**
 1. Recursively scans `--dir` for `.dcm` files

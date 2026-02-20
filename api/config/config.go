@@ -11,6 +11,7 @@ type Config struct {
 	StorageMode     string // "local", "gcs", or "s3"
 	LocalStorageDir string
 	APIBaseURL      string // for generating local upload URLs
+	AppTimezone     string // database session + server log timezone (default UTC)
 
 	// GCP (only used when StorageMode = "gcs")
 	GCPProject      string
@@ -83,6 +84,7 @@ func Load() *Config {
 		StorageMode:     envOr("STORAGE_MODE", "local"),
 		LocalStorageDir: envOr("LOCAL_STORAGE_DIR", "./data"),
 		APIBaseURL:      envOr("API_BASE_URL", "http://localhost:8080"),
+		AppTimezone:     envOr("APP_TIMEZONE", "UTC"),
 
 		GCPProject:      os.Getenv("GCP_PROJECT"),
 		GCSBucket:       os.Getenv("GCS_BUCKET"),

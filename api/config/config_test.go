@@ -10,6 +10,7 @@ func clearEnvVars(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
 		"PORT", "DATABASE_URL", "STORAGE_MODE", "LOCAL_STORAGE_DIR", "API_BASE_URL",
+		"APP_TIMEZONE",
 		"AUTH_ENABLED", "AUTH_PROVIDER", "DEV_USER_EMAIL",
 		"SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USERNAME", "SMTP_PASSWORD",
 		"PIPELINE_AUTO", "ALLOWED_ORIGINS",
@@ -32,6 +33,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 	assert.Equal(t, "8080", cfg.Port)
 	assert.Equal(t, "local", cfg.StorageMode)
+	assert.Equal(t, "UTC", cfg.AppTimezone)
 	assert.False(t, cfg.AuthEnabled)
 	assert.Equal(t, "auto", cfg.AuthProvider)
 	assert.Equal(t, "dev@aegis.local", cfg.DevUserEmail)
@@ -93,6 +95,13 @@ func TestLoad_SidecarURLs(t *testing.T) {
 	assert.Equal(t, "http://localhost:8083", cfg.QcServiceURL)
 	assert.Empty(t, cfg.PhiDetectionServiceURL)
 	assert.Empty(t, cfg.DimseReceiverURL)
+}
+
+func TestLoad_AppTimezoneOverride(t *testing.T) {
+	clearEnvVars(t)
+	t.Setenv("APP_TIMEZONE", "America/Chicago")
+	cfg := Load()
+	assert.Equal(t, "America/Chicago", cfg.AppTimezone)
 }
 
 func TestEnvOr(t *testing.T) {

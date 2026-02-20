@@ -22,6 +22,8 @@ import (
 )
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.LUTC)
+
 	// Docker HEALTHCHECK support: the distroless container has no shell or curl,
 	// so the binary itself can ping /healthz when invoked with --healthcheck.
 	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
@@ -53,6 +55,10 @@ func main() {
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatalf("database ping: %v", err)
 	}
+	if err := applyDBSessionTimezone(ctx, db, cfg.AppTimezone); err != nil {
+		log.Fatalf("database timezone setup (%s): %v", cfg.AppTimezone, err)
+	}
+	log.Printf("database session timezone set to %s", cfg.AppTimezone)
 
 	// Production connection pool tuning.
 	db.SetMaxOpenConns(25)
@@ -255,4 +261,9 @@ func main() {
 		log.Fatalf("shutdown: %v", err)
 	}
 	log.Println("stopped")
+}
+
+func applyDBSessionTimezone(ctx context.Context, db *sql.DB, timezone string) error {
+	var applied string
+	return db.QueryRowContext(ctx, `SELECT set_config('TimeZone', $1, false)`, timezone).Scan(&applied)
 }
