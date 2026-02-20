@@ -355,10 +355,14 @@ def retry_snapshot(now: float | None = None) -> dict[str, int]:
 
 
 def retry_details(
-    limit: int = 100, now: float | None = None, study_instance_uid: str | None = None
+    limit: int = 100,
+    now: float | None = None,
+    study_instance_uid: str | None = None,
+    sort: str = "next_attempt",
 ) -> dict[str, object]:
     """Return queue/dead-letter details for operational debugging."""
     current = time.time() if now is None else now
+    sort_mode = sort if sort in {"next_attempt", "age_desc"} else "next_attempt"
 
     with _retry_lock:
         pending_source = _retry_queue
@@ -368,8 +372,12 @@ def retry_details(
             dead_source = [item for item in _dead_letter if item.acc.study_instance_uid == study_instance_uid]
         pending_total = len(pending_source)
         dead_letter_total = len(dead_source)
-        pending = sorted(pending_source, key=lambda item: item.next_attempt_at)[:limit]
-        dead = dead_source[:limit]
+        if sort_mode == "age_desc":
+            pending = sorted(pending_source, key=lambda item: item.queued_at or current)[:limit]
+            dead = sorted(dead_source, key=lambda item: item.dead_lettered_at or current)[:limit]
+        else:
+            pending = sorted(pending_source, key=lambda item: item.next_attempt_at)[:limit]
+            dead = sorted(dead_source, key=lambda item: item.dead_lettered_at or 0)[:limit]
 
     pending_items = [
         {
@@ -406,6 +414,7 @@ def retry_details(
         "now": int(current),
         "limit": limit,
         "study_instance_uid": study_instance_uid or "",
+        "sort": sort_mode,
         "pending_total": pending_total,
         "dead_letter_total": dead_letter_total,
         "pending_returned": len(pending_items),

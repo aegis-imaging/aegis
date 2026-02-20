@@ -287,6 +287,7 @@ def test_ingest_retry_details_endpoint():
 
     details = {
         "snapshot": {"pending": 0, "dead_letter": 0},
+        "sort": "next_attempt",
         "pending_total": 0,
         "dead_letter_total": 0,
         "pending_returned": 0,
@@ -307,7 +308,7 @@ def test_ingest_retry_details_endpoint():
     assert resp.status_code == 200
     body = resp.json()
     assert body == {"status": "ok", "ingest_retry": details}
-    mock_details.assert_called_once_with(limit=10, study_instance_uid=None)
+    mock_details.assert_called_once_with(limit=10, study_instance_uid=None, sort="next_attempt")
 
 
 def test_ingest_retry_details_endpoint_with_study_filter():
@@ -315,6 +316,7 @@ def test_ingest_retry_details_endpoint_with_study_filter():
 
     details = {
         "snapshot": {"pending": 1, "dead_letter": 0},
+        "sort": "next_attempt",
         "pending_total": 1,
         "dead_letter_total": 0,
         "pending_returned": 1,
@@ -335,7 +337,36 @@ def test_ingest_retry_details_endpoint_with_study_filter():
     assert resp.status_code == 200
     body = resp.json()
     assert body == {"status": "ok", "ingest_retry": details}
-    mock_details.assert_called_once_with(limit=10, study_instance_uid="1.2.3.4")
+    mock_details.assert_called_once_with(limit=10, study_instance_uid="1.2.3.4", sort="next_attempt")
+
+
+def test_ingest_retry_details_endpoint_with_sort_option():
+    from unittest.mock import patch
+
+    details = {
+        "snapshot": {"pending": 1, "dead_letter": 0},
+        "sort": "age_desc",
+        "pending_total": 1,
+        "dead_letter_total": 0,
+        "pending_returned": 1,
+        "dead_letter_returned": 0,
+        "pending_truncated": False,
+        "dead_letter_truncated": False,
+        "study_instance_uid": "",
+        "pending_items": [{"study_instance_uid": "1.2.3.4"}],
+        "dead_letter_items": [],
+    }
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.retry_details", return_value=details) as mock_details:
+        with TestClient(app) as client:
+            resp = client.get("/ingest/retry/details?limit=10&sort=age_desc")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "ingest_retry": details}
+    mock_details.assert_called_once_with(limit=10, study_instance_uid=None, sort="age_desc")
 
 
 def test_ingest_retry_process_endpoint():

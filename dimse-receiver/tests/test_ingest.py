@@ -469,6 +469,7 @@ def test_retry_details_returns_pending_and_dead_letter(monkeypatch):
 
     details = retry_details(limit=10, now=100.0)
     assert details["limit"] == 10
+    assert details["sort"] == "next_attempt"
     assert details["pending_total"] == 1
     assert details["dead_letter_total"] == 1
     assert details["pending_returned"] == 1
@@ -522,6 +523,7 @@ def test_retry_details_filters_by_study_instance_uid(monkeypatch):
 
     details = retry_details(limit=10, now=200.0, study_instance_uid="9.9.9.9")
     assert details["study_instance_uid"] == "9.9.9.9"
+    assert details["sort"] == "next_attempt"
     assert details["pending_total"] == 0
     assert details["dead_letter_total"] == 1
     assert details["pending_returned"] == 0
@@ -545,6 +547,26 @@ def test_retry_details_reports_truncation_when_limited(monkeypatch):
     assert details["pending_total"] == 2
     assert details["pending_returned"] == 1
     assert details["pending_truncated"] is True
+
+
+def test_retry_details_sort_age_desc_orders_by_oldest_queue_age(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=100.0):
+        submit_ingest(_acc())
+    with patch("app.ingest.trigger_ingest", return_value=False), patch("app.ingest.time.time", return_value=120.0):
+        acc2 = _acc()
+        acc2.study_instance_uid = "2.2.2.2"
+        submit_ingest(acc2)
+
+    # Force next-attempt ordering opposite age ordering.
+    ingest_module._retry_queue[0].next_attempt_at = 500.0
+    ingest_module._retry_queue[1].next_attempt_at = 200.0
+
+    by_due = retry_details(limit=10, now=150.0, sort="next_attempt")
+    by_age = retry_details(limit=10, now=150.0, sort="age_desc")
+
+    assert [x["study_instance_uid"] for x in by_due["pending_items"]] == ["2.2.2.2", "1.2.3.4"]
+    assert [x["study_instance_uid"] for x in by_age["pending_items"]] == ["1.2.3.4", "2.2.2.2"]
 
 
 def test_clear_dead_letter_removes_items(monkeypatch):
