@@ -74,7 +74,7 @@ export function serializeDataset(
 export function buildStudySummary(files: ParsedDicomFile[]): StudySummary {
   if (files.length === 0) {
     return {
-      patientName: '', patientId: '', studyDate: '',
+      patientName: '', patientId: '', studyDate: '', studyTime: '', timezoneOffsetFromUtc: '', studyDateTimeIso: '',
       studyDescription: '', modality: '', studyInstanceUid: '',
       seriesCount: 0, imageCount: 0, bodyPart: '',
     }
@@ -86,11 +86,21 @@ export function buildStudySummary(files: ParsedDicomFile[]): StudySummary {
 
   const seriesUids = new Set(files.map(f => f.seriesInstanceUid))
   const modalities = new Set(files.map(f => f.modality).filter(Boolean))
+  const studyDate = firstTag('StudyDate')
+  const studyTime = firstTag('StudyTime')
+  const timezoneOffsetFromUtc = firstTag('TimezoneOffsetFromUTC')
+  const acquisitionDateTime = firstTag('AcquisitionDateTime')
+  const studyDateTimeIso =
+    dicomStudyDateTimeToIso(studyDate, studyTime, timezoneOffsetFromUtc) ||
+    dicomDateTimeTagToIso(acquisitionDateTime)
 
   return {
     patientName: firstTag('PatientName'),
     patientId: firstTag('PatientID'),
-    studyDate: firstTag('StudyDate'),
+    studyDate,
+    studyTime,
+    timezoneOffsetFromUtc,
+    studyDateTimeIso,
     studyDescription: firstTag('StudyDescription'),
     modality: Array.from(modalities).join(', '),
     studyInstanceUid: first.studyInstanceUid,
@@ -136,6 +146,84 @@ export function groupByStudy(files: ParsedDicomFile[]): Map<string, ParsedDicomF
     }
   }
   return groups
+}
+
+function dicomStudyDateTimeToIso(studyDate: string, studyTime: string, offset: string): string {
+  const dateParts = parseDicomDate(studyDate)
+  if (!dateParts) return ''
+
+  const timeParts = parseDicomTime(studyTime) ?? { hh: 0, mm: 0, ss: 0 }
+  const parsedOffset = parseDicomOffset(offset)
+  if (!parsedOffset) return ''
+
+  return (
+    `${pad4(dateParts.y)}-${pad2(dateParts.m)}-${pad2(dateParts.d)}` +
+    `T${pad2(timeParts.hh)}:${pad2(timeParts.mm)}:${pad2(timeParts.ss)}` +
+    `${parsedOffset.slice(0, 3)}:${parsedOffset.slice(3)}`
+  )
+}
+
+function dicomDateTimeTagToIso(value: string): string {
+  if (!value) return ''
+  const match = value.match(/^(\d{4})(\d{2})(\d{2})(\d{2})?(\d{2})?(\d{2})?(?:\.\d+)?([+-]\d{4})?$/)
+  if (!match) return ''
+
+  const y = Number(match[1])
+  const m = Number(match[2])
+  const d = Number(match[3])
+  const hh = Number(match[4] ?? '0')
+  const mm = Number(match[5] ?? '0')
+  const ss = Number(match[6] ?? '0')
+  const offset = parseDicomOffset(match[7] ?? '')
+  if (!isValidDate(y, m, d) || !isValidTime(hh, mm, ss) || !offset) return ''
+
+  return `${pad4(y)}-${pad2(m)}-${pad2(d)}T${pad2(hh)}:${pad2(mm)}:${pad2(ss)}${offset.slice(0, 3)}:${offset.slice(3)}`
+}
+
+function parseDicomDate(value: string): { y: number; m: number; d: number } | null {
+  if (!value || !/^\d{8}$/.test(value)) return null
+  const y = Number(value.slice(0, 4))
+  const m = Number(value.slice(4, 6))
+  const d = Number(value.slice(6, 8))
+  return isValidDate(y, m, d) ? { y, m, d } : null
+}
+
+function parseDicomTime(value: string): { hh: number; mm: number; ss: number } | null {
+  if (!value) return null
+  const main = value.split('.')[0]
+  if (!/^\d{2}(\d{2})?(\d{2})?$/.test(main)) return null
+
+  const hh = Number(main.slice(0, 2))
+  const mm = main.length >= 4 ? Number(main.slice(2, 4)) : 0
+  const ss = main.length >= 6 ? Number(main.slice(4, 6)) : 0
+
+  return isValidTime(hh, mm, ss) ? { hh, mm, ss } : null
+}
+
+function parseDicomOffset(value: string): string | null {
+  if (!value || !/^[+-]\d{4}$/.test(value)) return null
+  const hh = Number(value.slice(1, 3))
+  const mm = Number(value.slice(3, 5))
+  if (hh > 23 || mm > 59) return null
+  return value
+}
+
+function isValidDate(y: number, m: number, d: number): boolean {
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d
+}
+
+function isValidTime(hh: number, mm: number, ss: number): boolean {
+  return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59 && ss >= 0 && ss <= 59
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function pad4(n: number): string {
+  return String(n).padStart(4, '0')
 }
 
 function formatValue(value: unknown): string | undefined {
