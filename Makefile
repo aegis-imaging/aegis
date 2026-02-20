@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -55,3 +55,12 @@ test-race:
 
 check:
 	@curl -sf http://localhost:8080/healthz | python3 -m json.tool 2>/dev/null || echo "API: DOWN"
+
+smoke:
+	@if [ -z "$(BASE_URL)" ]; then \
+		echo "usage: make smoke BASE_URL=https://api-dev.aegisimaging.ai [ADMIN_HEADER='Header: value'] [PROJECT_SLUG=default]"; \
+		exit 1; \
+	fi
+	@CMD="python3 scripts/cloud_smoke_test.py --base-url $(BASE_URL) --project-slug $${PROJECT_SLUG:-default}"; \
+	if [ -n "$$ADMIN_HEADER" ]; then CMD="$$CMD --admin-header '$$ADMIN_HEADER'"; fi; \
+	eval "$$CMD"
