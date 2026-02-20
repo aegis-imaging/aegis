@@ -113,7 +113,7 @@ def test_handle_release_triggers_ingest_per_study():
         "study2": StudyAccumulator(study_instance_uid="study2", file_count=1, series_uids={"s2"}),
     }
 
-    with patch("app.scp.trigger_ingest", return_value=True) as mock_trigger:
+    with patch("app.scp.submit_ingest", return_value=True) as mock_trigger:
         handle_release(_Event(assoc=assoc))
 
     assert mock_trigger.call_count == 2
@@ -122,7 +122,7 @@ def test_handle_release_triggers_ingest_per_study():
 
 def test_handle_release_empty_state():
     assoc = _Assoc()
-    with patch("app.scp.trigger_ingest", return_value=True) as mock_trigger:
+    with patch("app.scp.submit_ingest", return_value=True) as mock_trigger:
         handle_release(_Event(assoc=assoc))
     mock_trigger.assert_not_called()
 
