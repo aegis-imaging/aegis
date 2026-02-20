@@ -1100,6 +1100,10 @@ git checkout develop && git pull
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
 | `docker` (8× matrix) | `docker build` for all service images |
 
+Manual workflow:
+- `.github/workflows/cloud-smoke.yml` (`workflow_dispatch`) runs `scripts/cloud_smoke_test.py` against a deployed environment.
+- Optional repo secret `CLOUD_SMOKE_ADMIN_HEADER` provides the admin auth header for protected endpoints.
+
 ### Python Sidecar Testing
 
 Each sidecar has `requirements-test.txt` (pytest + httpx) and a `tests/` directory:
@@ -1133,6 +1137,7 @@ Common dev commands available via `make`:
 | `make api` | Run Go API locally (`go run .`) |
 | `make lint` | Lint all languages (Go vet, Python py_compile, TypeScript tsc) |
 | `make check` | `curl /healthz` with pretty JSON output |
+| `make smoke` | Run cloud smoke harness (`BASE_URL=...`, optional `ADMIN_HEADER=...`) |
 | `make logs` | `docker compose logs -f` |
 
 ## Conventions
