@@ -2,3 +2,13 @@ aws_region         = "us-east-1"
 environment        = "dev"
 project_name       = "aegis"
 db_master_username = "aegis"
+
+# ACM certificate ARN in same region as the ALB.
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+# Must be globally unique within the AWS region/account partition.
+cognito_domain_prefix = "aegis-dev-auth"
+
+# Optional overrides (defaults to ALB DNS callbacks/logout):
+# cognito_callback_urls = ["https://admin.example.com/oauth2/idpresponse"]
+# cognito_logout_urls   = ["https://admin.example.com/logout"]
