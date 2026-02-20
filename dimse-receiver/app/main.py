@@ -22,6 +22,7 @@ from app.ingest import (
     retry_details,
     retry_snapshot,
 )
+from app.operator_audit import get_actions, record_action
 from app.scp import create_scp, start_scp
 from app.sender import forward_study
 
@@ -95,6 +96,12 @@ def ingest_retry_status():
     return {"status": "ok", "ingest_retry": retry_snapshot()}
 
 
+@app.get("/ingest/retry/actions")
+def ingest_retry_actions(limit: int = Query(default=100, ge=1, le=10000)):
+    """Return recent operator retry-control actions."""
+    return {"status": "ok", "actions": get_actions(limit=limit)}
+
+
 @app.get("/ingest/retry/details")
 def ingest_retry_details(limit: int = Query(default=100, ge=1, le=10000)):
     """Return detailed pending/dead-letter retry items (capped by limit)."""
@@ -105,13 +112,27 @@ def ingest_retry_details(limit: int = Query(default=100, ge=1, le=10000)):
 def ingest_retry_process():
     """Run one immediate retry processing pass."""
     processed = process_retry_queue()
-    return {"status": "ok", "processed": processed, "ingest_retry": retry_snapshot()}
+    snap = retry_snapshot()
+    record_action(
+        "retry_process",
+        processed=processed,
+        pending=snap["pending"],
+        dead_letter=snap["dead_letter"],
+    )
+    return {"status": "ok", "processed": processed, "ingest_retry": snap}
 
 
 @app.post("/ingest/retry/replay")
 def ingest_retry_replay(limit: int = Query(default=100, ge=1, le=10000)):
     """Replay dead-letter items back into the retry queue."""
     snap = replay_dead_letter(limit=limit)
+    record_action(
+        "retry_replay_bulk",
+        limit=limit,
+        replayed_now=snap.get("replayed_now", 0),
+        pending=snap["pending"],
+        dead_letter=snap["dead_letter"],
+    )
     return {"status": "ok", "ingest_retry": snap}
 
 
@@ -119,6 +140,13 @@ def ingest_retry_replay(limit: int = Query(default=100, ge=1, le=10000)):
 def ingest_retry_replay_study(study_instance_uid: str):
     """Replay a specific dead-letter study by StudyInstanceUID."""
     result = replay_dead_letter_study(study_instance_uid=study_instance_uid)
+    record_action(
+        "retry_replay_study",
+        study_instance_uid=study_instance_uid,
+        found=result.get("found", False),
+        moved=result.get("moved", 0),
+        blocked_by_queue_full=result.get("blocked_by_queue_full", False),
+    )
     return {"status": "ok", "ingest_retry": result}
 
 
@@ -126,6 +154,12 @@ def ingest_retry_replay_study(study_instance_uid: str):
 def ingest_retry_clear_dead_letter(limit: int = Query(default=10000, ge=1, le=50000)):
     """Clear dead-letter items after operator acknowledgement."""
     snap = clear_dead_letter(limit=limit)
+    record_action(
+        "retry_clear_dead_letter",
+        limit=limit,
+        cleared_now=snap.get("cleared_now", 0),
+        dead_letter=snap["dead_letter"],
+    )
     return {"status": "ok", "ingest_retry": snap}
 
 
