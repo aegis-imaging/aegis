@@ -23,7 +23,11 @@ interface StudyGroup {
   summary: StudySummaryType
 }
 
+type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const DISPLAY_TZ_MODE_KEY = 'aegis.upload.display_timezone_mode'
+const DISPLAY_TZ_CUSTOM_KEY = 'aegis.upload.display_timezone_custom'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -32,7 +36,44 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
+function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local'
+  } catch {
+    return 'Local'
+  }
+}
+
+function normalizeIanaTimeZone(value: string): string | null {
+  const candidate = value.trim()
+  if (!candidate) return null
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: candidate }).resolvedOptions().timeZone
+  } catch {
+    return null
+  }
+}
+
+function readDisplayTimezone(): { mode: DisplayTimezoneMode; customTimeZone: string } {
+  if (typeof window === 'undefined') {
+    return { mode: 'utc', customTimeZone: '' }
+  }
+  const storedMode = window.localStorage.getItem(DISPLAY_TZ_MODE_KEY)
+  const mode: DisplayTimezoneMode =
+    storedMode === 'local' || storedMode === 'custom' ? storedMode : 'utc'
+  const customTimeZone = window.localStorage.getItem(DISPLAY_TZ_CUSTOM_KEY) ?? ''
+  return { mode, customTimeZone }
+}
+
+function writeDisplayTimezone(mode: DisplayTimezoneMode, customTimeZone: string) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(DISPLAY_TZ_MODE_KEY, mode)
+  window.localStorage.setItem(DISPLAY_TZ_CUSTOM_KEY, customTimeZone)
+}
+
 export function App() {
+  const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
+  const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
   const [stage, setStage] = useState<Stage>('select')
   const [files, setFiles] = useState<ParsedDicomFile[]>([])
   const [studyGroups, setStudyGroups] = useState<StudyGroup[]>([])
@@ -52,10 +93,16 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState('default')
   const [projectsLoading, setProjectsLoading] = useState(true)
+  const validCustomTimeZone = normalizeIanaTimeZone(displayTimezoneCustom) ?? ''
+  const localTimeZone = browserTimeZone()
 
   // Cancel refs
   const cancelParseRef = useRef(false)
   const uploadAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    writeDisplayTimezone(displayTimezoneMode, displayTimezoneCustom)
+  }, [displayTimezoneMode, displayTimezoneCustom])
 
   // Fetch projects on mount
   useEffect(() => {
@@ -257,6 +304,33 @@ export function App() {
         <p style={{ margin: 0, color: '#6b7280', fontSize: '15px' }}>
           Anonymization & Exchange Gateway for Imaging Studies
         </p>
+        <div className="tz-control">
+          <label className="tz-label" htmlFor="upload-display-timezone-mode">Time Zone</label>
+          <select
+            id="upload-display-timezone-mode"
+            className="tz-select"
+            value={displayTimezoneMode}
+            onChange={e => setDisplayTimezoneMode(e.target.value as DisplayTimezoneMode)}
+          >
+            <option value="utc">UTC</option>
+            <option value="local">Local ({localTimeZone})</option>
+            <option value="custom">Custom</option>
+          </select>
+          {displayTimezoneMode === 'custom' && (
+            <>
+              <input
+                className="tz-input"
+                type="text"
+                placeholder="America/Chicago"
+                value={displayTimezoneCustom}
+                onChange={e => setDisplayTimezoneCustom(e.target.value)}
+              />
+              {!validCustomTimeZone && displayTimezoneCustom.trim() && (
+                <span className="tz-warning">Invalid IANA time zone</span>
+              )}
+            </>
+          )}
+        </div>
       </header>
 
       {/* Error display */}
@@ -411,7 +485,11 @@ export function App() {
                   Study {idx + 1} of {studyGroups.length} ({group.files.length} files)
                 </h3>
               )}
-              <StudySummary summary={group.summary} />
+              <StudySummary
+                summary={group.summary}
+                displayTimezoneMode={displayTimezoneMode}
+                displayTimezoneCustom={validCustomTimeZone}
+              />
             </div>
           ))}
 
