@@ -904,7 +904,7 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 
 Validation behavior:
 - `/api/import/batch` uses strict JSON decoding (`DisallowUnknownFields`); unknown/deprecated fields are rejected with HTTP `400`.
-- `dir` is required and trimmed before validation/scanning.
+- `dir` is required, trimmed, cleaned, and must be an absolute path.
 - `project_slug` is trimmed/lowercased; empty values default to `default`.
 - `source` is normalized and validated; only `internal` or `external` are accepted.
 - `source=external` requires canonical institution selector (`institution_id` or `institution_slug`) for provenance.
