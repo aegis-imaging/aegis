@@ -300,6 +300,17 @@ Returns a single study by UUID. Used by the admin dashboard's study detail panel
 
 Returns all audit trail entries for a specific study (by `resource_id`). Used by the study detail panel's audit tab.
 
+### Study Diagnostics (`GET /api/studies/{id}/diagnostics`)
+
+Returns a "why stuck?" diagnostics payload for one study:
+- `study` — current full study record
+- `summary` — `terminal`, `stuck`, `blockers[]`, `recommended_actions[]`, and last audit signal
+- `recent_audit` — bounded latest audit entries (most recent first)
+- `routing_log` — per-study routing rule log entries
+- `dimse_retry` — optional DIMSE retry/dead-letter counters for the same StudyInstanceUID when DIMSE receiver is configured
+
+Used for operator triage and MCP-assisted incident diagnosis.
+
 ### Study Detail Panel (Admin Dashboard)
 
 Clicking a study UID in the studies table navigates to a dedicated detail view with:
