@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	aegis-import --dir /path/to/dicom [--project slug] [--institution uuid] [--institution-slug slug] [--institution-ae-title AE_TITLE] [--source internal|external] [--dry-run]
+//	aegis-import --dir /path/to/dicom [--project slug] [--institution uuid] [--institution-slug slug] [--source internal|external] [--dry-run]
 package main
 
 import (
@@ -31,7 +31,6 @@ func main() {
 	project := flag.String("project", "default", "Project slug to import into")
 	institution := flag.String("institution", "", "Institution UUID (optional)")
 	institutionSlug := flag.String("institution-slug", "", "Institution slug (optional)")
-	institutionAETitle := flag.String("institution-ae-title", "", "Institution AE Title (internal source only; rejected for external)")
 	source := flag.String("source", "internal", "Study source: internal or external")
 	dryRun := flag.Bool("dry-run", false, "Scan and report without importing")
 	flag.Parse()
@@ -80,7 +79,6 @@ func main() {
 		ProjectSlug:        *project,
 		InstitutionID:      *institution,
 		InstitutionSlug:    *institutionSlug,
-		InstitutionAETitle: *institutionAETitle,
 		Source:             *source,
 		DryRun:             *dryRun,
 	}

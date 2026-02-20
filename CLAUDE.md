@@ -888,7 +888,6 @@ cd api && go build -o aegis-import ./cmd/import
 | `--project` | `default` | Project slug |
 | `--institution` | *(empty)* | Institution UUID (optional) |
 | `--institution-slug` | *(empty)* | Institution slug (optional, case-insensitive) |
-| `--institution-ae-title` | *(empty)* | Institution AE Title (optional, case-insensitive) |
 | `--source` | `internal` | `internal` or `external` |
 | `--dry-run` | `false` | Scan and report without importing |
 
@@ -901,17 +900,15 @@ Uses same env vars as the API (`DATABASE_URL`, `STORAGE_MODE`, `LOCAL_STORAGE_DI
 4. For each study: creates upload session + study record, copies files to `dicom/raw/{studyUID}/`, evaluates routing rules
 5. Duplicate StudyInstanceUIDs are rejected (unique constraint) — safe to re-run
 
-**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","institution_slug","institution_ae_title","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
+**API endpoint:** `POST /api/import/batch` — accepts `{"dir","project_slug","institution_id","institution_slug","source","dry_run"}`, returns `{files_scanned, files_skipped, studies_created, studies_failed, errors, study_ids}`.
 
 Validation behavior:
 - `dir` is required and trimmed before validation/scanning.
 - `project_slug` is trimmed/lowercased; empty values default to `default`.
 - `source` is normalized and validated; only `internal` or `external` are accepted.
+- `institution_ae_title` is no longer supported for batch import; use `institution_id` or `institution_slug`.
 - `source=external` requires canonical institution selector (`institution_id` or `institution_slug`) for provenance.
-- `source=external` rejects `institution_ae_title` (AE titles are non-canonical and can be ambiguous).
 - `institution_id` and `institution_slug` are mutually exclusive (provide only one).
-- If `institution_ae_title` is provided alongside `institution_id` or `institution_slug`, they must resolve to the same institution.
-- `institution_ae_title` alone must resolve to exactly one enabled institution; ambiguous matches are rejected with a validation error.
 - Institution selector (ID or slug) must reference an enabled institution with type `sender`/`both`, linked to the target project with role `sender`/`admin`.
 - Invalid directory/project/institution input now returns HTTP `400` from `/api/import/batch` (not `500`).
 
