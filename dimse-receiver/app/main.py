@@ -111,6 +111,11 @@ def _health_degraded_reasons(scp_running: bool, retry: dict[str, int]) -> list[s
     if pending_age_warn > 0 and pending_oldest_age >= pending_age_warn:
         reasons.append("pending_age_threshold_exceeded")
 
+    dead_letter_age_warn = max(0, int(config.DIMSE_DEAD_LETTER_AGE_WARN_SECONDS))
+    dead_letter_oldest_age = max(0, int(retry.get("dead_letter_oldest_age_seconds", 0)))
+    if dead_letter_age_warn > 0 and dead_letter_oldest_age >= dead_letter_age_warn:
+        reasons.append("dead_letter_age_threshold_exceeded")
+
     return reasons
 
 
@@ -120,6 +125,7 @@ def healthz():
     scp_running = _ae is not None and _ae.active_associations is not None
     retry = retry_snapshot()
     pending_age_warn = max(0, int(config.DIMSE_INGEST_PENDING_AGE_WARN_SECONDS))
+    dead_letter_age_warn = max(0, int(config.DIMSE_DEAD_LETTER_AGE_WARN_SECONDS))
     degraded_reasons = _health_degraded_reasons(scp_running, retry)
     status = "degraded" if degraded_reasons else "ok"
     return {
@@ -127,6 +133,7 @@ def healthz():
         "scp": "running" if scp_running else "not_running",
         "degraded_reasons": degraded_reasons,
         "pending_age_warn_seconds": pending_age_warn,
+        "dead_letter_age_warn_seconds": dead_letter_age_warn,
         "ingest_retry": retry,
     }
 

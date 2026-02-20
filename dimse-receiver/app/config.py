@@ -33,6 +33,8 @@ DIMSE_INGEST_MAX_ATTEMPTS: int = int(os.getenv("DIMSE_INGEST_MAX_ATTEMPTS", "5")
 DIMSE_INGEST_QUEUE_MAX: int = int(os.getenv("DIMSE_INGEST_QUEUE_MAX", "1000"))
 # Optional /healthz degradation threshold for stale pending retries (0 disables)
 DIMSE_INGEST_PENDING_AGE_WARN_SECONDS: int = int(os.getenv("DIMSE_INGEST_PENDING_AGE_WARN_SECONDS", "0"))
+# Optional /healthz reason threshold for stale dead-letter retries (0 disables)
+DIMSE_DEAD_LETTER_AGE_WARN_SECONDS: int = int(os.getenv("DIMSE_DEAD_LETTER_AGE_WARN_SECONDS", "0"))
 
 # In-memory operator action audit (retry control endpoints)
 DIMSE_OPERATOR_AUDIT_MAX: int = int(os.getenv("DIMSE_OPERATOR_AUDIT_MAX", "500"))

@@ -25,6 +25,7 @@ def setup_function():
 
     cfg.DIMSE_OPERATOR_API_KEY = ""
     cfg.DIMSE_INGEST_PENDING_AGE_WARN_SECONDS = 0
+    cfg.DIMSE_DEAD_LETTER_AGE_WARN_SECONDS = 0
 
 
 def test_healthz_ok_with_running_scp():
@@ -41,6 +42,7 @@ def test_healthz_ok_with_running_scp():
             assert data["scp"] == "running"
             assert data["degraded_reasons"] == []
             assert data["pending_age_warn_seconds"] == 0
+            assert data["dead_letter_age_warn_seconds"] == 0
             assert "ingest_retry" in data
             assert "pending_oldest_age_seconds" in data["ingest_retry"]
             assert "dead_letter_oldest_age_seconds" in data["ingest_retry"]
@@ -91,6 +93,32 @@ def test_healthz_degraded_when_pending_age_threshold_exceeded(monkeypatch):
     assert data["pending_age_warn_seconds"] == 30
     assert "pending_age_threshold_exceeded" in data["degraded_reasons"]
     assert "scp_not_running" not in data["degraded_reasons"]
+
+
+def test_healthz_includes_dead_letter_age_threshold_reason(monkeypatch):
+    dummy = _DummyAE(active_associations=[])
+    snapshot = {
+        "pending": 0,
+        "dead_letter": 1,
+        "pending_oldest_age_seconds": 0,
+        "dead_letter_oldest_age_seconds": 80,
+    }
+
+    from unittest.mock import patch
+
+    monkeypatch.setattr("app.config.DIMSE_DEAD_LETTER_AGE_WARN_SECONDS", 60)
+    with patch("app.main.create_scp", return_value=dummy), patch("app.main.start_scp", return_value=None), patch(
+        "app.main.retry_snapshot", return_value=snapshot
+    ):
+        with TestClient(app) as client:
+            resp = client.get("/healthz")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "degraded"
+    assert data["dead_letter_age_warn_seconds"] == 60
+    assert "dead_letter_nonzero" in data["degraded_reasons"]
+    assert "dead_letter_age_threshold_exceeded" in data["degraded_reasons"]
 
 
 def test_forward_success():
