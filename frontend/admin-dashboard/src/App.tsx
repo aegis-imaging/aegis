@@ -191,22 +191,21 @@ type AuthIdentity = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: false,
-  timeZoneName: 'short',
-})
+function pad2(n: number) {
+  return String(n).padStart(2, '0')
+}
 
 function fmtDate(iso: string) {
   if (!iso) return ''
   const dt = new Date(iso)
   if (Number.isNaN(dt.getTime())) return iso
-  return DATE_TIME_FORMAT.format(dt)
+  const y = dt.getUTCFullYear()
+  const m = pad2(dt.getUTCMonth() + 1)
+  const d = pad2(dt.getUTCDate())
+  const hh = pad2(dt.getUTCHours())
+  const mm = pad2(dt.getUTCMinutes())
+  const ss = pad2(dt.getUTCSeconds())
+  return `${y}-${m}-${d} ${hh}:${mm}:${ss} UTC`
 }
 
 function fmtRemaining(seconds: number) {
