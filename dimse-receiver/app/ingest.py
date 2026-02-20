@@ -42,6 +42,7 @@ _dead_letter: list[QueuedIngest] = []
 _retry_lock = threading.Lock()
 _metrics = {
     "queued_total": 0,
+    "deduped_total": 0,
     "retried_total": 0,
     "retried_ok_total": 0,
     "dead_letter_total": 0,
@@ -50,9 +51,30 @@ _metrics = {
 }
 
 
+def _merge_accumulator(existing: StudyAccumulator, incoming: StudyAccumulator) -> None:
+    """Merge incoming study metadata into an existing queued accumulator."""
+    existing.file_count = max(existing.file_count, incoming.file_count)
+    existing.series_uids.update(incoming.series_uids)
+    if not existing.modality and incoming.modality:
+        existing.modality = incoming.modality
+    if not existing.body_part and incoming.body_part:
+        existing.body_part = incoming.body_part
+    if not existing.study_description and incoming.study_description:
+        existing.study_description = incoming.study_description
+    if not existing.calling_ae_title and incoming.calling_ae_title:
+        existing.calling_ae_title = incoming.calling_ae_title
+
+
 def _enqueue_retry(acc: StudyAccumulator, reason: str) -> bool:
     """Queue a study for retry if queue capacity permits."""
     with _retry_lock:
+        for item in _retry_queue:
+            if item.acc.study_instance_uid == acc.study_instance_uid:
+                _merge_accumulator(item.acc, acc)
+                item.last_error = f"deduped: {reason}"
+                _metrics["deduped_total"] += 1
+                return True
+
         if len(_retry_queue) >= config.DIMSE_INGEST_QUEUE_MAX:
             log.error(
                 "Retry queue full (%d), dropping study %s",
@@ -192,6 +214,7 @@ def retry_snapshot() -> dict[str, int]:
             "pending": len(_retry_queue),
             "dead_letter": len(_dead_letter),
             "queued_total": _metrics["queued_total"],
+            "deduped_total": _metrics["deduped_total"],
             "retried_total": _metrics["retried_total"],
             "retried_ok_total": _metrics["retried_ok_total"],
             "dead_letter_total": _metrics["dead_letter_total"],
@@ -282,6 +305,7 @@ def reset_retry_state() -> None:
         _retry_queue.clear()
         _dead_letter.clear()
         _metrics["queued_total"] = 0
+        _metrics["deduped_total"] = 0
         _metrics["retried_total"] = 0
         _metrics["retried_ok_total"] = 0
         _metrics["dead_letter_total"] = 0

@@ -161,6 +161,32 @@ def test_submit_ingest_queues_on_failure(monkeypatch):
     snap = retry_snapshot()
     assert snap["pending"] == 1
     assert snap["queued_total"] == 1
+    assert snap["deduped_total"] == 0
+
+
+def test_submit_ingest_dedupes_same_study_uid(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+
+    acc_a = _acc()
+    acc_a.file_count = 2
+    acc_a.series_uids = {"1"}
+
+    acc_b = _acc()
+    acc_b.file_count = 7
+    acc_b.series_uids = {"1", "2", "3"}
+
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(acc_a)
+        submit_ingest(acc_b)
+
+    snap = retry_snapshot()
+    assert snap["pending"] == 1
+    assert snap["queued_total"] == 1
+    assert snap["deduped_total"] == 1
+
+    queued = ingest_module._retry_queue[0]
+    assert queued.acc.file_count == 7
+    assert queued.acc.series_uids == {"1", "2", "3"}
 
 
 def test_process_retry_queue_retries_and_succeeds(monkeypatch):
@@ -245,9 +271,12 @@ def test_retry_details_returns_pending_and_dead_letter(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 1)
     monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
 
+    acc2 = _acc()
+    acc2.study_instance_uid = "9.9.9.9"
+
     with patch("app.ingest.trigger_ingest", return_value=False):
         submit_ingest(_acc())  # queued
-        submit_ingest(_acc())  # dead-letter (queue full)
+        submit_ingest(acc2)  # dead-letter (queue full, different study)
 
     details = retry_details(limit=10, now=100.0)
     assert details["limit"] == 10

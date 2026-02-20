@@ -871,7 +871,7 @@ uvicorn app.main:app --port 8087
 | `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
 
 **Operational endpoints:**
-- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals) and returns `degraded` if SCP is down or dead-letter is non-zero.
+- `GET /healthz` — includes `ingest_retry` counters (`pending`, `dead_letter`, totals including `deduped_total`) and returns `degraded` if SCP is down or dead-letter is non-zero.
 - `GET /ingest/retry` — returns retry/dead-letter counters for troubleshooting.
 - `GET /ingest/retry/details?limit=N` — returns per-item pending/dead-letter details (`study_instance_uid`, attempts, next retry timing, last_error).
 - `POST /ingest/retry/process` — runs one immediate retry processing pass and returns processed count + counters.
@@ -1071,7 +1071,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | Service | Tests | Coverage |
 |---------|-------|----------|
 | classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
-| dimse-receiver | 38 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry status/details/process/replay/clear endpoints |
+| dimse-receiver | 39 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication, retry status/details/process/replay/clear endpoints |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
