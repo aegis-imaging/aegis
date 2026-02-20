@@ -60,14 +60,16 @@ func TestValidationErrorMarker(t *testing.T) {
 
 func TestNormalizeInstitutionSelectors_TrimAndLower(t *testing.T) {
 	opts := &Options{
-		InstitutionID:   "  ",
-		InstitutionSlug: "  Hospital-BRAVO  ",
+		InstitutionID:      "  ",
+		InstitutionSlug:    "  Hospital-BRAVO  ",
+		InstitutionAETitle: "  PACS_ALPHA  ",
 	}
 
 	err := normalizeInstitutionSelectors(opts)
 	require.NoError(t, err)
 	assert.Equal(t, "", opts.InstitutionID)
 	assert.Equal(t, "hospital-bravo", opts.InstitutionSlug)
+	assert.Equal(t, "PACS_ALPHA", normalizeAETitle(opts.InstitutionAETitle))
 }
 
 func TestNormalizeInstitutionSelectors_RejectsConflictingSelectors(t *testing.T) {
@@ -90,4 +92,8 @@ func TestRun_RejectsConflictingInstitutionSelectors(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, IsValidationError(err))
 	assert.Contains(t, err.Error(), "only one")
+}
+
+func TestNormalizeAETitle(t *testing.T) {
+	assert.Equal(t, "PACS_ALPHA", normalizeAETitle("  pacs_alpha  "))
 }
