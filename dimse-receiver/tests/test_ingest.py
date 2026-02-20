@@ -6,7 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import app.ingest as ingest_module
 from app.ingest import (
+    _retry_delay_seconds,
     clear_dead_letter,
+    clear_dead_letter_study,
     replay_dead_letter,
     replay_dead_letter_study,
     retry_details,
@@ -190,6 +192,16 @@ def test_submit_ingest_dedupes_same_study_uid(monkeypatch):
     assert queued.acc.series_uids == {"1", "2", "3"}
 
 
+def test_retry_delay_seconds_exponential_and_capped(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER", 2.0)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_MAX_INTERVAL", 25)
+
+    assert _retry_delay_seconds(1) == 10
+    assert _retry_delay_seconds(2) == 20
+    assert _retry_delay_seconds(3) == 25  # capped from 40
+
+
 def test_process_retry_queue_retries_and_succeeds(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
 
@@ -225,6 +237,25 @@ def test_process_retry_queue_moves_to_dead_letter_after_max_attempts(monkeypatch
     assert snap["dead_letter_total"] == 1
 
 
+def test_process_retry_queue_applies_backoff(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 10)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER", 2.0)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_MAX_INTERVAL", 300)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_MAX_ATTEMPTS", 10)
+
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        first_due = ingest_module._retry_queue[0].next_attempt_at
+        process_retry_queue(now=first_due + 1)
+        second_due = ingest_module._retry_queue[0].next_attempt_at
+        process_retry_queue(now=second_due + 1)
+        third_due = ingest_module._retry_queue[0].next_attempt_at
+
+    # First retry delay: 20s, second retry delay: 40s
+    assert int(second_due - (first_due + 1)) == 20
+    assert int(third_due - (second_due + 1)) == 40
+
+
 def test_submit_ingest_dead_letters_when_queue_full(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
     with patch("app.ingest.trigger_ingest", return_value=False):
@@ -233,6 +264,18 @@ def test_submit_ingest_dead_letters_when_queue_full(monkeypatch):
     snap = retry_snapshot()
     assert snap["pending"] == 0
     assert snap["dead_letter"] == 1
+
+
+def test_submit_ingest_dead_letter_dedupes_same_study(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        submit_ingest(_acc())
+
+    snap = retry_snapshot()
+    assert snap["dead_letter"] == 1
+    assert snap["dead_letter_total"] == 1
+    assert snap["dead_letter_deduped_total"] == 1
 
 
 def test_replay_dead_letter_moves_items_to_pending(monkeypatch):
@@ -256,10 +299,12 @@ def test_replay_dead_letter_moves_items_to_pending(monkeypatch):
 
 def test_replay_dead_letter_respects_limit(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 10)
+    acc2 = _acc()
+    acc2.study_instance_uid = "2.2.2.2"
     with patch("app.ingest.trigger_ingest", return_value=False):
         monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
         submit_ingest(_acc())
-        submit_ingest(_acc())
+        submit_ingest(acc2)
         monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 10)
 
     after = replay_dead_letter(limit=1, now=123.0)
@@ -291,9 +336,11 @@ def test_retry_details_returns_pending_and_dead_letter(monkeypatch):
 
 def test_clear_dead_letter_removes_items(monkeypatch):
     monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    acc2 = _acc()
+    acc2.study_instance_uid = "2.2.2.2"
     with patch("app.ingest.trigger_ingest", return_value=False):
         submit_ingest(_acc())
-        submit_ingest(_acc())
+        submit_ingest(acc2)
 
     before = retry_snapshot()
     assert before["dead_letter"] == 2
@@ -327,3 +374,23 @@ def test_replay_dead_letter_study_not_found():
     assert result["found"] is False
     assert result["moved"] == 0
     assert result["blocked_by_queue_full"] is False
+
+
+def test_clear_dead_letter_study_found(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    acc2 = _acc()
+    acc2.study_instance_uid = "2.2.2.2"
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        submit_ingest(acc2)
+
+    result = clear_dead_letter_study("2.2.2.2")
+    assert result["found"] is True
+    assert result["cleared"] == 1
+    assert result["snapshot"]["dead_letter"] == 1
+
+
+def test_clear_dead_letter_study_not_found():
+    result = clear_dead_letter_study("missing-study")
+    assert result["found"] is False
+    assert result["cleared"] == 0
