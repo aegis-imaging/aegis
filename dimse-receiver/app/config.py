@@ -27,3 +27,6 @@ DIMSE_INGEST_TIMEOUT: int = int(os.getenv("DIMSE_INGEST_TIMEOUT", "30"))
 DIMSE_INGEST_RETRY_INTERVAL: int = int(os.getenv("DIMSE_INGEST_RETRY_INTERVAL", "15"))
 DIMSE_INGEST_MAX_ATTEMPTS: int = int(os.getenv("DIMSE_INGEST_MAX_ATTEMPTS", "5"))
 DIMSE_INGEST_QUEUE_MAX: int = int(os.getenv("DIMSE_INGEST_QUEUE_MAX", "1000"))
+
+# In-memory operator action audit (retry control endpoints)
+DIMSE_OPERATOR_AUDIT_MAX: int = int(os.getenv("DIMSE_OPERATOR_AUDIT_MAX", "500"))
