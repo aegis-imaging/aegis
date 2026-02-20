@@ -4,6 +4,8 @@ import os
 
 
 class Config:
+    # Options: "auto", "heuristic", "google_vision", "aws_rekognition"
+    # "auto" tries each in priority order: google_vision > aws_rekognition > heuristic
     tool: str = os.environ.get("CLASSIFY_TOOL", "auto")
     confidence_threshold: float = float(os.environ.get("CLASSIFY_CONFIDENCE_THRESHOLD", "0.5"))
 

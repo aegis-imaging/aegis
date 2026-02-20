@@ -86,8 +86,19 @@ services:
   phi-detection:
     build:
       context: ./phi-detection
+      args:
+        INCLUDE_GOOGLE_VISION: "${INCLUDE_GOOGLE_VISION:-false}"
+        INCLUDE_AWS_TEXTRACT: "${INCLUDE_AWS_TEXTRACT:-false}"
+    environment:
+      PHI_TOOL: "${PHI_TOOL:-auto}"
+      GOOGLE_APPLICATION_CREDENTIALS: "/secrets/gcp-key.json"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
     volumes:
       - aegis-data:/app/data
+      # Uncomment to mount GCP service account key for Cloud Vision:
+      # - ./secrets/gcp-key.json:/secrets/gcp-key.json:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
       interval: 15s
@@ -122,8 +133,19 @@ services:
   classification-service:
     build:
       context: ./classification-service
+      args:
+        INCLUDE_GOOGLE_VISION: "${INCLUDE_GOOGLE_VISION:-false}"
+        INCLUDE_AWS_REKOGNITION: "${INCLUDE_AWS_REKOGNITION:-false}"
+    environment:
+      CLASSIFY_TOOL: "${CLASSIFY_TOOL:-auto}"
+      GOOGLE_APPLICATION_CREDENTIALS: "/secrets/gcp-key.json"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
     volumes:
       - aegis-data:/app/data
+      # Uncomment to mount GCP service account key for Cloud Vision:
+      # - ./secrets/gcp-key.json:/secrets/gcp-key.json:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
       interval: 15s
