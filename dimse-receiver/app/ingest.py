@@ -366,6 +366,8 @@ def retry_details(
         if study_instance_uid:
             pending_source = [item for item in _retry_queue if item.acc.study_instance_uid == study_instance_uid]
             dead_source = [item for item in _dead_letter if item.acc.study_instance_uid == study_instance_uid]
+        pending_total = len(pending_source)
+        dead_letter_total = len(dead_source)
         pending = sorted(pending_source, key=lambda item: item.next_attempt_at)[:limit]
         dead = dead_source[:limit]
 
@@ -404,6 +406,12 @@ def retry_details(
         "now": int(current),
         "limit": limit,
         "study_instance_uid": study_instance_uid or "",
+        "pending_total": pending_total,
+        "dead_letter_total": dead_letter_total,
+        "pending_returned": len(pending_items),
+        "dead_letter_returned": len(dead_items),
+        "pending_truncated": len(pending_items) < pending_total,
+        "dead_letter_truncated": len(dead_items) < dead_letter_total,
         "pending_items": pending_items,
         "dead_letter_items": dead_items,
     }

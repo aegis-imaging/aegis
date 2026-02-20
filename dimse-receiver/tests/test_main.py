@@ -271,6 +271,12 @@ def test_ingest_retry_details_endpoint():
 
     details = {
         "snapshot": {"pending": 0, "dead_letter": 0},
+        "pending_total": 0,
+        "dead_letter_total": 0,
+        "pending_returned": 0,
+        "dead_letter_returned": 0,
+        "pending_truncated": False,
+        "dead_letter_truncated": False,
         "study_instance_uid": "",
         "pending_items": [],
         "dead_letter_items": [],
@@ -293,6 +299,12 @@ def test_ingest_retry_details_endpoint_with_study_filter():
 
     details = {
         "snapshot": {"pending": 1, "dead_letter": 0},
+        "pending_total": 1,
+        "dead_letter_total": 0,
+        "pending_returned": 1,
+        "dead_letter_returned": 0,
+        "pending_truncated": False,
+        "dead_letter_truncated": False,
         "study_instance_uid": "1.2.3.4",
         "pending_items": [{"study_instance_uid": "1.2.3.4"}],
         "dead_letter_items": [],
