@@ -14,7 +14,13 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app import config
-from app.ingest import process_retry_queue, replay_dead_letter, retry_snapshot
+from app.ingest import (
+    clear_dead_letter,
+    process_retry_queue,
+    replay_dead_letter,
+    retry_details,
+    retry_snapshot,
+)
 from app.scp import create_scp, start_scp
 from app.sender import forward_study
 
@@ -88,6 +94,12 @@ def ingest_retry_status():
     return {"status": "ok", "ingest_retry": retry_snapshot()}
 
 
+@app.get("/ingest/retry/details")
+def ingest_retry_details(limit: int = Query(default=100, ge=1, le=10000)):
+    """Return detailed pending/dead-letter retry items (capped by limit)."""
+    return {"status": "ok", "ingest_retry": retry_details(limit=limit)}
+
+
 @app.post("/ingest/retry/process")
 def ingest_retry_process():
     """Run one immediate retry processing pass."""
@@ -99,6 +111,13 @@ def ingest_retry_process():
 def ingest_retry_replay(limit: int = Query(default=100, ge=1, le=10000)):
     """Replay dead-letter items back into the retry queue."""
     snap = replay_dead_letter(limit=limit)
+    return {"status": "ok", "ingest_retry": snap}
+
+
+@app.post("/ingest/retry/clear-dead-letter")
+def ingest_retry_clear_dead_letter(limit: int = Query(default=10000, ge=1, le=50000)):
+    """Clear dead-letter items after operator acknowledgement."""
+    snap = clear_dead_letter(limit=limit)
     return {"status": "ok", "ingest_retry": snap}
 
 

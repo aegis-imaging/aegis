@@ -46,6 +46,7 @@ _metrics = {
     "retried_ok_total": 0,
     "dead_letter_total": 0,
     "replayed_total": 0,
+    "cleared_dead_letter_total": 0,
 }
 
 
@@ -195,7 +196,48 @@ def retry_snapshot() -> dict[str, int]:
             "retried_ok_total": _metrics["retried_ok_total"],
             "dead_letter_total": _metrics["dead_letter_total"],
             "replayed_total": _metrics["replayed_total"],
+            "cleared_dead_letter_total": _metrics["cleared_dead_letter_total"],
         }
+
+
+def retry_details(limit: int = 100, now: float | None = None) -> dict[str, object]:
+    """Return queue/dead-letter details for operational debugging."""
+    current = time.time() if now is None else now
+
+    with _retry_lock:
+        pending = sorted(_retry_queue, key=lambda item: item.next_attempt_at)[:limit]
+        dead = _dead_letter[:limit]
+
+    pending_items = [
+        {
+            "study_instance_uid": item.acc.study_instance_uid,
+            "attempts": item.attempts,
+            "next_attempt_at": int(item.next_attempt_at),
+            "seconds_until_next_attempt": max(0, int(item.next_attempt_at - current)),
+            "file_count": item.acc.file_count,
+            "series_count": len(item.acc.series_uids),
+            "last_error": item.last_error,
+        }
+        for item in pending
+    ]
+    dead_items = [
+        {
+            "study_instance_uid": item.acc.study_instance_uid,
+            "attempts": item.attempts,
+            "file_count": item.acc.file_count,
+            "series_count": len(item.acc.series_uids),
+            "last_error": item.last_error,
+        }
+        for item in dead
+    ]
+
+    return {
+        "snapshot": retry_snapshot(),
+        "now": int(current),
+        "limit": limit,
+        "pending_items": pending_items,
+        "dead_letter_items": dead_items,
+    }
 
 
 def replay_dead_letter(limit: int = 100, now: float | None = None) -> dict[str, int]:
@@ -220,6 +262,20 @@ def replay_dead_letter(limit: int = 100, now: float | None = None) -> dict[str, 
     return snapshot
 
 
+def clear_dead_letter(limit: int = 10000) -> dict[str, int]:
+    """Clear up to `limit` dead-letter items and return counters."""
+    cleared = 0
+    with _retry_lock:
+        while cleared < limit and _dead_letter:
+            _dead_letter.pop(0)
+            cleared += 1
+        _metrics["cleared_dead_letter_total"] += cleared
+
+    snapshot = retry_snapshot()
+    snapshot["cleared_now"] = cleared
+    return snapshot
+
+
 def reset_retry_state() -> None:
     """Reset in-memory retry state (tests only)."""
     with _retry_lock:
@@ -230,3 +286,4 @@ def reset_retry_state() -> None:
         _metrics["retried_ok_total"] = 0
         _metrics["dead_letter_total"] = 0
         _metrics["replayed_total"] = 0
+        _metrics["cleared_dead_letter_total"] = 0

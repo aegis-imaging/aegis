@@ -6,7 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import app.ingest as ingest_module
 from app.ingest import (
+    clear_dead_letter,
     replay_dead_letter,
+    retry_details,
     StudyAccumulator,
     process_retry_queue,
     reset_retry_state,
@@ -237,3 +239,40 @@ def test_replay_dead_letter_respects_limit(monkeypatch):
     assert after["replayed_now"] == 1
     assert after["dead_letter"] == 1
     assert after["pending"] == 1
+
+
+def test_retry_details_returns_pending_and_dead_letter(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 1)
+    monkeypatch.setattr("app.config.DIMSE_INGEST_RETRY_INTERVAL", 15)
+
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())  # queued
+        submit_ingest(_acc())  # dead-letter (queue full)
+
+    details = retry_details(limit=10, now=100.0)
+    assert details["limit"] == 10
+    assert details["snapshot"]["pending"] == 1
+    assert details["snapshot"]["dead_letter"] == 1
+    assert len(details["pending_items"]) == 1
+    assert len(details["dead_letter_items"]) == 1
+    assert details["pending_items"][0]["study_instance_uid"] == "1.2.3.4"
+    assert "seconds_until_next_attempt" in details["pending_items"][0]
+
+
+def test_clear_dead_letter_removes_items(monkeypatch):
+    monkeypatch.setattr("app.config.DIMSE_INGEST_QUEUE_MAX", 0)
+    with patch("app.ingest.trigger_ingest", return_value=False):
+        submit_ingest(_acc())
+        submit_ingest(_acc())
+
+    before = retry_snapshot()
+    assert before["dead_letter"] == 2
+
+    after = clear_dead_letter(limit=1)
+    assert after["cleared_now"] == 1
+    assert after["dead_letter"] == 1
+
+    after2 = clear_dead_letter(limit=10)
+    assert after2["cleared_now"] == 1
+    assert after2["dead_letter"] == 0
+    assert after2["cleared_dead_letter_total"] == 2
