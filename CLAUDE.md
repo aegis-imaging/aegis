@@ -300,7 +300,7 @@ Returns all audit trail entries for a specific study (by `resource_id`). Used by
 Clicking a study UID in the studies table navigates to a dedicated detail view with:
 - **Header** — full study UID, status/source badges, description
 - **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
-- **Timestamp rendering** — admin dashboard, export portal, and upload portal support user-selectable viewing time zones (`UTC`, browser local, or custom IANA zone like `America/Chicago`) for display-only conversion. Upload portal converts DICOM study date/time only when an offset is present (falls back to explicit floating-time text when offset is missing).
+- **Timestamp rendering** — admin dashboard, export portal, and upload portal support user-selectable viewing time zones (`UTC`, browser local, or custom IANA zone like `America/Chicago`) for display-only conversion. Preference is synced across all three UIs via shared `localStorage` keys. Upload portal converts DICOM study date/time only when an offset is present (falls back to explicit floating-time text when offset is missing).
 - **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
 - **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
 - **Share form** — inline share creation for approved studies (email, note, expiry)
