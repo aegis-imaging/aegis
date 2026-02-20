@@ -149,13 +149,19 @@ Email env vars (`api/email/client.go`, `api/config/config.go`):
 
 Triggers: share created → recipient email; upload complete → uploader (if provided at upload time); study approved/rejected → uploader. No PHI in any email body.
 
-### Upload Portal — Email field
-The preview step shows an optional "Your email" input. The address is sent with `POST /api/upload/init` as `uploader_email` and stored in `upload_sessions`. If blank, no notification is sent. The `@aegis/client` `UploadOptions.uploaderEmail` field carries it through.
-
 ### Upload Portal (React)
 ```bash
 cd frontend/upload-portal && npm install && npm run dev   # runs on :3000, proxies /api to :8080
 ```
+
+**Features:**
+- **Project selector** — dropdown populated from `GET /api/projects`; auto-selects if only one project exists; hidden when single project
+- **Drag-and-drop** — folder and multi-file support via `webkitdirectory` and DataTransfer API; shows file count + total size after selection
+- **Multi-study detection** — groups files by StudyInstanceUID; each study gets its own summary card and uploads as a separate session
+- **Anonymization preview** — before/after tag diff table (PS3.15 Annex E Basic Profile); per-project retained tags from anonymization profiles
+- **Email validation** — optional uploader email with format validation; helper text explains notification triggers (approved/rejected)
+- **Cancel support** — cancel button during parsing and upload stages; aborts in-flight requests
+- **File progress** — per-file upload progress bar with current filename display and auto-retry (3× exponential backoff)
 
 ### Admin Dashboard (React)
 ```bash

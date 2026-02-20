@@ -14,7 +14,7 @@ export const VERSION = '0.1.0'
 export type { TagAction, DicomTag, StudySummary, ParsedDicomFile } from './types'
 
 // DICOM parsing
-export { parseDicomFile, buildStudySummary, isDicomFile, serializeDataset } from './dicom/parser'
+export { parseDicomFile, buildStudySummary, isDicomFile, serializeDataset, groupByStudy } from './dicom/parser'
 export type { NaturalizedDataset } from './dicom/parser'
 
 // De-identification
