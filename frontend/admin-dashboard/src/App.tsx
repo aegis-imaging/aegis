@@ -64,6 +64,7 @@ type Share = {
   note: string
   expires_at: string
   revoked_at?: string
+  status?: 'active' | 'expired' | 'revoked'
   created_at: string
 }
 
@@ -545,9 +546,9 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
           </thead>
           <tbody>
             {shares.map(s => {
-              const revoked = !!s.revoked_at
-              const expired = !revoked && new Date(s.expires_at) < new Date()
-              const shareStatus = revoked ? 'revoked' : expired ? 'expired' : 'active'
+              const shareStatus =
+                s.status ??
+                (s.revoked_at ? 'revoked' : (new Date(s.expires_at) < new Date() ? 'expired' : 'active'))
               const rowClass = shareStatus !== 'active' ? 'share-row--inactive' : ''
               const statusClass = `share-status--${shareStatus}`
               return (
@@ -836,15 +837,21 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             </thead>
             <tbody>
               {shares.length === 0 && <tr><td colSpan={5}>No shares.</td></tr>}
-              {shares.map(s => (
-                <tr key={s.id}>
-                  <td>{s.recipient_email}</td>
-                  <td className="td-date">{fmtDate(s.created_at)}</td>
-                  <td className="td-date">{fmtDate(s.expires_at)}</td>
-                  <td>{s.revoked_at ? <span className="badge badge--rejected">Revoked</span> : <span className="badge badge--approved">Active</span>}</td>
-                  <td>{s.note || '—'}</td>
-                </tr>
-              ))}
+              {shares.map(s => {
+                const shareStatus =
+                  s.status ??
+                  (s.revoked_at ? 'revoked' : (new Date(s.expires_at) < new Date() ? 'expired' : 'active'))
+                const statusClass = `share-status--${shareStatus}`
+                return (
+                  <tr key={s.id}>
+                    <td>{s.recipient_email}</td>
+                    <td className="td-date">{fmtDate(s.created_at)}</td>
+                    <td className="td-date">{fmtDate(s.expires_at)}</td>
+                    <td><span className={statusClass}>{shareStatus}</span></td>
+                    <td>{s.note || '—'}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
