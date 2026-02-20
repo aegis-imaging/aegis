@@ -907,7 +907,8 @@ Validation behavior:
 - `dir` is required and trimmed before validation/scanning.
 - `project_slug` is trimmed/lowercased; empty values default to `default`.
 - `source` is normalized and validated; only `internal` or `external` are accepted.
-- `source=external` requires explicit institution selector (`institution_id`, `institution_slug`, or `institution_ae_title`) for provenance.
+- `source=external` requires canonical institution selector (`institution_id` or `institution_slug`) for provenance.
+- `source=external` rejects `institution_ae_title` (AE titles are non-canonical and can be ambiguous).
 - `institution_id` and `institution_slug` are mutually exclusive (provide only one).
 - If `institution_ae_title` is provided alongside `institution_id` or `institution_slug`, they must resolve to the same institution.
 - `institution_ae_title` alone must resolve to exactly one enabled institution; ambiguous matches are rejected with a validation error.
