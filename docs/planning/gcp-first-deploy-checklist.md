@@ -1,7 +1,7 @@
 # AEGIS GCP First Deploy Checklist
 
 Created: 2026-02-20  
-Updated: 2026-02-20
+Updated: 2026-02-21
 
 This is the fastest path to stand up the first GCP-backed AEGIS environment using the deployment automation now in-repo.
 
@@ -89,9 +89,7 @@ Create DNS `A` records for:
 ## 9) Verify deployment
 
 ```bash
-curl -f https://<api_domain>/healthz
-gcloud run services list --region "$REGION"
-terraform -chdir=terraform/infra output smtp_egress_ip
+make gcp-verify-deployment PROJECT_ID="$PROJECT_ID" REGION="$REGION"
 ```
 
 Then:
@@ -99,13 +97,30 @@ Then:
 - confirm IAP login challenge,
 - confirm unauthorized user access is denied.
 
+Useful direct output checks:
+
+```bash
+terraform -chdir=terraform/infra output -raw api_healthz_url
+terraform -chdir=terraform/infra output -raw api_auth_me_url
+terraform -chdir=terraform/infra output -raw smtp_egress_ip
+```
+
 ## 10) Run cloud smoke suite
 
 ```bash
-python3 scripts/cloud_smoke_test.py \
-  --base-url "https://<api_domain>" \
-  --project-slug default \
-  --admin-header "X-Goog-Authenticated-User-Email: accounts.google.com:<you@example.com>"
+make cloud-smoke-from-terraform \
+  PROVIDER=gcp \
+  TERRAFORM_DIR=terraform/infra \
+  IAP_EMAIL="<you@example.com>"
+```
+
+Equivalent script command:
+
+```bash
+./scripts/cloud_smoke_from_terraform.sh \
+  --provider=gcp \
+  --terraform-dir=terraform/infra \
+  --iap-email="<you@example.com>"
 ```
 
 ## 11) Secret rotation drill (recommended before pilot)

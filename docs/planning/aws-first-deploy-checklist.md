@@ -1,6 +1,7 @@
 # AEGIS AWS First Deploy Checklist
 
 Created: 2026-02-20
+Updated: 2026-02-21
 
 This is the fastest path to stand up the first AWS-backed AEGIS environment with ALB + Cognito + ECS.
 
@@ -83,8 +84,8 @@ aws cognito-idp admin-create-user \
 ## 7) Verify deployment
 
 ```bash
+make aws-verify-deployment REGION=us-east-1 PROJECT_NAME=aegis
 ALB_DNS=$(terraform -chdir=terraform/aws output -raw alb_dns)
-curl -I "https://$ALB_DNS/healthz"
 ```
 
 Then:
@@ -99,4 +100,22 @@ Then:
 aws ecs list-services --cluster "$(terraform -chdir=terraform/aws output -raw ecs_cluster)"
 ```
 - Confirm target group health for API and admin target groups.
+- Confirm useful outputs resolve:
+```bash
+terraform -chdir=terraform/aws output -raw api_base_url
+terraform -chdir=terraform/aws output -raw api_healthz_url
+terraform -chdir=terraform/aws output -raw api_target_group_name
+terraform -chdir=terraform/aws output -raw admin_target_group_name
+```
 - Confirm RDS and CloudWatch logs show healthy startup for both ECS services.
+
+## 9) Run cloud smoke suite (optional gate)
+
+If you have an authenticated admin header context, run:
+
+```bash
+make cloud-smoke-from-terraform \
+  PROVIDER=aws \
+  TERRAFORM_DIR=terraform/aws \
+  ADMIN_HEADER="<Header-Name: value>"
+```
