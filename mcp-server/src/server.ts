@@ -54,6 +54,15 @@ type ListStudiesResponse = {
   offset?: number;
 };
 
+type DimseRetryDetails = {
+  pending_total?: number;
+  dead_letter_total?: number;
+};
+
+type DimseRetryDetailsResponse = {
+  ingest_retry?: DimseRetryDetails;
+};
+
 const writeInputSchema: Tool["inputSchema"] = {
   type: "object",
   required: ["study_uid", "reason", "confirm"],
@@ -201,7 +210,7 @@ const tools: Tool[] = [
   },
   {
     name: "retry_dimse_study",
-    description: "Guarded write tool stub for DIMSE retry action.",
+    description: "Process pending or dead-letter DIMSE retry state for one study instance UID.",
     inputSchema: {
       type: "object",
       required: ["study_instance_uid", "reason", "confirm"],
@@ -294,7 +303,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
-        return denyWriteTool(parsed.request_id ?? buildRequestId(), name);
+        return handleRetryDimseStudy(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       const parsed = writeArgsSchema.parse(args);
@@ -613,6 +622,60 @@ async function handleTriggerDeface(
   });
 }
 
+async function handleRetryDimseStudy(
+  requestId: string,
+  parsed: {
+    study_instance_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "retry_dimse_study");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow retry_dimse_study",
+      false,
+      "retry_dimse_study"
+    );
+  }
+
+  const studyUID = encodeURIComponent(parsed.study_instance_uid);
+  const detailsPath = `/api/dimse/retry/details?limit=1&study_instance_uid=${studyUID}`;
+  const detailsRaw = await client.get(detailsPath);
+  const details = extractDimseRetryDetails(detailsRaw);
+
+  if (details.pending_total <= 0 && details.dead_letter_total <= 0) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `No DIMSE retry/dead-letter entries found for study: ${parsed.study_instance_uid}`,
+      false,
+      "retry_dimse_study"
+    );
+  }
+
+  let action = "retry_process_pending";
+  let endpoint = `/api/dimse/retry/process/${studyUID}`;
+  if (details.pending_total <= 0 && details.dead_letter_total > 0) {
+    action = "retry_replay_dead_letter";
+    endpoint = `/api/dimse/retry/replay/${studyUID}`;
+  }
+
+  const data = await client.post(endpoint);
+  return formatSuccess(requestId, "retry_dimse_study", {
+    accepted: true,
+    study_instance_uid: parsed.study_instance_uid,
+    reason: parsed.reason,
+    action,
+    result: data
+  });
+}
+
 async function handleTriggerQcCheck(
   requestId: string,
   parsed: {
@@ -801,6 +864,21 @@ function extractStudies(value: unknown): StudySummary[] {
   }
 
   return maybe.studies.filter((item) => item && typeof item === "object" && typeof item.id === "string");
+}
+
+function extractDimseRetryDetails(value: unknown): Required<DimseRetryDetails> {
+  if (!value || typeof value !== "object") {
+    return { pending_total: 0, dead_letter_total: 0 };
+  }
+
+  const maybe = value as DimseRetryDetailsResponse;
+  const pending = Number(maybe.ingest_retry?.pending_total ?? 0);
+  const deadLetter = Number(maybe.ingest_retry?.dead_letter_total ?? 0);
+
+  return {
+    pending_total: Number.isFinite(pending) ? Math.max(0, Math.trunc(pending)) : 0,
+    dead_letter_total: Number.isFinite(deadLetter) ? Math.max(0, Math.trunc(deadLetter)) : 0
+  };
 }
 
 function formatSuccess(requestId: string, tool: ToolName, data: unknown) {
