@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc gcp-verify-deployment aws-build-images aws-apply-infra aws-install-poc aws-verify-deployment
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke cloud-smoke-from-terraform dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc gcp-verify-deployment aws-build-images aws-apply-infra aws-install-poc aws-verify-deployment
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -72,6 +72,19 @@ smoke:
 	@CMD="python3 scripts/cloud_smoke_test.py --base-url $(BASE_URL) --project-slug $${PROJECT_SLUG:-default}"; \
 	if [ -n "$$ADMIN_HEADER" ]; then CMD="$$CMD --admin-header '$$ADMIN_HEADER'"; fi; \
 	if [ -n "$$IAP_EMAIL" ]; then CMD="$$CMD --iap-email '$$IAP_EMAIL'"; fi; \
+	eval "$$CMD"
+
+cloud-smoke-from-terraform:
+	@CMD="./scripts/cloud_smoke_from_terraform.sh"; \
+	if [ -n "$$PROVIDER" ]; then CMD="$$CMD --provider='$$PROVIDER'"; fi; \
+	if [ -n "$$TERRAFORM_DIR" ]; then CMD="$$CMD --terraform-dir='$$TERRAFORM_DIR'"; fi; \
+	if [ -n "$$BASE_URL" ]; then CMD="$$CMD --base-url='$$BASE_URL'"; fi; \
+	if [ -n "$$PROJECT_SLUG" ]; then CMD="$$CMD --project-slug='$$PROJECT_SLUG'"; fi; \
+	if [ -n "$$TIMEOUT_SECONDS" ]; then CMD="$$CMD --timeout='$$TIMEOUT_SECONDS'"; fi; \
+	if [ -n "$$PIPELINE_TIMEOUT_SECONDS" ]; then CMD="$$CMD --pipeline-timeout='$$PIPELINE_TIMEOUT_SECONDS'"; fi; \
+	if [ -n "$$ADMIN_HEADER" ]; then CMD="$$CMD --admin-header='$$ADMIN_HEADER'"; fi; \
+	if [ -n "$$IAP_EMAIL" ]; then CMD="$$CMD --iap-email='$$IAP_EMAIL'"; fi; \
+	if [ -n "$$REQUIRE_AUTH_CONTEXT" ]; then CMD="$$CMD --require-auth-context='$$REQUIRE_AUTH_CONTEXT'"; fi; \
 	eval "$$CMD"
 
 dimse-e2e:
