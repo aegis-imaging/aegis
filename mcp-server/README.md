@@ -14,11 +14,11 @@ Minimal MCP API-wrapper scaffold for Anonymization & Exchange Gateway for Imagin
   - `get_system_health`
 - Write tools:
   - Implemented (with operator mode + feature-flag guard + preconditions):
+    - `trigger_classification`
     - `trigger_qc_check`
     - `trigger_protocol_check`
     - `trigger_phi_scan`
   - Registered but currently stubbed:
-  - `trigger_classification`
   - `trigger_bids_convert`
   - `trigger_export`
   - `trigger_deface`
@@ -58,5 +58,6 @@ npm run start
 - `trigger_qc_check` resolves study UID via `list_studies` search, enforces QC preconditions, then calls `POST /api/studies/{studyUID}/qc-check`.
 - `trigger_protocol_check` resolves study UID via `list_studies` search, enforces protocol preconditions, then calls `POST /api/studies/{studyUID}/protocol-check`.
 - `trigger_phi_scan` resolves study UID via `list_studies` search, enforces PHI-scan preconditions, then calls `POST /api/studies/{studyUID}/phi-scan`.
+- `trigger_classification` resolves study UID via `list_studies` search, enforces classification preconditions, then calls `POST /api/studies/{studyUID}/classify`.
 - `get_study_diagnostics` calls `GET /api/studies/{study_id}/diagnostics` for "why stuck" summary output.
-- All other write tools currently validate input (`confirm` + `reason`) and return guarded denial/not-implemented responses by design.
+- Remaining write tools currently validate input (`confirm` + `reason`) and return guarded denial/not-implemented responses by design.
