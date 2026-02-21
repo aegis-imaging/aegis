@@ -110,6 +110,30 @@ variable "api_allowed_origins" {
   default     = []
 }
 
+variable "admin_image_tag" {
+  description = "Container image tag used for the admin dashboard ECS task"
+  type        = string
+  default     = "latest"
+}
+
+variable "admin_desired_count" {
+  description = "Desired number of admin dashboard ECS tasks"
+  type        = number
+  default     = 1
+}
+
+variable "admin_cpu" {
+  description = "CPU units for admin dashboard ECS task definition"
+  type        = number
+  default     = 512
+}
+
+variable "admin_memory" {
+  description = "Memory (MiB) for admin dashboard ECS task definition"
+  type        = number
+  default     = 1024
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -336,9 +360,10 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "dimse-receiver"]
 
-  api_image = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
+  api_image   = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
+  admin_image = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
 
   cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
     "https://${aws_lb.main.dns_name}/oauth2/idpresponse"
@@ -504,6 +529,24 @@ resource "aws_lb_target_group" "api" {
   tags = { Name = "${var.project_name}-api-tg" }
 }
 
+resource "aws_lb_target_group" "admin" {
+  name        = "${var.project_name}-admin"
+  port        = 8080
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.main.id
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+
+  tags = { Name = "${var.project_name}-admin-tg" }
+}
+
 # HTTP listener — redirects to HTTPS
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
@@ -595,7 +638,7 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
+    target_group_arn = aws_lb_target_group.admin.arn
   }
 }
 
@@ -613,6 +656,34 @@ resource "aws_lb_listener_rule" "https_public_paths" {
   condition {
     path_pattern {
       values = each.value.paths
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "https_api_authenticated" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 90
+
+  action {
+    type = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn              = aws_cognito_user_pool.admin.arn
+      user_pool_client_id        = aws_cognito_user_pool_client.admin.id
+      user_pool_domain           = aws_cognito_user_pool_domain.admin.domain
+      on_unauthenticated_request = "authenticate"
+      scope                      = join(" ", var.cognito_allowed_oauth_scopes)
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
     }
   }
 }
@@ -777,6 +848,67 @@ resource "aws_ecs_service" "api" {
   depends_on = [aws_lb_listener.https]
 }
 
+resource "aws_ecs_task_definition" "admin" {
+  family                   = "${var.project_name}-admin-dashboard"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.admin_cpu)
+  memory                   = tostring(var.admin_memory)
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "admin-dashboard"
+      image     = local.admin_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.main.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "admin"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_service" "admin" {
+  name                   = "${var.project_name}-admin-dashboard"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.admin.arn
+  desired_count          = var.admin_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.admin.arn
+    container_name   = "admin-dashboard"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.https]
+}
+
 # --- SNS + SQS (Event Notifications) ---
 
 resource "aws_sns_topic" "dicom_ingest" {
@@ -839,6 +971,14 @@ output "ecs_api_service" {
 
 output "ecs_api_task_definition" {
   value = aws_ecs_task_definition.api.arn
+}
+
+output "ecs_admin_service" {
+  value = aws_ecs_service.admin.name
+}
+
+output "ecs_admin_task_definition" {
+  value = aws_ecs_task_definition.admin.arn
 }
 
 output "alb_dns" {
