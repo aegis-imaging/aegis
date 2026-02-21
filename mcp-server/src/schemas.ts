@@ -37,6 +37,7 @@ export const retryDimseArgsSchema = z.object({
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
+  "get_study_diagnostics",
   "get_study_audit",
   "get_study_routing_log",
   "list_export_shares",
