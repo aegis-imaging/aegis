@@ -336,7 +336,7 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service"]
 
   api_image = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
 
