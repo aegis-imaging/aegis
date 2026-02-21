@@ -220,6 +220,16 @@ variable "db_password" {
   type        = string
   default     = ""
   sensitive   = true
+
+  validation {
+    condition     = var.db_password == "" || length(var.db_password) >= 16
+    error_message = "db_password must be empty (auto-generates a secure password) or at least 16 characters."
+  }
+
+  validation {
+    condition     = !contains(["changeme", "aegis", "postgres", "password", "admin", "secret", "letmein", "root", "12345", "qwerty", "test"], lower(var.db_password))
+    error_message = "db_password must not be a known-weak value. Leave it empty to auto-generate a secure password."
+  }
 }
 
 variable "db_password_secret_id" {
