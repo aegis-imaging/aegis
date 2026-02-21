@@ -27,7 +27,14 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=terraform/${{ matrix.module }} init -backend=false
       - name: Terraform validate
-        run: terraform -chdir=terraform/${{ matrix.module }} validate
+        run: |
+          if [ "${{ matrix.module }}" = "aws" ]; then
+            terraform -chdir=terraform/${{ matrix.module }} validate \
+              -var="acm_certificate_arn=arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000" \
+              -var="cognito_domain_prefix=aegis-ci"
+          else
+            terraform -chdir=terraform/${{ matrix.module }} validate
+          fi
 
   go:
     name: Go build & vet
