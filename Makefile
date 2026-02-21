@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra aws-apply-infra
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra aws-build-images aws-apply-infra
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -99,3 +99,7 @@ gcp-apply-infra:
 
 aws-apply-infra:
 	./scripts/aws_apply_infra.sh
+
+aws-build-images:
+	@REGION="$${REGION:-us-east-1}" PROJECT_NAME="$${PROJECT_NAME:-aegis}" TAG="$${TAG:-latest}" \
+		./scripts/aws_build_push_images.sh --region="$$REGION" --project-name="$$PROJECT_NAME" --tag="$$TAG"
