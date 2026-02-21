@@ -12,3 +12,12 @@ cognito_domain_prefix = "aegis-dev-auth"
 # Optional overrides (defaults to ALB DNS callbacks/logout):
 # cognito_callback_urls = ["https://admin.example.com/oauth2/idpresponse"]
 # cognito_logout_urls   = ["https://admin.example.com/logout"]
+
+# ECS API runtime controls
+api_image_tag      = "latest"
+api_desired_count  = 1
+api_cpu            = 1024
+api_memory         = 2048
+
+# Optional CORS override for API runtime
+# api_allowed_origins = ["https://admin.example.com"]
