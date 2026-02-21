@@ -16,6 +16,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/handler"
 	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/migrate"
+	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/storage"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -70,6 +71,8 @@ func main() {
 		log.Fatalf("migrations: %v", err)
 	}
 	log.Println("migrations complete")
+
+	bootstrapFirstAdmin(context.Background(), db, cfg)
 
 	var store storage.Storage
 	switch cfg.StorageMode {
@@ -273,4 +276,32 @@ func main() {
 func applyDBSessionTimezone(ctx context.Context, db *sql.DB, timezone string) error {
 	var applied string
 	return db.QueryRowContext(ctx, `SELECT set_config('TimeZone', $1, false)`, timezone).Scan(&applied)
+}
+
+// bootstrapFirstAdmin seeds the first admin user when FIRST_ADMIN_EMAIL is set
+// and the admin_users table is empty. Idempotent — does nothing once any admin
+// user exists, so it is safe to leave set permanently in production.
+func bootstrapFirstAdmin(ctx context.Context, db *sql.DB, cfg *config.Config) {
+	if cfg.FirstAdminEmail == "" {
+		return
+	}
+	var count int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_users`).Scan(&count); err != nil {
+		log.Printf("first-admin bootstrap: count query failed: %v", err)
+		return
+	}
+	if count > 0 {
+		return
+	}
+	u := &model.AdminUser{
+		Email:   cfg.FirstAdminEmail,
+		Name:    cfg.FirstAdminName,
+		Role:    "admin",
+		Enabled: true,
+	}
+	if err := model.CreateAdminUser(ctx, db, u); err != nil {
+		log.Printf("first-admin bootstrap: failed to create %s: %v", cfg.FirstAdminEmail, err)
+		return
+	}
+	log.Printf("first-admin bootstrap: created admin user %s (id=%s)", u.Email, u.ID)
 }
