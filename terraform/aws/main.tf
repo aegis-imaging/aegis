@@ -985,8 +985,36 @@ output "alb_dns" {
   value = aws_lb.main.dns_name
 }
 
+output "api_base_url" {
+  value = "https://${aws_lb.main.dns_name}"
+}
+
+output "api_healthz_url" {
+  value = "https://${aws_lb.main.dns_name}/healthz"
+}
+
+output "admin_base_url" {
+  value = "https://${aws_lb.main.dns_name}/"
+}
+
 output "alb_https_listener_arn" {
   value = aws_lb_listener.https.arn
+}
+
+output "api_target_group_name" {
+  value = aws_lb_target_group.api.name
+}
+
+output "api_target_group_arn" {
+  value = aws_lb_target_group.api.arn
+}
+
+output "admin_target_group_name" {
+  value = aws_lb_target_group.admin.name
+}
+
+output "admin_target_group_arn" {
+  value = aws_lb_target_group.admin.arn
 }
 
 output "cognito_user_pool_id" {
