@@ -30,7 +30,15 @@ type ToolPayload = {
 type ErrorCode = "VALIDATION_ERROR" | "AUTH_ERROR" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "UPSTREAM_ERROR" | "TIMEOUT";
 type StudySummary = {
   id: string;
+  status?: string;
   study_instance_uid?: string;
+  defacing_required?: boolean;
+  classification_required?: boolean;
+  classification_status?: string;
+  bids_required?: boolean;
+  bids_status?: string;
+  export_required?: boolean;
+  export_status?: string;
   qc_required?: boolean;
   qc_status?: string;
   protocol_required?: boolean;
@@ -44,6 +52,15 @@ type ListStudiesResponse = {
   total?: number;
   limit?: number;
   offset?: number;
+};
+
+type DimseRetryDetails = {
+  pending_total?: number;
+  dead_letter_total?: number;
+};
+
+type DimseRetryDetailsResponse = {
+  ingest_retry?: DimseRetryDetails;
 };
 
 const writeInputSchema: Tool["inputSchema"] = {
@@ -83,6 +100,19 @@ const tools: Tool[] = [
   {
     name: "get_study_detail",
     description: "Get detail for a specific study UUID.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_study_diagnostics",
+    description: "Get per-study diagnostics summary for stuck-state triage.",
     inputSchema: {
       type: "object",
       required: ["study_id"],
@@ -145,7 +175,7 @@ const tools: Tool[] = [
   },
   {
     name: "trigger_classification",
-    description: "Guarded write tool stub. Validates input but does not execute mutation in scaffold.",
+    description: "Trigger metadata classification for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
@@ -165,22 +195,22 @@ const tools: Tool[] = [
   },
   {
     name: "trigger_bids_convert",
-    description: "Guarded write tool stub. Validates input but does not execute mutation in scaffold.",
+    description: "Trigger BIDS conversion for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
     name: "trigger_export",
-    description: "Guarded write tool stub. Validates input but does not execute mutation in scaffold.",
+    description: "Trigger export forwarding for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
     name: "trigger_deface",
-    description: "Guarded write tool stub. Validates input but does not execute mutation in scaffold.",
+    description: "Trigger defacing for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
     name: "retry_dimse_study",
-    description: "Guarded write tool stub for DIMSE retry action.",
+    description: "Process pending or dead-letter DIMSE retry state for one study instance UID.",
     inputSchema: {
       type: "object",
       required: ["study_instance_uid", "reason", "confirm"],
@@ -240,6 +270,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
     }
 
+    if (name === "get_study_diagnostics") {
+      const parsed = studyIdArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/diagnostics`);
+      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+    }
+
     if (name === "get_study_audit") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/audit`);
@@ -267,10 +303,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
-        return denyWriteTool(parsed.request_id ?? buildRequestId(), name);
+        return handleRetryDimseStudy(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       const parsed = writeArgsSchema.parse(args);
+
+      if (name === "trigger_classification") {
+        return handleTriggerClassification(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "trigger_bids_convert") {
+        return handleTriggerBidsConvert(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "trigger_export") {
+        return handleTriggerExport(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "trigger_deface") {
+        return handleTriggerDeface(parsed.request_id ?? buildRequestId(), parsed);
+      }
 
       if (name === "trigger_qc_check") {
         return handleTriggerQcCheck(parsed.request_id ?? buildRequestId(), parsed);
@@ -324,6 +376,304 @@ function denyWriteTool(requestId: string, tool: ToolName) {
   }
 
   return formatError(requestId, "FORBIDDEN", "Write tool handler not implemented in scaffold", false, tool);
+}
+
+async function handleTriggerClassification(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Caller is not permitted to execute write tools in readonly mode",
+      false,
+      "trigger_classification"
+    );
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_classification",
+      false,
+      "trigger_classification"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_classification");
+  }
+
+  if (matched.classification_required === false) {
+    return formatError(requestId, "CONFLICT", "Study does not require classification", false, "trigger_classification");
+  }
+
+  if (matched.classification_status === "classifying") {
+    return formatError(requestId, "CONFLICT", "Classification already in progress", false, "trigger_classification");
+  }
+
+  if (matched.classification_status && !["pending", "failed"].includes(matched.classification_status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `Classification trigger blocked for current status: ${matched.classification_status}`,
+      false,
+      "trigger_classification"
+    );
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/classify`);
+  return formatSuccess(requestId, "trigger_classification", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTriggerBidsConvert(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Caller is not permitted to execute write tools in readonly mode",
+      false,
+      "trigger_bids_convert"
+    );
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_bids_convert",
+      false,
+      "trigger_bids_convert"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_bids_convert");
+  }
+
+  if (matched.bids_required === false) {
+    return formatError(requestId, "CONFLICT", "Study does not require BIDS conversion", false, "trigger_bids_convert");
+  }
+
+  if (matched.bids_status === "converting") {
+    return formatError(requestId, "CONFLICT", "BIDS conversion already in progress", false, "trigger_bids_convert");
+  }
+
+  if (matched.bids_status && !["pending", "failed"].includes(matched.bids_status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `BIDS conversion trigger blocked for current status: ${matched.bids_status}`,
+      false,
+      "trigger_bids_convert"
+    );
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/bids-convert`);
+  return formatSuccess(requestId, "trigger_bids_convert", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTriggerExport(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "trigger_export");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_export",
+      false,
+      "trigger_export"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_export");
+  }
+
+  if (matched.status !== "approved") {
+    return formatError(requestId, "CONFLICT", "Only approved studies can be exported", false, "trigger_export");
+  }
+
+  if (matched.export_required === false) {
+    return formatError(requestId, "CONFLICT", "Export is not required for this study", false, "trigger_export");
+  }
+
+  if (matched.export_status === "exporting") {
+    return formatError(requestId, "CONFLICT", "Export is already in progress", false, "trigger_export");
+  }
+
+  if (matched.export_status && !["pending", "failed"].includes(matched.export_status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `Export trigger blocked for current status: ${matched.export_status}`,
+      false,
+      "trigger_export"
+    );
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/trigger-export`);
+  return formatSuccess(requestId, "trigger_export", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTriggerDeface(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "trigger_deface");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_deface",
+      false,
+      "trigger_deface"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_deface");
+  }
+
+  if (matched.defacing_required === false) {
+    return formatError(requestId, "CONFLICT", "Defacing is not required for this study", false, "trigger_deface");
+  }
+
+  if (matched.status === "defacing") {
+    return formatError(requestId, "CONFLICT", "Defacing is already in progress", false, "trigger_deface");
+  }
+
+  if (matched.status && ["approved", "rejected"].includes(matched.status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `Defacing trigger blocked for terminal status: ${matched.status}`,
+      false,
+      "trigger_deface"
+    );
+  }
+
+  const data = await client.post(`/api/deface/${encodeURIComponent(parsed.study_uid)}`);
+  return formatSuccess(requestId, "trigger_deface", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleRetryDimseStudy(
+  requestId: string,
+  parsed: {
+    study_instance_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "retry_dimse_study");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow retry_dimse_study",
+      false,
+      "retry_dimse_study"
+    );
+  }
+
+  const studyUID = encodeURIComponent(parsed.study_instance_uid);
+  const detailsPath = `/api/dimse/retry/details?limit=1&study_instance_uid=${studyUID}`;
+  const detailsRaw = await client.get(detailsPath);
+  const details = extractDimseRetryDetails(detailsRaw);
+
+  if (details.pending_total <= 0 && details.dead_letter_total <= 0) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `No DIMSE retry/dead-letter entries found for study: ${parsed.study_instance_uid}`,
+      false,
+      "retry_dimse_study"
+    );
+  }
+
+  let action = "retry_process_pending";
+  let endpoint = `/api/dimse/retry/process/${studyUID}`;
+  if (details.pending_total <= 0 && details.dead_letter_total > 0) {
+    action = "retry_replay_dead_letter";
+    endpoint = `/api/dimse/retry/replay/${studyUID}`;
+  }
+
+  const data = await client.post(endpoint);
+  return formatSuccess(requestId, "retry_dimse_study", {
+    accepted: true,
+    study_instance_uid: parsed.study_instance_uid,
+    reason: parsed.reason,
+    action,
+    result: data
+  });
 }
 
 async function handleTriggerQcCheck(
@@ -514,6 +864,21 @@ function extractStudies(value: unknown): StudySummary[] {
   }
 
   return maybe.studies.filter((item) => item && typeof item === "object" && typeof item.id === "string");
+}
+
+function extractDimseRetryDetails(value: unknown): Required<DimseRetryDetails> {
+  if (!value || typeof value !== "object") {
+    return { pending_total: 0, dead_letter_total: 0 };
+  }
+
+  const maybe = value as DimseRetryDetailsResponse;
+  const pending = Number(maybe.ingest_retry?.pending_total ?? 0);
+  const deadLetter = Number(maybe.ingest_retry?.dead_letter_total ?? 0);
+
+  return {
+    pending_total: Number.isFinite(pending) ? Math.max(0, Math.trunc(pending)) : 0,
+    dead_letter_total: Number.isFinite(deadLetter) ? Math.max(0, Math.trunc(deadLetter)) : 0
+  };
 }
 
 function formatSuccess(requestId: string, tool: ToolName, data: unknown) {

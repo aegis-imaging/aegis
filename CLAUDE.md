@@ -300,6 +300,17 @@ Returns a single study by UUID. Used by the admin dashboard's study detail panel
 
 Returns all audit trail entries for a specific study (by `resource_id`). Used by the study detail panel's audit tab.
 
+### Study Diagnostics (`GET /api/studies/{id}/diagnostics`)
+
+Returns a "why stuck?" diagnostics payload for one study:
+- `study` — current full study record
+- `summary` — `terminal`, `stuck`, `blockers[]`, `recommended_actions[]`, and last audit signal
+- `recent_audit` — bounded latest audit entries (most recent first)
+- `routing_log` — per-study routing rule log entries
+- `dimse_retry` — optional DIMSE retry/dead-letter counters for the same StudyInstanceUID when DIMSE receiver is configured
+
+Used for operator triage and MCP-assisted incident diagnosis.
+
 ### Study Detail Panel (Admin Dashboard)
 
 Clicking a study UID in the studies table navigates to a dedicated detail view with:
@@ -1161,7 +1172,7 @@ Common dev commands available via `make`:
 | `make clean` | `docker compose down -v` (destroy volumes) |
 | `make build` | `docker compose build` |
 | `make api` | Run Go API locally (`go run .`) |
-| `make lint` | Lint all languages (Go vet, Python py_compile, TypeScript tsc) |
+| `make lint` | Lint all languages with CI-parity scope (Go vet, Python py_compile including protocol/dimse + harness scripts, TypeScript tsc for all apps, MCP typecheck) |
 | `make check` | `curl /healthz` with pretty JSON output |
 | `make smoke` | Run cloud smoke harness (`BASE_URL=...`, optional `ADMIN_HEADER=...`) |
 | `make dimse-e2e` | Run DIMSE PACS E2E harness (mock ingest + retry/dead-letter scenarios) |
