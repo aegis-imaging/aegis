@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/handler"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/handler"
 	"github.com/stretchr/testify/assert"
 )
 

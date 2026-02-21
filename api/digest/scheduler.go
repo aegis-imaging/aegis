@@ -9,8 +9,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/msenjem/aegis/api/email"
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // Start launches a background goroutine that checks for due digest subscriptions

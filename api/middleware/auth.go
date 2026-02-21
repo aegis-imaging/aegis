@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // AuthUser represents the authenticated user stored in the request context.

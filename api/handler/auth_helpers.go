@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/msenjem/aegis/api/middleware"
+	"github.com/aegis-imaging/aegis/api/middleware"
 )
 
 // actorEmail returns the authenticated user's email from the request context,

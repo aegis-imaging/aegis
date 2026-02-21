@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // protocolCheckRequest is the payload sent to the Python protocol service.

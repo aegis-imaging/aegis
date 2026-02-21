@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/smtp"
 
-	"github.com/msenjem/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/config"
 )
 
 // Client sends plain-text emails via SMTP. It is a no-op when EmailEnabled is false,

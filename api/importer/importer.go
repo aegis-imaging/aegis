@@ -20,9 +20,9 @@ import (
 	dicom "github.com/suyashkumar/dicom"
 	"github.com/suyashkumar/dicom/pkg/tag"
 
-	"github.com/msenjem/aegis/api/model"
-	"github.com/msenjem/aegis/api/routing"
-	"github.com/msenjem/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/routing"
+	"github.com/aegis-imaging/aegis/api/storage"
 )
 
 // Options configures a batch import run.

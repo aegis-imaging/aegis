@@ -10,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/digest"
-	"github.com/msenjem/aegis/api/email"
-	"github.com/msenjem/aegis/api/handler"
-	"github.com/msenjem/aegis/api/middleware"
-	"github.com/msenjem/aegis/api/migrate"
-	"github.com/msenjem/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/digest"
+	"github.com/aegis-imaging/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/handler"
+	"github.com/aegis-imaging/aegis/api/middleware"
+	"github.com/aegis-imaging/aegis/api/migrate"
+	"github.com/aegis-imaging/aegis/api/storage"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )

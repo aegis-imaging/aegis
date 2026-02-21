@@ -3,7 +3,7 @@ package routing
 import (
 	"testing"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/msenjem/aegis/api/model"
-	"github.com/msenjem/aegis/api/testutil"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
