@@ -17,11 +17,11 @@ Minimal MCP API-wrapper scaffold for Anonymization & Exchange Gateway for Imagin
     - `trigger_classification`
     - `trigger_bids_convert`
     - `trigger_export`
+    - `trigger_deface`
     - `trigger_qc_check`
     - `trigger_protocol_check`
     - `trigger_phi_scan`
   - Registered but currently stubbed:
-  - `trigger_deface`
   - `retry_dimse_study`
 
 ## Environment
@@ -61,5 +61,6 @@ npm run start
 - `trigger_classification` resolves study UID via `list_studies` search, enforces classification preconditions, then calls `POST /api/studies/{studyUID}/classify`.
 - `trigger_bids_convert` resolves study UID via `list_studies` search, enforces BIDS preconditions, then calls `POST /api/studies/{studyUID}/bids-convert`.
 - `trigger_export` resolves study UID via `list_studies` search, enforces approved/export preconditions, then calls `POST /api/studies/{studyUID}/trigger-export`.
+- `trigger_deface` resolves study UID via `list_studies` search, enforces defacing preconditions, then calls `POST /api/deface/{studyUID}`.
 - `get_study_diagnostics` calls `GET /api/studies/{study_id}/diagnostics` for "why stuck" summary output.
 - Remaining write tools currently validate input (`confirm` + `reason`) and return guarded denial/not-implemented responses by design.
