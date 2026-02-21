@@ -1,0 +1,45 @@
+project_id   = "aegis-prod"
+region       = "us-central1"
+environment  = "dev"
+api_domain   = "api-dev.aegisimaging.ai"
+admin_domain = "admin-dev.aegisimaging.ai"
+
+# IAP OAuth credentials for the admin dashboard backend.
+iap_oauth_client_id     = "YOUR_IAP_OAUTH_CLIENT_ID"
+iap_oauth_client_secret = "YOUR_IAP_OAUTH_CLIENT_SECRET"
+
+# Grant IAP web access to these identities.
+iap_access_members = [
+  "user:you@example.com",
+]
+
+# Container images (build + push these before terraform apply).
+api_image                    = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/api:latest"
+admin_dashboard_image        = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/admin-dashboard:latest"
+defacing_image               = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/defacing:latest"
+phi_detection_image          = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/phi-detection:latest"
+qc_service_image             = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/qc-service:latest"
+bids_service_image           = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/bids-service:latest"
+classification_service_image = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/classification-service:latest"
+protocol_service_image       = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/protocol-service:latest"
+
+# Cloud SQL runtime DB password handling.
+# Preferred: generated password persisted to Secret Manager.
+generate_db_password        = true
+generated_db_password_length = 32
+db_password_secret_id       = "aegis-dev-db-password"
+
+# Optional explicit password override (if you must control the value externally).
+# db_password = "set-via-secure-secret-source"
+
+# SMTP relay config (documented PSC-equivalent path via Cloud NAT static egress IP).
+smtp_relay_host = "smtp-relay.example.org"
+smtp_relay_port = 587
+smtp_from       = "noreply@aegisimaging.ai"
+
+# Optional: alert destination and Cloud Armor ingress controls.
+alert_email                    = "ops@example.com"
+cloud_armor_allowed_ip_ranges  = ["*"]
+deletion_protection            = true
+enable_admin_iap               = true
+enable_monitoring_alerts       = true

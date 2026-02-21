@@ -1,0 +1,72 @@
+name: Cloud Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base API URL (example: https://api-dev.aegisimaging.ai)"
+        required: true
+        type: string
+      project_slug:
+        description: "Project slug for upload smoke test"
+        required: false
+        default: "default"
+        type: string
+      timeout_seconds:
+        description: "Per-request timeout"
+        required: false
+        default: "30"
+        type: string
+      pipeline_timeout_seconds:
+        description: "Pipeline progression poll timeout"
+        required: false
+        default: "45"
+        type: string
+      iap_email:
+        description: "Optional: identity email for X-Goog-Authenticated-User-Email convenience flag"
+        required: false
+        default: ""
+        type: string
+      require_auth_context:
+        description: "Fail fast when neither admin header secret nor iap_email is provided"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  smoke:
+    name: Cloud smoke suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run cloud smoke suite
+        env:
+          ADMIN_HEADER: ${{ secrets.CLOUD_SMOKE_ADMIN_HEADER }}
+        run: |
+          set -euo pipefail
+
+          CMD=(
+            python3 scripts/cloud_smoke_test.py
+            --base-url "${{ inputs.base_url }}"
+            --project-slug "${{ inputs.project_slug }}"
+            --timeout "${{ inputs.timeout_seconds }}"
+            --pipeline-timeout "${{ inputs.pipeline_timeout_seconds }}"
+          )
+
+          if [ -n "${ADMIN_HEADER}" ]; then
+            CMD+=(--admin-header "${ADMIN_HEADER}")
+          fi
+
+          if [ -n "${{ inputs.iap_email }}" ]; then
+            CMD+=(--iap-email "${{ inputs.iap_email }}")
+          fi
+
+          if [ "${{ inputs.require_auth_context }}" = "true" ] && [ -z "${ADMIN_HEADER}" ] && [ -z "${{ inputs.iap_email }}" ]; then
+            echo "error: provide CLOUD_SMOKE_ADMIN_HEADER secret or iap_email input for authenticated endpoints." >&2
+            exit 1
+          fi
+
+          "${CMD[@]}"

@@ -1,0 +1,225 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f0f2f5;
+  color: #1a1a2e;
+  min-height: 100vh;
+}
+
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 40px 16px;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  padding: 40px;
+  max-width: 600px;
+  width: 100%;
+}
+
+h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a1a2e;
+  letter-spacing: 2px;
+}
+
+.subtitle {
+  color: #666;
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+.tz-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.tz-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tz-select,
+.tz-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 13px;
+  background: #fff;
+  color: #111827;
+}
+
+.tz-input {
+  min-width: 180px;
+}
+
+.tz-warning {
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.loading {
+  color: #888;
+  font-style: italic;
+  margin-top: 16px;
+}
+
+.error-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.error-box h2 {
+  font-size: 18px;
+  color: #991b1b;
+  margin-bottom: 8px;
+}
+
+.error-box p {
+  color: #7f1d1d;
+  line-height: 1.5;
+}
+
+.study-info {
+  margin-top: 20px;
+}
+
+.study-info h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.info-table td {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.info-table .label {
+  font-weight: 600;
+  color: #666;
+  width: 120px;
+}
+
+.expiring-soon {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.note {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.download-section {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.btn-download {
+  display: inline-block;
+  background: #1a6b3c;
+  color: #fff;
+  text-decoration: none;
+  padding: 14px 32px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-download:hover {
+  background: #15572f;
+}
+
+.download-disabled {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.file-list {
+  margin-top: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.file-list summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #444;
+  padding: 4px 0;
+}
+
+.file-list ul {
+  list-style: none;
+  margin-top: 8px;
+}
+
+.file-list li {
+  padding: 4px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.file-list li:last-child {
+  border-bottom: none;
+}
+
+.file-list a {
+  color: #2563eb;
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.file-list a:hover {
+  text-decoration: underline;
+}
+
+.file-link-disabled {
+  color: #94a3b8;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.footer-text {
+  margin-top: 24px;
+  color: #999;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}

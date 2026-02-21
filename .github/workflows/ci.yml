@@ -1,0 +1,186 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  infra-guard:
+    name: Infra placeholder guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Terraform credential placeholders
+        run: ./scripts/check-infra-placeholders.sh
+
+  terraform:
+    name: "Terraform checks (${{ matrix.module }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [project, infra, aws]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform fmt check
+        run: terraform -chdir=terraform/${{ matrix.module }} fmt -check
+      - name: Terraform init
+        run: terraform -chdir=terraform/${{ matrix.module }} init -backend=false
+      - name: Terraform validate
+        run: terraform -chdir=terraform/${{ matrix.module }} validate
+
+  go:
+    name: Go build & vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Build
+        working-directory: api
+        run: go build ./...
+      - name: Vet
+        working-directory: api
+        run: go vet ./...
+
+  go-test:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Run tests
+        working-directory: api
+        run: go test -race -v -count=1 ./...
+
+  python:
+    name: "Python check (${{ matrix.service }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax check
+        run: find ${{ matrix.service }} -name '*.py' -exec python -m py_compile {} +
+
+  python-scripts:
+    name: Python script check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax check (harness scripts)
+        run: python -m py_compile scripts/cloud_smoke_test.py scripts/dimse_pacs_e2e_harness.py
+
+  shell-scripts:
+    name: "Shell script syntax (${{ matrix.script }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        script:
+          - scripts/check-infra-placeholders.sh
+          - scripts/gcp_preflight.sh
+          - scripts/gcp_bootstrap_project.sh
+          - scripts/gcp_build_push_images.sh
+          - scripts/gcp_apply_infra.sh
+          - scripts/gcp_install_poc.sh
+          - scripts/aws_build_push_images.sh
+          - scripts/aws_apply_infra.sh
+          - scripts/aws_install_poc.sh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: bash -n ${{ matrix.script }}
+
+  python-test:
+    name: "Python tests (${{ matrix.service }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: cd ${{ matrix.service }} && pip install -r requirements.txt -r requirements-test.txt
+      - name: Run tests
+        run: cd ${{ matrix.service }} && pytest -v --tb=short
+
+  frontend:
+    name: "TypeScript check (${{ matrix.app.name }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app:
+          - { dir: client, name: "@aegis/client", needs_client: false }
+          - { dir: frontend/upload-portal, name: upload-portal, needs_client: true }
+          - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: false }
+          - { dir: frontend/landing, name: landing, needs_client: false }
+          - { dir: frontend/export-portal, name: export-portal, needs_client: false }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build @aegis/client (dependency)
+        if: matrix.app.needs_client
+        run: cd client && npm install && npm run build
+      - name: Install dependencies
+        run: cd ${{ matrix.app.dir }} && npm install
+      - name: Type check
+        run: cd ${{ matrix.app.dir }} && npx tsc --noEmit
+
+  docker:
+    name: "Docker build (${{ matrix.service.name }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - { context: api, name: api }
+          - { context: frontend/admin-dashboard, name: admin-dashboard }
+          - { context: defacing, name: defacing }
+          - { context: phi-detection, name: phi-detection }
+          - { context: qc-service, name: qc-service }
+          - { context: bids-service, name: bids-service }
+          - { context: classification-service, name: classification-service }
+          - { context: protocol-service, name: protocol-service }
+          - { context: dimse-receiver, name: dimse-receiver }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image (retry on transient registry errors)
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="aegis-${{ matrix.service.name }}:ci"
+          context="${{ matrix.service.context }}"
+          attempts=5
+          delay_seconds=10
+
+          for attempt in $(seq 1 "${attempts}"); do
+            echo "Docker build attempt ${attempt}/${attempts}: ${image} from ${context}"
+            if docker build -t "${image}" "${context}"; then
+              exit 0
+            fi
+
+            if [ "${attempt}" -eq "${attempts}" ]; then
+              break
+            fi
+
+            echo "Build failed; sleeping ${delay_seconds}s before retry..."
+            sleep "${delay_seconds}"
+            delay_seconds=$((delay_seconds * 2))
+          done
+
+          echo "Docker build failed after ${attempts} attempts."
+          exit 1

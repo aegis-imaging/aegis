@@ -1,0 +1,23 @@
+project_id      = "aegis-prod"
+region          = "us-central1"
+billing_account = "XXXXXX-XXXXXX-XXXXXX"
+
+# Optional hardening overrides
+kms_key_ring_name    = "aegis"
+kms_crypto_key_name  = "aegis-data"
+kms_rotation_period  = "7776000s"
+
+enable_vpc_service_controls = false
+# access_policy_id = "1234567890" # Required when enable_vpc_service_controls=true
+
+# Optional VPC-SC restricted service overrides
+# vpc_service_restricted_services = [
+#   "storage.googleapis.com",
+#   "secretmanager.googleapis.com",
+#   "bigquery.googleapis.com",
+#   "healthcare.googleapis.com",
+#   "artifactregistry.googleapis.com"
+# ]
+
+# Optional audit-log data-read exemptions
+# audit_log_data_read_exempted_members = []

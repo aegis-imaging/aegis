@@ -1,0 +1,1330 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aegis.local/schemas/mcp-tool-schemas-v1.json",
+  "title": "AEGIS MCP Tool Schemas v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "common",
+    "tools"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "common": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "reason",
+        "confirm",
+        "successEnvelope",
+        "errorEnvelope"
+      ],
+      "properties": {
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "confirm": {
+          "$ref": "#/$defs/confirm"
+        },
+        "successEnvelope": {
+          "$ref": "#/$defs/successEnvelope"
+        },
+        "errorEnvelope": {
+          "$ref": "#/$defs/errorEnvelope"
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "list_studies",
+        "get_study_detail",
+        "get_study_audit",
+        "get_study_routing_log",
+        "list_export_shares",
+        "get_system_health",
+        "trigger_classification",
+        "trigger_phi_scan",
+        "trigger_protocol_check",
+        "trigger_qc_check",
+        "trigger_bids_convert",
+        "trigger_export",
+        "trigger_deface",
+        "retry_dimse_study"
+      ],
+      "properties": {
+        "list_studies": {
+          "$ref": "#/$defs/toolListStudies"
+        },
+        "get_study_detail": {
+          "$ref": "#/$defs/toolGetStudyDetail"
+        },
+        "get_study_audit": {
+          "$ref": "#/$defs/toolGetStudyAudit"
+        },
+        "get_study_routing_log": {
+          "$ref": "#/$defs/toolGetStudyRoutingLog"
+        },
+        "list_export_shares": {
+          "$ref": "#/$defs/toolListExportShares"
+        },
+        "get_system_health": {
+          "$ref": "#/$defs/toolGetSystemHealth"
+        },
+        "trigger_classification": {
+          "$ref": "#/$defs/toolTriggerClassification"
+        },
+        "trigger_phi_scan": {
+          "$ref": "#/$defs/toolTriggerPhiScan"
+        },
+        "trigger_protocol_check": {
+          "$ref": "#/$defs/toolTriggerProtocolCheck"
+        },
+        "trigger_qc_check": {
+          "$ref": "#/$defs/toolTriggerQcCheck"
+        },
+        "trigger_bids_convert": {
+          "$ref": "#/$defs/toolTriggerBidsConvert"
+        },
+        "trigger_export": {
+          "$ref": "#/$defs/toolTriggerExport"
+        },
+        "trigger_deface": {
+          "$ref": "#/$defs/toolTriggerDeface"
+        },
+        "retry_dimse_study": {
+          "$ref": "#/$defs/toolRetryDimseStudy"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "requestId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "description": "Client-provided correlation id. UUID is recommended."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 512,
+      "description": "Required for mutating tools. Must explain operator intent."
+    },
+    "confirm": {
+      "type": "boolean",
+      "const": true,
+      "description": "Must be true for all mutating tools."
+    },
+    "studyId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "studyUid": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 256,
+      "pattern": "^[0-9.]+$"
+    },
+    "studyInstanceUid": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 256,
+      "pattern": "^[0-9.]+$"
+    },
+    "projectId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "received",
+        "defacing",
+        "clean",
+        "defaced",
+        "approved",
+        "rejected"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "external",
+        "internal"
+      ]
+    },
+    "modality": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16,
+      "pattern": "^[A-Za-z0-9_]+$"
+    },
+    "errorCode": {
+      "type": "string",
+      "enum": [
+        "VALIDATION_ERROR",
+        "AUTH_ERROR",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "UPSTREAM_ERROR",
+        "TIMEOUT"
+      ]
+    },
+    "successEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "request_id",
+        "tool",
+        "data",
+        "warnings"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "request_id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "data": {
+          "type": "object"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "errorEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "request_id",
+        "tool",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": false
+        },
+        "request_id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "retryable"
+          ],
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/errorCode"
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "listStudiesInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "project_id": {
+          "$ref": "#/$defs/projectId"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "modality": {
+          "$ref": "#/$defs/modality"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "search": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "listStudiesData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "studies",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "properties": {
+        "studies": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "singleStudyByIdInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "study_id"
+      ],
+      "properties": {
+        "request_id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "study_id": {
+          "$ref": "#/$defs/studyId"
+        }
+      }
+    },
+    "emptyInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "$ref": "#/$defs/requestId"
+        }
+      }
+    },
+    "writeStudyUidInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "study_uid",
+        "reason",
+        "confirm"
+      ],
+      "properties": {
+        "request_id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "study_uid": {
+          "$ref": "#/$defs/studyUid"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "confirm": {
+          "$ref": "#/$defs/confirm"
+        }
+      }
+    },
+    "writeDimseInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "study_instance_uid",
+        "reason",
+        "confirm"
+      ],
+      "properties": {
+        "request_id": {
+          "$ref": "#/$defs/requestId"
+        },
+        "study_instance_uid": {
+          "$ref": "#/$defs/studyInstanceUid"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "confirm": {
+          "$ref": "#/$defs/confirm"
+        }
+      }
+    },
+    "actionAcceptedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "study_uid"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "study_uid": {
+          "$ref": "#/$defs/studyUid"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "actionAcceptedDimseData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "study_instance_uid"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "study_instance_uid": {
+          "$ref": "#/$defs/studyInstanceUid"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "toolBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "aegisEndpoint",
+        "inputSchema",
+        "successDataSchema",
+        "successEnvelope",
+        "errorEnvelope"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "aegisEndpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "successDataSchema": {
+          "type": "object"
+        },
+        "successEnvelope": {
+          "$ref": "#/$defs/successEnvelope"
+        },
+        "errorEnvelope": {
+          "$ref": "#/$defs/errorEnvelope"
+        }
+      }
+    },
+    "toolListStudies": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "list_studies"
+            },
+            "kind": {
+              "const": "read"
+            },
+            "aegisEndpoint": {
+              "const": "GET /api/studies"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/listStudiesInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/listStudiesData"
+            }
+          }
+        }
+      ]
+    },
+    "toolGetStudyDetail": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "get_study_detail"
+            },
+            "kind": {
+              "const": "read"
+            },
+            "aegisEndpoint": {
+              "const": "GET /api/studies/{id}"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/singleStudyByIdInput"
+            },
+            "successDataSchema": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "toolGetStudyAudit": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "get_study_audit"
+            },
+            "kind": {
+              "const": "read"
+            },
+            "aegisEndpoint": {
+              "const": "GET /api/studies/{id}/audit"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/singleStudyByIdInput"
+            },
+            "successDataSchema": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "toolGetStudyRoutingLog": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "get_study_routing_log"
+            },
+            "kind": {
+              "const": "read"
+            },
+            "aegisEndpoint": {
+              "const": "GET /api/studies/{studyID}/routing-log"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/singleStudyByIdInput"
+            },
+            "successDataSchema": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "toolListExportShares": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "list_export_shares"
+            },
+            "kind": {
+              "const": "read"
+            },
+            "aegisEndpoint": {
+              "const": "GET /api/studies/{id}/shares"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/singleStudyByIdInput"
+            },
+            "successDataSchema": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "toolGetSystemHealth": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "get_system_health"
+            },
+            "kind": {
+              "const": "read"
+            },
+            "aegisEndpoint": {
+              "const": "GET /healthz"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/emptyInput"
+            },
+            "successDataSchema": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "toolTriggerClassification": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "trigger_classification"
+            },
+            "kind": {
+              "const": "write"
+            },
+            "aegisEndpoint": {
+              "const": "POST /api/studies/{studyUID}/classify"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/writeStudyUidInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/actionAcceptedData"
+            }
+          }
+        }
+      ]
+    },
+    "toolTriggerPhiScan": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "trigger_phi_scan"
+            },
+            "kind": {
+              "const": "write"
+            },
+            "aegisEndpoint": {
+              "const": "POST /api/studies/{studyUID}/phi-scan"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/writeStudyUidInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/actionAcceptedData"
+            }
+          }
+        }
+      ]
+    },
+    "toolTriggerProtocolCheck": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "trigger_protocol_check"
+            },
+            "kind": {
+              "const": "write"
+            },
+            "aegisEndpoint": {
+              "const": "POST /api/studies/{studyUID}/protocol-check"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/writeStudyUidInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/actionAcceptedData"
+            }
+          }
+        }
+      ]
+    },
+    "toolTriggerQcCheck": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "trigger_qc_check"
+            },
+            "kind": {
+              "const": "write"
+            },
+            "aegisEndpoint": {
+              "const": "POST /api/studies/{studyUID}/qc-check"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/writeStudyUidInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/actionAcceptedData"
+            }
+          }
+        }
+      ]
+    },
+    "toolTriggerBidsConvert": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "trigger_bids_convert"
+            },
+            "kind": {
+              "const": "write"
+            },
+            "aegisEndpoint": {
+              "const": "POST /api/studies/{studyUID}/bids-convert"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/writeStudyUidInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/actionAcceptedData"
+            }
+          }
+        }
+      ]
+    },
+    "toolTriggerExport": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "trigger_export"
+            },
+            "kind": {
+              "const": "write"
+            },
+            "aegisEndpoint": {
+              "const": "POST /api/studies/{studyUID}/trigger-export"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/writeStudyUidInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/actionAcceptedData"
+            }
+          }
+        }
+      ]
+    },
+    "toolTriggerDeface": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "trigger_deface"
+            },
+            "kind": {
+              "const": "write"
+            },
+            "aegisEndpoint": {
+              "const": "POST /api/studies/{studyUID}/trigger-deface"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/writeStudyUidInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/actionAcceptedData"
+            }
+          }
+        }
+      ]
+    },
+    "toolRetryDimseStudy": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/toolBase"
+        },
+        {
+          "properties": {
+            "name": {
+              "const": "retry_dimse_study"
+            },
+            "kind": {
+              "const": "write"
+            },
+            "aegisEndpoint": {
+              "const": "POST /ingest/retry/process/{study_instance_uid}"
+            },
+            "inputSchema": {
+              "$ref": "#/$defs/writeDimseInput"
+            },
+            "successDataSchema": {
+              "$ref": "#/$defs/actionAcceptedDimseData"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "version": "v1",
+      "common": {
+        "requestId": "req_20260220_01",
+        "reason": "Investigating pipeline stall for this study",
+        "confirm": true,
+        "successEnvelope": {
+          "ok": true,
+          "request_id": "req_20260220_01",
+          "tool": "trigger_qc_check",
+          "data": {
+            "accepted": true,
+            "study_uid": "1.2.840.113619.2.55.3.604688435.1234.1700000000.1"
+          },
+          "warnings": []
+        },
+        "errorEnvelope": {
+          "ok": false,
+          "request_id": "req_20260220_01",
+          "tool": "trigger_qc_check",
+          "error": {
+            "code": "CONFLICT",
+            "message": "QC status is already checking",
+            "retryable": false
+          }
+        }
+      },
+      "tools": {
+        "list_studies": {
+          "name": "list_studies",
+          "kind": "read",
+          "aegisEndpoint": "GET /api/studies",
+          "inputSchema": {
+            "limit": 50,
+            "offset": 0,
+            "status": "received"
+          },
+          "successDataSchema": {
+            "studies": [],
+            "total": 0,
+            "limit": 50,
+            "offset": 0
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "list_studies",
+            "data": {
+              "studies": [],
+              "total": 0,
+              "limit": 50,
+              "offset": 0
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "list_studies",
+            "error": {
+              "code": "UPSTREAM_ERROR",
+              "message": "Temporary upstream error",
+              "retryable": true
+            }
+          }
+        },
+        "get_study_detail": {
+          "name": "get_study_detail",
+          "kind": "read",
+          "aegisEndpoint": "GET /api/studies/{id}",
+          "inputSchema": {
+            "study_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "successDataSchema": {},
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "get_study_detail",
+            "data": {},
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "get_study_detail",
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "Study not found",
+              "retryable": false
+            }
+          }
+        },
+        "get_study_audit": {
+          "name": "get_study_audit",
+          "kind": "read",
+          "aegisEndpoint": "GET /api/studies/{id}/audit",
+          "inputSchema": {
+            "study_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "successDataSchema": [],
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "get_study_audit",
+            "data": [],
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "get_study_audit",
+            "error": {
+              "code": "UPSTREAM_ERROR",
+              "message": "Audit endpoint unavailable",
+              "retryable": true
+            }
+          }
+        },
+        "get_study_routing_log": {
+          "name": "get_study_routing_log",
+          "kind": "read",
+          "aegisEndpoint": "GET /api/studies/{studyID}/routing-log",
+          "inputSchema": {
+            "study_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "successDataSchema": [],
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "get_study_routing_log",
+            "data": [],
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "get_study_routing_log",
+            "error": {
+              "code": "UPSTREAM_ERROR",
+              "message": "Routing log endpoint unavailable",
+              "retryable": true
+            }
+          }
+        },
+        "list_export_shares": {
+          "name": "list_export_shares",
+          "kind": "read",
+          "aegisEndpoint": "GET /api/studies/{id}/shares",
+          "inputSchema": {
+            "study_id": "00000000-0000-0000-0000-000000000000"
+          },
+          "successDataSchema": [],
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "list_export_shares",
+            "data": [],
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "list_export_shares",
+            "error": {
+              "code": "UPSTREAM_ERROR",
+              "message": "Share list endpoint unavailable",
+              "retryable": true
+            }
+          }
+        },
+        "get_system_health": {
+          "name": "get_system_health",
+          "kind": "read",
+          "aegisEndpoint": "GET /healthz",
+          "inputSchema": {},
+          "successDataSchema": {},
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "get_system_health",
+            "data": {
+              "status": "ok"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "get_system_health",
+            "error": {
+              "code": "TIMEOUT",
+              "message": "Health check timed out",
+              "retryable": true
+            }
+          }
+        },
+        "trigger_classification": {
+          "name": "trigger_classification",
+          "kind": "write",
+          "aegisEndpoint": "POST /api/studies/{studyUID}/classify",
+          "inputSchema": {
+            "study_uid": "1.2.3.4",
+            "reason": "Study missing modality, rerun classification",
+            "confirm": true
+          },
+          "successDataSchema": {
+            "accepted": true,
+            "study_uid": "1.2.3.4"
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_classification",
+            "data": {
+              "accepted": true,
+              "study_uid": "1.2.3.4"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_classification",
+            "error": {
+              "code": "FORBIDDEN",
+              "message": "Caller not permitted to execute write tools",
+              "retryable": false
+            }
+          }
+        },
+        "trigger_phi_scan": {
+          "name": "trigger_phi_scan",
+          "kind": "write",
+          "aegisEndpoint": "POST /api/studies/{studyUID}/phi-scan",
+          "inputSchema": {
+            "study_uid": "1.2.3.4",
+            "reason": "Need burned-in PHI validation",
+            "confirm": true
+          },
+          "successDataSchema": {
+            "accepted": true,
+            "study_uid": "1.2.3.4"
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_phi_scan",
+            "data": {
+              "accepted": true,
+              "study_uid": "1.2.3.4"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_phi_scan",
+            "error": {
+              "code": "CONFLICT",
+              "message": "PHI scan is already scanning",
+              "retryable": false
+            }
+          }
+        },
+        "trigger_protocol_check": {
+          "name": "trigger_protocol_check",
+          "kind": "write",
+          "aegisEndpoint": "POST /api/studies/{studyUID}/protocol-check",
+          "inputSchema": {
+            "study_uid": "1.2.3.4",
+            "reason": "Rechecking protocol after template update",
+            "confirm": true
+          },
+          "successDataSchema": {
+            "accepted": true,
+            "study_uid": "1.2.3.4"
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_protocol_check",
+            "data": {
+              "accepted": true,
+              "study_uid": "1.2.3.4"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_protocol_check",
+            "error": {
+              "code": "CONFLICT",
+              "message": "Protocol check already in progress",
+              "retryable": false
+            }
+          }
+        },
+        "trigger_qc_check": {
+          "name": "trigger_qc_check",
+          "kind": "write",
+          "aegisEndpoint": "POST /api/studies/{studyUID}/qc-check",
+          "inputSchema": {
+            "study_uid": "1.2.3.4",
+            "reason": "Rerun QC after clean store update",
+            "confirm": true
+          },
+          "successDataSchema": {
+            "accepted": true,
+            "study_uid": "1.2.3.4"
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_qc_check",
+            "data": {
+              "accepted": true,
+              "study_uid": "1.2.3.4"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_qc_check",
+            "error": {
+              "code": "CONFLICT",
+              "message": "QC check already in progress",
+              "retryable": false
+            }
+          }
+        },
+        "trigger_bids_convert": {
+          "name": "trigger_bids_convert",
+          "kind": "write",
+          "aegisEndpoint": "POST /api/studies/{studyUID}/bids-convert",
+          "inputSchema": {
+            "study_uid": "1.2.3.4",
+            "reason": "Rerun BIDS conversion after dcm2niix fix",
+            "confirm": true
+          },
+          "successDataSchema": {
+            "accepted": true,
+            "study_uid": "1.2.3.4"
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_bids_convert",
+            "data": {
+              "accepted": true,
+              "study_uid": "1.2.3.4"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_bids_convert",
+            "error": {
+              "code": "CONFLICT",
+              "message": "BIDS conversion already in progress",
+              "retryable": false
+            }
+          }
+        },
+        "trigger_export": {
+          "name": "trigger_export",
+          "kind": "write",
+          "aegisEndpoint": "POST /api/studies/{studyUID}/trigger-export",
+          "inputSchema": {
+            "study_uid": "1.2.3.4",
+            "reason": "Approved study needs outbound export",
+            "confirm": true
+          },
+          "successDataSchema": {
+            "accepted": true,
+            "study_uid": "1.2.3.4"
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_export",
+            "data": {
+              "accepted": true,
+              "study_uid": "1.2.3.4"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_export",
+            "error": {
+              "code": "CONFLICT",
+              "message": "Study must be approved before export",
+              "retryable": false
+            }
+          }
+        },
+        "trigger_deface": {
+          "name": "trigger_deface",
+          "kind": "write",
+          "aegisEndpoint": "POST /api/studies/{studyUID}/trigger-deface",
+          "inputSchema": {
+            "study_uid": "1.2.3.4",
+            "reason": "Head study requires defacing rerun",
+            "confirm": true
+          },
+          "successDataSchema": {
+            "accepted": true,
+            "study_uid": "1.2.3.4"
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_deface",
+            "data": {
+              "accepted": true,
+              "study_uid": "1.2.3.4"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "trigger_deface",
+            "error": {
+              "code": "CONFLICT",
+              "message": "Defacing already in progress",
+              "retryable": false
+            }
+          }
+        },
+        "retry_dimse_study": {
+          "name": "retry_dimse_study",
+          "kind": "write",
+          "aegisEndpoint": "POST /ingest/retry/process/{study_instance_uid}",
+          "inputSchema": {
+            "study_instance_uid": "1.2.840.113619.2.55.3.604688435.1234.1700000000.1",
+            "reason": "Retrying DIMSE ingest after API connectivity fix",
+            "confirm": true
+          },
+          "successDataSchema": {
+            "accepted": true,
+            "study_instance_uid": "1.2.840.113619.2.55.3.604688435.1234.1700000000.1"
+          },
+          "successEnvelope": {
+            "ok": true,
+            "request_id": "req_20260220_01",
+            "tool": "retry_dimse_study",
+            "data": {
+              "accepted": true,
+              "study_instance_uid": "1.2.840.113619.2.55.3.604688435.1234.1700000000.1"
+            },
+            "warnings": []
+          },
+          "errorEnvelope": {
+            "ok": false,
+            "request_id": "req_20260220_01",
+            "tool": "retry_dimse_study",
+            "error": {
+              "code": "FORBIDDEN",
+              "message": "DIMSE tools are disabled",
+              "retryable": false
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.vite/
+tsconfig.tsbuildinfo
+
+# Go
+api/aegis-api
+
+# Terraform
+terraform/**/.terraform/
+terraform/**/*.tfstate
+terraform/**/*.tfstate.backup
+terraform/**/*.tfplan
+terraform/**/.terraform.lock.hcl
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.tfvars
+!*.tfvars.example
+secrets/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test data (DICOM files — do not commit)
+test-data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.cache/
+
+# Business documents (CBI — never commit)
+Original Filing - Limited Liability Company (Domestic).pdf
+State of Minnesota - Secretary of State.pdf
+AEGIS_Imaging_LLC_EIN.pdf
+IRS Apply for an Employer Identification Number (EIN) online.pdf
+AEGIS_Imaging_LLC_Filing_Receipt.pdf
+PO_BOX_APPLICATION.pdf

@@ -1,0 +1,213 @@
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: aegis
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: aegis
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+
+  ohif:
+    image: ohif/app:v3-stable
+    ports:
+      - "3002:80"
+    volumes:
+      - ./ohif-config.js:/usr/share/nginx/html/app-config.js:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ── Go API ──────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: ./api
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: "postgres://aegis:aegis@postgres:5432/aegis?sslmode=disable"
+      STORAGE_MODE: "local"
+      LOCAL_STORAGE_DIR: "/app/data"
+      API_BASE_URL: "http://localhost:8080"
+      APP_TIMEZONE: "UTC"
+      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+      SMTP_HOST: "mailpit"
+      SMTP_PORT: "1025"
+      DEFACING_SERVICE_URL: "http://defacing:8080"
+      PHI_DETECTION_SERVICE_URL: "http://phi-detection:8080"
+      QC_SERVICE_URL: "http://qc-service:8080"
+      BIDS_SERVICE_URL: "http://bids-service:8080"
+      CLASSIFICATION_SERVICE_URL: "http://classification-service:8080"
+      PROTOCOL_SERVICE_URL: "http://protocol-service:8080"
+      DIMSE_RECEIVER_URL: "http://dimse-receiver:8080"
+      DIMSE_OPERATOR_API_KEY: "${DIMSE_OPERATOR_API_KEY:-}"
+    volumes:
+      - aegis-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["/aegis-api", "--healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Python sidecar services ─────────────────────────────────────────
+
+  defacing:
+    build:
+      context: ./defacing
+      args:
+        INCLUDE_DEEPDEFACER: "true"
+    volumes:
+      - aegis-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  phi-detection:
+    build:
+      context: ./phi-detection
+      args:
+        INCLUDE_GOOGLE_VISION: "${INCLUDE_GOOGLE_VISION:-false}"
+        INCLUDE_AWS_TEXTRACT: "${INCLUDE_AWS_TEXTRACT:-false}"
+    environment:
+      PHI_TOOL: "${PHI_TOOL:-auto}"
+      GOOGLE_APPLICATION_CREDENTIALS: "/secrets/gcp-key.json"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+    volumes:
+      - aegis-data:/app/data
+      # Uncomment to mount GCP service account key for Cloud Vision:
+      # - ./secrets/gcp-key.json:/secrets/gcp-key.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  qc-service:
+    build:
+      context: ./qc-service
+    volumes:
+      - aegis-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  bids-service:
+    build:
+      context: ./bids-service
+    volumes:
+      - aegis-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  classification-service:
+    build:
+      context: ./classification-service
+      args:
+        INCLUDE_GOOGLE_VISION: "${INCLUDE_GOOGLE_VISION:-false}"
+        INCLUDE_AWS_REKOGNITION: "${INCLUDE_AWS_REKOGNITION:-false}"
+    environment:
+      CLASSIFY_TOOL: "${CLASSIFY_TOOL:-auto}"
+      GOOGLE_APPLICATION_CREDENTIALS: "/secrets/gcp-key.json"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+    volumes:
+      - aegis-data:/app/data
+      # Uncomment to mount GCP service account key for Cloud Vision:
+      # - ./secrets/gcp-key.json:/secrets/gcp-key.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  protocol-service:
+    build:
+      context: ./protocol-service
+    volumes:
+      - aegis-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  dimse-receiver:
+    build:
+      context: ./dimse-receiver
+    ports:
+      - "11112:11112"
+    environment:
+      DIMSE_AE_TITLE: "${DIMSE_AE_TITLE:-AEGIS}"
+      DIMSE_PORT: "${DIMSE_PORT:-11112}"
+      DIMSE_DATA_DIR: "/app/data"
+      API_URL: "http://api:8080"
+      DIMSE_PROJECT_SLUG: "${DIMSE_PROJECT_SLUG:-default}"
+      DIMSE_INGEST_TIMEOUT: "${DIMSE_INGEST_TIMEOUT:-30}"
+      DIMSE_INGEST_RETRY_INTERVAL: "${DIMSE_INGEST_RETRY_INTERVAL:-15}"
+      DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER: "${DIMSE_INGEST_RETRY_BACKOFF_MULTIPLIER:-2.0}"
+      DIMSE_INGEST_RETRY_MAX_INTERVAL: "${DIMSE_INGEST_RETRY_MAX_INTERVAL:-300}"
+      DIMSE_INGEST_MAX_ATTEMPTS: "${DIMSE_INGEST_MAX_ATTEMPTS:-5}"
+      DIMSE_INGEST_QUEUE_MAX: "${DIMSE_INGEST_QUEUE_MAX:-1000}"
+      DIMSE_INGEST_DURABLE_STORE_ENABLED: "${DIMSE_INGEST_DURABLE_STORE_ENABLED:-true}"
+      DIMSE_INGEST_DURABLE_STORE_PATH: "${DIMSE_INGEST_DURABLE_STORE_PATH:-/app/data/dimse-ingest-retry-state.json}"
+      DIMSE_RETRY_ALERTS_ENABLED: "${DIMSE_RETRY_ALERTS_ENABLED:-false}"
+      DIMSE_RETRY_ALERT_MAX_EVENTS: "${DIMSE_RETRY_ALERT_MAX_EVENTS:-200}"
+      DIMSE_RETRY_ALERT_COOLDOWN_SECONDS: "${DIMSE_RETRY_ALERT_COOLDOWN_SECONDS:-300}"
+      DIMSE_RETRY_ALERT_PENDING_AGE_SECONDS: "${DIMSE_RETRY_ALERT_PENDING_AGE_SECONDS:-0}"
+      DIMSE_RETRY_ALERT_DEAD_LETTER_AGE_SECONDS: "${DIMSE_RETRY_ALERT_DEAD_LETTER_AGE_SECONDS:-0}"
+      DIMSE_RETRY_ALERT_DEAD_LETTER_NONZERO: "${DIMSE_RETRY_ALERT_DEAD_LETTER_NONZERO:-true}"
+      DIMSE_RETRY_ALERT_WEBHOOK_URL: "${DIMSE_RETRY_ALERT_WEBHOOK_URL:-}"
+      DIMSE_OPERATOR_API_KEY: "${DIMSE_OPERATOR_API_KEY:-}"
+      DIMSE_MAX_ASSOCIATIONS: "${DIMSE_MAX_ASSOCIATIONS:-10}"
+    volumes:
+      - aegis-data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  pgdata:
+  aegis-data:
