@@ -5,6 +5,16 @@ Updated: 2026-02-20
 
 This is the fastest path to stand up the first GCP-backed AEGIS environment using the deployment automation now in-repo.
 
+## One-Command Option
+
+After both tfvars files are configured, you can run the full flow with:
+
+```bash
+make gcp-install-poc PROJECT_ID="<gcp-project-id>" REGION="us-central1" TAG="latest"
+```
+
+The detailed steps below are the same sequence, broken out for control and troubleshooting.
+
 ## 1) Create GCP project and attach billing
 
 ```bash
