@@ -27,14 +27,10 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=terraform/${{ matrix.module }} init -backend=false
       - name: Terraform validate
-        run: |
-          if [ "${{ matrix.module }}" = "aws" ]; then
-            terraform -chdir=terraform/${{ matrix.module }} validate \
-              -var="acm_certificate_arn=arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000" \
-              -var="cognito_domain_prefix=aegis-ci"
-          else
-            terraform -chdir=terraform/${{ matrix.module }} validate
-          fi
+        env:
+          TF_VAR_acm_certificate_arn: "arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
+          TF_VAR_cognito_domain_prefix: "aegis-ci"
+        run: terraform -chdir=terraform/${{ matrix.module }} validate
 
   go:
     name: Go build & vet
