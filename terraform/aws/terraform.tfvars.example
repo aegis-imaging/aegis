@@ -19,5 +19,11 @@ api_desired_count  = 1
 api_cpu            = 1024
 api_memory         = 2048
 
+# ECS admin dashboard runtime controls
+admin_image_tag      = "latest"
+admin_desired_count  = 1
+admin_cpu            = 512
+admin_memory         = 1024
+
 # Optional CORS override for API runtime
 # api_allowed_origins = ["https://admin.example.com"]
