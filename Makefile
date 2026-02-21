@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke cloud-smoke-from-terraform dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc gcp-verify-deployment aws-build-images aws-apply-infra aws-install-poc aws-verify-deployment
+.PHONY: up down clean build api lint lint-go lint-python lint-python-scripts lint-frontend lint-mcp lint-shell lint-terraform lint-infra-guard check logs test test-unit test-race smoke cloud-smoke-from-terraform dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc gcp-verify-deployment aws-build-images aws-apply-infra aws-install-poc aws-verify-deployment
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ api:
 
 # ── Lint ────────────────────────────────────────────────────────────
 
-lint: lint-go lint-python lint-python-scripts lint-frontend lint-mcp
+lint: lint-go lint-python lint-python-scripts lint-frontend lint-mcp lint-shell lint-terraform lint-infra-guard
 
 lint-go:
 	cd api && go vet ./...
@@ -47,6 +47,17 @@ lint-frontend:
 
 lint-mcp:
 	cd mcp-server && npm run typecheck
+
+lint-shell:
+	@for s in scripts/*.sh; do bash -n "$$s" && echo "OK: $$s"; done
+
+lint-terraform:
+	terraform -chdir=terraform/project fmt -check
+	terraform -chdir=terraform/infra fmt -check
+	terraform -chdir=terraform/aws fmt -check
+
+lint-infra-guard:
+	./scripts/check-infra-placeholders.sh
 
 # ── Tests ──────────────────────────────────────────────────────────
 
