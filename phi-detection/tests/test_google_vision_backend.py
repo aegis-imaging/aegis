@@ -113,3 +113,23 @@ class TestGoogleVisionDetect:
         findings = backend.detect([path])
         assert findings == []
         mock_client.text_detection.assert_not_called()
+
+
+class TestGoogleVisionParseAnnotationsEdgeCases:
+    def _make_annotation(self, description, verts=None):
+        ann = MagicMock()
+        ann.description = description
+        bp = MagicMock()
+        bp.vertices = [] if verts is None else [MagicMock(x=v[0], y=v[1]) for v in verts]
+        ann.bounding_poly = bp
+        return ann
+
+    def test_parse_annotations_empty_vertices_falls_back_to_zero_bbox(self):
+        """Annotation with no bounding vertices gets bbox=[0, 0, 0, 0]."""
+        backend = GoogleVisionBackend(min_text_length=3)
+        full_page = self._make_annotation("FULL PAGE TEXT")
+        word = self._make_annotation("NAME")  # vertices=[]
+        regions = backend._parse_annotations([full_page, word])
+        assert len(regions) == 1
+        assert regions[0].text == "NAME"
+        assert regions[0].bbox == [0, 0, 0, 0]
