@@ -23,9 +23,14 @@ bids_service_image           = "us-central1-docker.pkg.dev/aegis-prod/aegis-serv
 classification_service_image = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/classification-service:latest"
 protocol_service_image       = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/protocol-service:latest"
 
-# Cloud SQL runtime DB password for aegis-api user.
-db_password          = "replace-with-strong-password"
-db_password_secret_id = "aegis-dev-db-password"
+# Cloud SQL runtime DB password handling.
+# Preferred: generated password persisted to Secret Manager.
+generate_db_password        = true
+generated_db_password_length = 32
+db_password_secret_id       = "aegis-dev-db-password"
+
+# Optional explicit password override (if you must control the value externally).
+# db_password = "set-via-secure-secret-source"
 
 # SMTP relay config (documented PSC-equivalent path via Cloud NAT static egress IP).
 smtp_relay_host = "smtp-relay.example.org"

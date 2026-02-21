@@ -27,6 +27,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -212,8 +216,9 @@ variable "db_disk_size_gb" {
 }
 
 variable "db_password" {
-  description = "Password for the aegis-api Cloud SQL user"
+  description = "Optional explicit password for the aegis-api Cloud SQL user. Leave empty to auto-generate."
   type        = string
+  default     = ""
   sensitive   = true
 }
 
@@ -221,6 +226,23 @@ variable "db_password_secret_id" {
   description = "Optional Secret Manager secret ID for API DB password (defaults to aegis-<env>-db-password)"
   type        = string
   default     = ""
+}
+
+variable "generate_db_password" {
+  description = "Generate a random DB password when db_password is empty"
+  type        = bool
+  default     = true
+}
+
+variable "generated_db_password_length" {
+  description = "Length for generated DB password"
+  type        = number
+  default     = 32
+
+  validation {
+    condition     = var.generated_db_password_length >= 16
+    error_message = "generated_db_password_length must be at least 16."
+  }
 }
 
 variable "cloud_armor_allowed_ip_ranges" {
@@ -279,6 +301,7 @@ provider "google" {
 locals {
   name_prefix                    = "aegis-${var.environment}"
   resolved_db_password_secret_id = var.db_password_secret_id != "" ? var.db_password_secret_id : "${local.name_prefix}-db-password"
+  resolved_db_password           = var.db_password != "" ? var.db_password : try(random_password.db_password[0].result, "")
 
   sidecar_services = {
     defacing               = var.defacing_image
@@ -295,6 +318,13 @@ locals {
     "https://${var.api_domain}",
     "https://${var.admin_domain}",
   ]
+}
+
+check "db_password_source" {
+  assert {
+    condition     = var.db_password != "" || var.generate_db_password
+    error_message = "Set db_password or keep generate_db_password=true."
+  }
 }
 
 # --- Networking ---
@@ -466,7 +496,14 @@ resource "google_sql_database" "aegis" {
 resource "google_sql_user" "api" {
   name     = "aegis-api"
   instance = google_sql_database_instance.aegis.name
-  password = var.db_password
+  password = local.resolved_db_password
+}
+
+resource "random_password" "db_password" {
+  count            = var.db_password == "" && var.generate_db_password ? 1 : 0
+  length           = var.generated_db_password_length
+  special          = true
+  override_special = "_%@"
 }
 
 resource "google_secret_manager_secret" "db_password" {
@@ -479,7 +516,7 @@ resource "google_secret_manager_secret" "db_password" {
 
 resource "google_secret_manager_secret_version" "db_password" {
   secret      = google_secret_manager_secret.db_password.id
-  secret_data = var.db_password
+  secret_data = local.resolved_db_password
 }
 
 resource "google_bigquery_dataset" "aegis" {
