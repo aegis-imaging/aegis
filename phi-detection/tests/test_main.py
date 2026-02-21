@@ -140,3 +140,64 @@ class TestDetect:
         assert body["findings"][0]["regions"][0]["text"] == "DOE JOHN"
         assert body["findings"][0]["regions"][0]["confidence"] == 0.92
         assert body["findings"][0]["regions"][1]["text"] == "DOB 01/01/1970"
+
+    def test_detect_missing_path_returns_400(self):
+        """Non-existent input path returns 400 before calling the backend."""
+        mock_backend = _make_mock_backend()
+
+        with patch("app.main._backend", mock_backend), \
+             patch("app.main.get_backend", return_value=mock_backend):
+            from app.main import app
+            client = TestClient(app)
+            resp = client.post("/detect", json={
+                "study_uid": "1.2.3.4.5",
+                "input_paths": ["/nonexistent/does/not/exist.dcm"],
+            })
+
+        assert resp.status_code == 400
+        mock_backend.detect.assert_not_called()
+
+    def test_detect_returns_failed_on_backend_exception(self, tmp_path):
+        """When the backend raises unexpectedly, /detect returns status=failed (200)."""
+        dummy = tmp_path / "slice.dcm"
+        dummy.write_bytes(b"\x00" * 128)
+
+        mock_backend = _make_mock_backend()
+        mock_backend.detect.side_effect = RuntimeError("backend exploded")
+
+        with patch("app.main._backend", mock_backend), \
+             patch("app.main.get_backend", return_value=mock_backend):
+            from app.main import app
+            client = TestClient(app)
+            resp = client.post("/detect", json={
+                "study_uid": "1.2.3.4.5",
+                "input_paths": [str(dummy)],
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "failed"
+        assert body["phi_detected"] is False
+        assert body["error"] is not None
+        assert "backend exploded" in body["error"]
+
+    def test_detect_response_includes_duration(self, tmp_path):
+        """Successful /detect response includes a non-negative duration_seconds."""
+        dummy = tmp_path / "slice.dcm"
+        dummy.write_bytes(b"\x00" * 128)
+
+        mock_backend = _make_mock_backend()
+
+        with patch("app.main._backend", mock_backend), \
+             patch("app.main.get_backend", return_value=mock_backend):
+            from app.main import app
+            client = TestClient(app)
+            resp = client.post("/detect", json={
+                "study_uid": "1.2.3.4.5",
+                "input_paths": [str(dummy)],
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "duration_seconds" in body
+        assert body["duration_seconds"] >= 0.0
