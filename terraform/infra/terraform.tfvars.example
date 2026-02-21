@@ -37,6 +37,11 @@ smtp_relay_host = "smtp-relay.example.org"
 smtp_relay_port = 587
 smtp_from       = "noreply@aegisimaging.ai"
 
+# Sidecar warmup: set sidecar_min_instances=1 to keep all processing services
+# always-warm (eliminates ~14s cold-start on first use, costs ~$38/month per sidecar).
+# Leave at 0 (default) for cost-efficient scale-to-zero behaviour.
+# sidecar_min_instances = 1
+
 # Optional: alert destination and Cloud Armor ingress controls.
 alert_email                    = "ops@example.com"
 cloud_armor_allowed_ip_ranges  = ["*"]

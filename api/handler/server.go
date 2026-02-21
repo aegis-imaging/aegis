@@ -13,19 +13,45 @@ import (
 	"github.com/msenjem/aegis/api/storage"
 )
 
+
+// sidecarHealthCache stores the last known health state of each sidecar service.
+// It is populated by a background goroutine so that /healthz never blocks on
+// cold-starting Cloud Run services.
+type sidecarHealthCache struct {
+	mu      sync.RWMutex
+	results map[string]string
+}
+
+func (c *sidecarHealthCache) set(name, status string) {
+	c.mu.Lock()
+	c.results[name] = status
+	c.mu.Unlock()
+}
+
+func (c *sidecarHealthCache) snapshot() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]string, len(c.results))
+	for k, v := range c.results {
+		out[k] = v
+	}
+	return out
+}
+
 type Server struct {
-	db         *sql.DB
-	store      storage.Storage
-	cfg        *config.Config
-	mailer     *email.Client
-	httpClient *http.Client
+	db            *sql.DB
+	store         storage.Storage
+	cfg           *config.Config
+	mailer        *email.Client
+	httpClient    *http.Client
+	sidecarHealth *sidecarHealthCache
 }
 
 func NewServer(db *sql.DB, store storage.Storage, cfg *config.Config) *Server {
-	return &Server{
-		db:     db,
-		store:  store,
-		cfg:    cfg,
+	s := &Server{
+		db:    db,
+		store: store,
+		cfg:   cfg,
 		mailer: email.New(cfg),
 		httpClient: &http.Client{
 			Transport: &http.Transport{
@@ -34,6 +60,61 @@ func NewServer(db *sql.DB, store storage.Storage, cfg *config.Config) *Server {
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
+		sidecarHealth: &sidecarHealthCache{results: map[string]string{}},
+	}
+	go s.runSidecarHealthLoop()
+	return s
+}
+
+// runSidecarHealthLoop probes sidecar /healthz endpoints in the background every
+// 30 seconds. Results are cached and returned from Healthz without blocking.
+// A 15-second probe timeout accommodates Cloud Run cold-start latency.
+func (s *Server) runSidecarHealthLoop() {
+	sidecars := func() map[string]string {
+		return map[string]string{
+			"defacing":       s.cfg.DefacingServiceURL,
+			"phi_detection":  s.cfg.PhiDetectionServiceURL,
+			"qc_service":     s.cfg.QcServiceURL,
+			"bids_service":   s.cfg.BidsServiceURL,
+			"classification": s.cfg.ClassificationServiceURL,
+			"protocol":       s.cfg.ProtocolServiceURL,
+			"dimse_receiver": s.cfg.DimseReceiverURL,
+		}
+	}
+	probe := func() {
+		m := sidecars()
+		var wg sync.WaitGroup
+		for name, url := range m {
+			if url == "" {
+				s.sidecarHealth.set(name, "disabled")
+				continue
+			}
+			wg.Add(1)
+			go func(name, url string) {
+				defer wg.Done()
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				defer cancel()
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/healthz", nil)
+				status := "unhealthy"
+				if err == nil {
+					if resp, err := s.httpClient.Do(req); err == nil {
+						resp.Body.Close()
+						if resp.StatusCode == http.StatusOK {
+							status = "healthy"
+						}
+					}
+				}
+				s.sidecarHealth.set(name, status)
+			}(name, url)
+		}
+		wg.Wait()
+	}
+
+	probe() // initial probe on startup
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		probe()
 	}
 }
 
@@ -66,47 +147,9 @@ func (s *Server) Healthz(w http.ResponseWriter, r *http.Request) {
 		result["storage"] = "healthy"
 	}
 
-	// Sidecar services — probed in parallel; unhealthy sidecars are informational only.
-	sidecars := map[string]string{
-		"defacing":       s.cfg.DefacingServiceURL,
-		"phi_detection":  s.cfg.PhiDetectionServiceURL,
-		"qc_service":     s.cfg.QcServiceURL,
-		"bids_service":   s.cfg.BidsServiceURL,
-		"classification": s.cfg.ClassificationServiceURL,
-		"protocol":       s.cfg.ProtocolServiceURL,
-		"dimse_receiver": s.cfg.DimseReceiverURL,
-	}
-	services := make(map[string]string, len(sidecars))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for name, url := range sidecars {
-		if url == "" {
-			services[name] = "disabled"
-			continue
-		}
-		wg.Add(1)
-		go func(name, url string) {
-			defer wg.Done()
-			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-			defer cancel()
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/healthz", nil)
-			status := "unhealthy"
-			if err == nil {
-				resp, err := s.httpClient.Do(req)
-				if err == nil {
-					resp.Body.Close()
-					if resp.StatusCode == http.StatusOK {
-						status = "healthy"
-					}
-				}
-			}
-			mu.Lock()
-			services[name] = status
-			mu.Unlock()
-		}(name, url)
-	}
-	wg.Wait()
-	result["services"] = services
+	// Sidecar services — returned from background cache (no inline blocking).
+	// Cache is refreshed every 30s by runSidecarHealthLoop.
+	result["services"] = s.sidecarHealth.snapshot()
 
 	httpStatus := http.StatusOK
 	if result["status"] == "degraded" {
