@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc aws-build-images aws-apply-infra aws-install-poc
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc gcp-verify-deployment aws-build-images aws-apply-infra aws-install-poc aws-verify-deployment
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -106,6 +106,17 @@ gcp-install-poc:
 	@REGION="$${REGION:-us-central1}" TAG="$${TAG:-latest}" \
 		./scripts/gcp_install_poc.sh --project-id="$(PROJECT_ID)" --region="$$REGION" --tag="$$TAG"
 
+gcp-verify-deployment:
+	@CMD="./scripts/gcp_verify_deployment.sh"; \
+	if [ -n "$$TFVARS" ]; then CMD="$$CMD --tfvars='$$TFVARS'"; fi; \
+	if [ -n "$$TERRAFORM_DIR" ]; then CMD="$$CMD --terraform-dir='$$TERRAFORM_DIR'"; fi; \
+	if [ -n "$$PROJECT_ID" ]; then CMD="$$CMD --project-id='$$PROJECT_ID'"; fi; \
+	if [ -n "$$REGION" ]; then CMD="$$CMD --region='$$REGION'"; fi; \
+	if [ -n "$$API_URL" ]; then CMD="$$CMD --api-url='$$API_URL'"; fi; \
+	if [ -n "$$ADMIN_URL" ]; then CMD="$$CMD --admin-url='$$ADMIN_URL'"; fi; \
+	if [ -n "$$EXPECT_ADMIN_AUTH" ]; then CMD="$$CMD --expect-admin-auth='$$EXPECT_ADMIN_AUTH'"; fi; \
+	eval "$$CMD"
+
 aws-apply-infra:
 	./scripts/aws_apply_infra.sh
 
@@ -116,3 +127,13 @@ aws-build-images:
 aws-install-poc:
 	@REGION="$${REGION:-us-east-1}" PROJECT_NAME="$${PROJECT_NAME:-aegis}" TAG="$${TAG:-latest}" \
 		./scripts/aws_install_poc.sh --region="$$REGION" --project-name="$$PROJECT_NAME" --tag="$$TAG"
+
+aws-verify-deployment:
+	@CMD="./scripts/aws_verify_deployment.sh"; \
+	if [ -n "$$TFVARS" ]; then CMD="$$CMD --tfvars='$$TFVARS'"; fi; \
+	if [ -n "$$TERRAFORM_DIR" ]; then CMD="$$CMD --terraform-dir='$$TERRAFORM_DIR'"; fi; \
+	if [ -n "$$REGION" ]; then CMD="$$CMD --region='$$REGION'"; fi; \
+	if [ -n "$$PROJECT_NAME" ]; then CMD="$$CMD --project-name='$$PROJECT_NAME'"; fi; \
+	if [ -n "$$ALB_DNS" ]; then CMD="$$CMD --alb-dns='$$ALB_DNS'"; fi; \
+	if [ -n "$$EXPECT_ADMIN_AUTH" ]; then CMD="$$CMD --expect-admin-auth='$$EXPECT_ADMIN_AUTH'"; fi; \
+	eval "$$CMD"
