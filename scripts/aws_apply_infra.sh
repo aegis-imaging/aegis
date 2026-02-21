@@ -35,6 +35,11 @@ if [ ! -f "$TFVARS_PATH" ]; then
   exit 1
 fi
 
+./scripts/validate_tfvars_required.sh \
+  "$TFVARS_PATH" \
+  acm_certificate_arn \
+  cognito_domain_prefix
+
 for cmd in aws terraform; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "error: required command not found: $cmd" >&2

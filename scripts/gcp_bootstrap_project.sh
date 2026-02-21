@@ -35,6 +35,11 @@ if [ ! -f "$TFVARS_PATH" ]; then
   exit 1
 fi
 
+./scripts/validate_tfvars_required.sh \
+  "$TFVARS_PATH" \
+  project_id \
+  billing_account
+
 if [ -x "./scripts/gcp_preflight.sh" ]; then
   ./scripts/gcp_preflight.sh --skip-docker
 fi

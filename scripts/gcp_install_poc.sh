@@ -64,6 +64,27 @@ if [ ! -f "$INFRA_TFVARS" ]; then
   exit 1
 fi
 
+./scripts/validate_tfvars_required.sh \
+  "$PROJECT_TFVARS" \
+  project_id \
+  billing_account
+
+./scripts/validate_tfvars_required.sh \
+  "$INFRA_TFVARS" \
+  project_id \
+  api_domain \
+  admin_domain \
+  iap_oauth_client_id \
+  iap_oauth_client_secret \
+  api_image \
+  admin_dashboard_image \
+  defacing_image \
+  phi_detection_image \
+  qc_service_image \
+  bids_service_image \
+  classification_service_image \
+  protocol_service_image
+
 ./scripts/gcp_preflight.sh
 
 if [ "$SKIP_BOOTSTRAP" -eq 0 ]; then

@@ -38,6 +38,22 @@ if [ ! -f "$TFVARS_PATH" ]; then
   exit 1
 fi
 
+./scripts/validate_tfvars_required.sh \
+  "$TFVARS_PATH" \
+  project_id \
+  api_domain \
+  admin_domain \
+  iap_oauth_client_id \
+  iap_oauth_client_secret \
+  api_image \
+  admin_dashboard_image \
+  defacing_image \
+  phi_detection_image \
+  qc_service_image \
+  bids_service_image \
+  classification_service_image \
+  protocol_service_image
+
 if [ -x "./scripts/gcp_preflight.sh" ]; then
   ./scripts/gcp_preflight.sh --skip-docker
 fi
