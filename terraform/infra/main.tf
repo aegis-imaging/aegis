@@ -1212,8 +1212,20 @@ output "api_base_url" {
   value = "https://${var.api_domain}"
 }
 
+output "api_healthz_url" {
+  value = "https://${var.api_domain}/healthz"
+}
+
+output "api_auth_me_url" {
+  value = "https://${var.api_domain}/api/auth/me"
+}
+
 output "admin_base_url" {
   value = "https://${var.admin_domain}"
+}
+
+output "admin_root_url" {
+  value = "https://${var.admin_domain}/"
 }
 
 output "cloud_armor_policy_name" {
