@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -85,3 +85,11 @@ gcp-preflight:
 
 gcp-bootstrap-project:
 	./scripts/gcp_bootstrap_project.sh
+
+gcp-build-images:
+	@if [ -z "$(PROJECT_ID)" ]; then \
+		echo "usage: make gcp-build-images PROJECT_ID=<gcp-project> [REGION=us-central1] [TAG=latest] [REPOSITORY=aegis-services]"; \
+		exit 1; \
+	fi
+	@REGION="$${REGION:-us-central1}" TAG="$${TAG:-latest}" REPOSITORY="$${REPOSITORY:-aegis-services}" \
+		./scripts/gcp_build_push_images.sh --project-id="$(PROJECT_ID)" --region="$$REGION" --tag="$$TAG" --repository="$$REPOSITORY"
