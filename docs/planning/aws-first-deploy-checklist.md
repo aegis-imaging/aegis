@@ -4,6 +4,16 @@ Created: 2026-02-20
 
 This is the fastest path to stand up the first AWS-backed AEGIS environment with ALB + Cognito + ECS.
 
+## One-Command Option
+
+After `terraform/aws/terraform.tfvars` is configured, you can run the full flow with:
+
+```bash
+make aws-install-poc REGION=us-east-1 PROJECT_NAME=aegis TAG=latest
+```
+
+The detailed steps below are the same sequence, broken out for control and troubleshooting.
+
 ## 1) Verify AWS credentials and tooling
 
 ```bash
