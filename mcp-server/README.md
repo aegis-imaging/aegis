@@ -67,8 +67,3 @@ npm run start
 - `retry_dimse_study` inspects `/api/dimse/retry/details` and then targets either `POST /api/dimse/retry/process/{studyUID}` or `POST /api/dimse/retry/replay/{studyUID}`.
 - `get_study_diagnostics` calls `GET /api/studies/{study_id}/diagnostics` for "why stuck" summary output.
 - All currently registered write tools execute with operator/feature-flag guards and endpoint precondition checks.
-- Security hardening includes:
-  - outbound API method/path allowlist in the MCP client;
-  - per-class (read/write) rate limiting;
-  - write idempotency dedupe cache keyed by `request_id + tool + target`;
-  - structured invocation audit logs with redacted arguments.

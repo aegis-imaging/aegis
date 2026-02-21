@@ -384,6 +384,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_study_diagnostics") {
+      const parsed = studyIdArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/diagnostics`);
+      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+    }
+
     if (name === "get_study_audit") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/audit`);
@@ -411,25 +417,25 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
-        return handleRetryDimseStudy(requestId, parsed);
+        return handleRetryDimseStudy(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       const parsed = writeArgsSchema.parse(args);
 
       if (name === "trigger_classification") {
-        return handleTriggerClassification(requestId, parsed);
+        return handleTriggerClassification(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "trigger_bids_convert") {
-        return handleTriggerBidsConvert(requestId, parsed);
+        return handleTriggerBidsConvert(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "trigger_export") {
-        return handleTriggerExport(requestId, parsed);
+        return handleTriggerExport(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "trigger_deface") {
-        return handleTriggerDeface(requestId, parsed);
+        return handleTriggerDeface(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "trigger_qc_check") {
@@ -1142,7 +1148,7 @@ function extractDimseRetryDetails(value: unknown): Required<DimseRetryDetails> {
   };
 }
 
-function formatSuccess(requestId: string, tool: ToolName, data: unknown): ToolResponse {
+function formatSuccess(requestId: string, tool: ToolName, data: unknown) {
   const payload: ToolPayload = {
     ok: true,
     request_id: requestId,
