@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra aws-build-images aws-apply-infra
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc aws-build-images aws-apply-infra
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -96,6 +96,14 @@ gcp-build-images:
 
 gcp-apply-infra:
 	./scripts/gcp_apply_infra.sh
+
+gcp-install-poc:
+	@if [ -z "$(PROJECT_ID)" ]; then \
+		echo "usage: make gcp-install-poc PROJECT_ID=<gcp-project> [REGION=us-central1] [TAG=latest]"; \
+		exit 1; \
+	fi
+	@REGION="$${REGION:-us-central1}" TAG="$${TAG:-latest}" \
+		./scripts/gcp_install_poc.sh --project-id="$(PROJECT_ID)" --region="$$REGION" --tag="$$TAG"
 
 aws-apply-infra:
 	./scripts/aws_apply_infra.sh
