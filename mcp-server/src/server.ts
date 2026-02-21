@@ -31,6 +31,8 @@ type ErrorCode = "VALIDATION_ERROR" | "AUTH_ERROR" | "FORBIDDEN" | "NOT_FOUND" |
 type StudySummary = {
   id: string;
   study_instance_uid?: string;
+  classification_required?: boolean;
+  classification_status?: string;
   qc_required?: boolean;
   qc_status?: string;
   protocol_required?: boolean;
@@ -158,7 +160,7 @@ const tools: Tool[] = [
   },
   {
     name: "trigger_classification",
-    description: "Guarded write tool stub. Validates input but does not execute mutation in scaffold.",
+    description: "Trigger metadata classification for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
@@ -291,6 +293,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const parsed = writeArgsSchema.parse(args);
 
+      if (name === "trigger_classification") {
+        return handleTriggerClassification(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       if (name === "trigger_qc_check") {
         return handleTriggerQcCheck(parsed.request_id ?? buildRequestId(), parsed);
       }
@@ -343,6 +349,69 @@ function denyWriteTool(requestId: string, tool: ToolName) {
   }
 
   return formatError(requestId, "FORBIDDEN", "Write tool handler not implemented in scaffold", false, tool);
+}
+
+async function handleTriggerClassification(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Caller is not permitted to execute write tools in readonly mode",
+      false,
+      "trigger_classification"
+    );
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_classification",
+      false,
+      "trigger_classification"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_classification");
+  }
+
+  if (matched.classification_required === false) {
+    return formatError(requestId, "CONFLICT", "Study does not require classification", false, "trigger_classification");
+  }
+
+  if (matched.classification_status === "classifying") {
+    return formatError(requestId, "CONFLICT", "Classification already in progress", false, "trigger_classification");
+  }
+
+  if (matched.classification_status && !["pending", "failed"].includes(matched.classification_status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `Classification trigger blocked for current status: ${matched.classification_status}`,
+      false,
+      "trigger_classification"
+    );
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/classify`);
+  return formatSuccess(requestId, "trigger_classification", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
 }
 
 async function handleTriggerQcCheck(
