@@ -32,6 +32,7 @@ type StudySummary = {
   id: string;
   status?: string;
   study_instance_uid?: string;
+  defacing_required?: boolean;
   classification_required?: boolean;
   classification_status?: string;
   bids_required?: boolean;
@@ -195,7 +196,7 @@ const tools: Tool[] = [
   },
   {
     name: "trigger_deface",
-    description: "Guarded write tool stub. Validates input but does not execute mutation in scaffold.",
+    description: "Trigger defacing for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
@@ -308,6 +309,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       if (name === "trigger_export") {
         return handleTriggerExport(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "trigger_deface") {
+        return handleTriggerDeface(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "trigger_qc_check") {
@@ -544,6 +549,63 @@ async function handleTriggerExport(
 
   const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/trigger-export`);
   return formatSuccess(requestId, "trigger_export", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTriggerDeface(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "trigger_deface");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_deface",
+      false,
+      "trigger_deface"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_deface");
+  }
+
+  if (matched.defacing_required === false) {
+    return formatError(requestId, "CONFLICT", "Defacing is not required for this study", false, "trigger_deface");
+  }
+
+  if (matched.status === "defacing") {
+    return formatError(requestId, "CONFLICT", "Defacing is already in progress", false, "trigger_deface");
+  }
+
+  if (matched.status && ["approved", "rejected"].includes(matched.status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `Defacing trigger blocked for terminal status: ${matched.status}`,
+      false,
+      "trigger_deface"
+    );
+  }
+
+  const data = await client.post(`/api/deface/${encodeURIComponent(parsed.study_uid)}`);
+  return formatSuccess(requestId, "trigger_deface", {
     accepted: true,
     study_uid: parsed.study_uid,
     reason: parsed.reason,
