@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/msenjem/aegis/api/importer"
+	"github.com/aegis-imaging/aegis/api/importer"
 )
 
 // BatchImport imports DICOM files from a server-local directory.

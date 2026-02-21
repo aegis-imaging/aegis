@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // phiScanRequest is the payload sent to the Python PHI detection service.

@@ -28,8 +28,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
-	"github.com/msenjem/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/storage"
 )
 
 var dimseForwardHTTPClient = &http.Client{Timeout: 10 * time.Minute}

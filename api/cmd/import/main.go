@@ -18,10 +18,10 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/importer"
-	"github.com/msenjem/aegis/api/migrate"
-	"github.com/msenjem/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/importer"
+	"github.com/aegis-imaging/aegis/api/migrate"
+	"github.com/aegis-imaging/aegis/api/storage"
 )
 
 func main() {

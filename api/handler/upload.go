@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/msenjem/aegis/api/email"
-	"github.com/msenjem/aegis/api/model"
-	"github.com/msenjem/aegis/api/routing"
+	"github.com/aegis-imaging/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/routing"
 )
 
 type uploadInitRequest struct {
