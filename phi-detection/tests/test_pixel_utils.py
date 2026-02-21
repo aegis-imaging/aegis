@@ -54,3 +54,24 @@ class TestApplyWindowingStandalone:
         assert result[0, 0] == 50.0   # clipped from 0 to low=50
         assert result[0, 1] == 100.0  # within range
         assert result[0, 2] == 150.0  # clipped from 200 to high=150
+
+
+class TestDicomToPilEdgeCases:
+    def test_multiframe_dicom_uses_first_frame(self, make_dicom_file):
+        """Multi-frame DICOM: dicom_to_pil extracts the first frame only."""
+        path = make_dicom_file(filename="multi.dcm", num_frames=3, pixel_value=100)
+        img = dicom_to_pil(path)
+        assert img is not None
+        assert img.mode == "L"
+        # Result must be a 2D image (rows, cols), not a 3D stack.
+        arr = np.array(img)
+        assert arr.ndim == 2
+        assert arr.shape == (64, 64)
+
+    def test_8bit_dicom_returns_pil_image(self, make_dicom_file):
+        """8-bit DICOM (BitsAllocated=8) is decoded to a valid grayscale image."""
+        path = make_dicom_file(filename="8bit.dcm", bits_allocated=8, pixel_value=128)
+        img = dicom_to_pil(path)
+        assert img is not None
+        assert img.mode == "L"
+        assert img.size == (64, 64)
