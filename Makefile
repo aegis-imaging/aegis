@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -82,3 +82,6 @@ dimse-e2e:
 
 gcp-preflight:
 	./scripts/gcp_preflight.sh
+
+gcp-bootstrap-project:
+	./scripts/gcp_bootstrap_project.sh
