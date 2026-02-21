@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e
+.PHONY: up down clean build api lint lint-go lint-python lint-python-scripts lint-frontend lint-mcp check logs test test-unit test-race smoke dimse-e2e
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -24,21 +24,29 @@ api:
 
 # ── Lint ────────────────────────────────────────────────────────────
 
-lint: lint-go lint-python lint-frontend
+lint: lint-go lint-python lint-python-scripts lint-frontend lint-mcp
 
 lint-go:
 	cd api && go vet ./...
 
 lint-python:
-	@for svc in defacing phi-detection qc-service bids-service classification-service; do \
+	@for svc in defacing phi-detection qc-service bids-service classification-service protocol-service dimse-receiver; do \
 		echo "Checking $$svc..."; \
 		find $$svc -name '*.py' -exec python3 -m py_compile {} +; \
 	done
+
+lint-python-scripts:
+	python3 -m py_compile scripts/cloud_smoke_test.py scripts/dimse_pacs_e2e_harness.py
 
 lint-frontend:
 	cd client && npx tsc --noEmit
 	cd frontend/upload-portal && npx tsc --noEmit
 	cd frontend/admin-dashboard && npx tsc --noEmit
+	cd frontend/landing && npx tsc --noEmit
+	cd frontend/export-portal && npx tsc --noEmit
+
+lint-mcp:
+	cd mcp-server && npm run typecheck
 
 # ── Tests ──────────────────────────────────────────────────────────
 
