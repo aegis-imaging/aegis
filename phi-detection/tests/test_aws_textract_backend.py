@@ -96,3 +96,36 @@ class TestAWSTextractDetect:
         findings = backend.detect([path])
         assert findings == []
         mock_client.detect_document_text.assert_not_called()
+
+    def test_detect_continues_on_api_exception(self, make_dicom_file):
+        """If detect_document_text raises for one file, detect() skips it and continues."""
+        path_err = make_dicom_file(filename="err.dcm", pixel_value=100)
+        path_ok = make_dicom_file(filename="ok.dcm", pixel_value=50)
+
+        call_count = [0]
+        mock_client = MagicMock()
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise RuntimeError("Textract API unavailable")
+            return {
+                "Blocks": [{
+                    "BlockType": "WORD", "Text": "PATIENT", "Confidence": 92.0,
+                    "Geometry": {"BoundingBox": {
+                        "Left": 0.1, "Top": 0.1, "Width": 0.1, "Height": 0.05,
+                    }},
+                }]
+            }
+
+        mock_client.detect_document_text.side_effect = side_effect
+
+        backend = AWSTextractBackend(confidence_threshold=0.4, min_text_length=3)
+        backend._client = mock_client
+
+        findings = backend.detect([path_err, path_ok])
+
+        # First file raised (skipped); second file returned a finding.
+        assert len(findings) == 1
+        assert findings[0].file == "ok.dcm"
+        assert findings[0].regions[0].text == "PATIENT"
