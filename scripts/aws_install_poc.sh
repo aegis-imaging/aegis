@@ -50,6 +50,11 @@ if [ ! -f "$TFVARS" ]; then
   exit 1
 fi
 
+./scripts/validate_tfvars_required.sh \
+  "$TFVARS" \
+  acm_certificate_arn \
+  cognito_domain_prefix
+
 if [ "$SKIP_FIRST_APPLY" -eq 0 ]; then
   ./scripts/aws_apply_infra.sh --tfvars="$TFVARS" --apply
 fi
