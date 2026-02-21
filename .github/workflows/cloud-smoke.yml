@@ -22,6 +22,16 @@ on:
         required: false
         default: "45"
         type: string
+      iap_email:
+        description: "Optional: identity email for X-Goog-Authenticated-User-Email convenience flag"
+        required: false
+        default: ""
+        type: string
+      require_auth_context:
+        description: "Fail fast when neither admin header secret nor iap_email is provided"
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   smoke:
@@ -48,6 +58,15 @@ jobs:
 
           if [ -n "${ADMIN_HEADER}" ]; then
             CMD+=(--admin-header "${ADMIN_HEADER}")
+          fi
+
+          if [ -n "${{ inputs.iap_email }}" ]; then
+            CMD+=(--iap-email "${{ inputs.iap_email }}")
+          fi
+
+          if [ "${{ inputs.require_auth_context }}" = "true" ] && [ -z "${ADMIN_HEADER}" ] && [ -z "${{ inputs.iap_email }}" ]; then
+            echo "error: provide CLOUD_SMOKE_ADMIN_HEADER secret or iap_email input for authenticated endpoints." >&2
+            exit 1
           fi
 
           "${CMD[@]}"
