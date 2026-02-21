@@ -5,7 +5,6 @@ the OCR-based burned-in PHI detection pipeline.
 """
 
 import os
-import struct
 import tempfile
 
 import numpy as np
@@ -40,6 +39,9 @@ def make_dicom_file(tmp_dir):
         BitsAllocated (default 16).
     include_pixel_data : bool
         If False, the file has no PixelData element at all.
+    num_frames : int
+        Number of frames (default 1). When > 1, sets NumberOfFrames and
+        creates a 3D pixel array of shape (num_frames, rows, cols).
 
     Returns
     -------
@@ -56,6 +58,7 @@ def make_dicom_file(tmp_dir):
         window_width=None,
         bits_allocated: int = 16,
         include_pixel_data: bool = True,
+        num_frames: int = 1,
     ) -> str:
         filepath = os.path.join(tmp_dir, filename)
 
@@ -86,7 +89,17 @@ def make_dicom_file(tmp_dir):
             ds.WindowWidth = window_width
 
         if include_pixel_data:
-            arr = np.full((rows, cols), pixel_value, dtype=np.uint16)
+            pixel_dtype = np.uint8 if bits_allocated == 8 else np.uint16
+            if num_frames > 1:
+                # Stack frames into (num_frames, rows, cols); each frame gets
+                # a slightly different fill value so the array is non-uniform.
+                arr = np.stack([
+                    np.full((rows, cols), pixel_value + i * 10, dtype=pixel_dtype)
+                    for i in range(num_frames)
+                ])
+                ds.NumberOfFrames = num_frames
+            else:
+                arr = np.full((rows, cols), pixel_value, dtype=pixel_dtype)
             ds.PixelData = arr.tobytes()
 
         ds.save_as(filepath)

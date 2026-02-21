@@ -194,3 +194,70 @@ class TestDetectMultipleFiles:
         assert findings[1].file == "file2.dcm"
         assert len(findings[1].regions) == 1
         assert findings[1].regions[0].text == "MRN-001"
+
+
+# ---------------------------------------------------------------------------
+# TesseractBackend.available() — unit-level
+# ---------------------------------------------------------------------------
+
+class TestTesseractAvailable:
+    """TesseractBackend.available() inspects the tesseract binary via pytesseract."""
+
+    def test_returns_true_when_version_succeeds(self):
+        from unittest.mock import patch
+
+        backend = TesseractBackend()
+        with patch("pytesseract.get_tesseract_version", return_value="4.1.1"):
+            assert backend.available() is True
+
+    def test_returns_false_when_version_raises(self):
+        from unittest.mock import patch
+
+        backend = TesseractBackend()
+        with patch("pytesseract.get_tesseract_version", side_effect=Exception("binary not found")):
+            assert backend.available() is False
+
+
+# ---------------------------------------------------------------------------
+# TesseractBackend.detect() — exception recovery
+# ---------------------------------------------------------------------------
+
+class TestTesseractDetectExceptionRecovery:
+    def test_detect_continues_on_scan_file_exception(self, make_dicom_file):
+        """If _scan_file raises for one file, detect() skips it and continues."""
+        from unittest.mock import patch
+
+        path1 = make_dicom_file(filename="ok1.dcm", pixel_value=100)
+        path2 = make_dicom_file(filename="err.dcm", pixel_value=50)
+        path3 = make_dicom_file(filename="ok3.dcm", pixel_value=200)
+
+        backend = TesseractBackend(confidence_threshold=0.4, min_text_length=3)
+
+        def mock_scan(path, *args):
+            if "err.dcm" in path:
+                raise RuntimeError("OCR process failed")
+            elif "ok1.dcm" in path:
+                return [Region(text="PATIENT", confidence=0.9, bbox=[0, 0, 50, 10])]
+            return []
+
+        with patch.object(backend, "_scan_file", side_effect=mock_scan):
+            findings = backend.detect([path1, path2, path3])
+
+        # Only ok1 produced findings; err.dcm is skipped; ok3 is clean.
+        assert len(findings) == 1
+        assert findings[0].file == "ok1.dcm"
+        assert findings[0].regions[0].text == "PATIENT"
+
+
+# ---------------------------------------------------------------------------
+# Backend .name properties
+# ---------------------------------------------------------------------------
+
+class TestBackendNameProperties:
+    def test_backend_name_properties(self):
+        from app.backends.google_vision import GoogleVisionBackend
+        from app.backends.aws_textract import AWSTextractBackend
+
+        assert TesseractBackend().name == "tesseract"
+        assert GoogleVisionBackend().name == "google_vision"
+        assert AWSTextractBackend().name == "aws_textract"

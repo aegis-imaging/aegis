@@ -384,12 +384,6 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
-    if (name === "get_study_diagnostics") {
-      const parsed = studyIdArgsSchema.parse(args);
-      const data = await client.get(`/api/studies/${parsed.study_id}/diagnostics`);
-      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
-    }
-
     if (name === "get_study_audit") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/audit`);
@@ -1148,7 +1142,7 @@ function extractDimseRetryDetails(value: unknown): Required<DimseRetryDetails> {
   };
 }
 
-function formatSuccess(requestId: string, tool: ToolName, data: unknown) {
+function formatSuccess(requestId: string, tool: ToolName, data: unknown): ToolResponse {
   const payload: ToolPayload = {
     ok: true,
     request_id: requestId,

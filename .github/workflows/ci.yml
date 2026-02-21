@@ -27,7 +27,14 @@ jobs:
       - name: Terraform init
         run: terraform -chdir=terraform/${{ matrix.module }} init -backend=false
       - name: Terraform validate
-        run: terraform -chdir=terraform/${{ matrix.module }} validate
+        run: |
+          if [ "${{ matrix.module }}" = "aws" ]; then
+            terraform -chdir=terraform/${{ matrix.module }} validate \
+              -var="acm_certificate_arn=arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000" \
+              -var="cognito_domain_prefix=aegis-ci"
+          else
+            terraform -chdir=terraform/${{ matrix.module }} validate
+          fi
 
   go:
     name: Go build & vet
@@ -128,6 +135,7 @@ jobs:
           - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: false }
           - { dir: frontend/landing, name: landing, needs_client: false }
           - { dir: frontend/export-portal, name: export-portal, needs_client: false }
+          - { dir: mcp-server, name: mcp-server, needs_client: false }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -140,6 +148,19 @@ jobs:
         run: cd ${{ matrix.app.dir }} && npm install
       - name: Type check
         run: cd ${{ matrix.app.dir }} && npx tsc --noEmit
+
+  mcp-test:
+    name: MCP server tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: cd mcp-server && npm install
+      - name: Run tests
+        run: cd mcp-server && npm test
 
   docker:
     name: "Docker build (${{ matrix.service.name }})"
