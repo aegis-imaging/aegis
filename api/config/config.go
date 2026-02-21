@@ -78,6 +78,11 @@ type Config struct {
 
 	// Contact form recipient
 	ContactEmail string // CONTACT_EMAIL — where contact form submissions go (default: contact@aegisimaging.ai)
+
+	// First-admin bootstrap — seeds the first admin user on startup when admin_users is empty.
+	// Idempotent: has no effect once any admin user exists.
+	FirstAdminEmail string // FIRST_ADMIN_EMAIL
+	FirstAdminName  string // FIRST_ADMIN_NAME (optional; defaults to email address)
 }
 
 func Load() *Config {
@@ -142,6 +147,9 @@ func Load() *Config {
 		EmailEnabled: smtpHost != "",
 
 		ContactEmail: envOr("CONTACT_EMAIL", "contact@aegisimaging.ai"),
+
+		FirstAdminEmail: os.Getenv("FIRST_ADMIN_EMAIL"),
+		FirstAdminName:  envOr("FIRST_ADMIN_NAME", os.Getenv("FIRST_ADMIN_EMAIL")),
 	}
 }
 
