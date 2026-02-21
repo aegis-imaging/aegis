@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // AdvancePipeline inspects a study's processing state and dispatches the next

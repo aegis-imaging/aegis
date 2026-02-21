@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // ListAnonProfiles returns all anonymization profiles for a project.

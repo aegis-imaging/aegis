@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/handler"
-	"github.com/msenjem/aegis/api/model"
-	"github.com/msenjem/aegis/api/storage"
-	"github.com/msenjem/aegis/api/testutil"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/handler"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

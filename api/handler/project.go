@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)

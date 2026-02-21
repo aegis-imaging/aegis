@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // ListProtocolTemplates returns all protocol templates for a project.

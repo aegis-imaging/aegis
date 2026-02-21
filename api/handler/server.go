@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/email"
-	"github.com/msenjem/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/storage"
 )
 
 type Server struct {

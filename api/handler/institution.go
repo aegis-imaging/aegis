@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // ─── Institutions ─────────────────────────────────────────────────────────────
