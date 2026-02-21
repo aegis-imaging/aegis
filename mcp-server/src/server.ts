@@ -30,11 +30,14 @@ type ToolPayload = {
 type ErrorCode = "VALIDATION_ERROR" | "AUTH_ERROR" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "UPSTREAM_ERROR" | "TIMEOUT";
 type StudySummary = {
   id: string;
+  status?: string;
   study_instance_uid?: string;
   classification_required?: boolean;
   classification_status?: string;
   bids_required?: boolean;
   bids_status?: string;
+  export_required?: boolean;
+  export_status?: string;
   qc_required?: boolean;
   qc_status?: string;
   protocol_required?: boolean;
@@ -187,7 +190,7 @@ const tools: Tool[] = [
   },
   {
     name: "trigger_export",
-    description: "Guarded write tool stub. Validates input but does not execute mutation in scaffold.",
+    description: "Trigger export forwarding for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
@@ -301,6 +304,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       if (name === "trigger_bids_convert") {
         return handleTriggerBidsConvert(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "trigger_export") {
+        return handleTriggerExport(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "trigger_qc_check") {
@@ -476,6 +483,67 @@ async function handleTriggerBidsConvert(
 
   const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/bids-convert`);
   return formatSuccess(requestId, "trigger_bids_convert", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTriggerExport(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "trigger_export");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_export",
+      false,
+      "trigger_export"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_export");
+  }
+
+  if (matched.status !== "approved") {
+    return formatError(requestId, "CONFLICT", "Only approved studies can be exported", false, "trigger_export");
+  }
+
+  if (matched.export_required === false) {
+    return formatError(requestId, "CONFLICT", "Export is not required for this study", false, "trigger_export");
+  }
+
+  if (matched.export_status === "exporting") {
+    return formatError(requestId, "CONFLICT", "Export is already in progress", false, "trigger_export");
+  }
+
+  if (matched.export_status && !["pending", "failed"].includes(matched.export_status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `Export trigger blocked for current status: ${matched.export_status}`,
+      false,
+      "trigger_export"
+    );
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/trigger-export`);
+  return formatSuccess(requestId, "trigger_export", {
     accepted: true,
     study_uid: parsed.study_uid,
     reason: parsed.reason,
