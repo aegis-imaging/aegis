@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra aws-apply-infra
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -96,3 +96,6 @@ gcp-build-images:
 
 gcp-apply-infra:
 	./scripts/gcp_apply_infra.sh
+
+aws-apply-infra:
+	./scripts/aws_apply_infra.sh
