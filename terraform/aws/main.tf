@@ -80,6 +80,36 @@ variable "cognito_allowed_oauth_scopes" {
   default     = ["openid", "email", "profile"]
 }
 
+variable "api_image_tag" {
+  description = "Container image tag used for the API ECS task"
+  type        = string
+  default     = "latest"
+}
+
+variable "api_desired_count" {
+  description = "Desired number of API ECS tasks"
+  type        = number
+  default     = 1
+}
+
+variable "api_cpu" {
+  description = "CPU units for API ECS task definition"
+  type        = number
+  default     = 1024
+}
+
+variable "api_memory" {
+  description = "Memory (MiB) for API ECS task definition"
+  type        = number
+  default     = 2048
+}
+
+variable "api_allowed_origins" {
+  description = "Optional CORS origins override for API runtime"
+  type        = list(string)
+  default     = []
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -308,12 +338,18 @@ resource "aws_db_instance" "main" {
 locals {
   services = ["api", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service"]
 
+  api_image = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
+
   cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
     "https://${aws_lb.main.dns_name}/oauth2/idpresponse"
   ]
 
   cognito_logout_urls = length(var.cognito_logout_urls) > 0 ? var.cognito_logout_urls : [
     "https://${aws_lb.main.dns_name}/logout"
+  ]
+
+  resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : [
+    "https://${aws_lb.main.dns_name}"
   ]
 
   public_path_rules = {
@@ -581,6 +617,166 @@ resource "aws_lb_listener_rule" "https_public_paths" {
   }
 }
 
+# --- ECS API runtime ---
+
+data "aws_iam_policy_document" "ecs_task_execution_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ecs_task_execution" {
+  name               = "${var.project_name}-ecs-task-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_execution_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_execution_managed" {
+  role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+data "aws_iam_policy_document" "ecs_task_execution_secrets" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "kms:Decrypt"
+    ]
+    resources = [
+      aws_db_instance.main.master_user_secret[0].secret_arn,
+      aws_kms_key.main.arn
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
+  name   = "${var.project_name}-ecs-task-execution-secrets"
+  role   = aws_iam_role.ecs_task_execution.id
+  policy = data.aws_iam_policy_document.ecs_task_execution_secrets.json
+}
+
+data "aws_iam_policy_document" "ecs_task_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ecs_task" {
+  name               = "${var.project_name}-ecs-task-runtime"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+}
+
+data "aws_iam_policy_document" "ecs_task_runtime" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:ListBucket"
+    ]
+    resources = [
+      aws_s3_bucket.dicom.arn,
+      "${aws_s3_bucket.dicom.arn}/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task_runtime" {
+  name   = "${var.project_name}-ecs-task-runtime-policy"
+  role   = aws_iam_role.ecs_task.id
+  policy = data.aws_iam_policy_document.ecs_task_runtime.json
+}
+
+resource "aws_ecs_task_definition" "api" {
+  family                   = "${var.project_name}-api"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.api_cpu)
+  memory                   = tostring(var.api_memory)
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "api"
+      image     = local.api_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "PORT", value = "8080" },
+        { name = "DB_HOST", value = aws_db_instance.main.address },
+        { name = "DB_PORT", value = "5432" },
+        { name = "DB_NAME", value = "aegis" },
+        { name = "DB_USER", value = var.db_master_username },
+        { name = "STORAGE_MODE", value = "s3" },
+        { name = "S3_BUCKET", value = aws_s3_bucket.dicom.bucket },
+        { name = "S3_REGION", value = var.aws_region },
+        { name = "API_BASE_URL", value = "https://${aws_lb.main.dns_name}" },
+        { name = "APP_TIMEZONE", value = "UTC" },
+        { name = "ALLOWED_ORIGINS", value = join(",", local.resolved_api_allowed_origins) },
+        { name = "AUTH_ENABLED", value = "true" },
+        { name = "AUTH_PROVIDER", value = "aws" }
+      ]
+      secrets = [
+        { name = "DB_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.main.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "api"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_service" "api" {
+  name                   = "${var.project_name}-api"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.api.arn
+  desired_count          = var.api_desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.api.arn
+    container_name   = "api"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.https]
+}
+
 # --- SNS + SQS (Event Notifications) ---
 
 resource "aws_sns_topic" "dicom_ingest" {
@@ -635,6 +831,14 @@ output "rds_master_user_secret_arn" {
 
 output "ecs_cluster" {
   value = aws_ecs_cluster.main.name
+}
+
+output "ecs_api_service" {
+  value = aws_ecs_service.api.name
+}
+
+output "ecs_api_task_definition" {
+  value = aws_ecs_task_definition.api.arn
 }
 
 output "alb_dns" {
