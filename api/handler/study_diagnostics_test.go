@@ -118,6 +118,11 @@ func TestGetStudyDiagnostics_ReportsDimseSignals(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The sidecar health loop probes /healthz on startup; ignore those requests.
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		assert.Equal(t, "/ingest/retry/details", r.URL.Path)
 		assert.Equal(t, study.StudyInstanceUID, r.URL.Query().Get("study_instance_uid"))
 		w.Header().Set("Content-Type", "application/json")
