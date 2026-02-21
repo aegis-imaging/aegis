@@ -112,6 +112,7 @@ jobs:
       matrix:
         service:
           - { context: api, name: api }
+          - { context: frontend/admin-dashboard, name: admin-dashboard }
           - { context: defacing, name: defacing }
           - { context: phi-detection, name: phi-detection }
           - { context: qc-service, name: qc-service }
