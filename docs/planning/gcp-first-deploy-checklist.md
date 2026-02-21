@@ -1,8 +1,9 @@
 # AEGIS GCP First Deploy Checklist
 
-Created: 2026-02-20
+Created: 2026-02-20  
+Updated: 2026-02-20
 
-This is a fast path to stand up the first GCP-backed AEGIS environment from a clean machine.
+This is the fastest path to stand up the first GCP-backed AEGIS environment using the deployment automation now in-repo.
 
 ## 1) Create GCP project and attach billing
 
@@ -18,75 +19,54 @@ gcloud beta billing projects link "$PROJECT_ID" --billing-account="<BILLING_ACCO
 gcloud config set project "$PROJECT_ID"
 ```
 
-## 2) Bootstrap project services via Terraform
+## 2) Run local preflight checks
+
+```bash
+make gcp-preflight
+```
+
+## 3) Configure Terraform variables
 
 ```bash
 cp terraform/project/terraform.tfvars.example terraform/project/terraform.tfvars
-# set: project_id, region, billing_account
-
-terraform -chdir=terraform/project init
-terraform -chdir=terraform/project plan
-terraform -chdir=terraform/project apply
-```
-
-## 3) Create IAP OAuth credentials
-
-In Google Cloud Console:
-1. Configure OAuth consent screen.
-2. Create OAuth client credentials (Web application).
-3. Capture the client ID and client secret for `terraform/infra/terraform.tfvars`.
-
-## 4) Prepare infra tfvars
-
-```bash
 cp terraform/infra/terraform.tfvars.example terraform/infra/terraform.tfvars
 ```
 
-Fill in:
-- `project_id`, `region`, `environment`
-- `api_domain`, `admin_domain`
-- `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
-- `db_password`, `db_password_secret_id`
-- image URIs for API, admin dashboard, and all sidecars
+Set required values in:
+- `terraform/project/terraform.tfvars`: `project_id`, `region`, `billing_account`
+- `terraform/infra/terraform.tfvars`: domains, IAP OAuth values, image tags, and environment options
 
-## 5) Create Artifact Registry first
+## 4) Bootstrap project-level services and security baseline
 
 ```bash
-terraform -chdir=terraform/infra init
-terraform -chdir=terraform/infra apply -target=google_artifact_registry_repository.services
+./scripts/gcp_bootstrap_project.sh --tfvars=terraform/project/terraform.tfvars --apply
 ```
 
-## 6) Build and push container images
+## 5) Bootstrap Artifact Registry first
 
 ```bash
-export REPO="${REGION}-docker.pkg.dev/${PROJECT_ID}/aegis-services"
-gcloud auth configure-docker "${REGION}-docker.pkg.dev"
-
-docker buildx build --platform linux/amd64 -t "${REPO}/api:latest" --push api
-docker buildx build --platform linux/amd64 -t "${REPO}/defacing:latest" --push defacing
-docker buildx build --platform linux/amd64 -t "${REPO}/phi-detection:latest" --push phi-detection
-docker buildx build --platform linux/amd64 -t "${REPO}/qc-service:latest" --push qc-service
-docker buildx build --platform linux/amd64 -t "${REPO}/bids-service:latest" --push bids-service
-docker buildx build --platform linux/amd64 -t "${REPO}/classification-service:latest" --push classification-service
-docker buildx build --platform linux/amd64 -t "${REPO}/protocol-service:latest" --push protocol-service
+./scripts/gcp_apply_infra.sh --tfvars=terraform/infra/terraform.tfvars --target-artifact-repo
 ```
 
-## 7) Admin dashboard image prerequisite
-
-Current repo state includes no `frontend/admin-dashboard/Dockerfile`, but Terraform infra expects `admin_dashboard_image`.
-
-Before full apply:
-- add/build/push an admin dashboard container image, then
-- set `admin_dashboard_image` in `terraform/infra/terraform.tfvars`.
-
-## 8) Full infra plan/apply
+## 6) Build and push images
 
 ```bash
-terraform -chdir=terraform/infra plan
-terraform -chdir=terraform/infra apply
+./scripts/gcp_build_push_images.sh --project-id="$PROJECT_ID" --region="$REGION" --tag="latest"
 ```
 
-## 9) Point DNS at load balancer IP
+Equivalent Make target:
+
+```bash
+make gcp-build-images PROJECT_ID="$PROJECT_ID" REGION="$REGION" TAG=latest
+```
+
+## 7) Apply full infra
+
+```bash
+./scripts/gcp_apply_infra.sh --tfvars=terraform/infra/terraform.tfvars --apply
+```
+
+## 8) Point DNS at load balancer IP
 
 ```bash
 terraform -chdir=terraform/infra output load_balancer_ip
@@ -96,7 +76,7 @@ Create DNS `A` records for:
 - `api_domain`
 - `admin_domain`
 
-## 10) Verify deployment
+## 9) Verify deployment
 
 ```bash
 curl -f https://<api_domain>/healthz
@@ -108,6 +88,15 @@ Then:
 - open `https://<admin_domain>` in incognito,
 - confirm IAP login challenge,
 - confirm unauthorized user access is denied.
+
+## 10) Run cloud smoke suite
+
+```bash
+python3 scripts/cloud_smoke_test.py \
+  --base-url "https://<api_domain>" \
+  --project-slug default \
+  --admin-header "X-Goog-Authenticated-User-Email: accounts.google.com:<you@example.com>"
+```
 
 ## 11) Secret rotation drill (recommended before pilot)
 
