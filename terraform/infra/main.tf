@@ -173,6 +173,12 @@ variable "sidecar_memory" {
   default     = "1Gi"
 }
 
+variable "sidecar_min_instances" {
+  description = "Minimum sidecar Cloud Run instances (0 = scale-to-zero, 1 = always-warm). Set to 1 to eliminate cold-start latency; adds ~$38/month per sidecar."
+  type        = number
+  default     = 0
+}
+
 variable "sidecar_max_instances" {
   description = "Maximum sidecar Cloud Run instances"
   type        = number
@@ -632,7 +638,7 @@ resource "google_cloud_run_v2_service" "sidecars" {
     service_account = google_service_account.sidecars.email
 
     scaling {
-      min_instance_count = 0
+      min_instance_count = var.sidecar_min_instances
       max_instance_count = var.sidecar_max_instances
     }
 
