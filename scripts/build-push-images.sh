@@ -6,7 +6,7 @@
 set -euo pipefail
 
 TAG="${1:-latest}"
-REGISTRY="us-central1-docker.pkg.dev/aegis-prod-488119/aegis-services"
+REGISTRY="us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "==> Building and pushing AEGIS images (tag: $TAG)"
@@ -25,7 +25,7 @@ services=(
 
 for svc in "${services[@]}"; do
   echo "==> [$svc] Building..."
-  docker build -t "$REGISTRY/$svc:$TAG" "$REPO_ROOT/$svc"
+  docker build --platform linux/amd64 -t "$REGISTRY/$svc:$TAG" "$REPO_ROOT/$svc"
   echo "==> [$svc] Pushing..."
   docker push "$REGISTRY/$svc:$TAG"
   echo "==> [$svc] Done."
@@ -33,7 +33,7 @@ for svc in "${services[@]}"; do
 done
 
 echo "==> [admin-dashboard] Building..."
-docker build -t "$REGISTRY/admin-dashboard:$TAG" "$REPO_ROOT/frontend/admin-dashboard"
+docker build --platform linux/amd64 -t "$REGISTRY/admin-dashboard:$TAG" "$REPO_ROOT/frontend/admin-dashboard"
 echo "==> [admin-dashboard] Pushing..."
 docker push "$REGISTRY/admin-dashboard:$TAG"
 echo "==> [admin-dashboard] Done."
