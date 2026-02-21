@@ -81,6 +81,26 @@ jobs:
       - name: Syntax check (harness scripts)
         run: python -m py_compile scripts/cloud_smoke_test.py scripts/dimse_pacs_e2e_harness.py
 
+  shell-scripts:
+    name: "Shell script syntax (${{ matrix.script }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        script:
+          - scripts/check-infra-placeholders.sh
+          - scripts/gcp_preflight.sh
+          - scripts/gcp_bootstrap_project.sh
+          - scripts/gcp_build_push_images.sh
+          - scripts/gcp_apply_infra.sh
+          - scripts/gcp_install_poc.sh
+          - scripts/aws_build_push_images.sh
+          - scripts/aws_apply_infra.sh
+          - scripts/aws_install_poc.sh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: bash -n ${{ matrix.script }}
+
   python-test:
     name: "Python tests (${{ matrix.service }})"
     runs-on: ubuntu-latest
