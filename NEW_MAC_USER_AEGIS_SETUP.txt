@@ -1,0 +1,87 @@
+AEGIS New macOS User Setup (2-Minute Checklist)
+================================================
+
+Goal
+----
+Create a clean, isolated AEGIS dev/account environment so Claude Code uses ai@aegisimaging.ai (not personal).
+
+Quick Checklist
+---------------
+1) Log into the new macOS user (AEGIS).
+2) In Safari (or a dedicated browser), sign into https://claude.ai as ai@aegisimaging.ai only.
+3) Install/open VS Code.
+4) Install Claude Code extension and authenticate (should bind to ai@aegisimaging.ai).
+5) Open Terminal and run the setup block below.
+6) Add the displayed SSH public key to GitHub account/org access.
+7) Clone repo and switch to develop.
+8) Confirm git identity and SSH auth.
+
+Terminal Setup Block (copy/paste)
+---------------------------------
+# 1) Install command-line tools (if not already installed)
+xcode-select --install || true
+
+# 2) Create dedicated SSH key for AEGIS
+ssh-keygen -t ed25519 -C "ai@aegisimaging.ai" -f ~/.ssh/id_ed25519_aegis
+
+# 3) Start ssh-agent and add key
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519_aegis
+
+# 4) SSH config for GitHub AEGIS host alias
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+cat >> ~/.ssh/config << 'EOF'
+Host github.com-aegis
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_aegis
+  IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+
+# 5) Print public key (copy this into GitHub SSH keys)
+cat ~/.ssh/id_ed25519_aegis.pub
+
+# 6) Test SSH auth (after adding key in GitHub settings)
+ssh -T git@github.com-aegis
+
+# 7) Clone AEGIS repo and switch to develop
+git clone git@github.com-aegis:aegis-imaging/aegis.git
+cd aegis
+git checkout develop
+
+# 8) Set repo-local Git identity
+git config user.name "Matthew Senjem (AEGIS)"
+git config user.email "ai@aegisimaging.ai"
+
+# 9) Verify
+git config --get user.name
+git config --get user.email
+git remote -v
+
+# 10) Open in VS Code
+# If 'code' command is unavailable, use VS Code UI: File -> Open Folder -> ~/aegis
+code . || true
+
+GitHub Steps
+------------
+A) Add SSH key:
+   GitHub -> Settings -> SSH and GPG keys -> New SSH key
+   Paste output from: cat ~/.ssh/id_ed25519_aegis.pub
+
+B) Repo access:
+   Ensure your GitHub user has access to org repo: aegis-imaging/aegis
+
+Verification Targets
+--------------------
+- Claude Code in VS Code shows ai@aegisimaging.ai account/session.
+- ssh -T git@github.com-aegis succeeds.
+- git config --get user.email returns ai@aegisimaging.ai.
+- You can pull/push on develop branch.
+
+If Something Fails
+------------------
+- SSH permission denied: re-check key added to GitHub and host alias in ~/.ssh/config.
+- code command missing: VS Code -> Command Palette -> "Shell Command: Install 'code' command in PATH".
+- Claude still wrong account: in this new macOS user, sign out everywhere and sign in only as ai@aegisimaging.ai.
