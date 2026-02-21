@@ -1172,7 +1172,7 @@ Common dev commands available via `make`:
 | `make clean` | `docker compose down -v` (destroy volumes) |
 | `make build` | `docker compose build` |
 | `make api` | Run Go API locally (`go run .`) |
-| `make lint` | Lint all languages (Go vet, Python py_compile, TypeScript tsc) |
+| `make lint` | Lint all languages with CI-parity scope (Go vet, Python py_compile including protocol/dimse + harness scripts, TypeScript tsc for all apps, MCP typecheck) |
 | `make check` | `curl /healthz` with pretty JSON output |
 | `make smoke` | Run cloud smoke harness (`BASE_URL=...`, optional `ADMIN_HEADER=...`) |
 | `make dimse-e2e` | Run DIMSE PACS E2E harness (mock ingest + retry/dead-letter scenarios) |
