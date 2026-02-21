@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +15,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func requireLoopbackListener(t *testing.T) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("skipping test: loopback listener unavailable: %v", err)
+		return
+	}
+	_ = ln.Close()
+}
 
 func dimseProxyServer(t *testing.T, dimseURL, operatorKey string) *handler.Server {
 	t.Helper()
@@ -50,6 +61,8 @@ func TestDimseRetryProxy_ServiceNotConfigured(t *testing.T) {
 }
 
 func TestDimseRetryProxy_ProxiesGetWithQueryAndOperatorKey(t *testing.T) {
+	requireLoopbackListener(t)
+
 	var gotPath string
 	var gotMethod string
 	var gotOperatorKey string
@@ -91,6 +104,8 @@ func TestDimseRetryProxy_ProxiesGetWithQueryAndOperatorKey(t *testing.T) {
 }
 
 func TestDimseRetryProxy_ProxiesPostTargetedPath(t *testing.T) {
+	requireLoopbackListener(t)
+
 	var gotPath string
 	var gotMethod string
 	var gotQuery url.Values
