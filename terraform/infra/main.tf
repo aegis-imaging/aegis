@@ -552,10 +552,10 @@ resource "google_bigquery_table" "audit_log" {
 
   schema = jsonencode([
     { name = "timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "event",     type = "STRING",    mode = "NULLABLE" },
-    { name = "user",      type = "STRING",    mode = "NULLABLE" },
-    { name = "resource",  type = "STRING",    mode = "NULLABLE" },
-    { name = "payload",   type = "JSON",      mode = "NULLABLE" },
+    { name = "event", type = "STRING", mode = "NULLABLE" },
+    { name = "user", type = "STRING", mode = "NULLABLE" },
+    { name = "resource", type = "STRING", mode = "NULLABLE" },
+    { name = "payload", type = "JSON", mode = "NULLABLE" },
   ])
 
   labels = {
