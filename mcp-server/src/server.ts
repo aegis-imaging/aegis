@@ -94,6 +94,19 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_study_diagnostics",
+    description: "Get per-study diagnostics summary for stuck-state triage.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_study_audit",
     description: "Get audit entries for a study UUID.",
     inputSchema: {
@@ -237,6 +250,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "get_study_detail") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}`);
+      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+    }
+
+    if (name === "get_study_diagnostics") {
+      const parsed = studyIdArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/diagnostics`);
       return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
     }
 

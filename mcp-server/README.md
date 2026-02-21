@@ -7,6 +7,7 @@ Minimal MCP API-wrapper scaffold for Anonymization & Exchange Gateway for Imagin
 - Read tools implemented and wired to AEGIS API:
   - `list_studies`
   - `get_study_detail`
+  - `get_study_diagnostics`
   - `get_study_audit`
   - `get_study_routing_log`
   - `list_export_shares`
@@ -57,4 +58,5 @@ npm run start
 - `trigger_qc_check` resolves study UID via `list_studies` search, enforces QC preconditions, then calls `POST /api/studies/{studyUID}/qc-check`.
 - `trigger_protocol_check` resolves study UID via `list_studies` search, enforces protocol preconditions, then calls `POST /api/studies/{studyUID}/protocol-check`.
 - `trigger_phi_scan` resolves study UID via `list_studies` search, enforces PHI-scan preconditions, then calls `POST /api/studies/{studyUID}/phi-scan`.
+- `get_study_diagnostics` calls `GET /api/studies/{study_id}/diagnostics` for "why stuck" summary output.
 - All other write tools currently validate input (`confirm` + `reason`) and return guarded denial/not-implemented responses by design.
