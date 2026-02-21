@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e gcp-preflight
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -79,3 +79,6 @@ dimse-e2e:
 	else \
 		python3 scripts/dimse_pacs_e2e_harness.py; \
 	fi
+
+gcp-preflight:
+	./scripts/gcp_preflight.sh
