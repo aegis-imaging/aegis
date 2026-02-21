@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // ServeDicomDownload streams a zip archive of a study's DICOM files.

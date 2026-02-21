@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/msenjem/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/email"
 )
 
 type contactRequest struct {

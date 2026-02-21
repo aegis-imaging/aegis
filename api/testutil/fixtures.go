@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // SeedProject returns the "default" project created by migration 001.

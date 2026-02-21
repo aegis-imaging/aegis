@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // ── DICOMweb JSON tag helpers ─────────────────────────────────────────────────

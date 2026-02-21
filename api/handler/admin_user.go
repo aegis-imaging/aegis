@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // ListAdminUsers returns all admin users.

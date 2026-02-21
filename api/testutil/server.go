@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/handler"
-	"github.com/msenjem/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/handler"
+	"github.com/aegis-imaging/aegis/api/storage"
 )
 
 // TestServer creates a handler.Server wired to a real test DB and temp local storage.

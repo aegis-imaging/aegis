@@ -1,4 +1,4 @@
-module github.com/msenjem/aegis/api
+module github.com/aegis-imaging/aegis/api
 
 go 1.24.0
 
