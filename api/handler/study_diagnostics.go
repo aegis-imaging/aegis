@@ -15,6 +15,28 @@ import (
 	"github.com/msenjem/aegis/api/model"
 )
 
+// isValidUUID returns true if s is a well-formed UUID (8-4-4-4-12 hex).
+// Used to return 404 before hitting the DB when a non-UUID path value is given,
+// avoiding a PostgreSQL "invalid input syntax for type uuid" error.
+func isValidUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 type studyDiagnosticsSummary struct {
 	Terminal           bool      `json:"terminal"`
 	Stuck              bool      `json:"stuck"`
@@ -43,6 +65,10 @@ type studyDiagnosticsResponse struct {
 
 func (s *Server) GetStudyDiagnostics(w http.ResponseWriter, r *http.Request) {
 	studyID := r.PathValue("id")
+	if !isValidUUID(studyID) {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
 	study, err := model.GetStudyByID(r.Context(), s.db, studyID)
 	if errors.Is(err, sql.ErrNoRows) {
 		s.writeError(w, http.StatusNotFound, "study not found")
