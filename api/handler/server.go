@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/msenjem/aegis/api/config"
@@ -65,7 +66,7 @@ func (s *Server) Healthz(w http.ResponseWriter, r *http.Request) {
 		result["storage"] = "healthy"
 	}
 
-	// Sidecar services (informational — degraded sidecars don't fail the check)
+	// Sidecar services — probed in parallel; unhealthy sidecars are informational only.
 	sidecars := map[string]string{
 		"defacing":       s.cfg.DefacingServiceURL,
 		"phi_detection":  s.cfg.PhiDetectionServiceURL,
@@ -75,32 +76,36 @@ func (s *Server) Healthz(w http.ResponseWriter, r *http.Request) {
 		"protocol":       s.cfg.ProtocolServiceURL,
 		"dimse_receiver": s.cfg.DimseReceiverURL,
 	}
-	services := map[string]string{}
+	services := make(map[string]string, len(sidecars))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	for name, url := range sidecars {
 		if url == "" {
 			services[name] = "disabled"
 			continue
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/healthz", nil)
-		if err != nil {
-			cancel()
-			services[name] = "unhealthy"
-			continue
-		}
-		resp, err := s.httpClient.Do(req)
-		cancel()
-		if err != nil {
-			services[name] = "unhealthy"
-			continue
-		}
-		resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			services[name] = "healthy"
-		} else {
-			services[name] = "unhealthy"
-		}
+		wg.Add(1)
+		go func(name, url string) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/healthz", nil)
+			status := "unhealthy"
+			if err == nil {
+				resp, err := s.httpClient.Do(req)
+				if err == nil {
+					resp.Body.Close()
+					if resp.StatusCode == http.StatusOK {
+						status = "healthy"
+					}
+				}
+			}
+			mu.Lock()
+			services[name] = status
+			mu.Unlock()
+		}(name, url)
 	}
+	wg.Wait()
 	result["services"] = services
 
 	httpStatus := http.StatusOK
