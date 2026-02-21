@@ -1,8 +1,9 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from "@modelcontextprotocol/sdk/types.js";
-import { AegisApiClient, UpstreamHttpError } from "./aegisClient.js";
+import { AegisApiClient, DisallowedPathError, UpstreamHttpError } from "./aegisClient.js";
 import { loadConfig } from "./config.js";
+import { redactToolArgs } from "./redaction.js";
 import {
   emptyArgsSchema,
   listStudiesArgsSchema,
@@ -21,13 +22,51 @@ type ToolPayload = {
   data?: unknown;
   warnings?: string[];
   error?: {
-    code: "VALIDATION_ERROR" | "AUTH_ERROR" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "UPSTREAM_ERROR" | "TIMEOUT";
+    code:
+      | "VALIDATION_ERROR"
+      | "AUTH_ERROR"
+      | "FORBIDDEN"
+      | "NOT_FOUND"
+      | "CONFLICT"
+      | "UPSTREAM_ERROR"
+      | "TIMEOUT"
+      | "RATE_LIMITED";
     message: string;
     retryable: boolean;
   };
 };
 
-type ErrorCode = "VALIDATION_ERROR" | "AUTH_ERROR" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "UPSTREAM_ERROR" | "TIMEOUT";
+type ErrorCode =
+  | "VALIDATION_ERROR"
+  | "AUTH_ERROR"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "UPSTREAM_ERROR"
+  | "TIMEOUT"
+  | "RATE_LIMITED";
+type ToolResponse = {
+  isError?: boolean;
+  content: Array<{ type: "text"; text: string }>;
+};
+
+type ToolClass = "read" | "write";
+
+type InvocationLogResult = "success" | "error" | "idempotent";
+
+type InvocationLog = {
+  event: "mcp_tool_invocation";
+  ts: string;
+  request_id: string;
+  caller_id: string;
+  requested_by?: string;
+  tool_name: ToolName | "unknown";
+  tool_class: ToolClass | "unknown";
+  args_redacted: Record<string, unknown>;
+  result: InvocationLogResult;
+  error_code?: ErrorCode;
+  duration_ms: number;
+};
 type StudySummary = {
   id: string;
   status?: string;
@@ -240,11 +279,80 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const name = request.params.name as ToolName;
+  const name = String(request.params.name ?? "");
   const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+  const requestId = resolveRequestId(args);
+  const startedAt = Date.now();
+  const knownTool = isKnownToolName(name);
+  const toolClass: ToolClass | "unknown" = knownTool ? (isWriteToolName(name) ? "write" : "read") : "unknown";
+  const callerId = process.env.MCP_CALLER_ID?.trim() || "mcp-stdio";
+  const requestedBy = extractRequestedBy(args);
 
-  if (![...readToolNames, ...writeToolNames].includes(name)) {
-    return formatError("unknown", "VALIDATION_ERROR", `Unknown tool: ${name}`, false);
+  let idempotencyKey: string | null = null;
+  let idempotencyHit = false;
+  let response: ToolResponse;
+
+  if (toolClass !== "unknown") {
+    const rateLimitResult = rateLimiter.consume(
+      `tool_class:${toolClass}`,
+      toolClass === "write" ? config.writeRateLimitPerMinute : config.readRateLimitPerMinute
+    );
+
+    if (!rateLimitResult.allowed) {
+      response = formatError(
+        requestId,
+        "RATE_LIMITED",
+        `Rate limit exceeded for ${toolClass} tools; retry after ${rateLimitResult.retryAfterSeconds}s`,
+        true,
+        knownTool ? name : "unknown"
+      );
+    } else if (toolClass === "write" && isWriteToolName(name)) {
+      const target = extractWriteTarget(name, args);
+      if (target) {
+        idempotencyKey = buildIdempotencyKey(requestId, name, target);
+        const cached = writeIdempotencyCache.get(idempotencyKey);
+        if (cached) {
+          response = cached;
+          idempotencyHit = true;
+        } else {
+          response = await executeTool(name, args, requestId);
+        }
+      } else {
+        response = await executeTool(name, args, requestId);
+      }
+    } else {
+      response = await executeTool(name, args, requestId);
+    }
+  } else {
+    response = await executeTool(name, args, requestId);
+  }
+
+  if (toolClass === "write" && idempotencyKey && !idempotencyHit) {
+    writeIdempotencyCache.set(idempotencyKey, response, config.writeIdempotencyTtlSeconds);
+  }
+
+  const payload = extractPayload(response);
+  const result: InvocationLogResult = idempotencyHit ? "idempotent" : payload?.ok ? "success" : "error";
+  emitInvocationLog({
+    event: "mcp_tool_invocation",
+    ts: new Date().toISOString(),
+    request_id: requestId,
+    caller_id: callerId,
+    requested_by: requestedBy,
+    tool_name: knownTool ? name : "unknown",
+    tool_class: toolClass,
+    args_redacted: redactToolArgs(args),
+    result,
+    error_code: payload?.error?.code,
+    duration_ms: Date.now() - startedAt
+  });
+
+  return response;
+});
+
+async function executeTool(name: string, args: Record<string, unknown>, requestId: string): Promise<ToolResponse> {
+  if (!isKnownToolName(name)) {
+    return formatError(requestId, "VALIDATION_ERROR", `Unknown tool: ${name}`, false);
   }
 
   try {
@@ -261,88 +369,91 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const suffix = query.toString() ? `?${query.toString()}` : "";
       const data = await client.get(`/api/studies${suffix}`);
-      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+      return formatSuccess(requestId, name, data);
     }
 
     if (name === "get_study_detail") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}`);
-      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+      return formatSuccess(requestId, name, data);
     }
 
     if (name === "get_study_diagnostics") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/diagnostics`);
-      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+      return formatSuccess(requestId, name, data);
     }
 
     if (name === "get_study_audit") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/audit`);
-      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+      return formatSuccess(requestId, name, data);
     }
 
     if (name === "get_study_routing_log") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/routing-log`);
-      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+      return formatSuccess(requestId, name, data);
     }
 
     if (name === "list_export_shares") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/shares`);
-      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+      return formatSuccess(requestId, name, data);
     }
 
     if (name === "get_system_health") {
-      const parsed = emptyArgsSchema.parse(args);
+      emptyArgsSchema.parse(args);
       const data = await client.get("/healthz");
-      return formatSuccess(parsed.request_id ?? buildRequestId(), name, data);
+      return formatSuccess(requestId, name, data);
     }
 
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
-        return handleRetryDimseStudy(parsed.request_id ?? buildRequestId(), parsed);
+        return handleRetryDimseStudy(requestId, parsed);
       }
 
       const parsed = writeArgsSchema.parse(args);
 
       if (name === "trigger_classification") {
-        return handleTriggerClassification(parsed.request_id ?? buildRequestId(), parsed);
+        return handleTriggerClassification(requestId, parsed);
       }
 
       if (name === "trigger_bids_convert") {
-        return handleTriggerBidsConvert(parsed.request_id ?? buildRequestId(), parsed);
+        return handleTriggerBidsConvert(requestId, parsed);
       }
 
       if (name === "trigger_export") {
-        return handleTriggerExport(parsed.request_id ?? buildRequestId(), parsed);
+        return handleTriggerExport(requestId, parsed);
       }
 
       if (name === "trigger_deface") {
-        return handleTriggerDeface(parsed.request_id ?? buildRequestId(), parsed);
+        return handleTriggerDeface(requestId, parsed);
       }
 
       if (name === "trigger_qc_check") {
-        return handleTriggerQcCheck(parsed.request_id ?? buildRequestId(), parsed);
+        return handleTriggerQcCheck(requestId, parsed);
       }
 
       if (name === "trigger_protocol_check") {
-        return handleTriggerProtocolCheck(parsed.request_id ?? buildRequestId(), parsed);
+        return handleTriggerProtocolCheck(requestId, parsed);
       }
 
       if (name === "trigger_phi_scan") {
-        return handleTriggerPhiScan(parsed.request_id ?? buildRequestId(), parsed);
+        return handleTriggerPhiScan(requestId, parsed);
       }
 
-      return denyWriteTool(parsed.request_id ?? buildRequestId(), name);
+      return denyWriteTool(requestId, name);
     }
 
-    return formatError(buildRequestId(), "VALIDATION_ERROR", `Unhandled tool: ${name}`, false);
+    return formatError(requestId, "VALIDATION_ERROR", `Unhandled tool: ${name}`, false, name);
   } catch (error) {
+    if (error instanceof DisallowedPathError) {
+      return formatError(requestId, "FORBIDDEN", error.message, false, name);
+    }
+
     if (error instanceof UpstreamHttpError) {
-      const requestId = buildRequestId();
       if (error.status === 404) {
         return formatError(requestId, "NOT_FOUND", error.body || "Resource not found", false, name);
       }
@@ -353,12 +464,162 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (error instanceof Error && error.name === "ZodError") {
-      return formatError(buildRequestId(), "VALIDATION_ERROR", error.message, false, name);
+      return formatError(requestId, "VALIDATION_ERROR", error.message, false, name);
     }
 
-    return formatError(buildRequestId(), "UPSTREAM_ERROR", error instanceof Error ? error.message : "Unknown error", false, name);
+    return formatError(requestId, "UPSTREAM_ERROR", error instanceof Error ? error.message : "Unknown error", false, name);
   }
-});
+}
+
+const knownToolNameSet = new Set<string>([...readToolNames, ...writeToolNames]);
+
+function isKnownToolName(name: string): name is ToolName {
+  return knownToolNameSet.has(name);
+}
+
+function isWriteToolName(name: string): name is (typeof writeToolNames)[number] {
+  return (writeToolNames as readonly string[]).includes(name);
+}
+
+function resolveRequestId(args: Record<string, unknown>): string {
+  const raw = args.request_id;
+  if (typeof raw !== "string") {
+    return buildRequestId();
+  }
+
+  const trimmed = raw.trim();
+  if (trimmed.length < 8 || trimmed.length > 128) {
+    return buildRequestId();
+  }
+
+  return trimmed;
+}
+
+function extractRequestedBy(args: Record<string, unknown>): string | undefined {
+  const raw = args.requested_by;
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.slice(0, 128);
+}
+
+function extractWriteTarget(name: ToolName, args: Record<string, unknown>): string | null {
+  if (name === "retry_dimse_study") {
+    return typeof args.study_instance_uid === "string" ? args.study_instance_uid : null;
+  }
+  return typeof args.study_uid === "string" ? args.study_uid : null;
+}
+
+function buildIdempotencyKey(requestId: string, tool: ToolName, target: string): string {
+  return `${requestId}|${tool}|${target}`;
+}
+
+function extractPayload(response: ToolResponse): ToolPayload | null {
+  const text = response.content[0]?.text;
+  if (typeof text !== "string") {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    return parsed as ToolPayload;
+  } catch {
+    return null;
+  }
+}
+
+function emitInvocationLog(log: InvocationLog): void {
+  console.error(JSON.stringify(log));
+}
+
+class InMemoryRateLimiter {
+  private readonly windowMs = 60_000;
+  private readonly counters = new Map<string, { windowStart: number; count: number }>();
+
+  consume(key: string, limit: number, now = Date.now()): { allowed: boolean; retryAfterSeconds: number } {
+    if (limit <= 0) {
+      return { allowed: false, retryAfterSeconds: Math.ceil(this.windowMs / 1000) };
+    }
+
+    const windowStart = now - (now % this.windowMs);
+    const current = this.counters.get(key);
+
+    if (!current || current.windowStart !== windowStart) {
+      this.counters.set(key, { windowStart, count: 1 });
+      this.prune(windowStart);
+      return { allowed: true, retryAfterSeconds: 0 };
+    }
+
+    if (current.count >= limit) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((windowStart + this.windowMs - now) / 1000));
+      return { allowed: false, retryAfterSeconds };
+    }
+
+    current.count += 1;
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  private prune(activeWindowStart: number): void {
+    if (this.counters.size <= 512) {
+      return;
+    }
+
+    for (const [key, value] of this.counters.entries()) {
+      if (value.windowStart !== activeWindowStart) {
+        this.counters.delete(key);
+      }
+    }
+  }
+}
+
+class InMemoryIdempotencyCache {
+  private readonly responses = new Map<string, { expiresAtMs: number; response: ToolResponse }>();
+
+  get(key: string, now = Date.now()): ToolResponse | null {
+    const entry = this.responses.get(key);
+    if (!entry) {
+      return null;
+    }
+    if (entry.expiresAtMs <= now) {
+      this.responses.delete(key);
+      return null;
+    }
+    return entry.response;
+  }
+
+  set(key: string, response: ToolResponse, ttlSeconds: number, now = Date.now()): void {
+    if (ttlSeconds <= 0) {
+      return;
+    }
+
+    this.responses.set(key, { response, expiresAtMs: now + ttlSeconds * 1000 });
+    this.prune(now);
+  }
+
+  private prune(now: number): void {
+    if (this.responses.size <= 2048) {
+      return;
+    }
+
+    for (const [key, entry] of this.responses.entries()) {
+      if (entry.expiresAtMs <= now) {
+        this.responses.delete(key);
+      }
+    }
+  }
+}
+
+const rateLimiter = new InMemoryRateLimiter();
+const writeIdempotencyCache = new InMemoryIdempotencyCache();
 
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
@@ -881,7 +1142,7 @@ function extractDimseRetryDetails(value: unknown): Required<DimseRetryDetails> {
   };
 }
 
-function formatSuccess(requestId: string, tool: ToolName, data: unknown) {
+function formatSuccess(requestId: string, tool: ToolName, data: unknown): ToolResponse {
   const payload: ToolPayload = {
     ok: true,
     request_id: requestId,
@@ -900,7 +1161,7 @@ function formatError(
   message: string,
   retryable: boolean,
   tool: ToolName | "unknown" = "unknown"
-) {
+): ToolResponse {
   const payload: ToolPayload = {
     ok: false,
     request_id: requestId,
@@ -919,7 +1180,7 @@ function formatError(
 }
 
 function buildRequestId() {
-  return `req_${Date.now()}`;
+  return `req_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
 }
 
 main().catch((error) => {

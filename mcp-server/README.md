@@ -32,6 +32,9 @@ Required:
 Optional:
 - `MCP_MODE=readonly|operator` (default `readonly`)
 - `MCP_ENABLE_WRITE_TOOLS=true|false` (default `false`)
+- `MCP_READ_RATE_LIMIT_PER_MINUTE` (default `240`)
+- `MCP_WRITE_RATE_LIMIT_PER_MINUTE` (default `60`)
+- `MCP_WRITE_IDEMPOTENCY_TTL_SECONDS` (default `900`)
 
 ## Run locally
 
@@ -64,3 +67,8 @@ npm run start
 - `retry_dimse_study` inspects `/api/dimse/retry/details` and then targets either `POST /api/dimse/retry/process/{studyUID}` or `POST /api/dimse/retry/replay/{studyUID}`.
 - `get_study_diagnostics` calls `GET /api/studies/{study_id}/diagnostics` for "why stuck" summary output.
 - All currently registered write tools execute with operator/feature-flag guards and endpoint precondition checks.
+- Security hardening includes:
+  - outbound API method/path allowlist in the MCP client;
+  - per-class (read/write) rate limiting;
+  - write idempotency dedupe cache keyed by `request_id + tool + target`;
+  - structured invocation audit logs with redacted arguments.
