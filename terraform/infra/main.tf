@@ -550,6 +550,14 @@ resource "google_bigquery_table" "audit_log" {
     field = "timestamp"
   }
 
+  schema = jsonencode([
+    { name = "timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "event",     type = "STRING",    mode = "NULLABLE" },
+    { name = "user",      type = "STRING",    mode = "NULLABLE" },
+    { name = "resource",  type = "STRING",    mode = "NULLABLE" },
+    { name = "payload",   type = "JSON",      mode = "NULLABLE" },
+  ])
+
   labels = {
     source = "aegis-api"
   }
@@ -689,10 +697,6 @@ resource "google_cloud_run_v2_service" "api" {
         }
       }
 
-      env {
-        name  = "PORT"
-        value = "8080"
-      }
       env {
         name  = "DB_HOST"
         value = google_sql_database_instance.aegis.private_ip_address
