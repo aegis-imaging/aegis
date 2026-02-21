@@ -66,11 +66,12 @@ check:
 
 smoke:
 	@if [ -z "$(BASE_URL)" ]; then \
-		echo "usage: make smoke BASE_URL=https://api-dev.aegisimaging.ai [ADMIN_HEADER='Header: value'] [PROJECT_SLUG=default]"; \
+		echo "usage: make smoke BASE_URL=https://api-dev.aegisimaging.ai [ADMIN_HEADER='Header: value'] [IAP_EMAIL=user@example.com] [PROJECT_SLUG=default]"; \
 		exit 1; \
 	fi
 	@CMD="python3 scripts/cloud_smoke_test.py --base-url $(BASE_URL) --project-slug $${PROJECT_SLUG:-default}"; \
 	if [ -n "$$ADMIN_HEADER" ]; then CMD="$$CMD --admin-header '$$ADMIN_HEADER'"; fi; \
+	if [ -n "$$IAP_EMAIL" ]; then CMD="$$CMD --iap-email '$$IAP_EMAIL'"; fi; \
 	eval "$$CMD"
 
 dimse-e2e:
