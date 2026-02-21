@@ -173,6 +173,12 @@ variable "sidecar_memory" {
   default     = "1Gi"
 }
 
+variable "sidecar_min_instances" {
+  description = "Minimum sidecar Cloud Run instances (0 = scale-to-zero, 1 = always-warm). Set to 1 to eliminate cold-start latency; adds ~$38/month per sidecar."
+  type        = number
+  default     = 0
+}
+
 variable "sidecar_max_instances" {
   description = "Maximum sidecar Cloud Run instances"
   type        = number
@@ -220,6 +226,16 @@ variable "db_password" {
   type        = string
   default     = ""
   sensitive   = true
+
+  validation {
+    condition     = var.db_password == "" || length(var.db_password) >= 16
+    error_message = "db_password must be empty (auto-generates a secure password) or at least 16 characters."
+  }
+
+  validation {
+    condition     = !contains(["changeme", "aegis", "postgres", "password", "admin", "secret", "letmein", "root", "12345", "qwerty", "test"], lower(var.db_password))
+    error_message = "db_password must not be a known-weak value. Leave it empty to auto-generate a secure password."
+  }
 }
 
 variable "db_password_secret_id" {
@@ -552,10 +568,10 @@ resource "google_bigquery_table" "audit_log" {
 
   schema = jsonencode([
     { name = "timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "event",     type = "STRING",    mode = "NULLABLE" },
-    { name = "user",      type = "STRING",    mode = "NULLABLE" },
-    { name = "resource",  type = "STRING",    mode = "NULLABLE" },
-    { name = "payload",   type = "JSON",      mode = "NULLABLE" },
+    { name = "event", type = "STRING", mode = "NULLABLE" },
+    { name = "user", type = "STRING", mode = "NULLABLE" },
+    { name = "resource", type = "STRING", mode = "NULLABLE" },
+    { name = "payload", type = "JSON", mode = "NULLABLE" },
   ])
 
   labels = {
@@ -622,7 +638,7 @@ resource "google_cloud_run_v2_service" "sidecars" {
     service_account = google_service_account.sidecars.email
 
     scaling {
-      min_instance_count = 0
+      min_instance_count = var.sidecar_min_instances
       max_instance_count = var.sidecar_max_instances
     }
 

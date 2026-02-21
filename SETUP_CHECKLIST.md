@@ -20,8 +20,7 @@ Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC a
 ### GitHub — use Organizations (one personal account is fine)
 
 - [ ] Create GitHub Organization `aegis-imaging` (free tier)
-- [ ] Transfer `msenjem/AEGIS` repo to `aegis-imaging/AEGIS` (Settings → Transfer ownership) — do this before adding collaborators
-- [ ] Your `msenjem` account stays as owner of the org
+- [x] Repo transferred to `aegis-imaging/aegis` — transfer complete
 
 ### P.O. Box (shared across all LLCs)
 
@@ -1011,11 +1010,11 @@ Both accept `{ name, email, organization, role, message }` and return `{ sent: t
 
 ### Organization setup
 
-Use GitHub Organizations to separate codebases by company. One personal GitHub account (`msenjem`) is fine — you own both orgs.
+Use GitHub Organizations to separate codebases by company.
 
 - [ ] Create GitHub Organization: `aegis-imaging`
-- [ ] Transfer repo: `msenjem/AEGIS` → `aegis-imaging/AEGIS` (Settings → Transfer ownership)
-- [ ] Update local remote: `git remote set-url origin git@github.com:aegis-imaging/AEGIS.git`
+- [x] Repo at `aegis-imaging/aegis` — transfer complete
+- [x] Local remote: `git@github.com:aegis-imaging/aegis.git`
 
 ### Repository setup
 

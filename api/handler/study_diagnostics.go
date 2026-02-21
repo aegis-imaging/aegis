@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // isValidUUID returns true if s is a well-formed UUID (8-4-4-4-12 hex).

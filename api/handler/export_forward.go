@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
-	"github.com/msenjem/aegis/api/routing"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/routing"
 )
 
 // TriggerExport manually triggers export forwarding for an approved study.

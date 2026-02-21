@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/handler"
-	"github.com/msenjem/aegis/api/model"
-	"github.com/msenjem/aegis/api/storage"
-	"github.com/msenjem/aegis/api/testutil"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/handler"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -118,6 +118,11 @@ func TestGetStudyDiagnostics_ReportsDimseSignals(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The sidecar health loop probes /healthz on startup; ignore those requests.
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		assert.Equal(t, "/ingest/retry/details", r.URL.Path)
 		assert.Equal(t, study.StudyInstanceUID, r.URL.Query().Get("study_instance_uid"))
 		w.Header().Set("Content-Type", "application/json")

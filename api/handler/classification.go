@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
-	"github.com/msenjem/aegis/api/routing"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/routing"
 )
 
 // classifyRequest is the payload sent to the Python classification service.

@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/msenjem/aegis/api/email"
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // ApproveStudy transitions a study to 'approved', making it eligible for export sharing.

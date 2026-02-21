@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // bidsConvertRequest is the payload sent to the Python BIDS service.

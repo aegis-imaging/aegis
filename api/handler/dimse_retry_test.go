@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/msenjem/aegis/api/config"
-	"github.com/msenjem/aegis/api/handler"
-	"github.com/msenjem/aegis/api/storage"
-	"github.com/msenjem/aegis/api/testutil"
+	"github.com/aegis-imaging/aegis/api/config"
+	"github.com/aegis-imaging/aegis/api/handler"
+	"github.com/aegis-imaging/aegis/api/storage"
+	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,6 +71,11 @@ func TestDimseRetryProxy_ProxiesGetWithQueryAndOperatorKey(t *testing.T) {
 	var gotStudy string
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The sidecar health loop probes /healthz on startup; ignore those requests.
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotOperatorKey = r.Header.Get("X-AEGIS-Operator-Key")
@@ -111,6 +116,11 @@ func TestDimseRetryProxy_ProxiesPostTargetedPath(t *testing.T) {
 	var gotQuery url.Values
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The sidecar health loop probes /healthz on startup; ignore those requests.
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotQuery = r.URL.Query()

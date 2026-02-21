@@ -3,7 +3,7 @@ package handler
 import (
 	"time"
 
-	"github.com/msenjem/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // shareStatus returns a stable share status label evaluated with UTC semantics.
