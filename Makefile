@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-python-scripts lint-frontend lint-mcp check logs test test-unit test-race smoke dimse-e2e
+.PHONY: up down clean build api lint lint-go lint-python lint-frontend check logs test test-unit test-race smoke dimse-e2e
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
