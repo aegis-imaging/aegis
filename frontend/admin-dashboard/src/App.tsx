@@ -63,6 +63,7 @@ type Study = {
   dicom_store: string
   instance_count: number
   deface_qa_score?: number
+  subject_id?: string
   created_at: string
   updated_at: string
 }
@@ -1298,6 +1299,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [noteSaving, setNoteSaving] = useState(false)
   const [noteSaved, setNoteSaved] = useState(false)
 
+  // Subject ID editor state
+  const [subjectEdit, setSubjectEdit] = useState(false)
+  const [subjectDraft, setSubjectDraft] = useState('')
+
   const loadData = useCallback(() => {
     setLoading(true)
     Promise.all([
@@ -1409,6 +1414,41 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             </span>
           </div>
         )}
+        <div className="study-detail__meta-item">
+          <strong>Subject</strong>
+          {subjectEdit ? (
+            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              <input
+                className="form-input"
+                style={{ width: 140, padding: '2px 6px', fontSize: '0.85em' }}
+                value={subjectDraft}
+                onChange={e => setSubjectDraft(e.target.value)}
+                placeholder="subject-id"
+                autoFocus
+              />
+              <button type="button" className="btn btn--sm" onClick={async () => {
+                await fetch(`/api/studies/${study.id}/subject`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subject_id: subjectDraft }),
+                })
+                setSubjectEdit(false)
+                loadData()
+              }}>Save</button>
+              <button type="button" className="btn btn--sm" onClick={() => setSubjectEdit(false)}>✕</button>
+            </span>
+          ) : (
+            <span>
+              {study.subject_id ? <code style={{ fontSize: '0.85em' }}>{study.subject_id}</code> : <em style={{ color: '#9ca3af' }}>unset</em>}
+              {isAdmin && (
+                <button type="button" className="btn btn--sm" style={{ marginLeft: 6 }}
+                  onClick={() => { setSubjectDraft(study.subject_id ?? ''); setSubjectEdit(true) }}>
+                  Edit
+                </button>
+              )}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Pipeline visualization */}
@@ -4506,6 +4546,7 @@ export function App() {
   const [filterSource,   setFilterSource]   = useState('')
   const [filterProject,  setFilterProject]  = useState('')
   const [filterSearch,   setFilterSearch]   = useState('')
+  const [filterSubject,  setFilterSubject]  = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo,   setFilterDateTo]   = useState('')
   const [page, setPage] = useState(0)
@@ -4553,6 +4594,7 @@ export function App() {
     if (filterSource)   params.set('source',     filterSource)
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
+    if (filterSubject)  params.set('subject_id', filterSubject)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
 
@@ -4570,7 +4612,7 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterDateFrom, filterDateTo, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterDateFrom, filterDateTo, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
@@ -4579,15 +4621,16 @@ export function App() {
   function setSourceF(v: string)   { setFilterSource(v);   setPage(0); setBulkSelected(new Set()) }
   function setProjectF(v: string)  { setFilterProject(v);  setPage(0); setBulkSelected(new Set()) }
   function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
+  function setSubjectF(v: string)   { setFilterSubject(v);   setPage(0); setBulkSelected(new Set()) }
   function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
   function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterDateFrom || filterDateTo)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterDateFrom || filterDateTo)
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
     setFilterSource(''); setFilterProject(''); setFilterSearch('')
-    setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
+    setFilterSubject(''); setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
     setBulkSelected(new Set())
   }
 
@@ -4904,6 +4947,13 @@ export function App() {
               <option value="">All projects</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            <input
+              className="filter-input filter-input--subject"
+              type="search"
+              placeholder="Subject ID…"
+              value={filterSubject}
+              onChange={e => setSubjectF(e.target.value)}
+            />
             <input
               type="date"
               className="filter-date"
