@@ -716,10 +716,12 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [emailSearch, setEmailSearch] = useState('')
   const [page, setPage] = useState(0)
   const [revoking, setRevoking] = useState<string | null>(null)
   const [expandedShare, setExpandedShare] = useState<string | null>(null)
   const [downloads, setDownloads] = useState<Record<string, DownloadRecord[]>>({})
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const fetchShares = useCallback(async (sf: string, pg: number) => {
     setLoading(true)
@@ -730,7 +732,9 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
       const res = await fetch(`/api/shares?${params}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setShares(data.shares ?? [])
+      const now = Date.now()
+      setNowMs(now)
+      setShares((data.shares ?? []).map((s: ShareRecord) => withShareExpiryAnchor(s as unknown as Share, now) as unknown as ShareRecord))
       setTotal(data.total ?? 0)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load shares')
@@ -740,6 +744,17 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   }, [])
 
   useEffect(() => { fetchShares(statusFilter, page) }, [fetchShares, statusFilter, page])
+
+  const hasLiveCountdown = shares.some(s => s.status === 'active')
+  useEffect(() => {
+    if (!hasLiveCountdown) return
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [hasLiveCountdown])
+
+  const visibleShares = emailSearch.trim()
+    ? shares.filter(s => s.recipient_email.toLowerCase().includes(emailSearch.toLowerCase()))
+    : shares
 
   const setStatusF = (v: string) => { setStatusFilter(v); setPage(0) }
 
@@ -796,6 +811,13 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
               {s || 'All'}
             </button>
           ))}
+          <input
+            type="text"
+            className="filter-search"
+            placeholder="Search by email…"
+            value={emailSearch}
+            onChange={e => setEmailSearch(e.target.value)}
+          />
         </div>
         <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
       </div>
@@ -823,12 +845,16 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Created By</th>
                 <th>Downloads</th>
                 <th>Expires</th>
+                <th>Note</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {shares.map(s => (
+              {visibleShares.map(s => {
+                const shareAsShare = s as unknown as Share
+                const remaining = s.status === 'active' ? shareRemainingSeconds(shareAsShare, nowMs) : null
+                return (
                 <>
                   <tr key={s.id} className="audit-row">
                     <td>{statusBadge(s)}</td>
@@ -845,7 +871,11 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                         {s.download_count ?? 0} {expandedShare === s.id ? '▲' : '▼'}
                       </button>
                     </td>
-                    <td className="audit-time">{fmtDate(s.expires_at)}</td>
+                    <td className="audit-time">
+                      {fmtDate(s.expires_at)}
+                      {remaining !== null && remaining > 0 && <div className="td-subtle">{fmtRemaining(remaining)}</div>}
+                    </td>
+                    <td className="audit-time td-note">{s.note || '—'}</td>
                     <td className="audit-time">{fmtDate(s.created_at)}</td>
                     <td>
                       {isAdmin && s.status === 'active' ? (
@@ -864,7 +894,7 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                   </tr>
                   {expandedShare === s.id && (
                     <tr key={`${s.id}-downloads`} className="audit-row audit-row--sub">
-                      <td colSpan={8} className="audit-sub-cell">
+                      <td colSpan={9} className="audit-sub-cell">
                         {!downloads[s.id] ? (
                           <span className="td-muted">Loading…</span>
                         ) : downloads[s.id].length === 0 ? (
@@ -891,7 +921,8 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                     </tr>
                   )}
                 </>
-              ))}
+                )
+              })}
             </tbody>
           </table>
           <div className="audit-pagination-bar audit-pagination-bar--bottom">
