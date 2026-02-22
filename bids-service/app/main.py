@@ -50,6 +50,7 @@ _backend = _select_backend()
 
 # ── Health check ─────────────────────────────────────────────────────────────
 
+@app.get("/health")
 @app.get("/healthz")
 def healthz() -> dict:
     if _backend is None:
