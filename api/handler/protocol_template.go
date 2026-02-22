@@ -122,3 +122,35 @@ func (s *Server) DeleteProtocolTemplate(w http.ResponseWriter, r *http.Request) 
 	model.CreateAuditEntry(r.Context(), s.db, "protocol_template.deleted", actorEmail(r), "protocol_template", id, clientIP(r), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// ExportProtocolTemplates returns all protocol templates for a project as a JSON download.
+// GET /api/projects/{projectID}/protocol-templates/export
+func (s *Server) ExportProtocolTemplates(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("projectID")
+	templates, err := model.ListProtocolTemplatesByProject(r.Context(), s.db, projectID)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to list templates")
+		return
+	}
+	if templates == nil {
+		templates = []model.ProtocolTemplate{}
+	}
+
+	payload := map[string]any{
+		"project_id": projectID,
+		"templates":  templates,
+		"count":      len(templates),
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to marshal templates")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="protocol-templates.json"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+	model.CreateAuditEntry(r.Context(), s.db, "protocol_template.exported", actorEmail(r), "project", projectID, clientIP(r),
+		map[string]any{"count": len(templates)})
+}
