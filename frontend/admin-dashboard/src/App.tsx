@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import './App.css'
+import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users' | 'api_keys'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'users' | 'api_keys'
 
 type APIKey = {
   id: string
@@ -63,6 +64,7 @@ type Study = {
   dicom_store: string
   instance_count: number
   deface_qa_score?: number
+  subject_id?: string
   created_at: string
   updated_at: string
 }
@@ -155,6 +157,8 @@ type Project = {
   slug: string
   description: string
   default_anon_profile_id?: string | null
+  retention_days?: number | null
+  archived?: boolean
   created_at: string
 }
 
@@ -188,6 +192,18 @@ type WebhookSubscription = {
   enabled: boolean
   created_at: string
   updated_at: string
+}
+
+type WebhookDelivery = {
+  id: string
+  subscription_id: string
+  event: string
+  url: string
+  attempt: number
+  status_code?: number | null
+  success: boolean
+  error_message?: string | null
+  delivered_at: string
 }
 
 type AdminUser = {
@@ -559,6 +575,15 @@ function AuditLog() {
   const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
+  type ActorSummary = { actor: string; action_count: number; last_seen_at: string; last_action: string }
+  const [actors, setActors] = useState<ActorSummary[] | null>(null)
+  const [showActors, setShowActors] = useState(false)
+  const loadActors = async () => {
+    if (actors) { setShowActors(v => !v); return }
+    const res = await fetch('/api/audit/actors')
+    if (res.ok) { const d = await res.json(); setActors(d.actors ?? []); setShowActors(true) }
+  }
+
   const fetchAudit = useCallback(async (actionF: string, actorF: string, pg: number) => {
     setLoading(true)
     setError(null)
@@ -600,6 +625,14 @@ function AuditLog() {
 
   const totalPages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
 
+  const auditCsvUrl = (() => {
+    const params = new URLSearchParams()
+    if (actionFilter) params.set('action', actionFilter)
+    if (actorFilter)  params.set('actor',  actorFilter)
+    const qs = params.toString()
+    return `/api/audit.csv${qs ? '?' + qs : ''}`
+  })()
+
   return (
     <div>
       <div className="audit-toolbar">
@@ -636,6 +669,33 @@ function AuditLog() {
           {actorFilter && <button type="button" className="btn-secondary" onClick={clearActorFilter}>Clear</button>}
         </div>
         <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, page)}>Refresh</button>
+        <a href={auditCsvUrl} download="audit.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
+      </div>
+
+      {/* Recent actors summary */}
+      <div style={{marginBottom:'8px'}}>
+        <button type="button" className="btn-secondary" onClick={loadActors} style={{fontSize:'0.8rem'}}>
+          {showActors ? '▲ Hide activity summary' : '▼ Recent admin activity'}
+        </button>
+        {showActors && actors && (
+          <div style={{marginTop:'6px',overflowX:'auto'}}>
+            <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'700px'}}>
+              <thead><tr><th>Actor</th><th>Actions (30d)</th><th>Last action</th><th>Last seen</th></tr></thead>
+              <tbody>
+                {actors.length === 0
+                  ? <tr><td colSpan={4} className="td-muted">No activity in last 30 days.</td></tr>
+                  : actors.map(a => (
+                    <tr key={a.actor}>
+                      <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{a.actor}</td>
+                      <td>{a.action_count}</td>
+                      <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{a.last_action}</td>
+                      <td className="td-date">{fmtDate(a.last_seen_at)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {loading && <div className="state-loading">Loading audit log…</div>}
@@ -742,6 +802,12 @@ type DownloadRecord = {
   accessed_at: string
 }
 
+type DownloadAnalytics = {
+  total_downloads: number
+  last_30_days: { date: string; count: number }[]
+  top_shares: { share_id: string; recipient_email: string; study_id: string; download_count: number }[]
+}
+
 function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [shares, setShares] = useState<ShareRecord[]>([])
   const [total, setTotal] = useState(0)
@@ -751,9 +817,18 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [emailSearch, setEmailSearch] = useState('')
   const [page, setPage] = useState(0)
   const [revoking, setRevoking] = useState<string | null>(null)
+  const [extending, setExtending] = useState<string | null>(null)
   const [expandedShare, setExpandedShare] = useState<string | null>(null)
   const [downloads, setDownloads] = useState<Record<string, DownloadRecord[]>>({})
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [analytics, setAnalytics] = useState<DownloadAnalytics | null>(null)
+
+  useEffect(() => {
+    fetch('/api/export-analytics')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAnalytics(d) })
+      .catch(() => {})
+  }, [])
 
   const fetchShares = useCallback(async (sf: string, pg: number) => {
     setLoading(true)
@@ -801,6 +876,27 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
       alert(err instanceof Error ? err.message : 'Failed to revoke share')
     } finally {
       setRevoking(null)
+    }
+  }
+
+  const extendShare = async (id: string) => {
+    const input = window.prompt('Extend by how many hours?', '48')
+    if (!input) return
+    const hours = parseInt(input, 10)
+    if (!hours || hours <= 0) { alert('Enter a positive number of hours.'); return }
+    setExtending(id)
+    try {
+      const res = await fetch(`/api/shares/${id}/extend`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extend_hours: hours }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      fetchShares(statusFilter, page)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to extend share')
+    } finally {
+      setExtending(null)
     }
   }
 
@@ -853,6 +949,24 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
         </div>
         <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
       </div>
+
+      {analytics && (
+        <div className="pipeline-stats-bar">
+          <span className="pipeline-stat">
+            <strong>{analytics.total_downloads}</strong> total downloads
+          </span>
+          {analytics.last_30_days.length > 0 && (
+            <span className="pipeline-stat">
+              <strong>{analytics.last_30_days.reduce((s, d) => s + d.count, 0)}</strong> in last 30 days
+            </span>
+          )}
+          {analytics.top_shares.length > 0 && (
+            <span className="pipeline-stat">
+              Top share: <strong>{analytics.top_shares[0].download_count}</strong> downloads ({analytics.top_shares[0].recipient_email})
+            </span>
+          )}
+        </div>
+      )}
 
       {loading && <div className="state-loading">Loading shares…</div>}
       {error && <div className="state-error">{error}</div>}
@@ -910,15 +1024,28 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                     <td className="audit-time td-note">{s.note || '—'}</td>
                     <td className="audit-time">{fmtDate(s.created_at)}</td>
                     <td>
-                      {isAdmin && s.status === 'active' ? (
-                        <button
-                          type="button"
-                          className="btn-secondary btn-danger-text"
-                          disabled={revoking === s.id}
-                          onClick={() => revokeShare(s.id)}
-                        >
-                          {revoking === s.id ? 'Revoking…' : 'Revoke'}
-                        </button>
+                      {isAdmin && (s.status === 'active' || s.status === 'expired') ? (
+                        <div className="actions-cell">
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={extending === s.id}
+                            onClick={() => extendShare(s.id)}
+                            title="Extend share expiry"
+                          >
+                            {extending === s.id ? 'Extending…' : 'Extend'}
+                          </button>
+                          {s.status === 'active' && (
+                            <button
+                              type="button"
+                              className="btn-secondary btn-danger-text"
+                              disabled={revoking === s.id}
+                              onClick={() => revokeShare(s.id)}
+                            >
+                              {revoking === s.id ? 'Revoking…' : 'Revoke'}
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <span className="audit-no-detail">—</span>
                       )}
@@ -1083,6 +1210,20 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
     if (newShare?.id === shareId) setNewShare(null)
   }
 
+  const handleExtend = async (shareId: string) => {
+    const input = window.prompt('Extend by how many hours?', '48')
+    if (!input) return
+    const hours = parseInt(input, 10)
+    if (!hours || hours <= 0) { alert('Enter a positive number of hours.'); return }
+    const res = await fetch(`/api/shares/${shareId}/extend`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extend_hours: hours }),
+    })
+    if (!res.ok) { alert('Failed to extend share.'); return }
+    fetchShares()
+  }
+
   const handleCopy = () => {
     if (newShare?.export_url) {
       navigator.clipboard.writeText(newShare.export_url)
@@ -1189,11 +1330,14 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
                   <td className={statusClass}>{shareStatus}</td>
                   <td className="td-muted">{fmtDate(s.created_at)}</td>
                   <td>
-                    {shareStatus === 'active' && (
-                      <button type="button" className="btn btn--revoke" onClick={() => handleRevoke(s.id)}>
-                        Revoke
-                      </button>
-                    )}
+                    {(shareStatus === 'active' || shareStatus === 'expired') ? (
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--share" onClick={() => handleExtend(s.id)} title="Extend share expiry">Extend</button>
+                        {shareStatus === 'active' && (
+                          <button type="button" className="btn btn--revoke" onClick={() => handleRevoke(s.id)}>Revoke</button>
+                        )}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               )
@@ -1285,6 +1429,27 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   // Viewer / review state
   const [viewOpen, setViewOpen] = useState(false)
   const [defaceOpen, setDefaceOpen] = useState(false)
+  const [tagsOpen, setTagsOpen] = useState(false)
+  const [dicomTags, setDicomTags] = useState<{ tag: string; keyword: string; vr: string; value: string }[] | null>(null)
+  const [tagsLoading, setTagsLoading] = useState(false)
+
+  const openDicomTags = async () => {
+    if (tagsOpen) { setTagsOpen(false); return }
+    if (!study) return
+    setTagsOpen(true)
+    if (dicomTags) return
+    setTagsLoading(true)
+    try {
+      const res = await fetch(`/api/studies/${study.study_instance_uid}/dicom-tags`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setDicomTags(data.tags ?? [])
+    } catch {
+      setDicomTags([])
+    } finally {
+      setTagsLoading(false)
+    }
+  }
 
   // Share form state
   const [shareEmail, setShareEmail] = useState('')
@@ -1297,6 +1462,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [noteText, setNoteText] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
   const [noteSaved, setNoteSaved] = useState(false)
+
+  // Subject ID editor state
+  const [subjectEdit, setSubjectEdit] = useState(false)
+  const [subjectDraft, setSubjectDraft] = useState('')
 
   const loadData = useCallback(() => {
     setLoading(true)
@@ -1347,8 +1516,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     { label: 'Export', required: study.export_required, status: study.export_status, step: 'export' },
   ]
 
-  const canApprove = !['approved', 'rejected'].includes(study.status)
-  const canReject = study.status !== 'rejected'
+  const canApprove = !['approved', 'rejected', 'expired'].includes(study.status)
+  const canReject = !['rejected', 'expired'].includes(study.status)
+  const canReactivate = study.status === 'expired'
   const canShare = study.status === 'approved'
   const canReviewDeface = study.defacing_required && ['defaced', 'approved'].includes(study.status)
   const canPhiScan = study.phi_scan_required && study.phi_scan_status === 'pending'
@@ -1409,6 +1579,41 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             </span>
           </div>
         )}
+        <div className="study-detail__meta-item">
+          <strong>Subject</strong>
+          {subjectEdit ? (
+            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              <input
+                className="form-input"
+                style={{ width: 140, padding: '2px 6px', fontSize: '0.85em' }}
+                value={subjectDraft}
+                onChange={e => setSubjectDraft(e.target.value)}
+                placeholder="subject-id"
+                autoFocus
+              />
+              <button type="button" className="btn btn--sm" onClick={async () => {
+                await fetch(`/api/studies/${study.id}/subject`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subject_id: subjectDraft }),
+                })
+                setSubjectEdit(false)
+                loadData()
+              }}>Save</button>
+              <button type="button" className="btn btn--sm" onClick={() => setSubjectEdit(false)}>✕</button>
+            </span>
+          ) : (
+            <span>
+              {study.subject_id ? <code style={{ fontSize: '0.85em' }}>{study.subject_id}</code> : <em style={{ color: '#9ca3af' }}>unset</em>}
+              {isAdmin && (
+                <button type="button" className="btn btn--sm" style={{ marginLeft: 6 }}
+                  onClick={() => { setSubjectDraft(study.subject_id ?? ''); setSubjectEdit(true) }}>
+                  Edit
+                </button>
+              )}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Pipeline visualization */}
@@ -1430,6 +1635,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="study-detail__actions">
           {isAdmin && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
           {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={() => { if (confirm('Reject this study?')) doAction(`/api/studies/${study.id}/reject`) }}>Reject</button>}
+          {isAdmin && canReactivate && <button type="button" className="btn btn--approve" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
           {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
           {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
           {isAdmin && canProtocolCheck && <button type="button" className="btn btn--protocol-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/protocol-check`)}>Check Protocol</button>}
@@ -1442,8 +1648,32 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           )}
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
           <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View in OHIF'}</button>
+          <button type="button" className="btn btn--secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
         </div>
       </div>
+
+      {/* DICOM tag inspection panel */}
+      {tagsOpen && (
+        <div className="dicom-tags-panel">
+          {tagsLoading && <div className="state-loading">Loading tags…</div>}
+          {!tagsLoading && dicomTags && dicomTags.length === 0 && <div className="state-empty">No tags found.</div>}
+          {!tagsLoading && dicomTags && dicomTags.length > 0 && (
+            <table className="audit-table dicom-tags-table">
+              <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Value</th></tr></thead>
+              <tbody>
+                {dicomTags.map(t => (
+                  <tr key={t.tag}>
+                    <td><code>{t.tag}</code></td>
+                    <td>{t.keyword}</td>
+                    <td><code>{t.vr}</code></td>
+                    <td className="dicom-tag-value">{t.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* Inline viewer */}
       {viewOpen && <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />}
@@ -1730,7 +1960,23 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
 
 // ── Study Row ─────────────────────────────────────────────────────────────────
 
-function StudyRow({ study, onAction, onSelect, isAdmin, checked, onToggle }: { study: Study; onAction: () => void; onSelect: () => void; isAdmin: boolean; checked: boolean; onToggle: () => void }) {
+function StudyRow({
+  study,
+  onAction,
+  onSelect,
+  onAskAgent,
+  isAdmin,
+  checked,
+  onToggle
+}: {
+  study: Study
+  onAction: () => void
+  onSelect: () => void
+  onAskAgent: () => void
+  isAdmin: boolean
+  checked: boolean
+  onToggle: () => void
+}) {
   const [shareOpen,  setShareOpen]  = useState(false)
   const [viewOpen,   setViewOpen]   = useState(false)
   const [defaceOpen, setDefaceOpen] = useState(false)
@@ -1746,8 +1992,9 @@ function StudyRow({ study, onAction, onSelect, isAdmin, checked, onToggle }: { s
     onAction()
   }
 
-  const canApprove    = !['approved', 'rejected'].includes(study.status)
-  const canReject     = study.status !== 'rejected'
+  const canApprove    = !['approved', 'rejected', 'expired'].includes(study.status)
+  const canReject     = !['rejected', 'expired'].includes(study.status)
+  const canReactivate = study.status === 'expired'
   const canShare      = study.status === 'approved'
   // Show "Review defacing" for head studies that have been defaced (raw files preserved).
   const canReviewDeface = study.defacing_required &&
@@ -1813,6 +2060,9 @@ function StudyRow({ study, onAction, onSelect, isAdmin, checked, onToggle }: { s
             {isAdmin && canReject && (
               <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>
             )}
+            {isAdmin && canReactivate && (
+              <button type="button" className="btn btn--approve" onClick={async () => { if (confirm('Reactivate this expired study?')) { await fetch(`/api/studies/${study.id}/reactivate`, { method: 'POST' }); onAction() } }} title="Restore expired study to approved">Reactivate</button>
+            )}
             {isAdmin && canShare && (
               <button type="button" className="btn btn--share" onClick={() => setShareOpen(o => !o)}>
                 {shareOpen ? 'Close' : 'Share'}
@@ -1849,6 +2099,9 @@ function StudyRow({ study, onAction, onSelect, isAdmin, checked, onToggle }: { s
             )}
             <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>
               {viewOpen ? 'Close viewer' : 'View'}
+            </button>
+            <button type="button" className="btn btn--agent" onClick={onAskAgent}>
+              Ask agent
             </button>
           </div>
         </td>
@@ -2638,7 +2891,19 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
               Studies are checked against matching templates when protocol compliance is required.
             </div>
           </div>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
+          <div className="actions-cell">
+            {projects.length > 0 && (
+              <a
+                className="btn btn--secondary"
+                href={`/api/projects/${formProject || projects[0]?.id}/protocol-templates/export`}
+                download="protocol-templates.json"
+                title="Download all templates for selected project as JSON"
+              >
+                Export JSON
+              </a>
+            )}
+            {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
+          </div>
         </div>
 
         {isAdmin && showForm && (
@@ -2785,6 +3050,24 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
   const [whSaving, setWhSaving]                   = useState(false)
   const [whFormError, setWhFormError]             = useState<string | null>(null)
   const [whEditId, setWhEditId]                   = useState<string | null>(null)
+
+  // Webhook delivery log state
+  const [deliveryWhId, setDeliveryWhId]           = useState<string | null>(null)
+  const [deliveries, setDeliveries]               = useState<WebhookDelivery[]>([])
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false)
+
+  const showDeliveries = async (id: string) => {
+    if (deliveryWhId === id) { setDeliveryWhId(null); return }
+    setDeliveryWhId(id)
+    setDeliveriesLoading(true)
+    try {
+      const res = await fetch(`/api/webhook-subscriptions/${id}/deliveries`)
+      const data = res.ok ? await res.json() : { deliveries: [] }
+      setDeliveries(data.deliveries ?? [])
+    } finally {
+      setDeliveriesLoading(false)
+    }
+  }
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -3063,26 +3346,74 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
             </thead>
             <tbody>
               {webhooks.map(wh => (
-                <tr key={wh.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
-                  <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
-                  <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="routing-desc">all</span>}</td>
-                  <td>
-                    <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
-                      {wh.enabled ? 'enabled' : 'disabled'}
-                    </span>
-                  </td>
-                  <td>
-                    {isAdmin && (
+                <>
+                  <tr key={wh.id}>
+                    <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
+                    <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
+                    <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="routing-desc">all</span>}</td>
+                    <td>
+                      <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
+                        {wh.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </td>
+                    <td>
                       <div className="actions-cell">
-                        <button type="button" className="btn btn--action"
-                          onClick={() => openWebhookEdit(wh)}>Edit</button>
-                        <button type="button" className="btn btn--revoke"
-                          onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
+                        <button type="button" className="btn-secondary"
+                          onClick={() => showDeliveries(wh.id)}
+                          title="View delivery log">
+                          {deliveryWhId === wh.id ? 'Hide Log' : 'Log'}
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <button type="button" className="btn btn--action"
+                              onClick={() => openWebhookEdit(wh)}>Edit</button>
+                            <button type="button" className="btn btn--revoke"
+                              onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
+                          </>
+                        )}
                       </div>
-                    )}
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
+                  {deliveryWhId === wh.id && (
+                    <tr key={`${wh.id}-deliveries`}>
+                      <td colSpan={5} className="audit-sub-cell">
+                        {deliveriesLoading ? (
+                          <span className="td-muted">Loading…</span>
+                        ) : deliveries.length === 0 ? (
+                          <span className="td-muted">No deliveries recorded yet.</span>
+                        ) : (
+                          <table className="audit-table audit-table--inner">
+                            <thead>
+                              <tr>
+                                <th>Event</th>
+                                <th>Attempt</th>
+                                <th>Status</th>
+                                <th>Result</th>
+                                <th>Time</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {deliveries.map(d => (
+                                <tr key={d.id}>
+                                  <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{d.event}</td>
+                                  <td>{d.attempt}</td>
+                                  <td>{d.status_code ?? '—'}</td>
+                                  <td>
+                                    <span className={`badge ${d.success ? 'badge--enabled' : 'badge--rejected'}`}>
+                                      {d.success ? 'ok' : 'failed'}
+                                    </span>
+                                    {d.error_message && <span className="td-subtle"> {d.error_message}</span>}
+                                  </td>
+                                  <td className="td-date">{fmtDate(d.delivered_at)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>
@@ -3108,6 +3439,7 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [selectedInst, setSelectedInst]   = useState<Institution | null>(null)
   const [instProjects, setInstProjects]   = useState<InstitutionProject[]>([])
   const [projLoading, setProjLoading]     = useState(false)
+  const [instStats, setInstStats]         = useState<{ total_studies: number; by_status: Record<string, number>; by_modality: Record<string, number>; last_study_at?: string } | null>(null)
 
   // Form
   const [form, setForm]               = useState<Omit<Institution, 'id' | 'created_at'>>(EMPTY_INSTITUTION)
@@ -3142,9 +3474,14 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
   const fetchInstProjects = useCallback(async (instId: string) => {
     setProjLoading(true)
     try {
-      const res = await fetch(`/api/institutions/${instId}/projects`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setInstProjects(await res.json())
+      const [projRes, statsRes] = await Promise.all([
+        fetch(`/api/institutions/${instId}/projects`),
+        fetch(`/api/institutions/${instId}/stats`),
+      ])
+      if (projRes.ok) setInstProjects(await projRes.json())
+      else setInstProjects([])
+      if (statsRes.ok) setInstStats(await statsRes.json())
+      else setInstStats(null)
     } catch {
       setInstProjects([])
     } finally {
@@ -3371,6 +3708,24 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
         <div className="inst-projects-panel">
           <h3>Projects — {selectedInst.name}</h3>
 
+          {/* Institution stats */}
+          {instStats && (
+            <div className="pipeline-stats-bar">
+              <span className="pipeline-stat"><strong>{instStats.total_studies}</strong> total studies</span>
+              {Object.entries(instStats.by_status).map(([k, v]) => (
+                <span key={k} className="pipeline-stat"><strong>{v}</strong> {k}</span>
+              ))}
+              {Object.keys(instStats.by_modality).length > 0 && (
+                <span className="pipeline-stat">
+                  {Object.entries(instStats.by_modality).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                </span>
+              )}
+              {instStats.last_study_at && (
+                <span className="pipeline-stat">Last study: {new Date(instStats.last_study_at).toLocaleDateString()}</span>
+              )}
+            </div>
+          )}
+
           {/* Link form */}
           {isAdmin && (
             <>
@@ -3462,6 +3817,15 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [phiSaving, setPhiSaving]       = useState(false)
   const [phiError, setPhiError]         = useState<string | null>(null)
 
+  // Retention policy editor state
+  const [retentionProjectId, setRetentionProjectId]   = useState<string | null>(null)
+  const [retentionDraft, setRetentionDraft]           = useState<string>('')
+  const [retentionSaving, setRetentionSaving]         = useState(false)
+  const [retentionError, setRetentionError]           = useState<string | null>(null)
+
+  // Archive/restore state
+  const [archiving, setArchiving] = useState<string | null>(null)
+
   async function openPhiConfig(projectId: string) {
     setPhiProjectId(projectId)
     setPhiError(null)
@@ -3489,6 +3853,52 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
       setPhiError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setPhiSaving(false)
+    }
+  }
+
+  function openRetention(p: Project) {
+    setRetentionProjectId(p.id)
+    setRetentionDraft(p.retention_days != null ? String(p.retention_days) : '')
+    setRetentionError(null)
+  }
+
+  async function saveRetention() {
+    if (!retentionProjectId) return
+    const days = retentionDraft.trim() === '' ? null : parseInt(retentionDraft, 10)
+    if (days !== null && (isNaN(days) || days <= 0)) {
+      setRetentionError('Must be a positive integer or leave blank to disable')
+      return
+    }
+    setRetentionSaving(true)
+    setRetentionError(null)
+    try {
+      const res = await fetch(`/api/projects/${retentionProjectId}/retention`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retention_days: days }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setRetentionProjectId(null)
+      fetchProjects()
+    } catch (err) {
+      setRetentionError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setRetentionSaving(false)
+    }
+  }
+
+  const toggleArchive = async (p: Project) => {
+    const action = p.archived ? 'restore' : 'archive'
+    if (!confirm(`${p.archived ? 'Restore' : 'Archive'} project "${p.name}"?`)) return
+    setArchiving(p.id)
+    try {
+      const res = await fetch(`/api/projects/${p.id}/${action}`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      fetchProjects()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : `Failed to ${action} project`)
+    } finally {
+      setArchiving(null)
     }
   }
 
@@ -3616,6 +4026,32 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
 
+        {/* Inline retention policy editor */}
+        {retentionProjectId && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>Retention Policy — {projects.find(p => p.id === retentionProjectId)?.name}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Approved studies older than this threshold are automatically marked as expired.
+              Leave blank to keep studies indefinitely.
+            </div>
+            {retentionError && <div className="form-error">{retentionError}</div>}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Retention period (days, blank = unlimited)
+                <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 90"
+                  value={retentionDraft}
+                  onChange={e => setRetentionDraft(e.target.value)} />
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveRetention} disabled={retentionSaving}>
+                {retentionSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setRetentionProjectId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {projects.length === 0 && !showForm ? (
           <div className="state-empty">No projects yet.</div>
         ) : projects.length > 0 && (
@@ -3625,6 +4061,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Project</th>
                 <th>Slug</th>
                 <th>Default profile</th>
+                <th>Retention</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -3633,7 +4070,10 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
               {projects.map(p => (
                 <tr key={p.id}>
                   <td>
-                    <div className="routing-name">{p.name}</div>
+                    <div className="routing-name">
+                      {p.name}
+                      {p.archived && <span className="badge badge--neutral" style={{marginLeft:'6px'}}>archived</span>}
+                    </div>
                     {p.description && <div className="routing-desc">{p.description}</div>}
                   </td>
                   <td><code className="inst-slug">{p.slug}</code></td>
@@ -3641,6 +4081,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {p.default_anon_profile_id
                       ? <span className="badge badge--enabled">profile set</span>
                       : <span className="routing-desc">none</span>}
+                  </td>
+                  <td>
+                    {p.retention_days != null
+                      ? <span className="badge badge--status">{p.retention_days}d</span>
+                      : <span className="routing-desc">unlimited</span>}
                   </td>
                   <td className="td-date">{fmtDate(p.created_at)}</td>
                   <td>
@@ -3663,9 +4108,185 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => openPhiConfig(p.id)}>
                           PHI Config
                         </button>
+                        <button type="button" className="btn btn--action"
+                          title="Set study retention period for this project"
+                          onClick={() => openRetention(p)}>
+                          Retention
+                        </button>
+                        <button type="button"
+                          className={p.archived ? 'btn btn--approve' : 'btn btn--action'}
+                          title={p.archived ? 'Restore project' : 'Archive project'}
+                          disabled={archiving === p.id}
+                          onClick={() => toggleArchive(p)}>
+                          {archiving === p.id ? '…' : p.archived ? 'Restore' : 'Archive'}
+                        </button>
                       </div>
                     )}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Federation Panel ──────────────────────────────────────────────────────────
+
+type FederationPeer = {
+  id: string
+  name: string
+  slug: string
+  api_url: string
+  enabled: boolean
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+const EMPTY_PEER: Omit<FederationPeer, 'id' | 'created_at' | 'updated_at'> = {
+  name: '', slug: '', api_url: '', enabled: true, notes: '',
+}
+
+function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
+  const [peers, setPeers]         = useState<FederationPeer[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+  const [form, setForm]           = useState<Omit<FederationPeer, 'id' | 'created_at' | 'updated_at'>>(EMPTY_PEER)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const fetchPeers = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/federation-peers')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setPeers(await res.json())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchPeers() }, [fetchPeers])
+
+  function openNew() { setForm(EMPTY_PEER); setEditingId(null); setFormError(null); setShowForm(true) }
+  function openEdit(p: FederationPeer) {
+    setForm({ name: p.name, slug: p.slug, api_url: p.api_url, enabled: p.enabled, notes: p.notes })
+    setEditingId(p.id); setFormError(null); setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.name) { setFormError('Name is required'); return }
+    if (!form.api_url) { setFormError('API URL is required'); return }
+    setSaving(true); setFormError(null)
+    try {
+      const url = editingId ? `/api/federation-peers/${editingId}` : '/api/federation-peers'
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false); setEditingId(null); fetchPeers()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally { setSaving(false) }
+  }
+
+  async function deletePeer(p: FederationPeer) {
+    if (!confirm(`Delete federation peer "${p.name}"?`)) return
+    await fetch(`/api/federation-peers/${p.id}`, { method: 'DELETE' })
+    fetchPeers()
+  }
+
+  if (loading) return <div className="state-loading">Loading…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Federation Peers</div>
+            <div className="routing-section-sub">
+              Trusted remote AEGIS instances for future cross-tenant study federation.
+              No data flows between peers yet — this is a configuration stub.
+            </div>
+          </div>
+          <div className="actions-cell">
+            <button type="button" className="btn-refresh" onClick={fetchPeers}>Refresh</button>
+            {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ Add peer</button>}
+          </div>
+        </div>
+
+        {isAdmin && showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit peer' : 'New federation peer'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Name *"
+                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <input className="form-input" placeholder="Slug (auto-generated)"
+                value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
+              <input className="form-input form-input--wide" placeholder="API URL * (e.g. https://peer.example.com)"
+                value={form.api_url} onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))} />
+              <input className="form-input form-input--wide" placeholder="Notes"
+                value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            {editingId && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem', marginTop: '8px' }}>
+                <input type="checkbox" checked={form.enabled}
+                  onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
+                Enabled
+              </label>
+            )}
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add peer'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {peers.length === 0 && !showForm ? (
+          <div className="state-empty">No federation peers configured.</div>
+        ) : peers.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Peer</th>
+                <th>Slug</th>
+                <th>API URL</th>
+                <th>Status</th>
+                <th>Added</th>
+                {isAdmin && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {peers.map(p => (
+                <tr key={p.id}>
+                  <td>
+                    <div className="routing-name">{p.name}</div>
+                    {p.notes && <div className="routing-desc">{p.notes}</div>}
+                  </td>
+                  <td><code className="inst-slug">{p.slug}</code></td>
+                  <td><a href={p.api_url} target="_blank" rel="noopener noreferrer">{p.api_url}</a></td>
+                  <td>
+                    {p.enabled
+                      ? <span className="badge badge--enabled">enabled</span>
+                      : <span className="badge badge--disabled">disabled</span>}
+                  </td>
+                  <td className="td-date">{fmtDate(p.created_at)}</td>
+                  {isAdmin && (
+                    <td>
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="btn btn--delete" onClick={() => deletePeer(p)}>Delete</button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -4455,6 +5076,7 @@ export function App() {
   const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null)
+  const [agentPrefill, setAgentPrefill] = useState<{ studyId: string; studyUid: string } | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
   const [stuckCount, setStuckCount] = useState(0)
@@ -4506,6 +5128,7 @@ export function App() {
   const [filterSource,   setFilterSource]   = useState('')
   const [filterProject,  setFilterProject]  = useState('')
   const [filterSearch,   setFilterSearch]   = useState('')
+  const [filterSubject,  setFilterSubject]  = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo,   setFilterDateTo]   = useState('')
   const [page, setPage] = useState(0)
@@ -4531,7 +5154,7 @@ export function App() {
 
   // Dashboard pipeline stats
   type PipelineStats = {
-    study_counts: { received: number; defacing: number; clean: number; defaced: number; approved: number; rejected: number; total: number }
+    study_counts: { received: number; defacing: number; clean: number; defaced: number; approved: number; rejected: number; expired: number; total: number }
     active_shares: number
   }
   const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null)
@@ -4541,6 +5164,23 @@ export function App() {
     }).catch(() => {})
   }, [])
   useEffect(() => { fetchStats() }, [fetchStats, refreshTick])
+
+  type BreakdownRow = { modality: string; body_part: string; count: number }
+  const [breakdown, setBreakdown] = useState<BreakdownRow[] | null>(null)
+  const [showBreakdown, setShowBreakdown] = useState(false)
+  const loadBreakdown = async () => {
+    if (breakdown) { setShowBreakdown(v => !v); return }
+    const res = await fetch('/api/stats/breakdown')
+    if (res.ok) { const d = await res.json(); setBreakdown(d.breakdown ?? []); setShowBreakdown(true) }
+  }
+
+  type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number }
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
+  const loadStorageStats = async () => {
+    const res = await fetch('/api/storage/stats')
+    if (res.ok) setStorageStats(await res.json())
+  }
+  useEffect(() => { loadStorageStats() }, [])
 
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
@@ -4553,6 +5193,7 @@ export function App() {
     if (filterSource)   params.set('source',     filterSource)
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
+    if (filterSubject)  params.set('subject_id', filterSubject)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
 
@@ -4570,7 +5211,7 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterDateFrom, filterDateTo, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterDateFrom, filterDateTo, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
@@ -4579,15 +5220,16 @@ export function App() {
   function setSourceF(v: string)   { setFilterSource(v);   setPage(0); setBulkSelected(new Set()) }
   function setProjectF(v: string)  { setFilterProject(v);  setPage(0); setBulkSelected(new Set()) }
   function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
+  function setSubjectF(v: string)   { setFilterSubject(v);   setPage(0); setBulkSelected(new Set()) }
   function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
   function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterDateFrom || filterDateTo)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterDateFrom || filterDateTo)
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
     setFilterSource(''); setFilterProject(''); setFilterSearch('')
-    setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
+    setFilterSubject(''); setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
     setBulkSelected(new Set())
   }
 
@@ -4737,6 +5379,13 @@ export function App() {
         </button>
         <button
           type="button"
+          className={`tab-btn${tab === 'agent' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('agent')}
+        >
+          Agent
+        </button>
+        <button
+          type="button"
           className={`tab-btn${tab === 'shares' ? ' tab-btn--active' : ''}`}
           onClick={() => setTab('shares')}
         >
@@ -4793,6 +5442,13 @@ export function App() {
         >
           Projects
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'federation' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('federation')}
+        >
+          Federation
+        </button>
         {isAdmin && (
           <button
             type="button"
@@ -4822,6 +5478,12 @@ export function App() {
           isAdmin={isAdmin}
         />
       )}
+      {tab === 'agent' && (
+        <AgentPanel
+          prefillStudyId={agentPrefill?.studyId}
+          prefillStudyUid={agentPrefill?.studyUid}
+        />
+      )}
       {tab === 'studies' && !selectedStudyId && (
         <>
           {/* Pipeline stats banner */}
@@ -4835,6 +5497,7 @@ export function App() {
                   ['defaced',  'Defaced',   pipelineStats.study_counts.defaced],
                   ['approved', 'Approved',  pipelineStats.study_counts.approved],
                   ['rejected', 'Rejected',  pipelineStats.study_counts.rejected],
+                  ['expired',  'Expired',   pipelineStats.study_counts.expired ?? 0],
                 ] as [string, string, number][]
               ).map(([status, label, count]) => (
                 <button
@@ -4852,8 +5515,41 @@ export function App() {
               <span className="stats-banner__shares" title="Active export shares">
                 {pipelineStats.active_shares} active {pipelineStats.active_shares === 1 ? 'share' : 'shares'}
               </span>
+              {storageStats && (
+                <>
+                  <span className="stats-banner__sep" />
+                  <span className="stats-banner__shares" title="DICOM file counts (raw / clean)">
+                    {storageStats.total_file_count} files ({storageStats.raw_file_count} raw, {storageStats.clean_file_count} clean)
+                  </span>
+                </>
+              )}
             </div>
           )}
+
+          {/* Breakdown stats toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
+              {showBreakdown ? '▲ Hide breakdown' : '▼ Modality / body part breakdown'}
+            </button>
+            {showBreakdown && breakdown && (
+              <div style={{marginTop:'6px',overflowX:'auto'}}>
+                <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
+                  <thead><tr><th>Modality</th><th>Body part</th><th>Count</th></tr></thead>
+                  <tbody>
+                    {breakdown.length === 0
+                      ? <tr><td colSpan={3} className="td-muted">No studies yet.</td></tr>
+                      : breakdown.map((r, i) => (
+                        <tr key={i}>
+                          <td>{r.modality || <span className="td-muted">—</span>}</td>
+                          <td>{r.body_part || <span className="td-muted">—</span>}</td>
+                          <td>{r.count}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           {/* Filter bar */}
           <div className="filter-bar">
@@ -4872,6 +5568,7 @@ export function App() {
               <option value="defaced">Defaced</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
+              <option value="expired">Expired</option>
             </select>
             <select className="filter-select" title="Filter by modality" value={filterModality} onChange={e => setModalityF(e.target.value)}>
               <option value="">All modalities</option>
@@ -4904,6 +5601,13 @@ export function App() {
               <option value="">All projects</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            <input
+              className="filter-input filter-input--subject"
+              type="search"
+              placeholder="Subject ID…"
+              value={filterSubject}
+              onChange={e => setSubjectF(e.target.value)}
+            />
             <input
               type="date"
               className="filter-date"
@@ -4992,6 +5696,10 @@ export function App() {
                       study={study}
                       onAction={() => setRefreshTick(t => t + 1)}
                       onSelect={() => setSelectedStudyId(study.id)}
+                      onAskAgent={() => {
+                        setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
+                        setTab('agent')
+                      }}
                       isAdmin={isAdmin}
                       checked={bulkSelected.has(study.id)}
                       onToggle={() => setBulkSelected(prev => {
@@ -5060,6 +5768,9 @@ export function App() {
 
       {/* Projects tab */}
       {tab === 'projects' && <ProjectsPanel isAdmin={isAdmin} />}
+
+      {/* Federation tab */}
+      {tab === 'federation' && <FederationPanel isAdmin={isAdmin} />}
 
       {/* Users tab — admin only */}
       {tab === 'users' && isAdmin && <UsersPanel />}

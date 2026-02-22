@@ -34,3 +34,32 @@ func (s *Server) GetStats(w http.ResponseWriter, r *http.Request) {
 		GeneratedAt:  time.Now().UTC(),
 	})
 }
+
+// GetBreakdownStats returns study counts grouped by modality and body part.
+// GET /api/stats/breakdown
+func (s *Server) GetBreakdownStats(w http.ResponseWriter, r *http.Request) {
+	rows, err := model.GetStudyBreakdown(r.Context(), s.db)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to query breakdown stats")
+		return
+	}
+	if rows == nil {
+		rows = []model.BreakdownRow{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"breakdown":    rows,
+		"generated_at": time.Now().UTC(),
+	})
+}
+
+// GetStorageStats returns aggregate DICOM file counts derived from the studies table.
+// GET /api/storage/stats
+func (s *Server) GetStorageStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := model.GetStorageStats(r.Context(), s.db)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to query storage stats")
+		return
+	}
+	stats.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
+	s.writeJSON(w, http.StatusOK, stats)
+}

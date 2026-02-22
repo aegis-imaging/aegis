@@ -62,6 +62,18 @@ func (s *Server) CreateInstitution(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusCreated, inst)
 }
 
+// GetInstitutionStats returns aggregate study statistics for one institution.
+// GET /api/institutions/{id}/stats
+func (s *Server) GetInstitutionStats(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	stats, err := model.GetInstitutionStats(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to load institution stats")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, stats)
+}
+
 func (s *Server) GetInstitution(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	inst, err := model.GetInstitutionByID(r.Context(), s.db, id)

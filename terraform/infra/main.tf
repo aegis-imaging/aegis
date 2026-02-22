@@ -1367,8 +1367,8 @@ resource "google_monitoring_alert_policy" "api_latency" {
         count = 1
       }
       aggregations {
-        alignment_period     = "60s"
-        per_series_aligner   = "ALIGN_PERCENTILE_99"
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_PERCENTILE_99"
       }
     }
   }
@@ -1456,11 +1456,11 @@ resource "google_monitoring_alert_policy" "cloudsql_connections" {
 # --- Cloud Monitoring Dashboard ---
 
 resource "google_monitoring_dashboard" "aegis" {
-  count          = var.enable_monitoring_alerts ? 1 : 0
+  count = var.enable_monitoring_alerts ? 1 : 0
   dashboard_json = templatefile("${path.module}/monitoring_dashboard.json", {
-    project_id   = var.project_id
-    api_service  = google_cloud_run_v2_service.api.name
-    environment  = var.environment
+    project_id  = var.project_id
+    api_service = google_cloud_run_v2_service.api.name
+    environment = var.environment
   })
 }
 

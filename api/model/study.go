@@ -35,6 +35,7 @@ type Study struct {
 	ExportRequired         bool      `json:"export_required"`
 	ExportStatus           string    `json:"export_status"`
 	DefaceQaScore          *float64  `json:"deface_qa_score,omitempty"`
+	SubjectID              *string   `json:"subject_id,omitempty"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
@@ -47,6 +48,7 @@ const studyColumns = `
 	protocol_required, protocol_status,
 	export_required, export_status,
 	deface_qa_score,
+	subject_id,
 	created_at, updated_at`
 
 type scannable interface {
@@ -64,6 +66,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.ProtocolRequired, &s.ProtocolStatus,
 		&s.ExportRequired, &s.ExportStatus,
 		&s.DefaceQaScore,
+		&s.SubjectID,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -117,6 +120,7 @@ type StudyFilters struct {
 	BodyPart  string    // HEAD|CHEST|… (case-insensitive exact match)
 	Source    string    // external|internal
 	Search    string    // substring match on study_instance_uid or study_description
+	SubjectID string    // exact match on subject_id
 	DateFrom  time.Time // created_at >= DateFrom (zero = no lower bound)
 	DateTo    time.Time // created_at <= DateTo   (zero = no upper bound)
 }
@@ -155,6 +159,11 @@ func studyWhere(f StudyFilters) (string, []any) {
 		clauses = append(clauses, fmt.Sprintf(
 			`(study_instance_uid ILIKE $%d OR study_description ILIKE $%d)`, n, n))
 		args = append(args, "%"+f.Search+"%")
+		n++
+	}
+	if f.SubjectID != "" {
+		clauses = append(clauses, fmt.Sprintf(`subject_id = $%d`, n))
+		args = append(args, f.SubjectID)
 		n++
 	}
 	if !f.DateFrom.IsZero() {
@@ -258,6 +267,47 @@ func UpdateDefaceQaScore(ctx context.Context, db *sql.DB, id string, score float
 		UPDATE studies SET deface_qa_score = $1, updated_at = now()
 		WHERE id = $2`, score, id)
 	return err
+}
+
+// UpdateStudySubjectID sets the subject_id on a study for cross-session linking.
+func UpdateStudySubjectID(ctx context.Context, db *sql.DB, id string, subjectID *string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET subject_id = $1, updated_at = now()
+		WHERE id = $2`, subjectID, id)
+	return err
+}
+
+// SubjectSummary holds per-subject study counts for the subjects listing.
+type SubjectSummary struct {
+	SubjectID  string `json:"subject_id"`
+	ProjectID  string `json:"project_id"`
+	StudyCount int    `json:"study_count"`
+}
+
+// ListSubjects returns unique subject_ids with study counts, optionally filtered by project.
+func ListSubjects(ctx context.Context, db *sql.DB, projectID string) ([]SubjectSummary, error) {
+	query := `SELECT subject_id, project_id, count(*) AS study_count
+	          FROM studies WHERE subject_id IS NOT NULL`
+	args := []any{}
+	if projectID != "" {
+		query += ` AND project_id = $1`
+		args = append(args, projectID)
+	}
+	query += ` GROUP BY subject_id, project_id ORDER BY subject_id`
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SubjectSummary
+	for rows.Next() {
+		var s SubjectSummary
+		if err := rows.Scan(&s.SubjectID, &s.ProjectID, &s.StudyCount); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }
 
 // SetPhiScanRequired sets the phi_scan_required flag and initialises phi_scan_status to "pending".
@@ -522,4 +572,60 @@ func GetStudyStatusCounts(ctx context.Context, db *sql.DB) (StudyStatusCounts, e
 		c.Total += n
 	}
 	return c, rows.Err()
+}
+
+// BreakdownRow is one cell in the modality × body_part cross-tab.
+type BreakdownRow struct {
+	Modality  string `json:"modality"`
+	BodyPart  string `json:"body_part"`
+	Count     int    `json:"count"`
+}
+
+// GetStudyBreakdown returns study counts grouped by (modality, body_part).
+// Empty modality/body_part values are normalised to the empty string.
+func GetStudyBreakdown(ctx context.Context, db *sql.DB) ([]BreakdownRow, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT coalesce(modality, ''), coalesce(body_part, ''), count(*)
+		FROM studies
+		GROUP BY modality, body_part
+		ORDER BY count(*) DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []BreakdownRow
+	for rows.Next() {
+		var r BreakdownRow
+		if err := rows.Scan(&r.Modality, &r.BodyPart, &r.Count); err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
+// StorageStats summarises DICOM file counts across studies by store type.
+type StorageStats struct {
+	RawFileCount     int `json:"raw_file_count"`   // files in dicom_store='raw'
+	CleanFileCount   int `json:"clean_file_count"` // files in dicom_store='clean'
+	TotalFileCount   int `json:"total_file_count"`
+	TotalStudies     int `json:"total_studies"`
+	GeneratedAt      string `json:"generated_at"`
+}
+
+// GetStorageStats returns aggregate DICOM file counts derived from the studies table.
+func GetStorageStats(ctx context.Context, db *sql.DB) (*StorageStats, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT
+		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'raw'),   0)::int,
+		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'clean'), 0)::int,
+		  coalesce(sum(instance_count), 0)::int,
+		  count(*)::int
+		FROM studies`)
+	var s StorageStats
+	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies); err != nil {
+		return nil, err
+	}
+	return &s, nil
 }

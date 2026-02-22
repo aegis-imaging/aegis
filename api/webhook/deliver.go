@@ -21,11 +21,11 @@ import (
 
 // Payload is the JSON body posted to webhook subscriber URLs.
 type Payload struct {
-	Event           string `json:"event"`
-	StudyID         string `json:"study_id"`
+	Event            string `json:"event"`
+	StudyID          string `json:"study_id"`
 	StudyInstanceUID string `json:"study_instance_uid"`
-	ProjectID       string `json:"project_id"`
-	Timestamp       string `json:"timestamp"`
+	ProjectID        string `json:"project_id"`
+	Timestamp        string `json:"timestamp"`
 }
 
 var client = &http.Client{Timeout: 10 * time.Second}
@@ -44,11 +44,11 @@ func Deliver(ctx context.Context, db *sql.DB, event string, study *model.Study) 
 	}
 
 	payload := Payload{
-		Event:           event,
-		StudyID:         study.ID,
+		Event:            event,
+		StudyID:          study.ID,
 		StudyInstanceUID: study.StudyInstanceUID,
-		ProjectID:       study.ProjectID,
-		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+		ProjectID:        study.ProjectID,
+		Timestamp:        time.Now().UTC().Format(time.RFC3339),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -57,17 +57,34 @@ func Deliver(ctx context.Context, db *sql.DB, event string, study *model.Study) 
 	}
 
 	for _, sub := range subs {
-		go deliverOne(sub, body)
+		go deliverOne(db, sub, event, body)
 	}
 }
 
-func deliverOne(sub model.WebhookSubscription, body []byte) {
+func deliverOne(db *sql.DB, sub model.WebhookSubscription, event string, body []byte) {
 	delays := []time.Duration{0, 5 * time.Second, 30 * time.Second}
 	for attempt, delay := range delays {
 		if delay > 0 {
 			time.Sleep(delay)
 		}
-		if err := post(sub, body); err != nil {
+		statusCode, err := post(sub, body)
+		rec := &model.WebhookDelivery{
+			SubscriptionID: sub.ID,
+			Event:          event,
+			URL:            sub.URL,
+			Attempt:        attempt + 1,
+			Success:        err == nil,
+		}
+		if statusCode != 0 {
+			rec.StatusCode = &statusCode
+		}
+		if err != nil {
+			msg := err.Error()
+			rec.ErrorMessage = &msg
+		}
+		model.RecordWebhookDelivery(context.Background(), db, rec)
+
+		if err != nil {
 			log.Printf("webhook: deliver to %s (attempt %d/3): %v", sub.URL, attempt+1, err)
 			continue
 		}
@@ -76,10 +93,10 @@ func deliverOne(sub model.WebhookSubscription, body []byte) {
 	log.Printf("webhook: all 3 attempts failed for subscription %s → %s", sub.ID, sub.URL)
 }
 
-func post(sub model.WebhookSubscription, body []byte) error {
+func post(sub model.WebhookSubscription, body []byte) (int, error) {
 	req, err := http.NewRequest("POST", sub.URL, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("build request: %w", err)
+		return 0, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Aegis-Event", "webhook")
@@ -90,11 +107,11 @@ func post(sub model.WebhookSubscription, body []byte) error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("non-2xx response: %d", resp.StatusCode)
+		return resp.StatusCode, fmt.Errorf("non-2xx response: %d", resp.StatusCode)
 	}
-	return nil
+	return resp.StatusCode, nil
 }

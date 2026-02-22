@@ -82,6 +82,28 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
 }
 
+// ReactivateStudy restores an expired study back to 'approved' status.
+// POST /api/studies/{id}/reactivate
+func (s *Server) ReactivateStudy(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	study, err := model.GetStudyByID(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+	if study.Status != "expired" {
+		s.writeError(w, http.StatusBadRequest, "only expired studies can be reactivated")
+		return
+	}
+	if err := model.UpdateStudyStatus(r.Context(), s.db, study.ID, "approved"); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to update status")
+		return
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "study.reactivated", actorEmail(r),
+		"study", study.ID, clientIP(r), nil)
+	s.writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+}
+
 type createShareRequest struct {
 	RecipientEmail string `json:"recipient_email"`
 	Note           string `json:"note"`
@@ -275,6 +297,16 @@ func buildListShareResponses(shares []model.ExportShare, now time.Time) []listSh
 	return out
 }
 
+// GetExportAnalytics returns aggregate download analytics across all export shares.
+func (s *Server) GetExportAnalytics(w http.ResponseWriter, r *http.Request) {
+	analytics, err := model.GetExportDownloadAnalytics(r.Context(), s.db)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to load export analytics")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, analytics)
+}
+
 // GetShareDownloads returns the immutable download history for one export share.
 func (s *Server) GetShareDownloads(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareID")
@@ -290,6 +322,51 @@ func (s *Server) GetShareDownloads(w http.ResponseWriter, r *http.Request) {
 		"share_id":  shareID,
 		"downloads": downloads,
 		"total":     len(downloads),
+	})
+}
+
+// ExtendShare extends an export share's expiry by the requested number of hours.
+// PATCH /api/shares/{shareID}/extend
+func (s *Server) ExtendShare(w http.ResponseWriter, r *http.Request) {
+	shareID := r.PathValue("shareID")
+	var req struct {
+		ExtendHours int `json:"extend_hours"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if req.ExtendHours <= 0 {
+		s.writeError(w, http.StatusBadRequest, "extend_hours must be positive")
+		return
+	}
+
+	share, err := model.GetExportShareByID(r.Context(), s.db, shareID)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "share not found")
+		return
+	}
+	if share.RevokedAt != nil {
+		s.writeError(w, http.StatusConflict, "cannot extend a revoked share")
+		return
+	}
+
+	// Extend from whichever is later: current expiry or now (handles already-expired shares).
+	base := share.ExpiresAt
+	if now := time.Now().UTC(); now.After(base) {
+		base = now
+	}
+	newExpiry := base.Add(time.Duration(req.ExtendHours) * time.Hour)
+
+	if err := model.ExtendExportShare(r.Context(), s.db, shareID, newExpiry); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to extend share")
+		return
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "share.extended", actorEmail(r), "export_share", shareID, clientIP(r),
+		map[string]any{"extend_hours": req.ExtendHours, "new_expiry": newExpiry})
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"share_id":   shareID,
+		"expires_at": newExpiry,
 	})
 }
 
