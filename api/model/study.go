@@ -292,6 +292,14 @@ func UpdateStudySubjectID(ctx context.Context, db *sql.DB, id string, subjectID 
 	return err
 }
 
+// ReassignStudyProject moves a study to a different project.
+func ReassignStudyProject(ctx context.Context, db *sql.DB, studyID, newProjectID string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE studies SET project_id = $1, updated_at = now() WHERE id = $2`,
+		newProjectID, studyID)
+	return err
+}
+
 // SubjectSummary holds per-subject study counts for the subjects listing.
 type SubjectSummary struct {
 	SubjectID  string `json:"subject_id"`
