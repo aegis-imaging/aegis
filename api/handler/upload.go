@@ -39,6 +39,7 @@ type studyMetadata struct {
 	StudyDescription string           `json:"study_description"`
 	SeriesCount      int              `json:"series_count"`
 	InstanceCount    int              `json:"instance_count"`
+	StudySizeBytes   int64            `json:"study_size_bytes,omitempty"`
 	Series           []seriesMetadata `json:"series,omitempty"`
 }
 
@@ -185,6 +186,14 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		model.UpdateUploadSessionFailed(r.Context(), s.db, session.ID, err.Error())
 		s.writeError(w, http.StatusInternalServerError, "ingest failed: "+err.Error())
 		return
+	}
+
+	// Compute and store total study size (non-fatal).
+	if dicomFiles, listErr := s.store.List(r.Context(), "dicom/raw/"+study.StudyInstanceUID); listErr == nil {
+		if sizeBytes := sumStoredSizes(r.Context(), s.store, dicomFiles); sizeBytes > 0 {
+			model.UpdateStudySizeBytes(r.Context(), s.db, study.ID, sizeBytes)
+			study.StudySizeBytes = sizeBytes
+		}
 	}
 
 	if session.UploaderEmail != "" {
