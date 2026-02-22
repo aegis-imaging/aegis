@@ -66,6 +66,10 @@ func (s *Server) CreateInstitution(w http.ResponseWriter, r *http.Request) {
 // GET /api/institutions/{id}/stats
 func (s *Server) GetInstitutionStats(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, err := model.GetInstitutionByID(r.Context(), s.db, id); err != nil {
+		s.writeError(w, http.StatusNotFound, "institution not found")
+		return
+	}
 	stats, err := model.GetInstitutionStats(r.Context(), s.db, id)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to load institution stats")

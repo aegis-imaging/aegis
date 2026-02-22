@@ -201,7 +201,7 @@ func TestTriggerPhiScan_WithMockService_ResultsInClean(t *testing.T) {
 
 	// Mock phi-detection service that responds "clean"
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -308,7 +308,7 @@ func TestTriggerQcCheck_WithMockService(t *testing.T) {
 	require.NoError(t, model.SetQcRequired(t.Context(), db, study.ID, true))
 
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -413,7 +413,7 @@ func TestTriggerBidsConversion_WithMockService(t *testing.T) {
 	require.NoError(t, model.SetBidsRequired(t.Context(), db, study.ID, true))
 
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -517,7 +517,7 @@ func TestTriggerClassification_WithMockService(t *testing.T) {
 	require.NoError(t, model.SetClassificationRequired(t.Context(), db, study.ID, true))
 
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -624,7 +624,7 @@ func TestTriggerDeface_WithMockService(t *testing.T) {
 	require.NoError(t, model.SetDefacingRequired(t.Context(), db, study.ID, true))
 
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
