@@ -1518,6 +1518,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [subjectEdit, setSubjectEdit] = useState(false)
   const [subjectDraft, setSubjectDraft] = useState('')
 
+  // Project reassignment state
+  const [reassignOpen, setReassignOpen] = useState(false)
+  const [allProjects, setAllProjects] = useState<{ id: string; name: string }[]>([])
+  const [reassignTarget, setReassignTarget] = useState('')
+
   const loadData = useCallback(() => {
     setLoading(true)
     Promise.all([
@@ -1593,6 +1598,31 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason: reason.trim() }),
     })
+    loadData()
+    onAction()
+  }
+
+  const openReassign = async () => {
+    if (allProjects.length === 0) {
+      const res = await fetch('/api/projects')
+      if (res.ok) {
+        const data = await res.json()
+        setAllProjects(data ?? [])
+        const first = (data ?? []).find((p: { id: string }) => p.id !== study.project_id)
+        setReassignTarget(first?.id ?? '')
+      }
+    }
+    setReassignOpen(true)
+  }
+
+  const handleReassign = async () => {
+    if (!reassignTarget) return
+    await fetch(`/api/studies/${study.id}/project`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: reassignTarget }),
+    })
+    setReassignOpen(false)
     loadData()
     onAction()
   }
@@ -1721,7 +1751,24 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
           <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View in OHIF'}</button>
           <button type="button" className="btn btn--secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
+          {isAdmin && <button type="button" className="btn btn--secondary" onClick={openReassign}>Move to Project</button>}
         </div>
+        {isAdmin && reassignOpen && (
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <select
+              title="Target project"
+              value={reassignTarget}
+              onChange={e => setReassignTarget(e.target.value)}
+              className="share-select"
+            >
+              {allProjects.filter(p => p.id !== study.project_id).map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <button type="button" className="btn btn--approve" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
+            <button type="button" className="btn btn--secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
+          </div>
+        )}
       </div>
 
       {/* DICOM tag inspection panel */}
