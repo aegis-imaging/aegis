@@ -59,7 +59,7 @@ test("AegisApiClient allows study lookup by UID path", async () => {
 
   const client = new AegisApiClient("http://example.internal", "token");
 
-  const result = await client.get("/api/studies/by-uid/1.2.840.10008.5.1");
+  const result = await client.get("/api/study-uid/1.2.840.10008.5.1");
   assert.deepEqual(result, {});
 });
 

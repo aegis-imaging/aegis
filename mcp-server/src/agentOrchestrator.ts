@@ -120,7 +120,7 @@ function buildToolHandlers(client: AegisApiClient): Record<string, ToolHandler> 
     },
     get_study_by_uid: async (args) => {
       const studyUid = String(args.study_instance_uid ?? "");
-      return client.get(`/api/studies/by-uid/${encodeURIComponent(studyUid)}`);
+      return client.get(`/api/study-uid/${encodeURIComponent(studyUid)}`);
     },
     get_study_diagnostics: async (args) => {
       const studyId = String(args.study_id ?? "");
