@@ -222,12 +222,25 @@ services:
     build:
       context: ./mcp-server
     stdin_open: true
+    ports:
+      - "8799:8799"
     environment:
       AEGIS_API_BASE_URL: "http://api:8080"
       AEGIS_API_TOKEN: "${MCP_API_TOKEN:-dev-token}"
       MCP_MODE: "${MCP_MODE:-readonly}"
       MCP_ENABLE_WRITE_TOOLS: "${MCP_ENABLE_WRITE_TOOLS:-false}"
       MCP_CALLER_ID: "docker-compose"
+      MCP_AGENT_HTTP_PORT: "${MCP_AGENT_HTTP_PORT:-8799}"
+      MCP_AGENT_ALLOWED_ORIGIN: "${MCP_AGENT_ALLOWED_ORIGIN:-*}"
+      MCP_AGENT_API_KEY: "${MCP_AGENT_API_KEY:-}"
+      MCP_AGENT_BEARER_TOKEN: "${MCP_AGENT_BEARER_TOKEN:-}"
+      MCP_AGENT_REQUIRE_AUTH: "${MCP_AGENT_REQUIRE_AUTH:-false}"
+      MCP_AGENT_RATE_LIMIT_PER_MINUTE: "${MCP_AGENT_RATE_LIMIT_PER_MINUTE:-120}"
+      MCP_AGENT_LLM_BASE_URL: "${MCP_AGENT_LLM_BASE_URL:-}"
+      MCP_AGENT_LLM_API_KEY: "${MCP_AGENT_LLM_API_KEY:-}"
+      MCP_AGENT_LLM_MODEL: "${MCP_AGENT_LLM_MODEL:-gpt-4.1-mini}"
+      MCP_AGENT_LLM_TEMPERATURE: "${MCP_AGENT_LLM_TEMPERATURE:-0.2}"
+      MCP_AGENT_LLM_MAX_TOKENS: "${MCP_AGENT_LLM_MAX_TOKENS:-700}"
     depends_on:
       api:
         condition: service_healthy

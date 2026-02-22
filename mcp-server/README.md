@@ -50,6 +50,17 @@ MCP_READ_RATE_LIMIT_PER_MINUTE    240 (default)
 MCP_WRITE_RATE_LIMIT_PER_MINUTE   60 (default)
 MCP_WRITE_IDEMPOTENCY_TTL_SECONDS 900 (default)
 MCP_CALLER_ID                     Label for audit logs (default: mcp-stdio)
+MCP_AGENT_HTTP_PORT               Optional HTTP port for the AEGIS Agent endpoint
+MCP_AGENT_ALLOWED_ORIGIN          CORS allow origin for agent HTTP server (default: *)
+MCP_AGENT_API_KEY                 Optional API key for agent requests (X-Aegis-Agent-Key)
+MCP_AGENT_BEARER_TOKEN            Optional bearer token for agent requests (Authorization)
+MCP_AGENT_REQUIRE_AUTH            true to enforce agent auth (default: false)
+MCP_AGENT_RATE_LIMIT_PER_MINUTE   120 (default)
+MCP_AGENT_LLM_BASE_URL            OpenAI-compatible base URL (e.g. https://api.openai.com/v1)
+MCP_AGENT_LLM_API_KEY             API key for the LLM provider
+MCP_AGENT_LLM_MODEL               Model name (default: gpt-4.1-mini)
+MCP_AGENT_LLM_TEMPERATURE         0.2 (default)
+MCP_AGENT_LLM_MAX_TOKENS          700 (default)
 ```
 
 See `.env.example` for annotated defaults.
