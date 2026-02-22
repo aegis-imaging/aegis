@@ -152,6 +152,7 @@ func (s *Server) runProtocolCheck(study *model.Study, templates []model.Protocol
 			"study_uid": studyUID,
 			"error":     "no rules found in templates",
 		})
+		s.notifyPipelineFailure(ctx, studyUID, "protocol_check", "no rules found in templates")
 		return
 	}
 
@@ -198,6 +199,7 @@ func (s *Server) runProtocolCheck(study *model.Study, templates []model.Protocol
 			"tool":      svcResp.ToolUsed,
 			"error":     errMsg,
 		})
+		s.notifyPipelineFailure(ctx, studyUID, "protocol_check", errMsg)
 		return
 	}
 

@@ -151,6 +151,7 @@ func (s *Server) runPhiScan(study *model.Study) {
 			"tool":      svcResp.ToolUsed,
 			"error":     errMsg,
 		})
+		s.notifyPipelineFailure(ctx, studyUID, "phi_scan", errMsg)
 		return
 	}
 
