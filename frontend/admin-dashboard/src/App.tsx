@@ -3472,6 +3472,7 @@ export function App() {
   // Filters
   const [filterStatus,   setFilterStatus]   = useState('')
   const [filterModality, setFilterModality] = useState('')
+  const [filterBodyPart, setFilterBodyPart] = useState('')
   const [filterSource,   setFilterSource]   = useState('')
   const [filterProject,  setFilterProject]  = useState('')
   const [filterSearch,   setFilterSearch]   = useState('')
@@ -3491,6 +3492,7 @@ export function App() {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) })
     if (filterStatus)   params.set('status',     filterStatus)
     if (filterModality) params.set('modality',   filterModality)
+    if (filterBodyPart) params.set('body_part',  filterBodyPart)
     if (filterSource)   params.set('source',     filterSource)
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
@@ -3509,20 +3511,21 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterSource, filterProject, filterSearch, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0) }
   function setModalityF(v: string) { setFilterModality(v); setPage(0) }
+  function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0) }
   function setSourceF(v: string)   { setFilterSource(v);   setPage(0) }
   function setProjectF(v: string)  { setFilterProject(v);  setPage(0) }
   function setSearchF(v: string)   { setFilterSearch(v);   setPage(0) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterSource || filterProject || filterSearch)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch)
 
   function clearFilters() {
-    setFilterStatus(''); setFilterModality(''); setFilterSource('')
-    setFilterProject(''); setFilterSearch(''); setPage(0)
+    setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
+    setFilterSource(''); setFilterProject(''); setFilterSearch(''); setPage(0)
   }
 
   const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
@@ -3698,6 +3701,17 @@ export function App() {
               <option value="DX">DX</option>
               <option value="NM">NM</option>
               <option value="PT">PT</option>
+            </select>
+            <select className="filter-select" title="Filter by body part" value={filterBodyPart} onChange={e => setBodyPartF(e.target.value)}>
+              <option value="">All body parts</option>
+              <option value="HEAD">Head</option>
+              <option value="BRAIN">Brain</option>
+              <option value="CHEST">Chest</option>
+              <option value="ABDOMEN">Abdomen</option>
+              <option value="SPINE">Spine</option>
+              <option value="EXTREMITY">Extremity</option>
+              <option value="NECK">Neck</option>
+              <option value="PELVIS">Pelvis</option>
             </select>
             <select className="filter-select" title="Filter by source" value={filterSource} onChange={e => setSourceF(e.target.value)}>
               <option value="">All sources</option>

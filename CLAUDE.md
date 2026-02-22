@@ -289,6 +289,7 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 | `project_id` | Filter by project UUID |
 | `status` | `received\|defacing\|clean\|defaced\|approved\|rejected` |
 | `modality` | Case-insensitive exact match (e.g. `MRI`, `CT`) |
+| `body_part` | Case-insensitive exact match (e.g. `HEAD`, `CHEST`) |
 | `source` | `external\|internal` |
 | `search` | Substring match on `study_instance_uid` or `study_description` |
 

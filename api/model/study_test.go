@@ -145,6 +145,33 @@ func TestListStudies_ModalityFilter(t *testing.T) {
 	assert.Equal(t, "CT", studies[0].Modality)
 }
 
+func TestListStudies_BodyPartFilter(t *testing.T) {
+	db := testutil.TestDB(t)
+	proj := testutil.SeedProject(t, db)
+
+	// CreateTestStudy uses body_part=HEAD
+	testutil.CreateTestStudy(t, db, proj.ID)
+
+	// Create a CHEST study
+	chest := &model.Study{
+		ProjectID: proj.ID, StudyInstanceUID: "2.3.4.5.chest",
+		Modality: "CT", BodyPart: "CHEST", Status: "received", DicomStore: "raw", Source: "external",
+	}
+	require.NoError(t, model.CreateStudy(context.Background(), db, chest))
+
+	// Filter by HEAD (case-insensitive)
+	head, err := model.ListStudies(context.Background(), db, model.StudyFilters{BodyPart: "head"}, 50, 0)
+	require.NoError(t, err)
+	assert.Len(t, head, 1)
+	assert.Equal(t, "HEAD", head[0].BodyPart)
+
+	// Filter by CHEST
+	chestResults, err := model.ListStudies(context.Background(), db, model.StudyFilters{BodyPart: "CHEST"}, 50, 0)
+	require.NoError(t, err)
+	assert.Len(t, chestResults, 1)
+	assert.Equal(t, "CHEST", chestResults[0].BodyPart)
+}
+
 func TestListStudies_SearchFilter(t *testing.T) {
 	db := testutil.TestDB(t)
 	proj := testutil.SeedProject(t, db)
