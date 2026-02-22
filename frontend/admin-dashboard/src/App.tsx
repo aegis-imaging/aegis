@@ -65,6 +65,7 @@ type Study = {
   instance_count: number
   deface_qa_score?: number
   subject_id?: string
+  rejection_reason?: string
   created_at: string
   updated_at: string
 }
@@ -1581,6 +1582,18 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     onAction()
   }
 
+  const handleReject = async () => {
+    const reason = prompt('Rejection reason (optional — shown to uploader):') ?? null
+    if (reason === null) return
+    await fetch(`/api/studies/${study.id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() }),
+    })
+    loadData()
+    onAction()
+  }
+
   const handleShare = async () => {
     const expiryHours = Math.max(1, shareDays * 24)
     const resp = await fetch(`/api/studies/${study.id}/share`, {
@@ -1663,6 +1676,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         </div>
       </div>
 
+      {study.status === 'rejected' && study.rejection_reason && (
+        <div className="study-detail__meta-item">
+          <strong>Rejection Reason</strong>
+          <span style={{ color: '#dc2626' }}>{study.rejection_reason}</span>
+        </div>
+      )}
+
       {/* Pipeline visualization */}
       <div className="study-detail__section">
         <h3 className="study-detail__section-title">Processing Pipeline</h3>
@@ -1681,7 +1701,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <h3 className="study-detail__section-title">Actions</h3>
         <div className="study-detail__actions">
           {isAdmin && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
-          {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={() => { if (confirm('Reject this study?')) doAction(`/api/studies/${study.id}/reject`) }}>Reject</button>}
+          {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>}
           {isAdmin && canReactivate && <button type="button" className="btn btn--approve" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
           {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
           {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
@@ -2034,8 +2054,13 @@ function StudyRow({
   }
 
   const handleReject = async () => {
-    if (!confirm('Reject this study? This cannot be undone.')) return
-    await fetch(`/api/studies/${study.id}/reject`, { method: 'POST' })
+    const reason = prompt('Rejection reason (optional — shown to uploader):') ?? null
+    if (reason === null) return  // cancelled
+    await fetch(`/api/studies/${study.id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() }),
+    })
     onAction()
   }
 

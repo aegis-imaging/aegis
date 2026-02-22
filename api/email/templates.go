@@ -54,8 +54,10 @@ var studyRejectedTmpl = template.Must(template.New("study_rejected").Parse(
 	`Your study submission has been reviewed and rejected.
 
 Study UID:  {{ .StudyUID }}
-
-Please contact the administrator for more information.
+{{ if .Reason }}
+Reason:     {{ .Reason }}
+{{ end }}
+Please contact your administrator if you have questions about this decision.
 
 --
 This is an automated message from AEGIS. Do not reply to this email.
@@ -91,10 +93,13 @@ func StudyApproved(studyUID string) (subject, body string) {
 	return subject, buf.String()
 }
 
-func StudyRejected(studyUID string) (subject, body string) {
+func StudyRejected(studyUID, reason string) (subject, body string) {
 	subject = "AEGIS — Study Rejected"
 	var buf bytes.Buffer
-	studyRejectedTmpl.Execute(&buf, struct{ StudyUID string }{studyUID})
+	studyRejectedTmpl.Execute(&buf, struct {
+		StudyUID string
+		Reason   string
+	}{studyUID, reason})
 	return subject, buf.String()
 }
 
