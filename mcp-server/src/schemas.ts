@@ -63,6 +63,27 @@ export const listAllSharesArgsSchema = z.object({
   status: z.enum(["active", "expired", "revoked"]).optional()
 });
 
+export const approveStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const rejectStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const revokeShareArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  share_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -85,7 +106,10 @@ export const writeToolNames = [
   "trigger_bids_convert",
   "trigger_export",
   "trigger_deface",
-  "retry_dimse_study"
+  "retry_dimse_study",
+  "approve_study",
+  "reject_study",
+  "revoke_share"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
