@@ -149,6 +149,12 @@ variable "protocol_service_image" {
   type        = string
 }
 
+variable "ohif_image" {
+  description = "Container image URI for the OHIF viewer (empty = disabled)"
+  type        = string
+  default     = ""
+}
+
 variable "api_cpu" {
   description = "CPU limit for Cloud Run API container"
   type        = string
@@ -706,6 +712,61 @@ resource "google_cloud_run_service_iam_member" "sidecar_invoker" {
 
   location = var.region
   service  = google_cloud_run_v2_service.sidecars[each.key].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# --- Cloud Run OHIF Viewer ---
+
+resource "google_cloud_run_v2_service" "ohif" {
+  count    = var.ohif_image != "" ? 1 : 0
+  name     = "ohif"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  deletion_protection = var.deletion_protection
+
+  template {
+    service_account = google_service_account.sidecars.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 2
+    }
+
+    containers {
+      image = var.ohif_image
+
+      env {
+        name  = "API_URL"
+        value = "https://${var.api_domain}"
+      }
+
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = "512Mi"
+        }
+      }
+
+      liveness_probe {
+        failure_threshold     = 3
+        initial_delay_seconds = 10
+        timeout_seconds       = 5
+        period_seconds        = 30
+
+        http_get {
+          path = "/health"
+        }
+      }
+    }
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "ohif_invoker" {
+  count    = var.ohif_image != "" ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.ohif[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -1290,6 +1351,10 @@ output "admin_service_uri" {
 
 output "sidecar_service_uris" {
   value = { for name, svc in google_cloud_run_v2_service.sidecars : name => svc.uri }
+}
+
+output "ohif_service_uri" {
+  value = var.ohif_image != "" ? google_cloud_run_v2_service.ohif[0].uri : ""
 }
 
 output "load_balancer_ip" {
