@@ -139,6 +139,21 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   ```bash
   gcloud monitoring policies list --format='value(displayName)'
   ```
+- [ ] Open the Cloud Monitoring dashboard in GCP Console:
+  ```
+  https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+  ```
+  Expected: "AEGIS Operations — prod" dashboard with 11 tiles (API rate/errors/latency, Cloud Run instances/memory, Cloud SQL CPU/disk/connections, sidecar 5xx, pipeline failures, stuck-study SLA alerts).
+- [ ] Confirm alert policies are active (9 total after Feature 55):
+  ```bash
+  gcloud monitoring policies list --project=aegis-prod-488120 --format='table(displayName,enabled)'
+  ```
+- [ ] Confirm log-based metrics exist:
+  ```bash
+  gcloud logging metrics list --project=aegis-prod-488120 --format='value(name)'
+  # Expected: aegis-prod-pipeline-failures, aegis-prod-study-stuck
+  ```
+- [ ] See `terraform/monitoring/README.md` for full metric reference and runbook links.
 
 ## 4a. First Admin Bootstrap
 
