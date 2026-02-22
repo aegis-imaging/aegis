@@ -62,6 +62,7 @@ type Study = {
   export_status: string
   dicom_store: string
   instance_count: number
+  deface_qa_score?: number
   created_at: string
   updated_at: string
 }
@@ -1400,6 +1401,14 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="study-detail__meta-item"><strong>Store</strong> {study.dicom_store || 'raw'}</div>
         <div className="study-detail__meta-item"><strong>Received</strong> {fmtDate(study.created_at)}</div>
         <div className="study-detail__meta-item"><strong>Updated</strong> {fmtDate(study.updated_at)}</div>
+        {study.deface_qa_score != null && (
+          <div className="study-detail__meta-item">
+            <strong>Deface QA</strong>
+            <span className={`deface-qa-score deface-qa-score--${study.deface_qa_score >= 0.9 ? 'good' : study.deface_qa_score >= 0.7 ? 'warn' : 'poor'}`}>
+              {study.deface_qa_score.toFixed(4)}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Pipeline visualization */}
