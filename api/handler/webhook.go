@@ -112,6 +112,25 @@ func (s *Server) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, sub)
 }
 
+// GetWebhookDeliveries GET /api/webhook-subscriptions/{id}/deliveries
+// Returns the most recent delivery log entries for a webhook subscription.
+func (s *Server) GetWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := model.GetWebhookSubscription(r.Context(), s.db, id); err != nil {
+		s.writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	deliveries, err := model.ListWebhookDeliveries(r.Context(), s.db, id, 0)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "query failed")
+		return
+	}
+	if deliveries == nil {
+		deliveries = []model.WebhookDelivery{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"deliveries": deliveries})
+}
+
 // DeleteWebhook DELETE /api/webhook-subscriptions/{id}
 func (s *Server) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
