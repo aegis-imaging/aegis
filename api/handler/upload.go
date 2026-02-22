@@ -188,7 +188,8 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if session.UploaderEmail != "" {
-		subject, body := email.UploadConfirmed(study.StudyInstanceUID, study.Modality, len(files), study.CreatedAt)
+		projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
+		subject, body := email.UploadConfirmed(study.StudyInstanceUID, study.Modality, projectName, len(files), study.CreatedAt)
 		if err := s.mailer.Send(r.Context(), session.UploaderEmail, subject, body); err != nil {
 			log.Printf("upload confirm email to %s: %v", session.UploaderEmail, err)
 		}
