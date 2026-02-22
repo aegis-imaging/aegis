@@ -61,6 +61,12 @@ variable "admin_domain" {
   type        = string
 }
 
+variable "export_portal_base_url" {
+  description = "Public base URL of the export portal UI (example: https://export.aegisimaging.ai). When set, share email links point to the portal instead of the raw API endpoint. Leave empty to fall back to the API URL."
+  type        = string
+  default     = ""
+}
+
 variable "iap_oauth_client_id" {
   description = "OAuth2 client ID used by IAP on the admin backend service"
   type        = string
@@ -770,6 +776,10 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "API_BASE_URL"
         value = "https://${var.api_domain}"
+      }
+      env {
+        name  = "EXPORT_PORTAL_BASE_URL"
+        value = var.export_portal_base_url
       }
       env {
         name  = "APP_TIMEZONE"
