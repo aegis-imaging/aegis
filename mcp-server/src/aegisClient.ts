@@ -22,6 +22,7 @@ export class DisallowedPathError extends Error {
 
 const allowedGetPathPatterns = [
   /^\/healthz(?:\?.*)?$/,
+  /^\/api\/stats$/,
   /^\/api\/studies(?:\?.*)?$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/diagnostics$/,

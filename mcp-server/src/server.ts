@@ -261,6 +261,17 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_pipeline_stats",
+    description: "Get a lightweight snapshot of the study pipeline: study counts by status (received/defacing/clean/defaced/approved/rejected/total) plus active export share count. Use for a quick pipeline health check or to answer 'how many studies are pending/approved/stuck?'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_system_health",
     description: "Get AEGIS system health snapshot from /healthz.",
     inputSchema: {
@@ -608,6 +619,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "get_share_downloads") {
       const parsed = getShareDownloadsArgsSchema.parse(args);
       const data = await client.get(`/api/shares/${encodeURIComponent(parsed.share_id)}/downloads`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_pipeline_stats") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/stats");
       return formatSuccess(requestId, name, data);
     }
 

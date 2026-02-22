@@ -118,7 +118,8 @@ export const readToolNames = [
   "get_audit_log",
   "get_study_by_uid",
   "list_all_shares",
-  "get_share_downloads"
+  "get_share_downloads",
+  "get_pipeline_stats"
 ] as const;
 
 export const writeToolNames = [
