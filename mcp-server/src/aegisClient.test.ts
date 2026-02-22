@@ -42,6 +42,27 @@ test("AegisApiClient allows DIMSE retry summary and details paths", async () => 
   assert.deepEqual(details, {});
 });
 
+test("AegisApiClient allows audit log path with and without query params", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+
+  const plain = await client.get("/api/audit");
+  const filtered = await client.get("/api/audit?action=study&actor=admin%40example.com&limit=50");
+
+  assert.deepEqual(plain, {});
+  assert.deepEqual(filtered, {});
+});
+
+test("AegisApiClient allows study lookup by UID path", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+
+  const result = await client.get("/api/studies/by-uid/1.2.840.10008.5.1");
+  assert.deepEqual(result, {});
+});
+
 test.after(() => {
   globalThis.fetch = originalFetch;
 });
