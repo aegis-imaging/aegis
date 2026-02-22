@@ -893,6 +893,107 @@ docker compose down -v           # stop + destroy volumes (fresh start)
 Runbook:
 - `docs/planning/dimse-pacs-e2e-validation-runbook.md`
 
+## 8ab. DICOM File Retention & Cleanup Policy
+
+### File lifecycle
+
+DICOM files are written to shared storage at:
+```
+dicom/raw/{studyInstanceUID}/{index}.dcm      ← original tag-de-identified files
+dicom/clean/{studyInstanceUID}/{index}.dcm    ← defaced output (when defacing is required)
+```
+
+The **DIMSE receiver** writes to `dicom/raw/` when it receives a C-STORE. The **upload portal** and
+**batch import CLI** also write to `dicom/raw/`. These files are the canonical storage copy — no
+automatic cleanup runs. Files accumulate until explicitly managed.
+
+### When is it safe to delete?
+
+Studies in a terminal state are safe to archive or delete:
+
+| Status | Safe to delete raw files? | Notes |
+|--------|--------------------------|-------|
+| `approved` | Yes | Defaced copy in `dicom/clean/` if defacing was required |
+| `rejected` | Yes | No further processing will occur |
+| `defaced` | Raw only | Keep `dicom/clean/` until approved or rejected |
+| `received` / `defacing` / `clean` | No | Still in active pipeline |
+
+Do **not** delete files for studies still in the processing pipeline — the sidecars read from shared
+storage and will fail with missing-file errors.
+
+### Production cleanup (GCS)
+
+Set a GCS object lifecycle rule on the DICOM bucket so raw files transition automatically:
+
+```bash
+# Create lifecycle config (adjust age to your retention policy)
+cat > /tmp/lifecycle.json << 'EOF'
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "COLDLINE" },
+        "condition": { "age": 90, "matchesPrefix": ["dicom/raw/"] }
+      },
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "COLDLINE" },
+        "condition": { "age": 365, "matchesPrefix": ["dicom/clean/"] }
+      }
+    ]
+  }
+}
+EOF
+gsutil lifecycle set /tmp/lifecycle.json gs://YOUR_GCS_BUCKET
+```
+
+For hard deletion instead of Coldline transition, change `"type": "Delete"` and remove `"storageClass"`.
+
+**Note:** GCS lifecycle rules apply only to object age, not study status. Coordinate retention
+periods with your data governance policy and any IRB or DUA requirements.
+
+### Production cleanup (S3)
+
+```bash
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket YOUR_S3_BUCKET \
+  --lifecycle-configuration '{
+    "Rules": [
+      {
+        "ID": "dicom-raw-coldline",
+        "Filter": { "Prefix": "dicom/raw/" },
+        "Status": "Enabled",
+        "Transitions": [{ "Days": 90, "StorageClass": "GLACIER_IR" }]
+      }
+    ]
+  }'
+```
+
+### Local dev cleanup
+
+```bash
+# Remove all DICOM files for one study (safe once approved/rejected)
+rm -rf ./data/dicom/raw/{studyUID}
+rm -rf ./data/dicom/clean/{studyUID}
+
+# Full reset (destroys all data including PostgreSQL)
+docker compose down -v
+
+# BIDS output cleanup
+rm -rf ./data/bids/{studyUID}
+```
+
+### DIMSE retry state file
+
+The durable retry state file (`dimse-ingest-retry-state.json`, default path
+`/app/data/dimse-ingest-retry-state.json`) is small and safe to leave in place. It is overwritten on
+each retry worker pass. Delete it only to reset the queue to empty (pending/dead-letter entries are
+lost):
+
+```bash
+rm /app/data/dimse-ingest-retry-state.json
+# Then restart dimse-receiver — it starts with empty queues
+```
+
 ## 8b. Email (Local Dev with Mailpit)
 
 Email is disabled by default — all calls are silent no-ops when `SMTP_HOST` is unset.
