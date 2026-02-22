@@ -37,6 +37,7 @@ type Study struct {
 	DefaceQaScore          *float64  `json:"deface_qa_score,omitempty"`
 	SubjectID              *string   `json:"subject_id,omitempty"`
 	RejectionReason        *string   `json:"rejection_reason,omitempty"`
+	StudySizeBytes         int64     `json:"study_size_bytes"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
@@ -51,6 +52,7 @@ const studyColumns = `
 	deface_qa_score,
 	subject_id,
 	rejection_reason,
+	study_size_bytes,
 	created_at, updated_at`
 
 type scannable interface {
@@ -70,6 +72,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.DefaceQaScore,
 		&s.SubjectID,
 		&s.RejectionReason,
+		&s.StudySizeBytes,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -229,6 +232,12 @@ func CountStudies(ctx context.Context, db *sql.DB, f StudyFilters) (int, error) 
 	var total int
 	err := db.QueryRowContext(ctx, `SELECT count(*) FROM studies`+where, args...).Scan(&total)
 	return total, err
+}
+
+func UpdateStudySizeBytes(ctx context.Context, db *sql.DB, id string, sizeBytes int64) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET study_size_bytes = $1, updated_at = now() WHERE id = $2`, sizeBytes, id)
+	return err
 }
 
 func UpdateStudyStatus(ctx context.Context, db *sql.DB, id, status string) error {
@@ -644,11 +653,12 @@ func GetStudyBreakdown(ctx context.Context, db *sql.DB, projectID ...string) ([]
 
 // StorageStats summarises DICOM file counts across studies by store type.
 type StorageStats struct {
-	RawFileCount     int `json:"raw_file_count"`   // files in dicom_store='raw'
-	CleanFileCount   int `json:"clean_file_count"` // files in dicom_store='clean'
-	TotalFileCount   int `json:"total_file_count"`
-	TotalStudies     int `json:"total_studies"`
-	GeneratedAt      string `json:"generated_at"`
+	RawFileCount   int    `json:"raw_file_count"`   // files in dicom_store='raw'
+	CleanFileCount int    `json:"clean_file_count"` // files in dicom_store='clean'
+	TotalFileCount int    `json:"total_file_count"`
+	TotalStudies   int    `json:"total_studies"`
+	TotalSizeBytes int64  `json:"total_size_bytes"` // sum of study_size_bytes across all studies
+	GeneratedAt    string `json:"generated_at"`
 }
 
 // GetStorageStats returns aggregate DICOM file counts derived from the studies table.
@@ -665,10 +675,11 @@ func GetStorageStats(ctx context.Context, db *sql.DB, projectID ...string) (*Sto
 		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'raw'),   0)::int,
 		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'clean'), 0)::int,
 		  coalesce(sum(instance_count), 0)::int,
-		  count(*)::int
+		  count(*)::int,
+		  coalesce(sum(study_size_bytes), 0)::bigint
 		FROM studies`+where, args...)
 	var s StorageStats
-	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies); err != nil {
+	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies, &s.TotalSizeBytes); err != nil {
 		return nil, err
 	}
 	return &s, nil

@@ -101,6 +101,15 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Store file size if provided by the caller (e.g. DIMSE receiver).
+	if req.Metadata.StudySizeBytes > 0 {
+		if err := model.UpdateStudySizeBytes(r.Context(), s.db, study.ID, req.Metadata.StudySizeBytes); err != nil {
+			log.Printf("update study size %s: %v", study.ID, err)
+		} else {
+			study.StudySizeBytes = req.Metadata.StudySizeBytes
+		}
+	}
+
 	// Upsert per-series metadata when the caller provides it.
 	for _, sm := range req.Metadata.Series {
 		if sm.SeriesInstanceUID == "" {
