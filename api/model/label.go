@@ -67,3 +67,39 @@ func DeleteStudyLabel(ctx context.Context, db *sql.DB, labelID, studyID string) 
 		DELETE FROM study_labels WHERE id = $1 AND study_id = $2`, labelID, studyID)
 	return err
 }
+
+// BulkAddLabel applies a label to multiple studies. Duplicate labels are silently ignored.
+// Returns the count of rows actually inserted.
+func BulkAddLabel(ctx context.Context, db *sql.DB, studyIDs []string, label, createdBy string) (int64, error) {
+	var total int64
+	for _, sid := range studyIDs {
+		res, err := db.ExecContext(ctx, `
+			INSERT INTO study_labels (study_id, label, created_by)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (study_id, lower(label)) DO NOTHING`,
+			sid, label, createdBy)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
+
+// BulkRemoveLabel removes a label (case-insensitive) from multiple studies.
+// Returns the count of rows deleted.
+func BulkRemoveLabel(ctx context.Context, db *sql.DB, studyIDs []string, label string) (int64, error) {
+	var total int64
+	for _, sid := range studyIDs {
+		res, err := db.ExecContext(ctx, `
+			DELETE FROM study_labels WHERE study_id = $1 AND lower(label) = lower($2)`,
+			sid, label)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
