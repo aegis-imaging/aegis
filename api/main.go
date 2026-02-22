@@ -222,6 +222,13 @@ func main() {
 	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", adminOnly(srv.CreateDigestSubscription))
 	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", adminOnly(srv.DeleteDigestSubscription))
 
+	// Webhook subscriptions — HTTP callbacks for study lifecycle events.
+	mux.HandleFunc("GET /api/webhook-subscriptions", auth(srv.ListWebhooks))
+	mux.HandleFunc("POST /api/webhook-subscriptions", adminOnly(srv.CreateWebhook))
+	mux.HandleFunc("GET /api/webhook-subscriptions/{id}", auth(srv.GetWebhook))
+	mux.HandleFunc("PUT /api/webhook-subscriptions/{id}", adminOnly(srv.UpdateWebhook))
+	mux.HandleFunc("DELETE /api/webhook-subscriptions/{id}", adminOnly(srv.DeleteWebhook))
+
 	// Admin users — authorised dashboard users and their roles.
 	mux.HandleFunc("GET /api/admin-users", auth(srv.ListAdminUsers))
 	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))

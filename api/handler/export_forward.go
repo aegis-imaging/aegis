@@ -8,6 +8,7 @@ import (
 
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/routing"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // TriggerExport manually triggers export forwarding for an approved study.
@@ -120,6 +121,7 @@ func (s *Server) runExportForward(study *model.Study) {
 				"study_uid":         study.StudyInstanceUID,
 				"destination_count": len(destinations),
 			})
+		webhook.Deliver(ctx, s.db, "study.export_complete", study)
 	} else {
 		model.UpdateExportStatus(ctx, s.db, study.ID, "failed")
 		model.CreateAuditEntry(ctx, s.db, "export.failed", "export-engine",

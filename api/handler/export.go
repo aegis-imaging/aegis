@@ -14,6 +14,7 @@ import (
 
 	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // ApproveStudy transitions a study to 'approved', making it eligible for export sharing.
@@ -33,6 +34,7 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.approved", actorEmail(r), "study", study.ID, clientIP(r), nil)
+	webhook.Deliver(r.Context(), s.db, "study.approved", study)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
 		subject, body := email.StudyApproved(study.StudyInstanceUID)
@@ -68,6 +70,7 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actorEmail(r), "study", study.ID, clientIP(r), nil)
+	webhook.Deliver(r.Context(), s.db, "study.rejected", study)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
 		subject, body := email.StudyRejected(study.StudyInstanceUID)

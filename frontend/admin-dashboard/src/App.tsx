@@ -158,6 +158,17 @@ type DigestSubscription = {
   created_at: string
 }
 
+type WebhookSubscription = {
+  id: string
+  project_id: string | null
+  url: string
+  events: string[]
+  secret: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
 type AdminUser = {
   id: string
   email: string
@@ -2648,12 +2659,22 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
 
 // ── Notifications Panel ───────────────────────────────────────────────────────
 
+const WEBHOOK_EVENTS = [
+  'study.approved',
+  'study.rejected',
+  'study.phi_flagged',
+  'study.export_complete',
+  'study.stuck',
+]
+
 function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [projects, setProjects]   = useState<Project[]>([])
   const [subs, setSubs]           = useState<DigestSubscription[]>([])
+  const [webhooks, setWebhooks]   = useState<WebhookSubscription[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
 
+  // Digest form state
   const [formEmail, setFormEmail]         = useState('')
   const [formProject, setFormProject]     = useState('')
   const [formFrequency, setFormFrequency] = useState<'weekly' | 'monthly'>('weekly')
@@ -2661,18 +2682,31 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [saving, setSaving]               = useState(false)
   const [formError, setFormError]         = useState<string | null>(null)
 
+  // Webhook form state
+  const [showWebhookForm, setShowWebhookForm]     = useState(false)
+  const [whURL, setWhURL]                         = useState('')
+  const [whEvents, setWhEvents]                   = useState<string[]>([])
+  const [whProject, setWhProject]                 = useState('')
+  const [whSecret, setWhSecret]                   = useState('')
+  const [whEnabled, setWhEnabled]                 = useState(true)
+  const [whSaving, setWhSaving]                   = useState(false)
+  const [whFormError, setWhFormError]             = useState<string | null>(null)
+  const [whEditId, setWhEditId]                   = useState<string | null>(null)
+
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [projRes, subRes] = await Promise.all([
+      const [projRes, subRes, whRes] = await Promise.all([
         fetch('/api/projects'),
         fetch('/api/digest-subscriptions'),
+        fetch('/api/webhook-subscriptions'),
       ])
-      if (!projRes.ok || !subRes.ok) throw new Error('Failed to load data')
-      const [projs, subList] = await Promise.all([projRes.json(), subRes.json()])
+      if (!projRes.ok || !subRes.ok || !whRes.ok) throw new Error('Failed to load data')
+      const [projs, subList, whList] = await Promise.all([projRes.json(), subRes.json(), whRes.json()])
       setProjects(projs ?? [])
       setSubs(subList ?? [])
+      setWebhooks(whList ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
@@ -2714,6 +2748,64 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
   async function del(id: string, email: string) {
     if (!confirm(`Remove digest subscription for ${email}?`)) return
     await fetch(`/api/digest-subscriptions/${id}`, { method: 'DELETE' })
+    fetchAll()
+  }
+
+  // Webhook helpers
+  function openWebhookCreate() {
+    setWhEditId(null)
+    setWhURL('')
+    setWhEvents([])
+    setWhProject('')
+    setWhSecret('')
+    setWhEnabled(true)
+    setWhFormError(null)
+    setShowWebhookForm(true)
+  }
+
+  function openWebhookEdit(wh: WebhookSubscription) {
+    setWhEditId(wh.id)
+    setWhURL(wh.url)
+    setWhEvents(wh.events)
+    setWhProject(wh.project_id ?? '')
+    setWhSecret('')
+    setWhEnabled(wh.enabled)
+    setWhFormError(null)
+    setShowWebhookForm(true)
+  }
+
+  function toggleWhEvent(ev: string) {
+    setWhEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev])
+  }
+
+  async function saveWebhook() {
+    if (!whURL) { setWhFormError('URL is required'); return }
+    if (whEvents.length === 0) { setWhFormError('Select at least one event'); return }
+    setWhSaving(true)
+    setWhFormError(null)
+    const body: Record<string, unknown> = {
+      url: whURL, events: whEvents, enabled: whEnabled,
+    }
+    if (whProject) body.project_id = whProject
+    if (whSecret)  body.secret = whSecret
+    try {
+      const res = await fetch(
+        whEditId ? `/api/webhook-subscriptions/${whEditId}` : '/api/webhook-subscriptions',
+        { method: whEditId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      )
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowWebhookForm(false)
+      fetchAll()
+    } catch (err) {
+      setWhFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setWhSaving(false)
+    }
+  }
+
+  async function deleteWebhook(id: string, url: string) {
+    if (!confirm(`Remove webhook for ${url}?`)) return
+    await fetch(`/api/webhook-subscriptions/${id}`, { method: 'DELETE' })
     fetchAll()
   }
 
@@ -2792,6 +2884,102 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
                       <div className="actions-cell">
                         <button type="button" className="btn btn--revoke"
                           onClick={() => del(sub.id, sub.email)}>Remove</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ── Webhook subscriptions ── */}
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Webhook Subscriptions</div>
+            <div className="routing-section-sub">
+              HTTP POST callbacks fired on study events, signed with HMAC-SHA256 when a secret is set.
+            </div>
+          </div>
+          {isAdmin && <button type="button" className="btn-primary" onClick={openWebhookCreate}>+ New webhook</button>}
+        </div>
+
+        {isAdmin && showWebhookForm && (
+          <div className="routing-form">
+            <h3>{whEditId ? 'Edit webhook' : 'New webhook'}</h3>
+            {whFormError && <div className="form-error">{whFormError}</div>}
+            <div className="form-grid">
+              <input className="form-input" type="url" placeholder="Endpoint URL (https://…) *"
+                value={whURL} onChange={e => setWhURL(e.target.value)} />
+              <select className="form-select" aria-label="Project scope"
+                value={whProject} onChange={e => setWhProject(e.target.value)}>
+                <option value="">All projects</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <input className="form-input" type="text" placeholder="Secret (optional, for HMAC signing)"
+                value={whSecret} onChange={e => setWhSecret(e.target.value)} />
+            </div>
+            <div className="form-row" style={{ gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>Events:</span>
+              {WEBHOOK_EVENTS.map(ev => (
+                <label key={ev} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={whEvents.includes(ev)} onChange={() => toggleWhEvent(ev)} />
+                  {ev}
+                </label>
+              ))}
+            </div>
+            <div className="form-row" style={{ marginBottom: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={whEnabled} onChange={e => setWhEnabled(e.target.checked)} />
+                Enabled
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveWebhook} disabled={whSaving}>
+                {whSaving ? 'Saving…' : (whEditId ? 'Update' : 'Create')}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowWebhookForm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading && <div className="state-loading">Loading…</div>}
+        {!loading && !error && webhooks.length === 0 && (
+          <div className="state-empty">No webhook subscriptions yet.</div>
+        )}
+        {!loading && !error && webhooks.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>URL</th>
+                <th>Events</th>
+                <th>Project</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {webhooks.map(wh => (
+                <tr key={wh.id}>
+                  <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
+                  <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
+                  <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="routing-desc">all</span>}</td>
+                  <td>
+                    <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
+                      {wh.enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </td>
+                  <td>
+                    {isAdmin && (
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--action"
+                          onClick={() => openWebhookEdit(wh)}>Edit</button>
+                        <button type="button" className="btn btn--revoke"
+                          onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
                       </div>
                     )}
                   </td>
