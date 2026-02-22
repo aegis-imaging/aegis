@@ -5211,6 +5211,8 @@ export function App() {
     setBulkSelected(new Set())
     setBreakdown(null)
     setShowBreakdown(false)
+    setTimeline(null)
+    setShowTimeline(false)
   }, [globalProjectId])
 
   // Projects for filter dropdown
@@ -5257,6 +5259,17 @@ export function App() {
     if (res.ok) setStorageStats(await res.json())
   }, [globalProjectId])
   useEffect(() => { loadStorageStats() }, [loadStorageStats])
+
+  type TimelineDay = { date: string; received: number; approved: number }
+  const [timeline, setTimeline] = useState<TimelineDay[] | null>(null)
+  const [showTimeline, setShowTimeline] = useState(false)
+  const loadTimeline = async () => {
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const res = await fetch(`/api/stats/timeline?${params}`)
+    if (res.ok) { const d = await res.json(); setTimeline(d.timeline ?? []); setShowTimeline(true) }
+    else setShowTimeline(v => !v)
+  }
 
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
@@ -5623,6 +5636,33 @@ export function App() {
                       ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+
+          {/* Timeline (daily ingestion) toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
+              {showTimeline ? '▲ Hide timeline' : '▼ Daily ingestion (last 30 days)'}
+            </button>
+            {showTimeline && timeline && (
+              <div style={{marginTop:'6px',overflowX:'auto'}}>
+                {timeline.length === 0
+                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                  : (
+                    <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
+                      <thead><tr><th>Date</th><th>Received</th><th>Approved</th></tr></thead>
+                      <tbody>
+                        {timeline.map(d => (
+                          <tr key={d.date}>
+                            <td>{d.date}</td>
+                            <td>{d.received}</td>
+                            <td>{d.approved}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
               </div>
             )}
           </div>

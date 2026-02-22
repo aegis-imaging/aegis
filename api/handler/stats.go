@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
@@ -69,4 +70,22 @@ func (s *Server) GetStorageStats(w http.ResponseWriter, r *http.Request) {
 	}
 	stats.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
 	s.writeJSON(w, http.StatusOK, stats)
+}
+
+// GetTimeline returns daily study ingestion counts.
+// GET /api/stats/timeline  — accepts ?days=30 (default) and ?project_id=
+func (s *Server) GetTimeline(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	days, _ := strconv.Atoi(q.Get("days"))
+	projectID := q.Get("project_id")
+
+	rows, err := model.GetStudyTimeline(r.Context(), s.db, days, projectID)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to query timeline")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"timeline":     rows,
+		"generated_at": time.Now().UTC(),
+	})
 }
