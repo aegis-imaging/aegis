@@ -19,6 +19,11 @@ export const studyIdArgsSchema = z.object({
   study_id: z.string().uuid()
 });
 
+export const studyUidArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_instance_uid: z.string().min(4).max(256).regex(/^[0-9.]+$/)
+});
+
 export const emptyArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional()
 });
@@ -60,7 +65,8 @@ export const readToolNames = [
   "list_export_shares",
   "get_system_health",
   "get_dimse_retry_status",
-  "get_audit_log"
+  "get_audit_log",
+  "get_study_by_uid"
 ] as const;
 
 export const writeToolNames = [
