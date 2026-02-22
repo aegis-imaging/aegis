@@ -53,3 +53,18 @@ func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request) {
 		Offset:  offset,
 	})
 }
+
+// GetAuditActors returns recent admin actors with their last-seen timestamp and action count.
+// GET /api/audit/actors
+func (s *Server) GetAuditActors(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	actors, err := model.GetActorSummary(r.Context(), s.db, limit)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to query actor summary")
+		return
+	}
+	if actors == nil {
+		actors = []model.ActorSummary{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"actors": actors})
+}
