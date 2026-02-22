@@ -314,6 +314,9 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-download", auth(srv.ServeDicomDownload))
 	mux.HandleFunc("POST /api/studies/{studyUID}/trigger-export", adminOnly(srv.TriggerExport))
 
+	// Synthetic MRI generation — creates a new synthetic brain MRI study.
+	mux.HandleFunc("POST /api/studies/generate-synthetic", adminOnly(srv.GenerateSyntheticStudy))
+
 	var h http.Handler = mux
 	h = middleware.Recover(h)
 	h = middleware.Logging(h)
