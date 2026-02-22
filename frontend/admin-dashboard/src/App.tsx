@@ -194,6 +194,18 @@ type WebhookSubscription = {
   updated_at: string
 }
 
+type WebhookDelivery = {
+  id: string
+  subscription_id: string
+  event: string
+  url: string
+  attempt: number
+  status_code?: number | null
+  success: boolean
+  error_message?: string | null
+  delivered_at: string
+}
+
 type AdminUser = {
   id: string
   email: string
@@ -2992,6 +3004,24 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
   const [whFormError, setWhFormError]             = useState<string | null>(null)
   const [whEditId, setWhEditId]                   = useState<string | null>(null)
 
+  // Webhook delivery log state
+  const [deliveryWhId, setDeliveryWhId]           = useState<string | null>(null)
+  const [deliveries, setDeliveries]               = useState<WebhookDelivery[]>([])
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false)
+
+  const showDeliveries = async (id: string) => {
+    if (deliveryWhId === id) { setDeliveryWhId(null); return }
+    setDeliveryWhId(id)
+    setDeliveriesLoading(true)
+    try {
+      const res = await fetch(`/api/webhook-subscriptions/${id}/deliveries`)
+      const data = res.ok ? await res.json() : { deliveries: [] }
+      setDeliveries(data.deliveries ?? [])
+    } finally {
+      setDeliveriesLoading(false)
+    }
+  }
+
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -3269,26 +3299,74 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
             </thead>
             <tbody>
               {webhooks.map(wh => (
-                <tr key={wh.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
-                  <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
-                  <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="routing-desc">all</span>}</td>
-                  <td>
-                    <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
-                      {wh.enabled ? 'enabled' : 'disabled'}
-                    </span>
-                  </td>
-                  <td>
-                    {isAdmin && (
+                <>
+                  <tr key={wh.id}>
+                    <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
+                    <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
+                    <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="routing-desc">all</span>}</td>
+                    <td>
+                      <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
+                        {wh.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </td>
+                    <td>
                       <div className="actions-cell">
-                        <button type="button" className="btn btn--action"
-                          onClick={() => openWebhookEdit(wh)}>Edit</button>
-                        <button type="button" className="btn btn--revoke"
-                          onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
+                        <button type="button" className="btn-secondary"
+                          onClick={() => showDeliveries(wh.id)}
+                          title="View delivery log">
+                          {deliveryWhId === wh.id ? 'Hide Log' : 'Log'}
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <button type="button" className="btn btn--action"
+                              onClick={() => openWebhookEdit(wh)}>Edit</button>
+                            <button type="button" className="btn btn--revoke"
+                              onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
+                          </>
+                        )}
                       </div>
-                    )}
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
+                  {deliveryWhId === wh.id && (
+                    <tr key={`${wh.id}-deliveries`}>
+                      <td colSpan={5} className="audit-sub-cell">
+                        {deliveriesLoading ? (
+                          <span className="td-muted">Loading…</span>
+                        ) : deliveries.length === 0 ? (
+                          <span className="td-muted">No deliveries recorded yet.</span>
+                        ) : (
+                          <table className="audit-table audit-table--inner">
+                            <thead>
+                              <tr>
+                                <th>Event</th>
+                                <th>Attempt</th>
+                                <th>Status</th>
+                                <th>Result</th>
+                                <th>Time</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {deliveries.map(d => (
+                                <tr key={d.id}>
+                                  <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{d.event}</td>
+                                  <td>{d.attempt}</td>
+                                  <td>{d.status_code ?? '—'}</td>
+                                  <td>
+                                    <span className={`badge ${d.success ? 'badge--enabled' : 'badge--rejected'}`}>
+                                      {d.success ? 'ok' : 'failed'}
+                                    </span>
+                                    {d.error_message && <span className="td-subtle"> {d.error_message}</span>}
+                                  </td>
+                                  <td className="td-date">{fmtDate(d.delivered_at)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>
