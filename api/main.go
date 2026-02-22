@@ -294,6 +294,7 @@ func main() {
 
 	// Protocol templates — per-project MRI acquisition parameter expectations.
 	mux.HandleFunc("GET /api/projects/{projectID}/protocol-templates", auth(srv.ListProtocolTemplates))
+	mux.HandleFunc("GET /api/projects/{projectID}/protocol-templates/export", auth(srv.ExportProtocolTemplates))
 	mux.HandleFunc("POST /api/projects/{projectID}/protocol-templates", adminOnly(srv.CreateProtocolTemplate))
 	mux.HandleFunc("GET /api/protocol-templates/{id}", auth(srv.GetProtocolTemplate))
 	mux.HandleFunc("PUT /api/protocol-templates/{id}", adminOnly(srv.UpdateProtocolTemplate))

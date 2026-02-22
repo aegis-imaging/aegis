@@ -2891,7 +2891,19 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
               Studies are checked against matching templates when protocol compliance is required.
             </div>
           </div>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
+          <div className="actions-cell">
+            {projects.length > 0 && (
+              <a
+                className="btn btn--secondary"
+                href={`/api/projects/${formProject || projects[0]?.id}/protocol-templates/export`}
+                download="protocol-templates.json"
+                title="Download all templates for selected project as JSON"
+              >
+                Export JSON
+              </a>
+            )}
+            {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
+          </div>
         </div>
 
         {isAdmin && showForm && (
