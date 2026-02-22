@@ -1523,7 +1523,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
 
 // ── Study Row ─────────────────────────────────────────────────────────────────
 
-function StudyRow({ study, onAction, onSelect, isAdmin }: { study: Study; onAction: () => void; onSelect: () => void; isAdmin: boolean }) {
+function StudyRow({ study, onAction, onSelect, isAdmin, checked, onToggle }: { study: Study; onAction: () => void; onSelect: () => void; isAdmin: boolean; checked: boolean; onToggle: () => void }) {
   const [shareOpen,  setShareOpen]  = useState(false)
   const [viewOpen,   setViewOpen]   = useState(false)
   const [defaceOpen, setDefaceOpen] = useState(false)
@@ -1583,7 +1583,8 @@ function StudyRow({ study, onAction, onSelect, isAdmin }: { study: Study; onActi
 
   return (
     <>
-      <tr>
+      <tr className={checked ? 'tr--selected' : ''}>
+        <td className="td-check"><input type="checkbox" checked={checked} onChange={onToggle} aria-label="Select study" /></td>
         <td className="td-uid"><button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button></td>
         <td>{study.modality || '—'}</td>
         <td>{study.body_part || '—'}</td>
@@ -3804,6 +3805,8 @@ export function App() {
   const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null)
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [bulkWorking, setBulkWorking] = useState(false)
 
   // Auth state
   const [currentUser, setCurrentUser] = useState<AuthIdentity | null>(null)
@@ -3892,14 +3895,14 @@ export function App() {
   }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterDateFrom, filterDateTo, refreshTick])
 
   // Filter change helpers — also reset page to 0
-  function setStatusF(v: string)   { setFilterStatus(v);   setPage(0) }
-  function setModalityF(v: string) { setFilterModality(v); setPage(0) }
-  function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0) }
-  function setSourceF(v: string)   { setFilterSource(v);   setPage(0) }
-  function setProjectF(v: string)  { setFilterProject(v);  setPage(0) }
-  function setSearchF(v: string)    { setFilterSearch(v);    setPage(0) }
-  function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0) }
-  function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0) }
+  function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
+  function setModalityF(v: string) { setFilterModality(v); setPage(0); setBulkSelected(new Set()) }
+  function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0); setBulkSelected(new Set()) }
+  function setSourceF(v: string)   { setFilterSource(v);   setPage(0); setBulkSelected(new Set()) }
+  function setProjectF(v: string)  { setFilterProject(v);  setPage(0); setBulkSelected(new Set()) }
+  function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
+  function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
+  function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
 
   const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterDateFrom || filterDateTo)
 
@@ -3907,6 +3910,45 @@ export function App() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
     setFilterSource(''); setFilterProject(''); setFilterSearch('')
     setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
+    setBulkSelected(new Set())
+  }
+
+  const allPageIds = studies.map(s => s.id)
+  const allPageSelected = allPageIds.length > 0 && allPageIds.every(id => bulkSelected.has(id))
+  const somePageSelected = allPageIds.some(id => bulkSelected.has(id))
+
+  function toggleSelectAll() {
+    if (allPageSelected) {
+      setBulkSelected(prev => {
+        const next = new Set(prev)
+        allPageIds.forEach(id => next.delete(id))
+        return next
+      })
+    } else {
+      setBulkSelected(prev => {
+        const next = new Set(prev)
+        allPageIds.forEach(id => next.add(id))
+        return next
+      })
+    }
+  }
+
+  async function doBulkAction(action: 'approve' | 'reject') {
+    const ids = Array.from(bulkSelected)
+    if (ids.length === 0) return
+    if (!confirm(`${action === 'approve' ? 'Approve' : 'Reject'} ${ids.length} selected ${ids.length === 1 ? 'study' : 'studies'}?`)) return
+    setBulkWorking(true)
+    try {
+      await fetch('/api/studies/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, study_ids: ids }),
+      })
+      setBulkSelected(new Set())
+      setRefreshTick(t => t + 1)
+    } finally {
+      setBulkWorking(false)
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
@@ -4180,11 +4222,29 @@ export function App() {
             </div>
           )}
 
+          {state === 'loaded' && bulkSelected.size > 0 && isAdmin && (
+            <div className="bulk-action-bar">
+              <span className="bulk-action-bar__count">{bulkSelected.size} selected</span>
+              <button type="button" className="btn btn--approve" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
+              <button type="button" className="btn btn--reject" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
+              <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
+            </div>
+          )}
+
           {state === 'loaded' && studies.length > 0 && (
             <div className="studies-table-wrap">
               <table className="studies-table">
                 <thead>
                   <tr>
+                    <th className="th-check">
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        ref={el => { if (el) el.indeterminate = somePageSelected && !allPageSelected }}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all on page"
+                      />
+                    </th>
                     <th>Study UID</th>
                     <th>Modality</th>
                     <th>Body Part</th>
@@ -4203,7 +4263,20 @@ export function App() {
                 </thead>
                 <tbody>
                   {studies.map(study => (
-                    <StudyRow key={study.id} study={study} onAction={() => setRefreshTick(t => t + 1)} onSelect={() => setSelectedStudyId(study.id)} isAdmin={isAdmin} />
+                    <StudyRow
+                      key={study.id}
+                      study={study}
+                      onAction={() => setRefreshTick(t => t + 1)}
+                      onSelect={() => setSelectedStudyId(study.id)}
+                      isAdmin={isAdmin}
+                      checked={bulkSelected.has(study.id)}
+                      onToggle={() => setBulkSelected(prev => {
+                        const next = new Set(prev)
+                        if (next.has(study.id)) next.delete(study.id)
+                        else next.add(study.id)
+                        return next
+                      })}
+                    />
                   ))}
                 </tbody>
               </table>
