@@ -7,21 +7,21 @@ interface TagDiffTableProps {
 }
 
 const ACTION_COLORS: Record<TagAction, string> = {
-  X: '#dc2626', // red — removed
+  X: '#ea580c', // orange — removed (colorblind-safe: not red)
   Z: '#d97706', // amber — zeroed
   D: '#d97706', // amber — dummy
   U: '#2563eb', // blue — UID replaced
   C: '#7c3aed', // purple — cleaned
-  K: '#16a34a', // green — kept
+  K: '#0d9488', // teal — kept (colorblind-safe: not green)
 }
 
 const ACTION_BG: Record<TagAction, string> = {
-  X: '#fef2f2',
+  X: '#fff7ed',
   Z: '#fffbeb',
   D: '#fffbeb',
   U: '#eff6ff',
   C: '#faf5ff',
-  K: '#f0fdf4',
+  K: '#f0fdfa',
 }
 
 export function TagDiffTable({ tags, privateTagsRemoved }: TagDiffTableProps) {

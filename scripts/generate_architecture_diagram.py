@@ -28,11 +28,11 @@ C = {
     "purple": "#7C3AED",
     "amber":  "#D97706",
     "cyan":   "#0891B2",
-    "red":    "#DC2626",
-    "green":  "#15803D",
+    "red":    "#EA580C",   # orange-600 — colorblind-safe (was #DC2626 red)
+    "green":  "#0F766E",   # teal-700 — colorblind-safe (was #15803D green)
     "navy":   "#1D4ED8",
     "slate":  "#374151",
-    "emerald":"#059669",
+    "emerald":"#0D9488",   # teal-600 — colorblind-safe (was #059669 emerald)
 }
 
 
@@ -132,8 +132,8 @@ body {
 
 .z-src  { background: #EFF6FF; border-color: #1D4ED8; }
 .z-src  .zone-hdr { color: #1D4ED8; }
-.z-gcp  { background: #F0FDF4; border-color: #15803D; }
-.z-gcp  .zone-hdr { color: #15803D; }
+.z-gcp  { background: #F0FDFA; border-color: #0F766E; }
+.z-gcp  .zone-hdr { color: #0F766E; }
 .z-pipe { background: #EFF6FF; border-color: #1D4ED8; }
 .z-pipe .zone-hdr { color: #1D4ED8; }
 .z-ph   { background: #FAF5FF; border-color: #7C3AED; }
@@ -781,7 +781,8 @@ if __name__ == "__main__":
     html     = build_html()
     html_path = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.html")
     pdf_path  = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.pdf")
-    png_path  = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.png")
+    # Canonical PNG location: served directly by the landing page
+    png_path  = os.path.join(PROJECT_DIR, "frontend", "landing", "public", "architecture.png")
 
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
