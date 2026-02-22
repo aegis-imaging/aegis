@@ -385,13 +385,17 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 	// Sort files for deterministic ordering.
 	sort.Strings(g.Files)
 
-	// Copy files to raw DICOM store.
+	// Copy files to raw DICOM store, accumulating total size.
+	var totalSizeBytes int64
 	for i, filePath := range g.Files {
 		key := fmt.Sprintf("dicom/raw/%s/%d.dcm", g.StudyInstanceUID, i)
 		f, err := os.Open(filePath)
 		if err != nil {
 			model.UpdateUploadSessionFailed(ctx, db, session.ID, err.Error())
 			return "", fmt.Errorf("open source file %s: %w", filepath.Base(filePath), err)
+		}
+		if fi, statErr := f.Stat(); statErr == nil {
+			totalSizeBytes += fi.Size()
 		}
 		if err := store.Store(ctx, key, f); err != nil {
 			f.Close()
@@ -429,6 +433,13 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 	if err := model.CreateStudy(ctx, db, study); err != nil {
 		model.UpdateUploadSessionFailed(ctx, db, session.ID, err.Error())
 		return "", fmt.Errorf("create study: %w", err)
+	}
+
+	// Store computed file size (non-fatal).
+	if totalSizeBytes > 0 {
+		if err := model.UpdateStudySizeBytes(ctx, db, study.ID, totalSizeBytes); err != nil {
+			log.Printf("update study size %s: %v", study.ID, err)
+		}
 	}
 
 	// Upsert per-series metadata now that we have a study ID.

@@ -74,6 +74,7 @@ type Study = {
   export_status: string
   dicom_store: string
   instance_count: number
+  study_size_bytes: number
   deface_qa_score?: number
   subject_id?: string
   rejection_reason?: string
@@ -542,6 +543,13 @@ function shareStatusLabel(share: Share, nowMs = Date.now()): 'active' | 'expired
 
 function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i]
 }
 
 function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' | 'export' }) {
@@ -1677,6 +1685,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="study-detail__meta-item"><strong>Body Part</strong> {study.body_part || '—'}</div>
         <div className="study-detail__meta-item"><strong>Files</strong> {study.instance_count}</div>
         <div className="study-detail__meta-item"><strong>Series</strong> {study.series_count}</div>
+        <div className="study-detail__meta-item"><strong>Size</strong> {study.study_size_bytes > 0 ? formatBytes(study.study_size_bytes) : '—'}</div>
         <div className="study-detail__meta-item"><strong>Store</strong> {study.dicom_store || 'raw'}</div>
         <div className="study-detail__meta-item"><strong>Received</strong> {fmtDate(study.created_at)}</div>
         <div className="study-detail__meta-item"><strong>Updated</strong> {fmtDate(study.updated_at)}</div>
@@ -5391,7 +5400,7 @@ export function App() {
     else setShowBreakdown(v => !v)
   }
 
-  type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number }
+  type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number; total_size_bytes: number }
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
   const loadStorageStats = useCallback(async () => {
     const params = new URLSearchParams()
@@ -5773,8 +5782,9 @@ export function App() {
               {storageStats && (
                 <>
                   <span className="stats-banner__sep" />
-                  <span className="stats-banner__shares" title="DICOM file counts (raw / clean)">
+                  <span className="stats-banner__shares" title="DICOM file counts and total storage size">
                     {storageStats.total_file_count} files ({storageStats.raw_file_count} raw, {storageStats.clean_file_count} clean)
+                    {storageStats.total_size_bytes > 0 && ` · ${formatBytes(storageStats.total_size_bytes)}`}
                   </span>
                 </>
               )}

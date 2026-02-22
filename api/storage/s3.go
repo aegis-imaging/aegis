@@ -151,6 +151,20 @@ func (s *S3) Move(ctx context.Context, srcKey, dstKey string) error {
 	return s.Delete(ctx, srcKey)
 }
 
+func (s *S3) Size(ctx context.Context, key string) (int64, error) {
+	out, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("s3 head object: %w", err)
+	}
+	if out.ContentLength == nil {
+		return 0, nil
+	}
+	return *out.ContentLength, nil
+}
+
 // KeyToPath returns empty for cloud storage (files are not on the local filesystem).
 func (s *S3) KeyToPath(_ string) string {
 	return ""
