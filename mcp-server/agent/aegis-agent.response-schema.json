@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AegisAgentResponse",
+  "type": "object",
+  "properties": {
+    "ok": { "type": "boolean" },
+    "request_id": { "type": "string" },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "summary": { "type": "string" },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": { "type": "string" },
+              "value": { "type": ["string", "number", "boolean", "null"] },
+              "timestamp": { "type": ["string", "null"] }
+            },
+            "required": ["field", "value"],
+            "additionalProperties": false
+          }
+        },
+        "diagnostics": {
+          "type": "object",
+          "properties": {
+            "terminal": { "type": "boolean" },
+            "stuck": { "type": "boolean" },
+            "blockers": { "type": "array", "items": { "type": "string" } },
+            "recommended_actions": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["terminal", "stuck", "blockers", "recommended_actions"],
+          "additionalProperties": false
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "event": { "type": "string" },
+              "timestamp": { "type": "string" }
+            },
+            "required": ["event", "timestamp"],
+            "additionalProperties": false
+          }
+        },
+        "next_steps": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["summary", "evidence", "diagnostics", "timeline", "next_steps"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["ok", "request_id"],
+  "oneOf": [
+    { "required": ["data"] },
+    { "required": ["error"] }
+  ],
+  "additionalProperties": false
+}
