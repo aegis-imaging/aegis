@@ -1200,6 +1200,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
+  // Internal note state
+  const [noteText, setNoteText] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [noteSaved, setNoteSaved] = useState(false)
+
   const loadData = useCallback(() => {
     setLoading(true)
     Promise.all([
@@ -1361,6 +1366,46 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               Share created! Link: <code>{shareResult.export_url}</code>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Internal admin note (admin only) */}
+      {isAdmin && (
+        <div className="study-detail__section">
+          <h3 className="study-detail__section-title">Add Internal Note</h3>
+          <div className="note-inline">
+            <textarea
+              className="note-textarea"
+              placeholder="Internal note (visible only to admins in audit trail)…"
+              value={noteText}
+              onChange={e => { setNoteText(e.target.value); setNoteSaved(false) }}
+              rows={3}
+              maxLength={2000}
+            />
+            <div className="note-inline__footer">
+              <span className="note-char-count">{noteText.length}/2000</span>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={!noteText.trim() || noteSaving}
+                onClick={async () => {
+                  setNoteSaving(true)
+                  await fetch(`/api/studies/${study.id}/notes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note: noteText }),
+                  })
+                  setNoteText('')
+                  setNoteSaved(true)
+                  setNoteSaving(false)
+                  loadData()
+                }}
+              >
+                {noteSaving ? 'Saving…' : 'Save note'}
+              </button>
+              {noteSaved && <span className="note-saved">Saved</span>}
+            </div>
+          </div>
         </div>
       )}
 
