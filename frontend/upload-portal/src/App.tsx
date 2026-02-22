@@ -363,10 +363,10 @@ export function App() {
       {error && (
         <div style={{
           padding: '12px 16px',
-          backgroundColor: '#fef2f2',
-          border: '1px solid #fecaca',
+          backgroundColor: '#fff7ed',
+          border: '1px solid #fed7aa',
           borderRadius: '8px',
-          color: '#dc2626',
+          color: '#ea580c',
           marginBottom: '24px',
           fontSize: '14px',
         }}>
@@ -551,7 +551,7 @@ export function App() {
               }}
             />
             {emailTouched && !emailValid ? (
-              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#dc2626' }}>
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#ea580c' }}>
                 Please enter a valid email address.
               </p>
             ) : (

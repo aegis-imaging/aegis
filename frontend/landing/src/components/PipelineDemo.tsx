@@ -92,11 +92,11 @@ function renderDicomToCanvas(
 // ---------------------------------------------------------------------------
 
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  X: { label: 'Removed',  color: '#dc2626' },
-  Z: { label: 'Zeroed',   color: '#ea580c' },
+  X: { label: 'Removed',  color: '#ea580c' },  // orange — colorblind-safe (not red)
+  Z: { label: 'Zeroed',   color: '#b45309' },  // amber-700
   D: { label: 'Replaced', color: '#d97706' },
   U: { label: 'New UID',  color: '#7c3aed' },
-  K: { label: 'Kept',     color: '#059669' },
+  K: { label: 'Kept',     color: '#0d9488' },  // teal — colorblind-safe (not green)
   C: { label: 'Cleaned',  color: '#0284c7' },
 }
 
