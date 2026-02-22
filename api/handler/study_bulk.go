@@ -90,7 +90,7 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 			}
 			model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actor, "study", study.ID, ip, nil)
 			if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
-				subject, body := email.StudyRejected(study.StudyInstanceUID)
+				subject, body := email.StudyRejected(study.StudyInstanceUID, "")
 				if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
 					// non-fatal
 					_ = err

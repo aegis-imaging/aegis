@@ -49,11 +49,18 @@ func TestStudyApproved(t *testing.T) {
 }
 
 func TestStudyRejected(t *testing.T) {
-	subject, body := StudyRejected("1.2.3.4")
+	subject, body := StudyRejected("1.2.3.4", "")
 
 	assert.Equal(t, "AEGIS — Study Rejected", subject)
 	assert.Contains(t, body, "1.2.3.4")
 	assert.Contains(t, body, "rejected")
+}
+
+func TestStudyRejected_WithReason(t *testing.T) {
+	_, body := StudyRejected("1.2.3.4", "Poor image quality")
+
+	assert.Contains(t, body, "1.2.3.4")
+	assert.Contains(t, body, "Poor image quality")
 }
 
 func TestDigestSummary(t *testing.T) {
@@ -80,7 +87,7 @@ func TestTemplates_NoPHI(t *testing.T) {
 	_, shareBody := ShareCreated("https://example.com", time.Now(), "test")
 	_, uploadBody := UploadConfirmed("1.2.3", "CT", 1, time.Now())
 	_, approvedBody := StudyApproved("1.2.3")
-	_, rejectedBody := StudyRejected("1.2.3")
+	_, rejectedBody := StudyRejected("1.2.3", "")
 	_, digestBody := DigestSummary("Test", "weekly", "test", 0, 0, 0, 0, 0)
 
 	for _, body := range []string{shareBody, uploadBody, approvedBody, rejectedBody, digestBody} {
