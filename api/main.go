@@ -268,6 +268,13 @@ func main() {
 	mux.HandleFunc("GET /api/subjects", auth(srv.ListSubjects))
 	mux.HandleFunc("PUT /api/studies/{id}/subject", adminOnly(srv.SetStudySubject))
 
+	// Federation peers — trusted remote AEGIS instances (stub for future cross-tenant federation).
+	mux.HandleFunc("GET /api/federation-peers", auth(srv.ListFederationPeers))
+	mux.HandleFunc("POST /api/federation-peers", adminOnly(srv.CreateFederationPeer))
+	mux.HandleFunc("GET /api/federation-peers/{id}", auth(srv.GetFederationPeer))
+	mux.HandleFunc("PUT /api/federation-peers/{id}", adminOnly(srv.UpdateFederationPeer))
+	mux.HandleFunc("DELETE /api/federation-peers/{id}", adminOnly(srv.DeleteFederationPeer))
+
 	// Admin users — authorised dashboard users and their roles.
 	mux.HandleFunc("GET /api/admin-users", auth(srv.ListAdminUsers))
 	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))
