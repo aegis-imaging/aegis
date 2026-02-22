@@ -3953,6 +3953,20 @@ export function App() {
 
   const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
   const pageStart  = studiesTotal === 0 ? 0 : page * PAGE_SIZE + 1
+
+  const csvUrl = (() => {
+    const params = new URLSearchParams()
+    if (filterStatus)   params.set('status',     filterStatus)
+    if (filterModality) params.set('modality',   filterModality)
+    if (filterBodyPart) params.set('body_part',  filterBodyPart)
+    if (filterSource)   params.set('source',     filterSource)
+    if (filterProject)  params.set('project_id', filterProject)
+    if (filterSearch)   params.set('search',     filterSearch)
+    if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
+    if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
+    const qs = params.toString()
+    return `/api/studies.csv${qs ? '?' + qs : ''}`
+  })()
   const pageEnd    = Math.min((page + 1) * PAGE_SIZE, studiesTotal)
 
   return (
@@ -4209,6 +4223,9 @@ export function App() {
                     ? `${studiesTotal} matching`
                     : `${studiesTotal} total`}
               </span>
+            )}
+            {state === 'loaded' && studiesTotal > 0 && (
+              <a href={csvUrl} download="studies.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
             )}
           </div>
 
