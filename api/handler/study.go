@@ -32,6 +32,7 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		ProjectID: q.Get("project_id"),
 		Status:    q.Get("status"),
 		Modality:  q.Get("modality"),
+		BodyPart:  q.Get("body_part"),
 		Source:    q.Get("source"),
 		Search:    q.Get("search"),
 	}

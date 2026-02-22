@@ -110,7 +110,8 @@ func GetStudyByUID(ctx context.Context, db *sql.DB, uid string) (*Study, error) 
 type StudyFilters struct {
 	ProjectID string
 	Status    string // received|defacing|clean|defaced|approved|rejected
-	Modality  string // MRI|CT|PET|… (case-insensitive prefix match)
+	Modality  string // MRI|CT|PET|… (case-insensitive exact match)
+	BodyPart  string // HEAD|CHEST|… (case-insensitive exact match)
 	Source    string // external|internal
 	Search    string // substring match on study_instance_uid or study_description
 }
@@ -133,6 +134,11 @@ func studyWhere(f StudyFilters) (string, []any) {
 	if f.Modality != "" {
 		clauses = append(clauses, fmt.Sprintf(`upper(modality) = upper($%d)`, n))
 		args = append(args, f.Modality)
+		n++
+	}
+	if f.BodyPart != "" {
+		clauses = append(clauses, fmt.Sprintf(`upper(body_part) = upper($%d)`, n))
+		args = append(args, f.BodyPart)
 		n++
 	}
 	if f.Source != "" {
