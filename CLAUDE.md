@@ -278,6 +278,8 @@ In the admin dashboard:
 - **Projects tab** — create and edit projects (name, slug, description); shows default anon profile badge.
 - **Users tab** — manage authorised admin users and their roles (admin|viewer).
 
+**Global project selector:** A dropdown in the admin dashboard header scopes all tabs — studies list, stats banner, breakdown table, storage stats, timeline, and audit log — to a single project. Selecting "All Projects" restores the unfiltered view. The selection is persisted in `localStorage`. The stats banner, breakdown, and timeline panels auto-reload when the project changes.
+
 ### Studies List (`GET /api/studies`)
 
 Returns a paginated envelope `{ studies, total, limit, offset }`.
@@ -991,6 +993,7 @@ After routing rules evaluate (upload complete, internal ingest, batch import), t
 | Var | Default | Notes |
 |-----|---------|-------|
 | `PIPELINE_AUTO` | `true` | Set to `"false"` to disable auto-dispatch (manual-only mode) |
+| `PIPELINE_ALERT_EMAIL` | *(empty — disabled)* | Email address that receives an alert when any pipeline step fails; requires `SMTP_HOST` to be set |
 
 **Dependency graph (3 phases):**
 
@@ -1014,6 +1017,8 @@ Phase 2: QC check + BIDS conversion (after defacing, final files)
 - Services with no URL configured are silently skipped (study stays in "pending")
 
 **Audit trail:** Each auto-dispatch creates a `pipeline.dispatch` audit entry recording which service was dispatched and for which study.
+
+**Pipeline failure alerts:** When `PIPELINE_ALERT_EMAIL` is set and `SMTP_HOST` is configured, a plain-text email is sent whenever a sidecar service actively reports failure (defacing, PHI scan, classification, protocol check, QC, BIDS conversion). The email body contains service name, study UID, error message, and timestamp — no PHI. Subject: `[AEGIS Alert] Pipeline step failed: <service> — <studyUID>`.
 
 ### Study Export & DICOM Download (`api/handler/export.go`, `api/handler/dicom_download.go`, `api/handler/export_forward.go`)
 
@@ -1120,8 +1125,17 @@ Free-text labels (up to 80 characters each) that admins can attach to studies fo
 - `GET /api/studies/{id}/labels` — list all labels for a study
 - `POST /api/studies/{id}/labels` — add a label (`{"label": "text"}`); emits `study.label_added` audit entry
 - `DELETE /api/studies/{id}/labels/{labelID}` — remove a label; emits `study.label_removed` audit entry
+- `POST /api/studies/bulk-label` — apply or remove a label across multiple studies in one request (admin-only)
 
-Labels are displayed as coloured chips on the study detail panel. Viewers can see labels; only admins can add or remove them.
+**Bulk label API** (`POST /api/studies/bulk-label`):
+- Body: `{"study_ids": ["<uuid>", ...], "label": "cohort-A", "action": "add"|"remove"}`
+- `study_ids` must be non-empty; max 200 studies per call
+- `action: "add"` — inserts the label for each study; duplicates silently ignored (`ON CONFLICT DO NOTHING`)
+- `action: "remove"` — deletes the label (case-insensitive) from each study
+- Returns `{applied: N, total: M}` (add) or `{removed: N, total: M}` (remove)
+- Emits `study.bulk_label_added` / `study.bulk_label_removed` audit entry with count
+
+**Admin dashboard:** Labels shown as chips on the study detail panel. Bulk action bar (shown when studies are selected) includes a label text input with "+ Label" and "− Label" buttons. Viewers can see labels; only admins can add or remove.
 
 ### Subject/Session Linking (`api/handler/subject.go`)
 
@@ -1160,10 +1174,15 @@ Push notifications to external HTTP endpoints when study events occur. Payloads 
 
 **Delivery:** `deliver.go` retries up to 3 times (immediate, +5 s, +30 s). Each attempt — success or failure — is recorded in the `webhook_deliveries` table (migration 030).
 
+**Test delivery** (`POST /api/webhook-subscriptions/{id}/test`, admin-only):
+- Sends a synthetic `study.approved` payload to the subscription's URL immediately
+- Returns `{success, status_code, url, error?}` so operators can verify connectivity before real events fire
+- Records the attempt in `webhook_deliveries` like any real delivery
+
 **Delivery log API:**
 - `GET /api/webhook-subscriptions/{id}/deliveries` — returns immutable log of all HTTP delivery attempts for a subscription (`{id, subscription_id, event, url, attempt, status_code, success, error_message, delivered_at}`)
 
-**Admin dashboard:** Webhook list in Notifications tab; "Log" button per row opens inline delivery history table.
+**Admin dashboard:** Webhook list in Notifications tab; "Test" button per row sends a synthetic test payload and shows the result; "Log" button per row opens inline delivery history table.
 
 ### API Keys (`api/handler/api_key.go`)
 
@@ -1240,10 +1259,24 @@ Streams the audit trail as a CSV download with the same filters as `GET /api/aud
 
 **API:**
 - `GET /api/audit.csv` — returns `Content-Disposition: attachment; filename="audit.csv"`
-- Query params: `actor`, `action`, `resource_type`, `resource_id`, `date_from`, `date_to` (RFC3339), `limit` (default 1000, max 10 000)
+- Query params: `actor`, `action`, `resource_type`, `resource_id`, `search`, `date_from`, `date_to` (RFC3339), `limit` (default 1000, max 10 000)
+- `search` performs case-insensitive substring match across `action`, `actor`, `resource_type`, and `metadata`
 - Columns: `id`, `action`, `actor`, `resource_type`, `resource_id`, `ip`, `created_at`, `metadata` (JSON)
 
-**Admin dashboard:** "Export CSV" button in the Audit Log tab.
+**Admin dashboard:** "Export CSV" button in the Audit Log tab; export uses same active filters (search text, date range) as the currently displayed log.
+
+**Audit log filter params** (both `GET /api/audit` JSON and `GET /api/audit.csv` CSV):
+
+| Param | Notes |
+|-------|-------|
+| `search` | Case-insensitive substring match across action, actor, resource_type, metadata (ILIKE) |
+| `date_from` | RFC3339 start timestamp (inclusive) |
+| `date_to` | RFC3339 end timestamp (inclusive) |
+| `actor` | Exact actor email filter |
+| `action` | Exact action name filter (e.g. `study.approved`) |
+| `resource_type` | Exact resource type filter (e.g. `study`) |
+
+**Admin dashboard search bar:** Text input + date range pickers in the Audit Log tab toolbar; "Apply" sets filters, "Clear" resets to unfiltered view.
 
 ### Export Download Analytics (`api/handler/export.go`)
 
@@ -1264,21 +1297,32 @@ Per-institution aggregate statistics derived from the studies table.
 
 **Admin dashboard:** Stats panel shown when an institution is selected in the Institutions tab.
 
-### Stats: Breakdown, Storage, and Activity Summary
+### Stats: Breakdown, Storage, Activity Summary, and Timeline
 
 **Modality/body part breakdown** (`GET /api/stats/breakdown`, admin-read):
 - Returns `{rows: [{modality, body_part, count}]}` ordered by count descending
 - Uses `GROUP BY modality, body_part` across all studies
-- **Admin dashboard:** collapsible breakdown table in the Studies tab header
+- Query param: `project_id` (UUID, optional) — scopes breakdown to one project
+- **Admin dashboard:** collapsible breakdown table in the Studies tab header; respects global project selector
 
 **DICOM storage stats** (`GET /api/storage/stats`, admin-read):
 - Returns `{raw_file_count, clean_file_count, total_file_count, total_studies}` derived from `studies.instance_count` using SQL `FILTER (WHERE dicom_store = ...)` aggregation — cloud-agnostic, no filesystem walk
-- **Admin dashboard:** raw/clean file counts displayed in the stats banner
+- Query param: `project_id` (UUID, optional) — scopes counts to one project
+- **Admin dashboard:** raw/clean file counts displayed in the stats banner; respects global project selector
+
+**Pipeline stats** (`GET /api/stats`, admin-read):
+- Returns status counts (`received`, `defacing`, `clean`, `defaced`, `approved`, `rejected`) and aggregate counts
+- Query param: `project_id` (UUID, optional) — scopes counts to one project
 
 **Admin activity summary** (`GET /api/audit/actors`, admin-read):
 - Returns `{actors: [{actor, action_count, last_seen_at, last_action}]}` for the last 30 days, ordered by `action_count DESC`
 - Query param: `limit` (default 20)
 - **Admin dashboard:** collapsible "Recent admin activity" table in the Audit Log tab
+
+**Daily ingestion timeline** (`GET /api/stats/timeline`, admin-read):
+- Returns `{days: [{day: "YYYY-MM-DD", received, approved}]}` for the last N days (default 30)
+- Query params: `days` (1–365), `project_id` (UUID, optional)
+- **Admin dashboard:** collapsible "Daily ingestion (last 30 days)" table showing received and approved counts per day; respects global project selector; resets when project changes
 
 ### Protocol Template Export (`api/handler/protocol_template.go`)
 
@@ -1310,6 +1354,58 @@ Token-bucket rate limiting on public upload endpoints prevents abuse without aff
 - Each source IP gets its own bucket (configurable capacity and refill rate via env vars or defaults)
 - Exceeding the limit returns `429 Too Many Requests`
 - Admin and sidecar endpoints are not rate-limited
+
+### MCP Server (`mcp-server/`)
+
+A Model Context Protocol server that exposes AEGIS admin operations as typed tools for AI agents (Claude, Cursor, etc.). Tools are split into read-only and write (mutating) categories. All tools accept an optional `request_id` for correlation.
+
+**Running locally:**
+```bash
+cd mcp-server && npm install && npm run build
+# Use with Claude Desktop: point config to mcp-server/dist/index.js
+```
+
+**Read tools** (safe to call without confirmation):
+
+| Tool | Description |
+|------|-------------|
+| `list_studies` | Paginated study list with filters (status, modality, body_part, source, project_id, search, date range) |
+| `get_study_detail` | Full study record by UUID |
+| `get_study_by_uid` | Full study record by DICOM StudyInstanceUID |
+| `get_study_diagnostics` | "Why is this stuck?" triage payload |
+| `get_study_audit` | Per-study audit trail |
+| `get_study_routing_log` | Per-study routing rule execution log |
+| `list_export_shares` | Shares for a study |
+| `list_all_shares` | All shares across all studies (filterable by status) |
+| `get_share_downloads` | Per-share download analytics |
+| `get_system_health` | API + sidecar health (`/healthz`) |
+| `get_dimse_retry_status` | DIMSE retry/dead-letter counters |
+| `get_audit_log` | Global audit log with filters (search, date_from, date_to, action, resource_type, actor) |
+| `get_pipeline_stats` | Study status counts (optionally scoped to a project) |
+| `get_stuck_studies` | Studies idle beyond a threshold (minutes, optional project_id) |
+| `get_breakdown_stats` | Modality/body part breakdown (optional project_id) |
+| `get_storage_stats` | Raw/clean file counts (optional project_id) |
+| `get_audit_actors` | Top admin actors in the last 30 days |
+
+**Write tools** (require `confirm: true` and a `reason` string):
+
+| Tool | Description |
+|------|-------------|
+| `approve_study` | Approve a study |
+| `reject_study` | Reject a study |
+| `trigger_classification` | Trigger metadata classification |
+| `trigger_phi_scan` | Trigger PHI scan |
+| `trigger_protocol_check` | Trigger protocol compliance check |
+| `trigger_qc_check` | Trigger QC automation |
+| `trigger_bids_convert` | Trigger NIfTI/BIDS conversion |
+| `trigger_export` | Trigger DICOM export forwarding |
+| `trigger_deface` | Trigger defacing |
+| `retry_dimse_study` | Retry a DIMSE ingest failure |
+| `revoke_share` | Revoke an export share |
+| `create_share` | Create a new export share |
+| `re_evaluate_routing` | Re-evaluate routing rules for a study |
+
+All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 
 ### Terraform
 ```bash
