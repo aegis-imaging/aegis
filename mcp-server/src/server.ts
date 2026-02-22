@@ -874,7 +874,7 @@ async function handleTriggerDeface(
     );
   }
 
-  const data = await client.post(`/api/deface/${encodeURIComponent(parsed.study_uid)}`);
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/trigger-deface`);
   return formatSuccess(requestId, "trigger_deface", {
     accepted: true,
     study_uid: parsed.study_uid,
