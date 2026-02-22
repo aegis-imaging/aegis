@@ -1179,6 +1179,7 @@ type PipelineStage = {
   label: string
   required: boolean
   status: string
+  step: string  // API step name for reset-pipeline-step
 }
 
 function pipelineColorClass(status: string): string {
@@ -1189,7 +1190,28 @@ function pipelineColorClass(status: string): string {
   return 'pipeline-dot--pending'
 }
 
-function PipelineNode({ stage }: { stage: PipelineStage }) {
+const IN_FLIGHT_STATUSES = ['scanning', 'checking', 'converting', 'classifying', 'defacing', 'exporting']
+
+function PipelineNode({ stage, studyId, isAdmin, onRerun }: {
+  stage: PipelineStage
+  studyId: string
+  isAdmin: boolean
+  onRerun: () => void
+}) {
+  const [rerunning, setRerunning] = useState(false)
+  const canRerun = isAdmin && stage.required && !IN_FLIGHT_STATUSES.includes(stage.status) && stage.status !== 'pending'
+
+  const handleRerun = async () => {
+    setRerunning(true)
+    await fetch(`/api/studies/${studyId}/reset-pipeline-step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: stage.step }),
+    })
+    setRerunning(false)
+    onRerun()
+  }
+
   if (!stage.required) return (
     <div className="pipeline-node pipeline-node--skip">
       <div className="pipeline-dot pipeline-dot--skip" />
@@ -1202,6 +1224,11 @@ function PipelineNode({ stage }: { stage: PipelineStage }) {
       <div className={`pipeline-dot ${pipelineColorClass(stage.status)}`} />
       <span className="pipeline-label">{stage.label}</span>
       <span className="pipeline-status">{stage.status || 'pending'}</span>
+      {canRerun && (
+        <button type="button" className="btn btn--rerun" onClick={handleRerun} disabled={rerunning} title={`Reset ${stage.label} step to pending`}>
+          {rerunning ? '…' : '↺'}
+        </button>
+      )}
     </div>
   )
 }
@@ -1274,13 +1301,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   if (!study) return <div className="state-error">Study not found. <button type="button" className="btn btn--secondary" onClick={onBack}>Back</button></div>
 
   const stages: PipelineStage[] = [
-    { label: 'Classification', required: study.classification_required, status: study.classification_status },
-    { label: 'PHI Scan', required: study.phi_scan_required, status: study.phi_scan_status },
-    { label: 'Protocol', required: study.protocol_required, status: study.protocol_status },
-    { label: 'Defacing', required: study.defacing_required, status: study.status === 'defaced' ? 'defaced' : study.status === 'defacing' ? 'defacing' : study.defacing_required ? 'pending' : '' },
-    { label: 'QC', required: study.qc_required, status: study.qc_status },
-    { label: 'BIDS', required: study.bids_required, status: study.bids_status },
-    { label: 'Export', required: study.export_required, status: study.export_status },
+    { label: 'Classification', required: study.classification_required, status: study.classification_status, step: 'classify' },
+    { label: 'PHI Scan', required: study.phi_scan_required, status: study.phi_scan_status, step: 'phi_scan' },
+    { label: 'Protocol', required: study.protocol_required, status: study.protocol_status, step: 'protocol' },
+    { label: 'Defacing', required: study.defacing_required, status: study.status === 'defaced' ? 'defaced' : study.status === 'defacing' ? 'defacing' : study.defacing_required ? 'pending' : '', step: 'deface' },
+    { label: 'QC', required: study.qc_required, status: study.qc_status, step: 'qc' },
+    { label: 'BIDS', required: study.bids_required, status: study.bids_status, step: 'bids' },
+    { label: 'Export', required: study.export_required, status: study.export_status, step: 'export' },
   ]
 
   const canApprove = !['approved', 'rejected'].includes(study.status)
@@ -1345,7 +1372,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="pipeline-row">
           {stages.map((stage, i) => (
             <div key={stage.label} className="pipeline-step">
-              <PipelineNode stage={stage} />
+              <PipelineNode stage={stage} studyId={study.id} isAdmin={isAdmin} onRerun={loadData} />
               {i < stages.length - 1 && <div className="pipeline-arrow">→</div>}
             </div>
           ))}
