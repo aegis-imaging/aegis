@@ -5118,6 +5118,15 @@ export function App() {
   }, [])
   useEffect(() => { fetchStats() }, [fetchStats, refreshTick])
 
+  type BreakdownRow = { modality: string; body_part: string; count: number }
+  const [breakdown, setBreakdown] = useState<BreakdownRow[] | null>(null)
+  const [showBreakdown, setShowBreakdown] = useState(false)
+  const loadBreakdown = async () => {
+    if (breakdown) { setShowBreakdown(v => !v); return }
+    const res = await fetch('/api/stats/breakdown')
+    if (res.ok) { const d = await res.json(); setBreakdown(d.breakdown ?? []); setShowBreakdown(true) }
+  }
+
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
     let cancelled = false
@@ -5453,6 +5462,31 @@ export function App() {
               </span>
             </div>
           )}
+
+          {/* Breakdown stats toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
+              {showBreakdown ? '▲ Hide breakdown' : '▼ Modality / body part breakdown'}
+            </button>
+            {showBreakdown && breakdown && (
+              <div style={{marginTop:'6px',overflowX:'auto'}}>
+                <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
+                  <thead><tr><th>Modality</th><th>Body part</th><th>Count</th></tr></thead>
+                  <tbody>
+                    {breakdown.length === 0
+                      ? <tr><td colSpan={3} className="td-muted">No studies yet.</td></tr>
+                      : breakdown.map((r, i) => (
+                        <tr key={i}>
+                          <td>{r.modality || <span className="td-muted">—</span>}</td>
+                          <td>{r.body_part || <span className="td-muted">—</span>}</td>
+                          <td>{r.count}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           {/* Filter bar */}
           <div className="filter-bar">
