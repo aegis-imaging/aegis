@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import './App.css'
+import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users' | 'api_keys'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'users' | 'api_keys'
 
 type APIKey = {
   id: string
@@ -3901,6 +3902,170 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   )
 }
 
+// ── Federation Panel ──────────────────────────────────────────────────────────
+
+type FederationPeer = {
+  id: string
+  name: string
+  slug: string
+  api_url: string
+  enabled: boolean
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+const EMPTY_PEER: Omit<FederationPeer, 'id' | 'created_at' | 'updated_at'> = {
+  name: '', slug: '', api_url: '', enabled: true, notes: '',
+}
+
+function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
+  const [peers, setPeers]         = useState<FederationPeer[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+  const [form, setForm]           = useState<Omit<FederationPeer, 'id' | 'created_at' | 'updated_at'>>(EMPTY_PEER)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const fetchPeers = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/federation-peers')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setPeers(await res.json())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchPeers() }, [fetchPeers])
+
+  function openNew() { setForm(EMPTY_PEER); setEditingId(null); setFormError(null); setShowForm(true) }
+  function openEdit(p: FederationPeer) {
+    setForm({ name: p.name, slug: p.slug, api_url: p.api_url, enabled: p.enabled, notes: p.notes })
+    setEditingId(p.id); setFormError(null); setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.name) { setFormError('Name is required'); return }
+    if (!form.api_url) { setFormError('API URL is required'); return }
+    setSaving(true); setFormError(null)
+    try {
+      const url = editingId ? `/api/federation-peers/${editingId}` : '/api/federation-peers'
+      const method = editingId ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false); setEditingId(null); fetchPeers()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally { setSaving(false) }
+  }
+
+  async function deletePeer(p: FederationPeer) {
+    if (!confirm(`Delete federation peer "${p.name}"?`)) return
+    await fetch(`/api/federation-peers/${p.id}`, { method: 'DELETE' })
+    fetchPeers()
+  }
+
+  if (loading) return <div className="state-loading">Loading…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Federation Peers</div>
+            <div className="routing-section-sub">
+              Trusted remote AEGIS instances for future cross-tenant study federation.
+              No data flows between peers yet — this is a configuration stub.
+            </div>
+          </div>
+          <div className="actions-cell">
+            <button type="button" className="btn-refresh" onClick={fetchPeers}>Refresh</button>
+            {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ Add peer</button>}
+          </div>
+        </div>
+
+        {isAdmin && showForm && (
+          <div className="routing-form">
+            <h3>{editingId ? 'Edit peer' : 'New federation peer'}</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" placeholder="Name *"
+                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <input className="form-input" placeholder="Slug (auto-generated)"
+                value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
+              <input className="form-input form-input--wide" placeholder="API URL * (e.g. https://peer.example.com)"
+                value={form.api_url} onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))} />
+              <input className="form-input form-input--wide" placeholder="Notes"
+                value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            {editingId && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem', marginTop: '8px' }}>
+                <input type="checkbox" checked={form.enabled}
+                  onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
+                Enabled
+              </label>
+            )}
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add peer'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {peers.length === 0 && !showForm ? (
+          <div className="state-empty">No federation peers configured.</div>
+        ) : peers.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Peer</th>
+                <th>Slug</th>
+                <th>API URL</th>
+                <th>Status</th>
+                <th>Added</th>
+                {isAdmin && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {peers.map(p => (
+                <tr key={p.id}>
+                  <td>
+                    <div className="routing-name">{p.name}</div>
+                    {p.notes && <div className="routing-desc">{p.notes}</div>}
+                  </td>
+                  <td><code className="inst-slug">{p.slug}</code></td>
+                  <td><a href={p.api_url} target="_blank" rel="noopener noreferrer">{p.api_url}</a></td>
+                  <td>
+                    {p.enabled
+                      ? <span className="badge badge--enabled">enabled</span>
+                      : <span className="badge badge--disabled">disabled</span>}
+                  </td>
+                  <td className="td-date">{fmtDate(p.created_at)}</td>
+                  {isAdmin && (
+                    <td>
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="btn btn--delete" onClick={() => deletePeer(p)}>Delete</button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Users Panel ───────────────────────────────────────────────────────────────
 
 const EMPTY_USER: Omit<AdminUser, 'id' | 'created_at'> = {
@@ -4965,6 +5130,13 @@ export function App() {
         </button>
         <button
           type="button"
+          className={`tab-btn${tab === 'agent' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('agent')}
+        >
+          Agent
+        </button>
+        <button
+          type="button"
           className={`tab-btn${tab === 'shares' ? ' tab-btn--active' : ''}`}
           onClick={() => setTab('shares')}
         >
@@ -5021,6 +5193,13 @@ export function App() {
         >
           Projects
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'federation' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('federation')}
+        >
+          Federation
+        </button>
         {isAdmin && (
           <button
             type="button"
@@ -5049,6 +5228,9 @@ export function App() {
           onAction={() => setRefreshTick(t => t + 1)}
           isAdmin={isAdmin}
         />
+      )}
+      {tab === 'agent' && (
+        <AgentPanel />
       )}
       {tab === 'studies' && !selectedStudyId && (
         <>
@@ -5295,6 +5477,9 @@ export function App() {
 
       {/* Projects tab */}
       {tab === 'projects' && <ProjectsPanel isAdmin={isAdmin} />}
+
+      {/* Federation tab */}
+      {tab === 'federation' && <FederationPanel isAdmin={isAdmin} />}
 
       {/* Users tab — admin only */}
       {tab === 'users' && isAdmin && <UsersPanel />}
