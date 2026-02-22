@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // phiScanRequest is the payload sent to the Python PHI detection service.
@@ -162,6 +163,9 @@ func (s *Server) runPhiScan(study *model.Study) {
 	if err := model.UpdatePhiScanStatus(ctx, s.db, study.ID, newStatus); err != nil {
 		log.Printf("phi_scan: update study record for %s: %v", studyUID, err)
 		return
+	}
+	if newStatus == "flagged" {
+		webhook.Deliver(ctx, s.db, "study.phi_flagged", study)
 	}
 
 	log.Printf("phi_scan: complete for %s — phi_detected=%v, %d files in %.1fs using %s",
