@@ -7,6 +7,7 @@ export const listStudiesArgsSchema = z.object({
   project_id: z.string().uuid().optional(),
   status: z.enum(["received", "defacing", "clean", "defaced", "approved", "rejected"]).optional(),
   modality: z.string().min(1).max(16).regex(/^[A-Za-z0-9_]+$/).optional(),
+  body_part: z.string().min(1).max(64).regex(/^[A-Za-z0-9_]+$/).optional(),
   source: z.enum(["external", "internal"]).optional(),
   search: z.string().min(1).max(256).optional()
 });
