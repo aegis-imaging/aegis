@@ -229,6 +229,74 @@ func ListInstitutionsForProject(ctx context.Context, db *sql.DB, projectID strin
 	return out, rows.Err()
 }
 
+// InstitutionStats holds aggregate study statistics for one institution.
+type InstitutionStats struct {
+	InstitutionID  string            `json:"institution_id"`
+	TotalStudies   int               `json:"total_studies"`
+	ByStatus       map[string]int    `json:"by_status"`
+	ByModality     map[string]int    `json:"by_modality"`
+	LastStudyAt    *time.Time        `json:"last_study_at,omitempty"`
+}
+
+// GetInstitutionStats returns aggregate study counts for an institution.
+func GetInstitutionStats(ctx context.Context, db *sql.DB, institutionID string) (*InstitutionStats, error) {
+	stats := &InstitutionStats{
+		InstitutionID: institutionID,
+		ByStatus:      map[string]int{},
+		ByModality:    map[string]int{},
+	}
+
+	// Total count + most recent study timestamp.
+	var lastAt sql.NullTime
+	err := db.QueryRowContext(ctx, `
+		SELECT count(*), max(created_at) FROM studies WHERE institution_id = $1`,
+		institutionID).Scan(&stats.TotalStudies, &lastAt)
+	if err != nil {
+		return nil, err
+	}
+	if lastAt.Valid {
+		t := lastAt.Time.UTC()
+		stats.LastStudyAt = &t
+	}
+
+	// Counts by status.
+	rows, err := db.QueryContext(ctx, `
+		SELECT status, count(*) FROM studies WHERE institution_id = $1 GROUP BY status`, institutionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k string
+		var n int
+		if err := rows.Scan(&k, &n); err != nil {
+			return nil, err
+		}
+		stats.ByStatus[k] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Counts by modality (exclude empty).
+	mrows, err := db.QueryContext(ctx, `
+		SELECT modality, count(*) FROM studies WHERE institution_id = $1 AND modality != '' GROUP BY modality ORDER BY count(*) DESC`,
+		institutionID)
+	if err != nil {
+		return nil, err
+	}
+	defer mrows.Close()
+	for mrows.Next() {
+		var k string
+		var n int
+		if err := mrows.Scan(&k, &n); err != nil {
+			return nil, err
+		}
+		stats.ByModality[k] = n
+	}
+	return stats, mrows.Err()
+}
+
 // InstitutionCanSendToProject returns true when the institution is enabled,
 // has type sender/both, and is linked to the project with sender/admin role.
 func InstitutionCanSendToProject(ctx context.Context, db *sql.DB, institutionID, projectID string) (bool, error) {
