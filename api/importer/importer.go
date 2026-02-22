@@ -64,6 +64,14 @@ func IsValidationError(err error) bool {
 	return errors.As(err, &vErr)
 }
 
+// SeriesInfo accumulates per-series metadata from DICOM file headers.
+type SeriesInfo struct {
+	SeriesDescription string
+	Modality          string
+	BodyPart          string
+	InstanceCount     int
+}
+
 // StudyGroup holds DICOM files grouped by StudyInstanceUID.
 type StudyGroup struct {
 	StudyInstanceUID string
@@ -71,7 +79,8 @@ type StudyGroup struct {
 	BodyPart         string
 	StudyDescription string
 	SeriesUIDs       map[string]bool
-	Files            []string // absolute file paths
+	SeriesMeta       map[string]*SeriesInfo // keyed by SeriesInstanceUID
+	Files            []string               // absolute file paths
 }
 
 // Run executes the batch import.
@@ -277,7 +286,7 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 
 		result.FilesScanned++
 
-		studyUID, modality, bodyPart, studyDesc, seriesUID, parseErr := parseDICOMHeaders(path)
+		studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, parseErr := parseDICOMHeaders(path)
 		if parseErr != nil {
 			result.FilesSkipped++
 			result.Errors = append(result.Errors, fmt.Sprintf("parse %s: %v", filepath.Base(path), parseErr))
@@ -292,12 +301,23 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 				BodyPart:         strings.ToUpper(bodyPart),
 				StudyDescription: studyDesc,
 				SeriesUIDs:       make(map[string]bool),
+				SeriesMeta:       make(map[string]*SeriesInfo),
 			}
 			groups[studyUID] = g
 		}
 		g.Files = append(g.Files, path)
 		if seriesUID != "" {
 			g.SeriesUIDs[seriesUID] = true
+			if info, exists := g.SeriesMeta[seriesUID]; exists {
+				info.InstanceCount++
+			} else {
+				g.SeriesMeta[seriesUID] = &SeriesInfo{
+					SeriesDescription: seriesDesc,
+					Modality:          modality,
+					BodyPart:          strings.ToUpper(bodyPart),
+					InstanceCount:     1,
+				}
+			}
 		}
 
 		return nil
@@ -307,21 +327,21 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 }
 
 // parseDICOMHeaders extracts key tags from a DICOM file without loading pixel data.
-func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, seriesUID string, err error) {
+func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("open: %w", err)
+		return "", "", "", "", "", "", fmt.Errorf("open: %w", err)
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("stat: %w", err)
+		return "", "", "", "", "", "", fmt.Errorf("stat: %w", err)
 	}
 
 	dataset, err := dicom.Parse(f, info.Size(), nil, dicom.SkipPixelData())
 	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
+		return "", "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
 	}
 
 	studyUID = getStringTag(dataset, tag.StudyInstanceUID)
@@ -329,11 +349,12 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 	bodyPart = getStringTag(dataset, tag.BodyPartExamined)
 	studyDesc = getStringTag(dataset, tag.StudyDescription)
 	seriesUID = getStringTag(dataset, tag.SeriesInstanceUID)
+	seriesDesc = getStringTag(dataset, tag.SeriesDescription)
 
 	if studyUID == "" {
-		return "", "", "", "", "", fmt.Errorf("missing StudyInstanceUID")
+		return "", "", "", "", "", "", fmt.Errorf("missing StudyInstanceUID")
 	}
-	return studyUID, modality, bodyPart, studyDesc, seriesUID, nil
+	return studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, nil
 }
 
 // getStringTag extracts a string value from a DICOM dataset element.
@@ -408,6 +429,21 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 	if err := model.CreateStudy(ctx, db, study); err != nil {
 		model.UpdateUploadSessionFailed(ctx, db, session.ID, err.Error())
 		return "", fmt.Errorf("create study: %w", err)
+	}
+
+	// Upsert per-series metadata now that we have a study ID.
+	for seriesUID, info := range g.SeriesMeta {
+		s := &model.StudySeries{
+			StudyID:           study.ID,
+			SeriesInstanceUID: seriesUID,
+			SeriesDescription: info.SeriesDescription,
+			Modality:          info.Modality,
+			BodyPart:          info.BodyPart,
+			InstanceCount:     info.InstanceCount,
+		}
+		if err := model.UpsertStudySeries(ctx, db, s); err != nil {
+			log.Printf("upsert series %s: %v", seriesUID, err)
+		}
 	}
 
 	// Evaluate routing rules — may set defacing_required, phi_scan, auto_approve, etc.
