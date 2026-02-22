@@ -604,3 +604,28 @@ func GetStudyBreakdown(ctx context.Context, db *sql.DB) ([]BreakdownRow, error) 
 	}
 	return result, rows.Err()
 }
+
+// StorageStats summarises DICOM file counts across studies by store type.
+type StorageStats struct {
+	RawFileCount     int `json:"raw_file_count"`   // files in dicom_store='raw'
+	CleanFileCount   int `json:"clean_file_count"` // files in dicom_store='clean'
+	TotalFileCount   int `json:"total_file_count"`
+	TotalStudies     int `json:"total_studies"`
+	GeneratedAt      string `json:"generated_at"`
+}
+
+// GetStorageStats returns aggregate DICOM file counts derived from the studies table.
+func GetStorageStats(ctx context.Context, db *sql.DB) (*StorageStats, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT
+		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'raw'),   0)::int,
+		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'clean'), 0)::int,
+		  coalesce(sum(instance_count), 0)::int,
+		  count(*)::int
+		FROM studies`)
+	var s StorageStats
+	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
