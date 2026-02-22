@@ -156,6 +156,7 @@ func main() {
 	// Studies — list, detail, and shares readable by all; mutations require admin.
 	mux.HandleFunc("GET /api/studies", auth(srv.ListStudies))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
+	mux.HandleFunc("GET /api/studies/by-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/{id}/audit", auth(srv.ListStudyAudit))
 	mux.HandleFunc("GET /api/studies/{id}/diagnostics", auth(srv.GetStudyDiagnostics))
 	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
