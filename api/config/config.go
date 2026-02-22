@@ -12,8 +12,9 @@ type Config struct {
 	DatabaseURL     string
 	StorageMode     string // "local", "gcs", or "s3"
 	LocalStorageDir string
-	APIBaseURL      string // for generating local upload URLs
-	AppTimezone     string // database session + server log timezone (default UTC)
+	APIBaseURL          string // for generating local upload URLs
+	ExportPortalBaseURL string // base URL of the export portal UI — used in share email links
+	AppTimezone         string // database session + server log timezone (default UTC)
 
 	// GCP (only used when StorageMode = "gcs")
 	GCPProject      string
@@ -104,8 +105,9 @@ func Load() *Config {
 		DatabaseURL:     databaseURL,
 		StorageMode:     envOr("STORAGE_MODE", "local"),
 		LocalStorageDir: envOr("LOCAL_STORAGE_DIR", "./data"),
-		APIBaseURL:      envOr("API_BASE_URL", "http://localhost:8080"),
-		AppTimezone:     envOr("APP_TIMEZONE", "UTC"),
+		APIBaseURL:          envOr("API_BASE_URL", "http://localhost:8080"),
+		ExportPortalBaseURL: os.Getenv("EXPORT_PORTAL_BASE_URL"), // e.g. https://export.aegisimaging.ai
+		AppTimezone:         envOr("APP_TIMEZONE", "UTC"),
 
 		GCPProject:      os.Getenv("GCP_PROJECT"),
 		GCSBucket:       os.Getenv("GCS_BUCKET"),

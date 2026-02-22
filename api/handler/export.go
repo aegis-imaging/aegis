@@ -144,7 +144,16 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	share.Token = rawToken
-	exportURL := fmt.Sprintf("%s/api/export/%s", s.cfg.APIBaseURL, rawToken)
+	// Build the export URL for the share email and API response.
+	// If EXPORT_PORTAL_BASE_URL is set (e.g. https://export.aegisimaging.ai),
+	// the link points to the export portal UI: {base}?token={token}.
+	// Otherwise falls back to the raw API endpoint for backward compatibility.
+	var exportURL string
+	if s.cfg.ExportPortalBaseURL != "" {
+		exportURL = fmt.Sprintf("%s?token=%s", s.cfg.ExportPortalBaseURL, rawToken)
+	} else {
+		exportURL = fmt.Sprintf("%s/api/export/%s", s.cfg.APIBaseURL, rawToken)
+	}
 	model.CreateAuditEntry(r.Context(), s.db, "share.created", actorEmail(r), "export_share", share.ID, clientIP(r), map[string]any{
 		"recipient":  req.RecipientEmail,
 		"study_id":   study.ID,
