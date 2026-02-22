@@ -676,6 +676,14 @@ type ShareRecord = {
   created_at: string
   status: string
   expires_in_seconds: number
+  download_count: number
+}
+
+type DownloadRecord = {
+  id: string
+  share_id: string
+  client_ip: string
+  accessed_at: string
 }
 
 function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
@@ -686,6 +694,8 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(0)
   const [revoking, setRevoking] = useState<string | null>(null)
+  const [expandedShare, setExpandedShare] = useState<string | null>(null)
+  const [downloads, setDownloads] = useState<Record<string, DownloadRecord[]>>({})
 
   const fetchShares = useCallback(async (sf: string, pg: number) => {
     setLoading(true)
@@ -720,6 +730,23 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
       alert(err instanceof Error ? err.message : 'Failed to revoke share')
     } finally {
       setRevoking(null)
+    }
+  }
+
+  const toggleDownloads = async (shareId: string) => {
+    if (expandedShare === shareId) {
+      setExpandedShare(null)
+      return
+    }
+    setExpandedShare(shareId)
+    if (downloads[shareId]) return
+    try {
+      const res = await fetch(`/api/shares/${shareId}/downloads`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setDownloads(prev => ({ ...prev, [shareId]: data.downloads ?? [] }))
+    } catch {
+      setDownloads(prev => ({ ...prev, [shareId]: [] }))
     }
   }
 
@@ -770,23 +797,34 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Recipient</th>
                 <th>Study ID</th>
                 <th>Created By</th>
+                <th>Downloads</th>
                 <th>Expires</th>
                 <th>Created</th>
-                {isAdmin && <th>Actions</th>}
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {shares.map(s => (
-                <tr key={s.id} className="audit-row">
-                  <td>{statusBadge(s)}</td>
-                  <td className="audit-actor">{s.recipient_email}</td>
-                  <td className="audit-resource-id">{uidShort(s.study_id)}</td>
-                  <td className="audit-actor">{s.created_by || '—'}</td>
-                  <td className="audit-time">{fmtDate(s.expires_at)}</td>
-                  <td className="audit-time">{fmtDate(s.created_at)}</td>
-                  {isAdmin && (
+                <>
+                  <tr key={s.id} className="audit-row">
+                    <td>{statusBadge(s)}</td>
+                    <td className="audit-actor">{s.recipient_email}</td>
+                    <td className="audit-resource-id">{uidShort(s.study_id)}</td>
+                    <td className="audit-actor">{s.created_by || '—'}</td>
                     <td>
-                      {s.status === 'active' ? (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => toggleDownloads(s.id)}
+                        title="View download history"
+                      >
+                        {s.download_count ?? 0} {expandedShare === s.id ? '▲' : '▼'}
+                      </button>
+                    </td>
+                    <td className="audit-time">{fmtDate(s.expires_at)}</td>
+                    <td className="audit-time">{fmtDate(s.created_at)}</td>
+                    <td>
+                      {isAdmin && s.status === 'active' ? (
                         <button
                           type="button"
                           className="btn-secondary btn-danger-text"
@@ -799,8 +837,36 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                         <span className="audit-no-detail">—</span>
                       )}
                     </td>
+                  </tr>
+                  {expandedShare === s.id && (
+                    <tr key={`${s.id}-downloads`} className="audit-row audit-row--sub">
+                      <td colSpan={8} className="audit-sub-cell">
+                        {!downloads[s.id] ? (
+                          <span className="td-muted">Loading…</span>
+                        ) : downloads[s.id].length === 0 ? (
+                          <span className="td-muted">No downloads recorded.</span>
+                        ) : (
+                          <table className="audit-table audit-table--inner">
+                            <thead>
+                              <tr>
+                                <th>Downloaded At</th>
+                                <th>Client IP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {downloads[s.id].map(d => (
+                                <tr key={d.id} className="audit-row">
+                                  <td className="audit-time">{fmtDate(d.accessed_at)}</td>
+                                  <td className="audit-actor">{d.client_ip || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
                   )}
-                </tr>
+                </>
               ))}
             </tbody>
           </table>
