@@ -7,6 +7,10 @@ REPOSITORY="${REPOSITORY:-aegis-services}"
 TAG="${TAG:-latest}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 PUSH=1
+# OHIF_BASE_URL: set to OHIF Cloud Run URL to bake it into the admin-dashboard build.
+# Example: OHIF_BASE_URL=https://ohif-abc123-uc.a.run.app
+# Leave empty to use localhost:3002 fallback (local dev).
+OHIF_BASE_URL="${OHIF_BASE_URL:-}"
 
 for arg in "$@"; do
   case "$arg" in
@@ -15,6 +19,7 @@ for arg in "$@"; do
     --repository=*) REPOSITORY="${arg#*=}" ;;
     --tag=*) TAG="${arg#*=}" ;;
     --platform=*) PLATFORM="${arg#*=}" ;;
+    --ohif-base-url=*) OHIF_BASE_URL="${arg#*=}" ;;
     --no-push) PUSH=0 ;;
     -h|--help)
       cat <<'USAGE'
@@ -25,9 +30,10 @@ Options:
   --repository=<repo>       Default: aegis-services
   --tag=<tag>               Default: latest
   --platform=<platform>     Default: linux/amd64
+  --ohif-base-url=<url>     OHIF viewer URL baked into admin-dashboard build (optional)
   --no-push                 Build locally (uses --load) instead of pushing
 
-Environment variables supported: PROJECT_ID, REGION, REPOSITORY, TAG, PLATFORM
+Environment variables supported: PROJECT_ID, REGION, REPOSITORY, TAG, PLATFORM, OHIF_BASE_URL
 USAGE
       exit 0
       ;;
@@ -63,7 +69,6 @@ fi
 
 SERVICES=(
   "api:api"
-  "admin-dashboard:frontend/admin-dashboard"
   "defacing:defacing"
   "phi-detection:phi-detection"
   "qc-service:qc-service"
@@ -71,6 +76,7 @@ SERVICES=(
   "classification-service:classification-service"
   "protocol-service:protocol-service"
   "dimse-receiver:dimse-receiver"
+  "ohif:ohif"
 )
 
 for service in "${SERVICES[@]}"; do
@@ -85,3 +91,15 @@ for service in "${SERVICES[@]}"; do
     docker buildx build --platform "$PLATFORM" -t "$image" --load "$context"
   fi
 done
+
+# admin-dashboard is built separately because it takes an optional OHIF_BASE_URL build arg
+ADMIN_IMAGE="${REPO_BASE}/admin-dashboard:${TAG}"
+echo "==> Building ${ADMIN_IMAGE} from frontend/admin-dashboard"
+ADMIN_BUILD_ARGS="--build-arg VITE_OHIF_BASE_URL=${OHIF_BASE_URL}"
+if [ "$PUSH" -eq 1 ]; then
+  # shellcheck disable=SC2086
+  docker buildx build --platform "$PLATFORM" $ADMIN_BUILD_ARGS -t "$ADMIN_IMAGE" --push "frontend/admin-dashboard"
+else
+  # shellcheck disable=SC2086
+  docker buildx build --platform "$PLATFORM" $ADMIN_BUILD_ARGS -t "$ADMIN_IMAGE" --load "frontend/admin-dashboard"
+fi

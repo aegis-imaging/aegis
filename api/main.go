@@ -17,6 +17,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/migrate"
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/sla"
 	"github.com/aegis-imaging/aegis/api/storage"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -140,10 +141,15 @@ func main() {
 	// Auth identity endpoint.
 	mux.HandleFunc("GET /api/auth/me", auth(srv.AuthMe))
 
+	// Dashboard stats — lightweight study pipeline overview.
+	mux.HandleFunc("GET /api/stats", auth(srv.GetStats))
+
 	// Projects — create/update require admin; list is public (upload portal).
 	mux.HandleFunc("POST /api/projects", adminOnly(srv.CreateProject))
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
 	mux.HandleFunc("PUT /api/projects/{id}", adminOnly(srv.UpdateProject))
+	mux.HandleFunc("GET /api/projects/{id}/phi-config", auth(srv.GetProjectPhiConfig))
+	mux.HandleFunc("PUT /api/projects/{id}/phi-config", adminOnly(srv.UpdateProjectPhiConfig))
 
 	// Anonymization profiles — per-project DICOM tag retention overrides.
 	mux.HandleFunc("GET /api/projects/{projectID}/anon-profiles", auth(srv.ListAnonProfiles))
@@ -155,16 +161,23 @@ func main() {
 
 	// Studies — list, detail, and shares readable by all; mutations require admin.
 	mux.HandleFunc("GET /api/studies", auth(srv.ListStudies))
+	mux.HandleFunc("GET /api/studies.csv", auth(srv.ExportStudiesCSV))
+	mux.HandleFunc("GET /api/studies/stuck", auth(srv.GetStuckStudies))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
+	mux.HandleFunc("GET /api/study-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/by-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/{id}/audit", auth(srv.ListStudyAudit))
 	mux.HandleFunc("GET /api/studies/{id}/diagnostics", auth(srv.GetStudyDiagnostics))
+	mux.HandleFunc("POST /api/studies/bulk", adminOnly(srv.BulkStudyAction))
+	mux.HandleFunc("POST /api/studies/{id}/notes", adminOnly(srv.AddStudyNote))
+	mux.HandleFunc("POST /api/studies/{id}/reset-pipeline-step", adminOnly(srv.ResetPipelineStep))
 	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
 	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
 	mux.HandleFunc("POST /api/studies/{id}/share", adminOnly(srv.CreateShare))
 	mux.HandleFunc("GET /api/studies/{id}/shares", auth(srv.ListShares))
 
 	mux.HandleFunc("GET /api/shares", auth(srv.ListAllShares))
+	mux.HandleFunc("GET /api/shares/{shareID}/downloads", auth(srv.GetShareDownloads))
 	mux.HandleFunc("DELETE /api/shares/{shareID}", adminOnly(srv.RevokeShare))
 
 	// Internal enterprise ingestion path.
@@ -211,11 +224,33 @@ func main() {
 	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", adminOnly(srv.CreateDigestSubscription))
 	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", adminOnly(srv.DeleteDigestSubscription))
 
+	// API keys — long-lived machine-to-machine credentials.
+	mux.HandleFunc("GET /api/api-keys", auth(srv.ListAPIKeys))
+	mux.HandleFunc("POST /api/api-keys", adminOnly(srv.CreateAPIKey))
+	mux.HandleFunc("PATCH /api/api-keys/{id}/enable", adminOnly(srv.EnableAPIKey))
+	mux.HandleFunc("PATCH /api/api-keys/{id}/disable", adminOnly(srv.DisableAPIKey))
+	mux.HandleFunc("DELETE /api/api-keys/{id}", adminOnly(srv.DeleteAPIKey))
+
+	// Study labels — free-text tags applied by admin users for structured triage.
+	mux.HandleFunc("GET /api/studies/{id}/labels", auth(srv.ListStudyLabels))
+	mux.HandleFunc("POST /api/studies/{id}/labels", adminOnly(srv.AddStudyLabel))
+	mux.HandleFunc("DELETE /api/studies/{id}/labels/{labelID}", adminOnly(srv.DeleteStudyLabel))
+
+	// Webhook subscriptions — HTTP callbacks for study lifecycle events.
+	mux.HandleFunc("GET /api/webhook-subscriptions", auth(srv.ListWebhooks))
+	mux.HandleFunc("POST /api/webhook-subscriptions", adminOnly(srv.CreateWebhook))
+	mux.HandleFunc("GET /api/webhook-subscriptions/{id}", auth(srv.GetWebhook))
+	mux.HandleFunc("PUT /api/webhook-subscriptions/{id}", adminOnly(srv.UpdateWebhook))
+	mux.HandleFunc("DELETE /api/webhook-subscriptions/{id}", adminOnly(srv.DeleteWebhook))
+
 	// Admin users — authorised dashboard users and their roles.
 	mux.HandleFunc("GET /api/admin-users", auth(srv.ListAdminUsers))
 	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))
 	mux.HandleFunc("PUT /api/admin-users/{id}", adminOnly(srv.UpdateAdminUser))
 	mux.HandleFunc("DELETE /api/admin-users/{id}", adminOnly(srv.DeleteAdminUser))
+
+	// Project-level batch export — dispatch all eligible approved studies.
+	mux.HandleFunc("POST /api/projects/{id}/export-batch", adminOnly(srv.ExportBatch))
 
 	// Protocol templates — per-project MRI acquisition parameter expectations.
 	mux.HandleFunc("GET /api/projects/{projectID}/protocol-templates", auth(srv.ListProtocolTemplates))
@@ -248,10 +283,17 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	mailer := email.New(cfg)
+
 	// Start the email digest scheduler (hourly check, no-op when SMTP is disabled).
 	digestCtx, digestCancel := context.WithCancel(context.Background())
 	defer digestCancel()
-	digest.Start(digestCtx, db, email.New(cfg))
+	digest.Start(digestCtx, db, mailer)
+
+	// Start the SLA stuck-study alert scheduler (hourly, no-op when SLA_PIPELINE_MINUTES=0).
+	slaCtx, slaCancel := context.WithCancel(context.Background())
+	defer slaCancel()
+	sla.Start(slaCtx, db, mailer, cfg.SLAPipelineMinutes, cfg.SLACooldownHours, cfg.SLAAlertEmail)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)

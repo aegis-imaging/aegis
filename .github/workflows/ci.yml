@@ -174,6 +174,7 @@ jobs:
           - { context: protocol-service, name: protocol-service }
           - { context: dimse-receiver, name: dimse-receiver }
           - { context: mcp-server, name: mcp-server }
+          - { context: ohif, name: ohif }
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image (retry on transient registry errors)

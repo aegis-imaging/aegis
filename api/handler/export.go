@@ -14,6 +14,7 @@ import (
 
 	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // ApproveStudy transitions a study to 'approved', making it eligible for export sharing.
@@ -33,6 +34,7 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.approved", actorEmail(r), "study", study.ID, clientIP(r), nil)
+	webhook.Deliver(r.Context(), s.db, "study.approved", study)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
 		subject, body := email.StudyApproved(study.StudyInstanceUID)
@@ -68,6 +70,7 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actorEmail(r), "study", study.ID, clientIP(r), nil)
+	webhook.Deliver(r.Context(), s.db, "study.rejected", study)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
 		subject, body := email.StudyRejected(study.StudyInstanceUID)
@@ -270,6 +273,24 @@ func buildListShareResponses(shares []model.ExportShare, now time.Time) []listSh
 		})
 	}
 	return out
+}
+
+// GetShareDownloads returns the immutable download history for one export share.
+func (s *Server) GetShareDownloads(w http.ResponseWriter, r *http.Request) {
+	shareID := r.PathValue("shareID")
+	downloads, err := model.ListExportDownloadsByShare(r.Context(), s.db, shareID)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to list downloads")
+		return
+	}
+	if downloads == nil {
+		downloads = []model.ExportDownload{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"share_id":  shareID,
+		"downloads": downloads,
+		"total":     len(downloads),
+	})
 }
 
 // RevokeShare immediately revokes an export share.

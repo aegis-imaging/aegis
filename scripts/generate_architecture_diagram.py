@@ -2,16 +2,16 @@
 """Generate AEGIS architecture diagram as PNG."""
 
 from PIL import Image, ImageDraw, ImageFont
-import math
 import os
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 
 # Canvas
-W, H = 2400, 2060
+W, H = 2500, 2300
 img = Image.new("RGB", (W, H), "#FFFFFF")
 draw = ImageDraw.Draw(img)
+
 
 # Fonts
 def font(size):
@@ -19,6 +19,7 @@ def font(size):
         return ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", size)
     except Exception:
         return ImageFont.truetype("/System/Library/Fonts/SFNSMono.ttf", size)
+
 
 TITLE = font(32)
 HEADING = font(20)
@@ -46,7 +47,6 @@ TEXT_LIGHT = "#616161"
 
 
 def rounded_rect(xy, fill, outline, width=2, radius=12):
-    x0, y0, x1, y1 = xy
     draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
 
 
@@ -54,7 +54,6 @@ def arrow_down(x, y1, y2, label=None):
     draw.line([(x, y1), (x, y2 - 8)], fill=ARROW_COLOR, width=3)
     draw.polygon([(x - 8, y2 - 12), (x + 8, y2 - 12), (x, y2)], fill=ARROW_COLOR)
     if label:
-        tw = draw.textlength(label, font=SMALL)
         draw.text((x + 12, (y1 + y2) / 2 - 8), label, fill=ARROW_COLOR, font=SMALL)
 
 
@@ -73,13 +72,10 @@ def arrow_left(x1, x2, y, label=None):
 def service_box(xy, title, items, accent, title_font=BOLD):
     x0, y0, x1, y1 = xy
     rounded_rect(xy, fill=BG_SERVICE, outline=accent, width=2)
-    # Title bar
     draw.rounded_rectangle((x0, y0, x1, y0 + 36), radius=12, fill=accent, outline=accent)
-    # Fix bottom corners of title bar
     draw.rectangle((x0 + 1, y0 + 24, x1 - 1, y0 + 36), fill=accent)
     tw = draw.textlength(title, font=title_font)
     draw.text((x0 + (x1 - x0 - tw) / 2, y0 + 7), title, fill="#FFFFFF", font=title_font)
-    # Items
     for i, item in enumerate(items):
         draw.text((x0 + 16, y0 + 46 + i * 22), f"• {item}", fill=TEXT_MED, font=SMALL)
 
@@ -91,238 +87,285 @@ if os.path.exists(logo_path):
     logo_h = 90
     logo_w = int(logo_h * logo.width / logo.height)
     logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
-    # Paste logo with transparency onto white background
-    logo_x = W // 2 - 200
+    logo_x = W // 2 - 220
     logo_y = 5
     img.paste(logo, (logo_x, logo_y), mask=logo.split()[3])
-    # Redraw draw object after paste
     draw = ImageDraw.Draw(img)
     text_x = logo_x + logo_w + 15
     draw.text((text_x, 15), "AEGIS Architecture", fill=TEXT_DARK, font=TITLE)
     draw.text((text_x, 55), "Anonymization & Exchange Gateway for Imaging Studies", fill=TEXT_LIGHT, font=HEADING)
 else:
     draw.text((W // 2 - 200, 20), "AEGIS Architecture", fill=TEXT_DARK, font=TITLE)
-    draw.text((W // 2 - 260, 60), "Anonymization & Exchange Gateway for Imaging Studies", fill=TEXT_LIGHT, font=HEADING)
+    draw.text((W // 2 - 270, 60), "Anonymization & Exchange Gateway for Imaging Studies", fill=TEXT_LIGHT, font=HEADING)
 
 # ══════════════════════════════════════════════════════
-# SENDING SITE (Hospital)
+# SENDING SOURCES
 # ══════════════════════════════════════════════════════
-hosp_xy = (60, 110, 2340, 380)
+hosp_xy = (60, 110, 2430, 390)
 rounded_rect(hosp_xy, fill=BG_HOSPITAL, outline=BORDER_HOSPITAL, width=3)
-draw.text((80, 120), "SENDING SOURCES  (External Browser + Internal Enterprise)", fill=BORDER_HOSPITAL, font=HEADING)
+draw.text((80, 120), "SENDING SOURCES  (External Browser Upload + DICOM Network + Enterprise Ingest)", fill=BORDER_HOSPITAL, font=HEADING)
 
 # Upload Portal
 service_box(
-    (100, 160, 700, 360),
+    (90, 160, 680, 370),
     "React Upload Portal (PWA)",
     [
         "DICOM file/folder picker",
         "Client-side parsing (dcmjs)",
         "Tag de-identification (PS3.15)",
-        "Anonymization preview",
-        "Chunked upload to GCS",
+        "Anonymization preview (before/after)",
+        "Multi-study detection & upload",
+        "Auto-retry (3× exponential backoff)",
     ],
     ACCENT_REACT,
 )
 
-# Internal ingress lane callout
-rounded_rect((720, 116, 1360, 152), fill="#E3F2FD", outline=BORDER_HOSPITAL, width=1)
-draw.text((736, 126), "Internal-enterprise studies can ingest directly into the same GCP pipeline.", fill=BORDER_HOSPITAL, font=SMALL)
-
 # De-id Engine
 service_box(
-    (740, 160, 1240, 360),
+    (710, 160, 1180, 370),
     "De-identification Engine",
     [
         "HIPAA Safe Harbor (18 identifiers)",
         "D/Z/X/U/C action codes per tag",
         "Deterministic UID hashing",
         "Date shifting",
-        "Private tag removal",
+        "Per-project retained-tag profiles",
     ],
     "#7B1FA2",
 )
 
-# Client Library
+# DIMSE Receiver
 service_box(
-    (1280, 160, 1700, 360),
-    "Uploader Library (TypeScript)",
+    (1220, 160, 1720, 370),
+    "DIMSE Receiver (pynetdicom)",
     [
-        "Reusable npm package",
-        "Web Workers for parsing",
-        "Embeddable in other apps",
-        "Progress tracking",
+        "C-STORE SCP on port 11112",
+        "Receives studies from PACS/scanners",
+        "Writes raw DICOM to shared storage",
+        "Calls POST /api/ingest on assoc close",
+        "Exponential retry with dead-letter",
+        "Durable state across restarts",
     ],
-    "#00897B",
+    ACCENT_PYTHON,
 )
 
 # Key callout
-rounded_rect((1740, 160, 2320, 360), fill="#FFF3E0", outline=ACCENT_SECURITY, width=2)
-draw.text((1760, 170), "Key Principle", fill=ACCENT_SECURITY, font=BOLD)
-draw.text((1760, 200), "PHI is stripped in the browser", fill=TEXT_DARK, font=BODY)
-draw.text((1760, 225), "BEFORE data leaves the", fill=TEXT_DARK, font=BODY)
-draw.text((1760, 250), "hospital network.", fill=TEXT_DARK, font=BODY)
-draw.text((1760, 285), "Only tag-de-identified DICOM", fill=TEXT_MED, font=SMALL)
-draw.text((1760, 305), "is transmitted over HTTPS/TLS.", fill=TEXT_MED, font=SMALL)
-draw.text((1760, 335), "No software installation required.", fill=TEXT_MED, font=SMALL)
+rounded_rect((1760, 160, 2400, 370), fill="#FFF3E0", outline=ACCENT_SECURITY, width=2)
+draw.text((1780, 170), "Key Principle", fill=ACCENT_SECURITY, font=BOLD)
+draw.text((1780, 200), "PHI is stripped in the browser", fill=TEXT_DARK, font=BODY)
+draw.text((1780, 225), "BEFORE data leaves the", fill=TEXT_DARK, font=BODY)
+draw.text((1780, 250), "hospital network.", fill=TEXT_DARK, font=BODY)
+draw.text((1780, 285), "Only tag-de-identified DICOM", fill=TEXT_MED, font=SMALL)
+draw.text((1780, 305), "is transmitted over HTTPS/TLS.", fill=TEXT_MED, font=SMALL)
+draw.text((1780, 325), "No software install at sending site.", fill=TEXT_MED, font=SMALL)
+draw.text((1780, 345), "DIMSE ingests raw (internal path).", fill=TEXT_MED, font=SMALL)
 
-# ── Arrow: Hospital → GCP ──
-arrow_down(W // 2, 380, 450, "HTTPS (TLS 1.2+) — De-identified DICOM only")
+# ── Arrow: Sources → GCP ──
+arrow_down(W // 2, 390, 460, "HTTPS (TLS 1.2+) · DICOM C-STORE (11112)")
 
 # ══════════════════════════════════════════════════════
 # GCP PROJECT
 # ══════════════════════════════════════════════════════
-gcp_xy = (60, 450, 2340, 1460)
+gcp_xy = (60, 460, 2430, 1690)
 rounded_rect(gcp_xy, fill=BG_GCP, outline=BORDER_GCP, width=3)
-draw.text((80, 460), "GCP PROJECT  (Secured Enterprise Tenancy)", fill=BORDER_GCP, font=HEADING)
+draw.text((80, 470), "GCP PROJECT  aegis-prod-488119 · us-central1  (Live, February 2026)", fill=BORDER_GCP, font=HEADING)
 
 # Cloud Armor + LB
-rounded_rect((100, 500, 2320, 560), fill="#E3F2FD", outline=ACCENT_GCP_SVC, width=2)
-draw.text((120, 515), "Cloud Armor (DDoS / WAF)", fill=ACCENT_GCP_SVC, font=BOLD)
-draw.text((520, 518), "+   Global HTTPS Load Balancer", fill=TEXT_MED, font=BODY)
-draw.text((900, 518), "+   Identity-Aware Proxy (admin routes)", fill=TEXT_MED, font=BODY)
+rounded_rect((90, 510, 2400, 570), fill="#E3F2FD", outline=ACCENT_GCP_SVC, width=2)
+draw.text((110, 525), "Cloud Armor (DDoS / WAF)", fill=ACCENT_GCP_SVC, font=BOLD)
+draw.text((510, 528), "+   Global HTTPS Load Balancer", fill=TEXT_MED, font=BODY)
+draw.text((890, 528), "+   Identity-Aware Proxy (admin dashboard routes)", fill=TEXT_MED, font=BODY)
+draw.text((1400, 528), "+   Cloud Run (all services)", fill=TEXT_MED, font=BODY)
 
 # Arrow into services
-arrow_down(W // 2, 560, 610)
+arrow_down(W // 2, 570, 620)
 
 # ── Go API Backend ──
 service_box(
-    (100, 610, 750, 870),
+    (90, 620, 720, 930),
     "API Backend (Go / Cloud Run)",
     [
-        "Upload orchestration (signed URLs)",
-        "Study / project management",
-        "User auth (OAuth 2.0 / JWT)",
-        "Routing rules engine",
-        "DICOMweb proxy → Healthcare API",
-        "Pub/Sub event handlers",
+        "Upload orchestration (sessions, chunks)",
+        "Study / project / institution management",
+        "Routing rules engine (auto-pipeline)",
+        "DICOMweb proxy (QIDO-RS + WADO-RS)",
+        "Bulk actions, CSV export, study notes",
+        "Export shares (token-auth, ZIP download)",
+        "DIMSE retry control proxy",
+        "Email digest scheduler",
         "distroless image (~10-20 MB)",
     ],
     ACCENT_GO,
 )
 
-# ── Healthcare API ──
+# ── Admin Dashboard + OHIF ──
 service_box(
-    (800, 610, 1450, 870),
-    "GCP Healthcare API",
-    [
-        "DICOM Store (DICOMweb)",
-        "STOW-RS / WADO-RS / QIDO-RS",
-        "Server-side de-id validation",
-        "InfoType detection (DLP)",
-        "Pub/Sub notifications",
-        "BigQuery metadata export",
-        "CMEK encryption at rest",
-    ],
-    ACCENT_GCP_SVC,
-)
-
-# ── Cloud Storage ──
-service_box(
-    (1500, 610, 1950, 800),
-    "Cloud Storage",
-    [
-        "Staging bucket (uploads)",
-        "Archive bucket (exports)",
-        "Signed URL uploads",
-        "Lifecycle policies",
-    ],
-    "#F9A825",
-)
-
-# ── Pub/Sub ──
-service_box(
-    (2000, 610, 2320, 790),
-    "Pub/Sub",
-    [
-        "Ingest notifications",
-        "Defacing triggers",
-        "PHI scan triggers",
-        "Routing events",
-        "Audit events",
-    ],
-    "#AB47BC",
-)
-
-# Arrows between services
-arrow_right(750, 800, 740, "STOW/WADO")
-arrow_right(750, 1500, 680)
-arrow_right(1450, 2000, 680)
-
-# ── Defacing Service ──
-service_box(
-    (100, 920, 750, 1180),
-    "Defacing Service (Python / Cloud Run)",
-    [
-        "Triggered for head MRI/PET/CT",
-        "WADO-RS retrieval from DICOM store",
-        "dcm2niix (DICOM → NIfTI)",
-        "mri_deface or DeepDefacer",
-        "pydicom pixel data injection",
-        "STOW-RS back to 'clean' store",
-        "~0.5-2 GB container image",
-        "2-10 min per volume",
-    ],
-    ACCENT_PYTHON,
-)
-
-# Arrow from API to Defacing
-arrow_down(425, 870, 920, "HTTP trigger")
-
-# Arrow from Defacing back to Healthcare API
-arrow_right(750, 800, 1050, "Defaced DICOM")
-
-# ── PHI Detection Service ──
-service_box(
-    (100, 1200, 750, 1420),
-    "PHI Detection (Python / Cloud Run)",
-    [
-        "Burned-in text OCR on pixel data",
-        "Tesseract backend (local dev)",
-        "Vertex AI Document AI (prod)",
-        "Confidence-threshold filtering",
-        "Structured findings per file",
-        "Non-blocking (informational flag)",
-    ],
-    ACCENT_PYTHON,
-)
-
-# Arrow from API to PHI Detection
-arrow_down(425, 1180, 1200, "HTTP trigger")
-
-# ── OHIF Viewer / Admin Dashboard ──
-service_box(
-    (800, 920, 1450, 1180),
-    "Admin Dashboard (React / Cloud Run)",
+    (760, 620, 1380, 930),
+    "Admin Dashboard + OHIF (React / Cloud Run)",
     [
         "Behind Identity-Aware Proxy (IAP)",
-        "OHIF Viewer (DICOMweb)",
-        "Study browser + QC review",
-        "Defacing review (before/after)",
-        "Burned-in PHI scan status",
-        "Routing rule configuration",
-        "User/institution management",
-        "Audit log viewer",
+        "Study browser — filter, search, paginate",
+        "Bulk approve/reject + CSV export",
+        "OHIF Viewer (before/after defacing review)",
+        "Study diagnostics & routing log panel",
+        "Routing rules / destinations config",
+        "Institutions, users, projects management",
+        "Protocol templates & audit log viewer",
+        "Share management with countdown timers",
     ],
     ACCENT_VIEWER,
 )
 
-# ── Two DICOM Stores diagram ──
-rounded_rect((1500, 920, 1950, 1100), fill="#E8EAF6", outline="#3F51B5", width=2)
-draw.text((1520, 930), "Two DICOM Stores", fill="#3F51B5", font=BOLD)
-draw.text((1520, 960), "raw", fill=TEXT_DARK, font=BODY)
-draw.text((1620, 960), "Tag de-id'd, not defaced", fill=TEXT_LIGHT, font=SMALL)
-draw.text((1520, 990), "clean", fill=TEXT_DARK, font=BODY)
-draw.text((1620, 990), "Fully processed + defaced", fill=TEXT_LIGHT, font=SMALL)
-draw.text((1520, 1025), "Non-destructive pipeline:", fill=TEXT_MED, font=SMALL)
-draw.text((1520, 1045), "raw → deface → clean → approve", fill=TEXT_MED, font=SMALL)
-draw.text((1520, 1075), "Admin reviews before release", fill=TEXT_MED, font=SMALL)
+# ── Cloud SQL + Storage ──
+service_box(
+    (1420, 620, 1940, 780),
+    "Cloud SQL (PostgreSQL 15)",
+    [
+        "Studies, projects, institutions",
+        "Routing rules, audit trail",
+        "Admin users, shares, digest subs",
+        "Private IP, Secret Manager creds",
+    ],
+    "#F9A825",
+)
+
+service_box(
+    (1980, 620, 2400, 780),
+    "Cloud Storage (GCS)",
+    [
+        "dicom/raw/{studyUID}/ — tag-de-id'd",
+        "dicom/clean/{studyUID}/ — defaced",
+        "bids/{studyUID}/ — NIfTI/BIDS output",
+        "Signed URL uploads from browser",
+    ],
+    ACCENT_GCP_SVC,
+)
+
+# Two DICOM stores note
+rounded_rect((1420, 810, 2400, 930), fill="#E8EAF6", outline="#3F51B5", width=2)
+draw.text((1440, 820), "Two Storage Paths (non-destructive pipeline)", fill="#3F51B5", font=BOLD)
+draw.text((1440, 850), "raw   →  tag de-id'd only (upload portal / DIMSE input)", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 872), "clean →  fully processed + defaced (OHIF default view)", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 894), "Admin reviews raw vs clean side-by-side before approving", fill=TEXT_LIGHT, font=SMALL)
+
+# Arrows between Go API and dependencies
+arrow_right(720, 760, 760, "HTTP")
+arrow_right(720, 1420, 700)
+arrow_right(720, 1980, 680)
+
+# ── Processing Sidecars row ──
+sidecar_y = 970
+sidecar_label_y = sidecar_y - 30
+draw.text((90, sidecar_label_y), "Processing Sidecars (Python / Cloud Run)  — all triggered async by Go API via HTTP", fill=ACCENT_PYTHON, font=BOLD)
+
+svc_w = 370
+svc_h = 220
+svc_gap = 15
+svc_x = 90
+
+# Defacing
+service_box(
+    (svc_x, sidecar_y, svc_x + svc_w, sidecar_y + svc_h),
+    "Defacing (Python)",
+    [
+        "Head MRI/PET/CT — face removal",
+        "mri_reface / DeepDefacer / mri_deface",
+        "nibabel fallback (dev/test)",
+        "dcm2niix (DICOM → NIfTI)",
+        "Writes defaced DICOM to clean/",
+        "~0.5-4 GB image, 1-10 min/vol",
+    ],
+    ACCENT_PYTHON,
+)
+svc_x += svc_w + svc_gap
+
+# PHI Detection
+service_box(
+    (svc_x, sidecar_y, svc_x + svc_w, sidecar_y + svc_h),
+    "PHI Detection (Python)",
+    [
+        "Burned-in text OCR on pixel data",
+        "Tesseract (local) / Cloud Vision /",
+        "  AWS Textract (cloud backends)",
+        "Per-file findings with confidence",
+        "Informational — non-blocking",
+        "Sets phi_scan_status: clean|flagged",
+    ],
+    ACCENT_PYTHON,
+)
+svc_x += svc_w + svc_gap
+
+# QC Service
+service_box(
+    (svc_x, sidecar_y, svc_x + svc_w, sidecar_y + svc_h),
+    "QC Automation (Python)",
+    [
+        "File integrity check",
+        "Slice consistency (dims/spacing)",
+        "SNR estimation (signal/noise)",
+        "Coverage completeness by body part",
+        "Missing slice gap detection",
+        "Sets qc_status: pass|warn|fail",
+    ],
+    ACCENT_PYTHON,
+)
+svc_x += svc_w + svc_gap
+
+# Classification
+service_box(
+    (svc_x, sidecar_y, svc_x + svc_w, sidecar_y + svc_h),
+    "Classification (Python)",
+    [
+        "Fills modality + body_part from DICOM",
+        "Heuristic: tags → SOP UID → desc",
+        "Cloud Vision / AWS Rekognition fallback",
+        "Re-evaluates routing rules after classify",
+        "Confidence-threshold gating (≥0.5)",
+        "Sets classification_status: classified",
+    ],
+    ACCENT_PYTHON,
+)
+svc_x += svc_w + svc_gap
+
+# BIDS Service
+service_box(
+    (svc_x, sidecar_y, svc_x + svc_w, sidecar_y + svc_h),
+    "BIDS Conversion (Python)",
+    [
+        "DICOM → NIfTI (dcm2niix)",
+        "BIDS directory structure",
+        "sub-{hash8}/anat|func|dwi/",
+        "JSON sidecar metadata",
+        "Privacy: UID-hashed subject label",
+        "ZIP download via Go API",
+    ],
+    ACCENT_PYTHON,
+)
+svc_x += svc_w + svc_gap
+
+# Protocol Service
+service_box(
+    (svc_x, sidecar_y, svc_x + svc_w, sidecar_y + svc_h),
+    "Protocol Check (Python)",
+    [
+        "Verifies TR/TE/flip/slice vs template",
+        "Classic + Enhanced DICOM support",
+        "Per-project protocol templates",
+        "numeric/exact/range/contains match",
+        "critical/warning/info severity",
+        "Sets protocol_status: compliant|deviations",
+    ],
+    ACCENT_PYTHON,
+)
+
+# Arrow from Go API down to sidecars
+arrow_down(405, 930, sidecar_y, "HTTP trigger")
 
 # ── Security box ──
-rounded_rect((2000, 920, 2320, 1180), fill="#FCE4EC", outline=ACCENT_SECURITY, width=2)
-draw.text((2020, 930), "Security Layers", fill=ACCENT_SECURITY, font=BOLD)
+rounded_rect((90, 1210, 510, 1480), fill="#FCE4EC", outline=ACCENT_SECURITY, width=2)
+draw.text((110, 1220), "Security Layers", fill=ACCENT_SECURITY, font=BOLD)
 items_sec = [
-    "VPC Service Controls",
+    "VPC (private subnets + Cloud NAT)",
     "Cloud Armor DDoS/WAF",
     "TLS 1.2+ everywhere",
     "CMEK (Cloud KMS)",
@@ -331,68 +374,96 @@ items_sec = [
     "Secret Manager",
     "Artifact Registry scanning",
     "distroless containers",
+    "IAP for admin routes",
+    "No PHI in email/audit",
+    "HIPAA-compliant pipeline",
 ]
 for i, item in enumerate(items_sec):
-    draw.text((2020, 960 + i * 22), f"• {item}", fill=TEXT_MED, font=SMALL)
+    draw.text((110, 1252 + i * 20), f"• {item}", fill=TEXT_MED, font=SMALL)
+
+# ── Export / Recipients box ──
+rounded_rect((560, 1210, 1380, 1480), fill="#E8F5E9", outline=BORDER_GCP, width=2)
+draw.text((580, 1220), "Export & Sharing", fill=BORDER_GCP, font=BOLD)
+draw.text((580, 1252), "Export Portal (React / Vercel)", fill=BORDER_GCP, font=BODY)
+draw.text((580, 1275), "• Token-authenticated share links", fill=TEXT_MED, font=SMALL)
+draw.text((580, 1295), "• Modality/body-part badges, study info", fill=TEXT_MED, font=SMALL)
+draw.text((580, 1315), "• Expiry countdown (server-anchored clock)", fill=TEXT_MED, font=SMALL)
+draw.text((580, 1335), "• ZIP download of approved DICOM files", fill=TEXT_MED, font=SMALL)
+draw.text((580, 1365), "Automated DICOM Forwarding", fill=BORDER_GCP, font=BODY)
+draw.text((580, 1388), "• route_to routing action", fill=TEXT_MED, font=SMALL)
+draw.text((580, 1408), "• DICOMweb (STOW-RS) destinations", fill=TEXT_MED, font=SMALL)
+draw.text((580, 1428), "• DIMSE C-STORE to remote AE Title", fill=TEXT_MED, font=SMALL)
+draw.text((580, 1448), "• Auto-forwards on approval", fill=TEXT_MED, font=SMALL)
+
+# ── MCP Server box ──
+rounded_rect((1420, 1210, 2400, 1480), fill="#EDE7F6", outline="#7B1FA2", width=2)
+draw.text((1440, 1220), "MCP Server + Operator Tooling", fill="#7B1FA2", font=BOLD)
+draw.text((1440, 1252), "Model Context Protocol (Claude integration)", fill="#7B1FA2", font=BODY)
+draw.text((1440, 1275), "• Read tools: list_studies, get_study, list_audit, get_diagnostics", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 1295), "• Write tools (MCP_ENABLE_WRITE_TOOLS=true): approve/reject", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 1315), "• Readonly mode by default — safe for AI-assisted triage", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 1335), "• DIMSE retry proxy: process, replay, clear dead-letter", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 1365), "Batch Import CLI (aegis-import)", fill="#7B1FA2", font=BODY)
+draw.text((1440, 1388), "• Bulk historical DICOM migration from local dir", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 1408), "• POST /api/import/batch — institution-linked provenance", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 1428), "• Dry-run mode, duplicate rejection, routing evaluation", fill=TEXT_MED, font=SMALL)
+draw.text((1440, 1448), "• Internal ingest: /api/ingest with IP-based institution auto-match", fill=TEXT_MED, font=SMALL)
 
 # ══════════════════════════════════════════════════════
-# Bottom: Repository Structure + Tech Stack
+# Bottom: Pipeline Flow + Tech Stack
 # ══════════════════════════════════════════════════════
-repos_y = 1490
+pipeline_y = 1720
 
-rounded_rect((100, repos_y, 1150, repos_y + 220), fill="#F5F5F5", outline="#9E9E9E", width=2)
-draw.text((120, repos_y + 10), "Repository Structure (5 Repos)", fill=TEXT_DARK, font=BOLD)
+# Pipeline visualization
+rounded_rect((60, pipeline_y, 2430, pipeline_y + 130), fill="#E3F2FD", outline=ACCENT_GCP_SVC, width=2)
+draw.text((80, pipeline_y + 10), "Automated Processing Pipeline  (triggered by routing rules, runs hands-free)", fill=ACCENT_GCP_SVC, font=BOLD)
 
-repos = [
-    ("aegis-terraform-prj", "GCP project bootstrap, IAM, KMS", "#795548"),
-    ("aegis-terraform-infra", "VPC, Cloud Run, Healthcare API, Cloud Armor", "#795548"),
-    ("aegis-api", "Go backend — upload, routing, DICOMweb proxy", ACCENT_GO),
-    ("aegis-frontend", "React — Upload Portal + Admin Dashboard", ACCENT_REACT),
-    ("aegis-client", "TypeScript uploader library (npm package)", "#00897B"),
+stages = [
+    ("Classification", "#9C27B0", "fills modality/body_part\nre-evaluates rules"),
+    ("PHI Scan", "#E53935", "OCR on pixels\nflags burned-in text"),
+    ("Protocol Check", "#F57C00", "validates TR/TE/flip\nvs project template"),
+    ("Defacing", "#1565C0", "removes facial features\nhead imaging only"),
+    ("QC Check", "#2E7D32", "SNR, coverage,\nslice consistency"),
+    ("BIDS Convert", "#00695C", "NIfTI + sidecar JSON\nBIDS structure"),
+    ("Export Forward", "#37474F", "STOW-RS or DIMSE\nroute_to destinations"),
 ]
-for i, (name, desc, color) in enumerate(repos):
-    y = repos_y + 45 + i * 34
-    draw.rounded_rectangle((120, y, 135, y + 20), radius=3, fill=color)
-    draw.text((145, y), name, fill=TEXT_DARK, font=BODY)
-    draw.text((530, y + 2), desc, fill=TEXT_LIGHT, font=SMALL)
 
-# Tech stack
-rounded_rect((1200, repos_y, 2320, repos_y + 254), fill="#F5F5F5", outline="#9E9E9E", width=2)
-draw.text((1220, repos_y + 10), "Key Open-Source Dependencies", fill=TEXT_DARK, font=BOLD)
+stage_w = 330
+stage_x = 80
+arrow_x = stage_x + stage_w
+for i, (name, color, desc) in enumerate(stages):
+    rounded_rect((stage_x, pipeline_y + 40, stage_x + stage_w, pipeline_y + 120),
+                 fill=color, outline=color, width=2, radius=8)
+    tw = draw.textlength(name, font=BOLD)
+    draw.text((stage_x + (stage_w - tw) // 2, pipeline_y + 48), name, fill="#FFFFFF", font=BOLD)
+    for j, line in enumerate(desc.split("\n")):
+        tw2 = draw.textlength(line, font=SMALL)
+        draw.text((stage_x + (stage_w - tw2) // 2, pipeline_y + 75 + j * 18), line, fill="#FFFFFF", font=SMALL)
+    if i < len(stages) - 1:
+        ax = stage_x + stage_w + 2
+        ay = pipeline_y + 80
+        draw.polygon([(ax, ay - 8), (ax, ay + 8), (ax + 15, ay)], fill=ACCENT_GCP_SVC)
+    stage_x += stage_w + 18
 
-deps = [
-    ("Go:", "suyashkumar/dicom, GCP Go SDK", ACCENT_GO),
-    ("Browser:", "dcmjs, dicomParser, OHIF Viewer", ACCENT_REACT),
-    ("Defacing:", "mri_deface, dcm2niix, pydicom, nibabel", ACCENT_PYTHON),
-    ("PHI Detect:", "Tesseract OCR, pytesseract, pydicom", ACCENT_PYTHON),
-    ("Infra:", "Terraform Google Provider, Cloud Build", "#795548"),
-    ("Viewing:", "OHIF Viewer (MIT) — DICOMweb native", ACCENT_VIEWER),
-]
-for i, (cat, desc, color) in enumerate(deps):
-    y = repos_y + 45 + i * 34
-    draw.text((1220, y), cat, fill=color, font=BOLD)
-    draw.text((1350, y + 2), desc, fill=TEXT_MED, font=SMALL)
+# Phases
+phases_y = pipeline_y + 155
 
-# ── Phases ──
-phases_y = repos_y + 250
-rounded_rect((100, phases_y, 2320, phases_y + 170), fill="#F3E5F5", outline="#7B1FA2", width=2)
-draw.text((120, phases_y + 10), "Implementation Phases", fill="#7B1FA2", font=BOLD)
+rounded_rect((60, phases_y, 2430, phases_y + 170), fill="#F3E5F5", outline="#7B1FA2", width=2)
+draw.text((80, phases_y + 10), "Implementation Phases (all complete as of February 2026)", fill="#7B1FA2", font=BOLD)
 
 phase_data = [
-    ("Phase 1: Foundation MVP", "Terraform + Go API + Upload Portal + Admin Dashboard"),
-    ("Phase 2: Defacing Pipeline", "Python Cloud Run sidecar, mri_deface, automated trigger"),
-    ("Phase 3: Operations", "Routing rules, institution management, audit logging"),
-    ("Phase 4: Advanced", "Burned-in PHI OCR, QC automation, BIDS conversion"),
+    ("Phase 1: Foundation  ✓", "Terraform + Go API + Upload Portal + Admin Dashboard + PostgreSQL + CI", "#4CAF50"),
+    ("Phase 2: Processing  ✓", "Defacing + PHI Detection + QC + BIDS + Classification + Protocol + DIMSE", "#2196F3"),
+    ("Phase 3: Operations  ✓", "Routing rules + Institutions + Audit + Export portal + Shares + Email digest", "#FF9800"),
+    ("Phase 4: Production  ✓", "GCP Cloud Run deploy + Terraform infra + MCP server + Batch import + GCP live", "#9C27B0"),
 ]
 
-phase_w = 540
-for i, (title, desc) in enumerate(phase_data):
-    x = 120 + i * (phase_w + 20)
+phase_w = 560
+for i, (title, desc, color) in enumerate(phase_data):
+    x = 80 + i * (phase_w + 20)
     y = phases_y + 45
-    colors = ["#4CAF50", "#2196F3", "#FF9800", "#9C27B0"]
-    rounded_rect((x, y, x + phase_w, y + 110), fill="#FFFFFF", outline=colors[i], width=2)
-    draw.text((x + 15, y + 10), title, fill=colors[i], font=BOLD)
-    # Word-wrap description
+    rounded_rect((x, y, x + phase_w, y + 110), fill="#FFFFFF", outline=color, width=2)
+    draw.text((x + 15, y + 10), title, fill=color, font=BOLD)
     words = desc.split(", ")
     line = ""
     ly = y + 38
@@ -407,7 +478,40 @@ for i, (title, desc) in enumerate(phase_data):
     if line:
         draw.text((x + 15, ly), line, fill=TEXT_MED, font=SMALL)
 
+# Tech stack + repos
+stack_y = phases_y + 180
+
+rounded_rect((60, stack_y, 1240, stack_y + 200), fill="#F5F5F5", outline="#9E9E9E", width=2)
+draw.text((80, stack_y + 10), "Key Open-Source Dependencies", fill=TEXT_DARK, font=BOLD)
+deps = [
+    ("Go:", "suyashkumar/dicom, pgx, testcontainers-go, testify", ACCENT_GO),
+    ("Browser:", "dcmjs, dicomParser, OHIF Viewer (MIT), React 19, Vite", ACCENT_REACT),
+    ("Defacing:", "mri_reface, DeepDefacer, mri_deface, dcm2niix, pydicom, nibabel", ACCENT_PYTHON),
+    ("PHI / OCR:", "Tesseract, pytesseract, Google Cloud Vision, AWS Textract", ACCENT_PYTHON),
+    ("QC / BIDS:", "pydicom, numpy, dcm2niix, pynetdicom (DIMSE C-STORE SCP)", ACCENT_PYTHON),
+    ("Infra:", "Terraform Google + AWS providers, Docker distroless/slim", "#795548"),
+]
+for i, (cat, desc, color) in enumerate(deps):
+    y = stack_y + 45 + i * 28
+    draw.text((80, y), cat, fill=color, font=BOLD)
+    draw.text((220, y + 2), desc, fill=TEXT_MED, font=SMALL)
+
+rounded_rect((1280, stack_y, 2430, stack_y + 200), fill="#F5F5F5", outline="#9E9E9E", width=2)
+draw.text((1300, stack_y + 10), "Multi-Cloud Support", fill=TEXT_DARK, font=BOLD)
+multicloud = [
+    ("GCP:", "Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · Cloud KMS", ACCENT_GCP_SVC),
+    ("AWS:", "ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager", "#FF9900"),
+    ("Local Dev:", "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem", "#546E7A"),
+    ("Auth:", "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth", "#E65100"),
+    ("Storage:", "STORAGE_MODE=gcs|s3|local — same Go API code, no changes", ACCENT_GO),
+    ("CI:", "GitHub Actions — Go tests (120+), Python tests (206+), TS, Docker", "#2E7D32"),
+]
+for i, (cat, desc, color) in enumerate(multicloud):
+    y = stack_y + 45 + i * 28
+    draw.text((1300, y), cat, fill=color, font=BOLD)
+    draw.text((1440, y + 2), desc, fill=TEXT_MED, font=SMALL)
+
 # Save
-out_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ARCHITECTURE.png")
+out_path = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.png")
 img.save(out_path, "PNG", quality=95)
 print(f"Saved to {out_path}")

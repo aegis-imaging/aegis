@@ -22,6 +22,7 @@ export class DisallowedPathError extends Error {
 
 const allowedGetPathPatterns = [
   /^\/healthz(?:\?.*)?$/,
+  /^\/api\/stats$/,
   /^\/api\/studies(?:\?.*)?$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/diagnostics$/,
@@ -32,7 +33,8 @@ const allowedGetPathPatterns = [
   /^\/api\/dimse\/retry\/summary(?:\?.*)?$/,
   /^\/api\/studies\/by-uid\/[0-9.]+$/,
   /^\/api\/audit(?:\?.*)?$/,
-  /^\/api\/shares(?:\?.*)?$/
+  /^\/api\/shares(?:\?.*)?$/,
+  /^\/api\/shares\/[0-9a-fA-F-]{36}\/downloads$/
 ] as const;
 
 const allowedPostPathPatterns = [
@@ -46,7 +48,9 @@ const allowedPostPathPatterns = [
   /^\/api\/dimse\/retry\/process\/[0-9.]+$/,
   /^\/api\/dimse\/retry\/replay\/[0-9.]+$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/approve$/,
-  /^\/api\/studies\/[0-9a-fA-F-]{36}\/reject$/
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/reject$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/share$/,
+  /^\/api\/routing-rules\/evaluate\/[0-9a-fA-F-]{36}$/
 ] as const;
 
 const allowedDeletePathPatterns = [

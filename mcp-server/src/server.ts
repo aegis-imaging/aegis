@@ -8,12 +8,15 @@ import { InMemoryRateLimiter } from "./rateLimiter.js";
 import { redactToolArgs } from "./redaction.js";
 import {
   approveStudyArgsSchema,
+  createShareArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
+  getShareDownloadsArgsSchema,
   listAllSharesArgsSchema,
   listAuditArgsSchema,
   listStudiesArgsSchema,
   readToolNames,
+  reEvaluateRoutingArgsSchema,
   rejectStudyArgsSchema,
   retryDimseArgsSchema,
   revokeShareArgsSchema,
@@ -245,6 +248,30 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_share_downloads",
+    description: "Get the complete download history for one export share by its UUID. Returns {share_id, downloads: [{id, share_id, client_ip, accessed_at}], total}. Use for compliance auditing to see who downloaded a study and from which IP.",
+    inputSchema: {
+      type: "object",
+      required: ["share_id"],
+      properties: {
+        request_id: { type: "string" },
+        share_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_pipeline_stats",
+    description: "Get a lightweight snapshot of the study pipeline: study counts by status (received/defacing/clean/defaced/approved/rejected/total) plus active export share count. Use for a quick pipeline health check or to answer 'how many studies are pending/approved/stuck?'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_system_health",
     description: "Get AEGIS system health snapshot from /healthz.",
     inputSchema: {
@@ -344,6 +371,39 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         study_instance_uid: { type: "string", pattern: "^[0-9.]+$" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_share",
+    description: "Create an export share link for an approved study. Returns a one-time token and export URL for the recipient. Study must be in 'approved' status. Requires recipient_email, confirm=true, and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "recipient_email", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        recipient_email: { type: "string", format: "email" },
+        note: { type: "string", maxLength: 512 },
+        expiry_hours: { type: "integer", minimum: 1, maximum: 8760, description: "Share expiry in hours (default 168 = 7 days, max 8760 = 1 year)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "re_evaluate_routing",
+    description: "Re-evaluate routing rules for an existing study. Use this to recover studies stuck in an incomplete pipeline state — re-running routing may trigger classification, defacing, QC, or other required steps that were missed at ingest.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -556,6 +616,18 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_share_downloads") {
+      const parsed = getShareDownloadsArgsSchema.parse(args);
+      const data = await client.get(`/api/shares/${encodeURIComponent(parsed.share_id)}/downloads`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_pipeline_stats") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/stats");
+      return formatSuccess(requestId, name, data);
+    }
+
     if (name === "get_system_health") {
       emptyArgsSchema.parse(args);
       const data = await client.get("/healthz");
@@ -605,6 +677,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "revoke_share") {
         const parsedRevoke = revokeShareArgsSchema.parse(args);
         return handleRevokeShare(parsedRevoke.request_id ?? buildRequestId(), parsedRevoke);
+      }
+
+      if (name === "create_share") {
+        const parsedShare = createShareArgsSchema.parse(args);
+        return handleCreateShare(parsedShare.request_id ?? buildRequestId(), parsedShare);
+      }
+
+      if (name === "re_evaluate_routing") {
+        const parsedReEval = reEvaluateRoutingArgsSchema.parse(args);
+        return handleReEvaluateRouting(parsedReEval.request_id ?? buildRequestId(), parsedReEval);
       }
 
       const parsed = writeArgsSchema.parse(args);
@@ -706,7 +788,7 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   if (name === "retry_dimse_study") {
     return typeof args.study_instance_uid === "string" ? args.study_instance_uid : null;
   }
-  if (name === "approve_study" || name === "reject_study") {
+  if (name === "approve_study" || name === "reject_study" || name === "create_share" || name === "re_evaluate_routing") {
     return typeof args.study_id === "string" ? args.study_id : null;
   }
   if (name === "revoke_share") {
@@ -1299,6 +1381,56 @@ function formatError(
     isError: true,
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }]
   };
+}
+
+async function handleCreateShare(
+  requestId: string,
+  parsed: { study_id: string; recipient_email: string; note?: string; expiry_hours?: number; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_share");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_share", false, "create_share");
+  }
+
+  const study = await client.get(`/api/studies/${encodeURIComponent(parsed.study_id)}`) as Record<string, unknown>;
+  if (study?.status !== "approved") {
+    return formatError(requestId, "CONFLICT", `Only approved studies can be shared; current status: ${study?.status ?? "unknown"}`, false, "create_share");
+  }
+
+  const payload: Record<string, unknown> = { recipient_email: parsed.recipient_email };
+  if (parsed.note !== undefined) payload.note = parsed.note;
+  if (parsed.expiry_hours !== undefined) payload.expiry_hours = parsed.expiry_hours;
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/share`, payload);
+  return formatSuccess(requestId, "create_share", {
+    accepted: true,
+    study_id: parsed.study_id,
+    recipient_email: parsed.recipient_email,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleReEvaluateRouting(
+  requestId: string,
+  parsed: { study_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "re_evaluate_routing");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow re_evaluate_routing", false, "re_evaluate_routing");
+  }
+
+  const data = await client.post(`/api/routing-rules/evaluate/${encodeURIComponent(parsed.study_id)}`);
+  return formatSuccess(requestId, "re_evaluate_routing", {
+    accepted: true,
+    study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
 }
 
 async function handleApproveStudy(

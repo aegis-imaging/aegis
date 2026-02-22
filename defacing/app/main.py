@@ -22,6 +22,8 @@ import logging
 import time
 from pathlib import Path
 
+import numpy as np
+import pydicom
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -38,6 +40,63 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# SSIM visual QA
+# ---------------------------------------------------------------------------
+
+def _compute_ssim_score(input_paths: list[str], output_paths: list[str]) -> float | None:
+    """
+    Compute mean Structural Similarity Index (SSIM) between paired raw and defaced
+    DICOM slices. Samples up to 10 slice pairs for speed.
+
+    Returns a float in [0, 1] (higher = more structurally similar, defacing preserved
+    brain anatomy). Returns None if scikit-image is not installed or computation fails.
+    """
+    try:
+        from skimage.metrics import structural_similarity as ssim
+    except ImportError:
+        log.debug("scikit-image not available — skipping SSIM computation")
+        return None
+
+    try:
+        # Build a lookup: filename → raw path
+        raw_by_name = {Path(p).name: p for p in input_paths}
+
+        # Match output files to their raw originals by filename
+        pairs: list[tuple[str, str]] = []
+        for out_path in output_paths:
+            name = Path(out_path).name
+            if name in raw_by_name:
+                pairs.append((raw_by_name[name], out_path))
+
+        if not pairs:
+            return None
+
+        # Sample up to 10 pairs
+        step = max(1, len(pairs) // 10)
+        sampled = pairs[::step][:10]
+
+        scores: list[float] = []
+        for raw_path, def_path in sampled:
+            try:
+                raw_ds = pydicom.dcmread(raw_path)
+                def_ds = pydicom.dcmread(def_path)
+                raw_arr = raw_ds.pixel_array.astype(np.float32)
+                def_arr = def_ds.pixel_array.astype(np.float32)
+                if raw_arr.shape != def_arr.shape:
+                    continue
+                data_range = float(raw_arr.max() - raw_arr.min()) or 1.0
+                s = ssim(raw_arr, def_arr, data_range=data_range)
+                scores.append(float(s))
+            except Exception:
+                continue
+
+        return round(float(np.mean(scores)), 4) if scores else None
+    except Exception as e:
+        log.warning("SSIM computation failed: %s", e)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -104,9 +163,11 @@ class DefaceResponse(BaseModel):
     output_paths: list[str]
     tool_used: str
     duration_seconds: float
+    ssim_score: float | None = None   # mean SSIM across defaced slices (None if unavailable)
     error: str | None = None
 
 
+@app.get("/health")
 @app.get("/healthz")
 def healthz() -> dict:
     try:
@@ -143,9 +204,11 @@ def deface(req: DefaceRequest) -> DefaceResponse:
     try:
         output_paths = run_pipeline(req.input_paths, req.output_dir, backend)
         duration = time.monotonic() - start
+        ssim_score = _compute_ssim_score(req.input_paths, output_paths)
         log.info(
-            "Defacing complete for %s: %d output files in %.1fs",
+            "Defacing complete for %s: %d output files in %.1fs (SSIM=%s)",
             req.study_uid, len(output_paths), duration,
+            f"{ssim_score:.4f}" if ssim_score is not None else "n/a",
         )
         return DefaceResponse(
             study_uid=req.study_uid,
@@ -153,6 +216,7 @@ def deface(req: DefaceRequest) -> DefaceResponse:
             output_paths=output_paths,
             tool_used=backend.name,
             duration_seconds=duration,
+            ssim_score=ssim_score,
         )
     except Exception as e:
         duration = time.monotonic() - start

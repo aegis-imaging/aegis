@@ -189,6 +189,62 @@
 .badge--export-exported  { background: #dcfce7; color: #15803d; }
 .badge--export-failed    { background: #fee2e2; color: #b91c1c; }
 
+/* ── Pipeline stats banner ───────────────────────────────────────────────── */
+.stats-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.stats-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.1s, box-shadow 0.1s;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.stats-pill:hover { opacity: 0.85; }
+
+.stats-pill--active {
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+.stats-pill__count {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* Per-status tints */
+.stats-pill--received  { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.stats-pill--defacing  { background: #fefce8; color: #854d0e; border-color: #fef08a; }
+.stats-pill--clean     { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.stats-pill--defaced   { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.stats-pill--approved  { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+.stats-pill--rejected  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+
+.stats-banner__sep {
+  width: 1px;
+  height: 20px;
+  background: #e5e7eb;
+  margin: 0 4px;
+}
+
+.stats-banner__shares {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
 /* ── Filter bar ──────────────────────────────────────────────────────────── */
 .filter-bar {
   display: flex;
@@ -1296,3 +1352,245 @@
   border-radius: 6px;
   padding: 8px 10px;
 }
+
+/* ── Admin Study Notes ────────────────────────────────────────────────────── */
+.note-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note-textarea {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  color: #1f2937;
+}
+
+.note-textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+
+.note-inline__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.note-char-count {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-left: auto;
+  order: 1;
+}
+
+.note-saved {
+  font-size: 13px;
+  color: #15803d;
+  font-weight: 600;
+}
+
+/* ── Bulk Action Bar ──────────────────────────────────────────────────────── */
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.bulk-action-bar__count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4ed8;
+  margin-right: 4px;
+}
+
+.td-check, .th-check {
+  width: 36px;
+  min-width: 36px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+.tr--selected td {
+  background: #eff6ff;
+}
+
+/* ── Diagnostics Panel ────────────────────────────────────────────────────── */
+.diagnostics-panel {
+  padding: 12px 0;
+}
+
+.diagnostics-summary {
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: #f9fafb;
+}
+
+.diagnostics-summary--stuck {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+
+.diagnostics-summary--terminal {
+  border-color: #d1d5db;
+  background: #f3f4f6;
+}
+
+.diagnostics-summary--ok {
+  border-color: #6ee7b7;
+  background: #ecfdf5;
+}
+
+.diagnostics-summary__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.diagnostics-summary__section {
+  margin-top: 12px;
+}
+
+.diagnostics-summary__section strong {
+  display: block;
+  font-size: 13px;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.diag-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.diag-badge--ok      { background: #d1fae5; color: #065f46; }
+.diag-badge--stuck   { background: #fef3c7; color: #92400e; }
+.diag-badge--terminal { background: #e5e7eb; color: #374151; }
+
+.diag-last-action {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.diag-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.diag-list li {
+  margin-bottom: 4px;
+}
+
+.diag-error {
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+/* ── SLA stuck badge (Studies tab) ─────────────────────────────────────── */
+.tab-stuck-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: #ef4444;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+  line-height: 1.6;
+}
+
+/* ── Pipeline Re-run button ─────────────────────────────────────────────── */
+.btn--rerun {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #374151;
+  line-height: 1.5;
+}
+.btn--rerun:hover { background: #e5e7eb; }
+.btn--rerun:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Study Labels ────────────────────────────────────────────────────────── */
+.labels-panel { padding: 12px 0; }
+.labels-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  min-height: 32px;
+  align-items: center;
+}
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  border-radius: 9999px;
+  padding: 2px 10px 2px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.label-chip__remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0 0 2px;
+  display: flex;
+  align-items: center;
+}
+.label-chip__remove:hover { color: #ef4444; }
+.labels-panel__form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.labels-panel__form .form-input {
+  flex: 1;
+  max-width: 300px;
+}
+
+/* ── Defacing QA Score ───────────────────────────────────────────────────── */
+.deface-qa-score {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.85em;
+}
+.deface-qa-score--good { background: #d1fae5; color: #065f46; }
+.deface-qa-score--warn { background: #fef3c7; color: #92400e; }
+.deface-qa-score--poor { background: #fee2e2; color: #991b1b; }

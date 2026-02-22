@@ -302,7 +302,13 @@ def step_upload_file(timeout: int, state: Dict[str, str]) -> str:
     if not upload_url:
         raise SmokeFailure("upload.file: missing upload_url state")
     synthetic_dicom = b"DICM-SMOKE-" + uuid.uuid4().hex.encode("ascii")
-    status, body, _ = http_request("PUT", upload_url, raw_body=synthetic_dicom, timeout_s=timeout)
+    status, body, _ = http_request(
+        "PUT",
+        upload_url,
+        headers={"Content-Type": "application/dicom"},
+        raw_body=synthetic_dicom,
+        timeout_s=timeout,
+    )
     expect_status(status, {200}, "upload.file", body)
     return f"bytes={len(synthetic_dicom)}"
 
@@ -426,7 +432,7 @@ def step_download_share(base_url: str, timeout: int, state: Dict[str, str]) -> s
         raise SmokeFailure("share.download: missing export_token state")
     status, body, headers = http_request("GET", build_url(base_url, f"/api/export/{token}/download"), timeout_s=timeout)
     expect_status(status, {200}, "share.download", body)
-    content_type = headers.get("Content-Type", "")
+    content_type = next((v for k, v in headers.items() if k.lower() == "content-type"), "")
     if "zip" not in content_type.lower():
         raise SmokeFailure(f"share.download: expected zip content type, got {content_type!r}")
     if len(body) == 0:

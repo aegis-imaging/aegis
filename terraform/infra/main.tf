@@ -149,6 +149,12 @@ variable "protocol_service_image" {
   type        = string
 }
 
+variable "ohif_image" {
+  description = "Container image URI for the OHIF viewer (empty = disabled)"
+  type        = string
+  default     = ""
+}
+
 variable "api_cpu" {
   description = "CPU limit for Cloud Run API container"
   type        = string
@@ -646,6 +652,13 @@ resource "google_secret_manager_secret_iam_member" "api_db_password_access" {
   member    = "serviceAccount:${google_service_account.api.email}"
 }
 
+# Allow the API service account to sign blobs as itself (for GCS signed URLs).
+resource "google_service_account_iam_member" "api_self_token_creator" {
+  service_account_id = google_service_account.api.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.api.email}"
+}
+
 # --- Cloud Run sidecars ---
 
 resource "google_cloud_run_v2_service" "sidecars" {
@@ -682,7 +695,7 @@ resource "google_cloud_run_v2_service" "sidecars" {
         period_seconds        = 15
 
         http_get {
-          path = "/healthz"
+          path = "/health"
         }
       }
     }
@@ -699,6 +712,61 @@ resource "google_cloud_run_service_iam_member" "sidecar_invoker" {
 
   location = var.region
   service  = google_cloud_run_v2_service.sidecars[each.key].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# --- Cloud Run OHIF Viewer ---
+
+resource "google_cloud_run_v2_service" "ohif" {
+  count    = var.ohif_image != "" ? 1 : 0
+  name     = "ohif"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  deletion_protection = var.deletion_protection
+
+  template {
+    service_account = google_service_account.sidecars.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 2
+    }
+
+    containers {
+      image = var.ohif_image
+
+      env {
+        name  = "API_URL"
+        value = "https://${var.api_domain}"
+      }
+
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = "512Mi"
+        }
+      }
+
+      liveness_probe {
+        failure_threshold     = 3
+        initial_delay_seconds = 10
+        timeout_seconds       = 5
+        period_seconds        = 30
+
+        http_get {
+          path = "/health"
+        }
+      }
+    }
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "ohif_invoker" {
+  count    = var.ohif_image != "" ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.ohif[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -777,6 +845,10 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "GCS_BUCKET"
         value = google_storage_bucket.staging.name
+      }
+      env {
+        name  = "GCS_SIGNING_EMAIL"
+        value = google_service_account.api.email
       }
       env {
         name  = "DICOM_DATASET"
@@ -956,6 +1028,7 @@ resource "google_cloud_run_service_iam_member" "iap_invoker_admin" {
   member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
 }
 
+
 # --- Cloud Armor ---
 
 resource "google_compute_security_policy" "api" {
@@ -1080,6 +1153,9 @@ resource "google_compute_url_map" "https" {
   path_matcher {
     name            = "admin"
     default_service = google_compute_backend_service.admin.id
+    # No path rules needed — nginx proxies /api/* to the API backend internally.
+    # All traffic hits the IAP-protected admin backend (nginx), which forwards
+    # API calls to api.aegisimaging.ai with the IAP identity headers intact.
   }
 }
 
@@ -1214,6 +1290,180 @@ resource "google_monitoring_alert_policy" "cloudsql_cpu" {
   }
 }
 
+# --- Uptime check ---
+
+resource "google_monitoring_uptime_check_config" "api_healthz" {
+  count        = var.api_domain != "" && var.enable_monitoring_alerts ? 1 : 0
+  display_name = "AEGIS API /healthz (${var.environment})"
+  timeout      = "10s"
+  period       = "60s"
+
+  http_check {
+    path         = "/healthz"
+    port         = 443
+    use_ssl      = true
+    validate_ssl = true
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      project_id = var.project_id
+      host       = var.api_domain
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "api_uptime" {
+  count        = var.api_domain != "" && var.enable_monitoring_alerts ? 1 : 0
+  display_name = "AEGIS API uptime check failing (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Uptime check failure"
+    condition_threshold {
+      filter          = "metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type = \"uptime_url\" AND metric.label.check_id = \"${google_monitoring_uptime_check_config.api_healthz[0].uptime_check_id}\""
+      comparison      = "COMPARISON_LT"
+      threshold_value = 1
+      duration        = "120s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_NEXT_OLDER"
+        cross_series_reducer = "REDUCE_COUNT_FALSE"
+        group_by_fields      = ["resource.label.*"]
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "The API /healthz endpoint is not responding. Check Cloud Run service health, DB connectivity, and load balancer configuration."
+  }
+
+  user_labels = {
+    service  = "api"
+    severity = "critical"
+  }
+}
+
+resource "google_monitoring_alert_policy" "api_latency" {
+  display_name = "AEGIS API p99 latency high (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Cloud Run API request latency p99 > 5s"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND resource.label.service_name = \"${google_cloud_run_v2_service.api.name}\" AND metric.type = \"run.googleapis.com/request_latencies\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 5000
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_PERCENTILE_99"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "API p99 latency exceeded 5 seconds. Check for slow DB queries, sidecar timeouts, or cold start spikes. Consider increasing Cloud Run min-instances."
+  }
+
+  user_labels = {
+    service  = "api"
+    severity = "warning"
+  }
+}
+
+resource "google_monitoring_alert_policy" "cloudsql_disk" {
+  display_name = "AEGIS Cloud SQL disk usage high (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Cloud SQL disk utilisation > 85%"
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.label.database_id = \"${var.project_id}:${google_sql_database_instance.aegis.name}\" AND metric.type = \"cloudsql.googleapis.com/database/disk/utilization\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.85
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "Cloud SQL disk is above 85%. Enable storage auto-resize in the GCP Console or increase disk_size in Terraform. See docs/runbooks/alert-response.md."
+  }
+
+  user_labels = {
+    service  = "postgres"
+    severity = "critical"
+  }
+}
+
+resource "google_monitoring_alert_policy" "cloudsql_connections" {
+  display_name = "AEGIS Cloud SQL connections high (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Cloud SQL active connections > 80"
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.label.database_id = \"${var.project_id}:${google_sql_database_instance.aegis.name}\" AND metric.type = \"cloudsql.googleapis.com/database/postgresql/num_backends\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 80
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_MAX"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "Active PostgreSQL connections are near the limit. Review Cloud Run max-instances, enable PgBouncer, or increase max_connections in Cloud SQL flags."
+  }
+
+  user_labels = {
+    service  = "postgres"
+    severity = "warning"
+  }
+}
+
+# --- Cloud Monitoring Dashboard ---
+
+resource "google_monitoring_dashboard" "aegis" {
+  count          = var.enable_monitoring_alerts ? 1 : 0
+  dashboard_json = templatefile("${path.module}/monitoring_dashboard.json", {
+    project_id   = var.project_id
+    api_service  = google_cloud_run_v2_service.api.name
+    environment  = var.environment
+  })
+}
+
 # --- Outputs ---
 
 output "network" {
@@ -1275,6 +1525,10 @@ output "admin_service_uri" {
 
 output "sidecar_service_uris" {
   value = { for name, svc in google_cloud_run_v2_service.sidecars : name => svc.uri }
+}
+
+output "ohif_service_uri" {
+  value = var.ohif_image != "" ? google_cloud_run_v2_service.ohif[0].uri : ""
 }
 
 output "load_balancer_ip" {

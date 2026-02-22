@@ -34,6 +34,7 @@ type Study struct {
 	ProtocolStatus         string    `json:"protocol_status"`
 	ExportRequired         bool      `json:"export_required"`
 	ExportStatus           string    `json:"export_status"`
+	DefaceQaScore          *float64  `json:"deface_qa_score,omitempty"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
@@ -45,6 +46,7 @@ const studyColumns = `
 	bids_required, bids_status, classification_required, classification_status,
 	protocol_required, protocol_status,
 	export_required, export_status,
+	deface_qa_score,
 	created_at, updated_at`
 
 type scannable interface {
@@ -61,6 +63,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.ClassificationRequired, &s.ClassificationStatus,
 		&s.ProtocolRequired, &s.ProtocolStatus,
 		&s.ExportRequired, &s.ExportStatus,
+		&s.DefaceQaScore,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -246,6 +249,14 @@ func UpdateStudyDefaced(ctx context.Context, db *sql.DB, id string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET status = 'defaced', dicom_store = 'clean', updated_at = now()
 		WHERE id = $1`, id)
+	return err
+}
+
+// UpdateDefaceQaScore stores the SSIM-based visual QA score from the defacing service.
+func UpdateDefaceQaScore(ctx context.Context, db *sql.DB, id string, score float64) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET deface_qa_score = $1, updated_at = now()
+		WHERE id = $2`, score, id)
 	return err
 }
 
@@ -465,4 +476,50 @@ func ClaimExport(ctx context.Context, db *sql.DB, id string) (bool, error) {
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// StudyStatusCounts holds per-status study counts for the dashboard overview.
+type StudyStatusCounts struct {
+	Received  int `json:"received"`
+	Defacing  int `json:"defacing"`
+	Clean     int `json:"clean"`
+	Defaced   int `json:"defaced"`
+	Approved  int `json:"approved"`
+	Rejected  int `json:"rejected"`
+	Total     int `json:"total"`
+}
+
+// GetStudyStatusCounts returns a snapshot count of studies by status.
+func GetStudyStatusCounts(ctx context.Context, db *sql.DB) (StudyStatusCounts, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT status, count(*) FROM studies GROUP BY status`)
+	if err != nil {
+		return StudyStatusCounts{}, err
+	}
+	defer rows.Close()
+
+	var c StudyStatusCounts
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return StudyStatusCounts{}, err
+		}
+		switch status {
+		case "received":
+			c.Received = n
+		case "defacing":
+			c.Defacing = n
+		case "clean":
+			c.Clean = n
+		case "defaced":
+			c.Defaced = n
+		case "approved":
+			c.Approved = n
+		case "rejected":
+			c.Rejected = n
+		}
+		c.Total += n
+	}
+	return c, rows.Err()
 }

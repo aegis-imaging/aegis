@@ -1,7 +1,11 @@
 # AEGIS GCP First Deploy Checklist
 
-Created: 2026-02-20  
-Updated: 2026-02-21
+Created: 2026-02-20
+Updated: 2026-02-22
+
+> **Status: COMPLETE ✅** — GCP production environment `aegis-prod-488120` fully deployed and smoke-tested (2026-02-22).
+> API: `https://api.aegisimaging.ai` | Admin: `https://admin.aegisimaging.ai` (IAP-gated)
+> Cloud smoke suite: **11/11 PASS in 2.56s**
 
 This is the fastest path to stand up the first GCP-backed AEGIS environment using the deployment automation now in-repo.
 

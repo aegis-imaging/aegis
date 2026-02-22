@@ -4,7 +4,27 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
+type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users' | 'api_keys'
+
+type APIKey = {
+  id: string
+  name: string
+  key_prefix: string
+  created_by: string
+  enabled: boolean
+  last_used_at: string | null
+  expires_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+type StudyLabel = {
+  id: string
+  study_id: string
+  label: string
+  created_by: string
+  created_at: string
+}
 
 type AuditEntry = {
   id: string
@@ -42,6 +62,7 @@ type Study = {
   export_status: string
   dicom_store: string
   instance_count: number
+  deface_qa_score?: number
   created_at: string
   updated_at: string
 }
@@ -158,6 +179,17 @@ type DigestSubscription = {
   created_at: string
 }
 
+type WebhookSubscription = {
+  id: string
+  project_id: string | null
+  url: string
+  events: string[]
+  secret: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
 type AdminUser = {
   id: string
   email: string
@@ -266,6 +298,30 @@ type DimseRetryAlert = {
   condition: string
   message: string
   snapshot?: Record<string, number>
+}
+
+type StudyDiagnosticsSummary = {
+  terminal: boolean
+  stuck: boolean
+  blockers: string[]
+  recommended_actions: string[]
+  last_audit_action?: string
+  last_audit_at?: string
+}
+
+type StudyDiagnosticsResponse = {
+  study: Study
+  summary: StudyDiagnosticsSummary
+  recent_audit: AuditEntry[]
+  routing_log: RoutingLogEntry[]
+  dimse_retry: {
+    available: boolean
+    pending_total: number
+    dead_letter_total: number
+    pending_items?: Record<string, unknown>[]
+    dead_letter_items?: Record<string, unknown>[]
+    error?: string
+  }
 }
 
 type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
@@ -676,6 +732,14 @@ type ShareRecord = {
   created_at: string
   status: string
   expires_in_seconds: number
+  download_count: number
+}
+
+type DownloadRecord = {
+  id: string
+  share_id: string
+  client_ip: string
+  accessed_at: string
 }
 
 function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
@@ -684,8 +748,12 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [emailSearch, setEmailSearch] = useState('')
   const [page, setPage] = useState(0)
   const [revoking, setRevoking] = useState<string | null>(null)
+  const [expandedShare, setExpandedShare] = useState<string | null>(null)
+  const [downloads, setDownloads] = useState<Record<string, DownloadRecord[]>>({})
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const fetchShares = useCallback(async (sf: string, pg: number) => {
     setLoading(true)
@@ -696,7 +764,9 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
       const res = await fetch(`/api/shares?${params}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setShares(data.shares ?? [])
+      const now = Date.now()
+      setNowMs(now)
+      setShares((data.shares ?? []).map((s: ShareRecord) => withShareExpiryAnchor(s as unknown as Share, now) as unknown as ShareRecord))
       setTotal(data.total ?? 0)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load shares')
@@ -706,6 +776,17 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   }, [])
 
   useEffect(() => { fetchShares(statusFilter, page) }, [fetchShares, statusFilter, page])
+
+  const hasLiveCountdown = shares.some(s => s.status === 'active')
+  useEffect(() => {
+    if (!hasLiveCountdown) return
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [hasLiveCountdown])
+
+  const visibleShares = emailSearch.trim()
+    ? shares.filter(s => s.recipient_email.toLowerCase().includes(emailSearch.toLowerCase()))
+    : shares
 
   const setStatusF = (v: string) => { setStatusFilter(v); setPage(0) }
 
@@ -720,6 +801,23 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
       alert(err instanceof Error ? err.message : 'Failed to revoke share')
     } finally {
       setRevoking(null)
+    }
+  }
+
+  const toggleDownloads = async (shareId: string) => {
+    if (expandedShare === shareId) {
+      setExpandedShare(null)
+      return
+    }
+    setExpandedShare(shareId)
+    if (downloads[shareId]) return
+    try {
+      const res = await fetch(`/api/shares/${shareId}/downloads`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setDownloads(prev => ({ ...prev, [shareId]: data.downloads ?? [] }))
+    } catch {
+      setDownloads(prev => ({ ...prev, [shareId]: [] }))
     }
   }
 
@@ -745,6 +843,13 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
               {s || 'All'}
             </button>
           ))}
+          <input
+            type="text"
+            className="filter-search"
+            placeholder="Search by email…"
+            value={emailSearch}
+            onChange={e => setEmailSearch(e.target.value)}
+          />
         </div>
         <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
       </div>
@@ -770,23 +875,42 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Recipient</th>
                 <th>Study ID</th>
                 <th>Created By</th>
+                <th>Downloads</th>
                 <th>Expires</th>
+                <th>Note</th>
                 <th>Created</th>
-                {isAdmin && <th>Actions</th>}
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {shares.map(s => (
-                <tr key={s.id} className="audit-row">
-                  <td>{statusBadge(s)}</td>
-                  <td className="audit-actor">{s.recipient_email}</td>
-                  <td className="audit-resource-id">{uidShort(s.study_id)}</td>
-                  <td className="audit-actor">{s.created_by || '—'}</td>
-                  <td className="audit-time">{fmtDate(s.expires_at)}</td>
-                  <td className="audit-time">{fmtDate(s.created_at)}</td>
-                  {isAdmin && (
+              {visibleShares.map(s => {
+                const shareAsShare = s as unknown as Share
+                const remaining = s.status === 'active' ? shareRemainingSeconds(shareAsShare, nowMs) : null
+                return (
+                <>
+                  <tr key={s.id} className="audit-row">
+                    <td>{statusBadge(s)}</td>
+                    <td className="audit-actor">{s.recipient_email}</td>
+                    <td className="audit-resource-id">{uidShort(s.study_id)}</td>
+                    <td className="audit-actor">{s.created_by || '—'}</td>
                     <td>
-                      {s.status === 'active' ? (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => toggleDownloads(s.id)}
+                        title="View download history"
+                      >
+                        {s.download_count ?? 0} {expandedShare === s.id ? '▲' : '▼'}
+                      </button>
+                    </td>
+                    <td className="audit-time">
+                      {fmtDate(s.expires_at)}
+                      {remaining !== null && remaining > 0 && <div className="td-subtle">{fmtRemaining(remaining)}</div>}
+                    </td>
+                    <td className="audit-time td-note">{s.note || '—'}</td>
+                    <td className="audit-time">{fmtDate(s.created_at)}</td>
+                    <td>
+                      {isAdmin && s.status === 'active' ? (
                         <button
                           type="button"
                           className="btn-secondary btn-danger-text"
@@ -799,9 +923,38 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                         <span className="audit-no-detail">—</span>
                       )}
                     </td>
+                  </tr>
+                  {expandedShare === s.id && (
+                    <tr key={`${s.id}-downloads`} className="audit-row audit-row--sub">
+                      <td colSpan={9} className="audit-sub-cell">
+                        {!downloads[s.id] ? (
+                          <span className="td-muted">Loading…</span>
+                        ) : downloads[s.id].length === 0 ? (
+                          <span className="td-muted">No downloads recorded.</span>
+                        ) : (
+                          <table className="audit-table audit-table--inner">
+                            <thead>
+                              <tr>
+                                <th>Downloaded At</th>
+                                <th>Client IP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {downloads[s.id].map(d => (
+                                <tr key={d.id} className="audit-row">
+                                  <td className="audit-time">{fmtDate(d.accessed_at)}</td>
+                                  <td className="audit-actor">{d.client_ip || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
                   )}
-                </tr>
-              ))}
+                </>
+                )
+              })}
             </tbody>
           </table>
           <div className="audit-pagination-bar audit-pagination-bar--bottom">
@@ -817,7 +970,7 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
 
 // ── Defacing Review Panel ─────────────────────────────────────────────────────
 
-const OHIF_BASE = 'http://localhost:3002'
+const OHIF_BASE = import.meta.env.VITE_OHIF_BASE_URL ?? 'http://localhost:3002'
 
 function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const beforeUrl = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${study.study_instance_uid}&dataSource=dicomweb-raw`
@@ -1058,6 +1211,7 @@ type PipelineStage = {
   label: string
   required: boolean
   status: string
+  step: string  // API step name for reset-pipeline-step
 }
 
 function pipelineColorClass(status: string): string {
@@ -1068,7 +1222,28 @@ function pipelineColorClass(status: string): string {
   return 'pipeline-dot--pending'
 }
 
-function PipelineNode({ stage }: { stage: PipelineStage }) {
+const IN_FLIGHT_STATUSES = ['scanning', 'checking', 'converting', 'classifying', 'defacing', 'exporting']
+
+function PipelineNode({ stage, studyId, isAdmin, onRerun }: {
+  stage: PipelineStage
+  studyId: string
+  isAdmin: boolean
+  onRerun: () => void
+}) {
+  const [rerunning, setRerunning] = useState(false)
+  const canRerun = isAdmin && stage.required && !IN_FLIGHT_STATUSES.includes(stage.status) && stage.status !== 'pending'
+
+  const handleRerun = async () => {
+    setRerunning(true)
+    await fetch(`/api/studies/${studyId}/reset-pipeline-step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: stage.step }),
+    })
+    setRerunning(false)
+    onRerun()
+  }
+
   if (!stage.required) return (
     <div className="pipeline-node pipeline-node--skip">
       <div className="pipeline-dot pipeline-dot--skip" />
@@ -1081,6 +1256,11 @@ function PipelineNode({ stage }: { stage: PipelineStage }) {
       <div className={`pipeline-dot ${pipelineColorClass(stage.status)}`} />
       <span className="pipeline-label">{stage.label}</span>
       <span className="pipeline-status">{stage.status || 'pending'}</span>
+      {canRerun && (
+        <button type="button" className="btn btn--rerun" onClick={handleRerun} disabled={rerunning} title={`Reset ${stage.label} step to pending`}>
+          {rerunning ? '…' : '↺'}
+        </button>
+      )}
     </div>
   )
 }
@@ -1095,8 +1275,12 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [audit, setAudit] = useState<AuditEntry[]>([])
   const [routingLog, setRoutingLog] = useState<RoutingLogEntry[]>([])
   const [shares, setShares] = useState<Share[]>([])
+  const [diagnostics, setDiagnostics] = useState<StudyDiagnosticsResponse | null>(null)
+  const [labels, setLabels] = useState<StudyLabel[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels'>('audit')
+  const [newLabel, setNewLabel] = useState('')
+  const [labelSaving, setLabelSaving] = useState(false)
 
   // Viewer / review state
   const [viewOpen, setViewOpen] = useState(false)
@@ -1109,6 +1293,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
+  // Internal note state
+  const [noteText, setNoteText] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [noteSaved, setNoteSaved] = useState(false)
+
   const loadData = useCallback(() => {
     setLoading(true)
     Promise.all([
@@ -1116,13 +1305,17 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/audit`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/routing-log`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/shares`).then(r => r.ok ? r.json() : []),
-    ]).then(([s, a, rl, sh]) => {
+      fetch(`/api/studies/${studyId}/diagnostics`).then(r => r.ok ? r.json() : null),
+      fetch(`/api/studies/${studyId}/labels`).then(r => r.ok ? r.json() : []),
+    ]).then(([s, a, rl, sh, diag, lbls]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
       setRoutingLog(rl ?? [])
       const shareRows = (sh ?? []) as Share[]
       setShares(shareRows.map(row => withShareExpiryAnchor(row, now)))
+      setDiagnostics(diag ?? null)
+      setLabels(lbls ?? [])
       setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -1145,13 +1338,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   if (!study) return <div className="state-error">Study not found. <button type="button" className="btn btn--secondary" onClick={onBack}>Back</button></div>
 
   const stages: PipelineStage[] = [
-    { label: 'Classification', required: study.classification_required, status: study.classification_status },
-    { label: 'PHI Scan', required: study.phi_scan_required, status: study.phi_scan_status },
-    { label: 'Protocol', required: study.protocol_required, status: study.protocol_status },
-    { label: 'Defacing', required: study.defacing_required, status: study.status === 'defaced' ? 'defaced' : study.status === 'defacing' ? 'defacing' : study.defacing_required ? 'pending' : '' },
-    { label: 'QC', required: study.qc_required, status: study.qc_status },
-    { label: 'BIDS', required: study.bids_required, status: study.bids_status },
-    { label: 'Export', required: study.export_required, status: study.export_status },
+    { label: 'Classification', required: study.classification_required, status: study.classification_status, step: 'classify' },
+    { label: 'PHI Scan', required: study.phi_scan_required, status: study.phi_scan_status, step: 'phi_scan' },
+    { label: 'Protocol', required: study.protocol_required, status: study.protocol_status, step: 'protocol' },
+    { label: 'Defacing', required: study.defacing_required, status: study.status === 'defaced' ? 'defaced' : study.status === 'defacing' ? 'defacing' : study.defacing_required ? 'pending' : '', step: 'deface' },
+    { label: 'QC', required: study.qc_required, status: study.qc_status, step: 'qc' },
+    { label: 'BIDS', required: study.bids_required, status: study.bids_status, step: 'bids' },
+    { label: 'Export', required: study.export_required, status: study.export_status, step: 'export' },
   ]
 
   const canApprove = !['approved', 'rejected'].includes(study.status)
@@ -1208,6 +1401,14 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="study-detail__meta-item"><strong>Store</strong> {study.dicom_store || 'raw'}</div>
         <div className="study-detail__meta-item"><strong>Received</strong> {fmtDate(study.created_at)}</div>
         <div className="study-detail__meta-item"><strong>Updated</strong> {fmtDate(study.updated_at)}</div>
+        {study.deface_qa_score != null && (
+          <div className="study-detail__meta-item">
+            <strong>Deface QA</strong>
+            <span className={`deface-qa-score deface-qa-score--${study.deface_qa_score >= 0.9 ? 'good' : study.deface_qa_score >= 0.7 ? 'warn' : 'poor'}`}>
+              {study.deface_qa_score.toFixed(4)}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Pipeline visualization */}
@@ -1216,7 +1417,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="pipeline-row">
           {stages.map((stage, i) => (
             <div key={stage.label} className="pipeline-step">
-              <PipelineNode stage={stage} />
+              <PipelineNode stage={stage} studyId={study.id} isAdmin={isAdmin} onRerun={loadData} />
               {i < stages.length - 1 && <div className="pipeline-arrow">→</div>}
             </div>
           ))}
@@ -1271,7 +1472,47 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         </div>
       )}
 
-      {/* Detail tabs: Audit / Routing / Shares */}
+      {/* Internal admin note (admin only) */}
+      {isAdmin && (
+        <div className="study-detail__section">
+          <h3 className="study-detail__section-title">Add Internal Note</h3>
+          <div className="note-inline">
+            <textarea
+              className="note-textarea"
+              placeholder="Internal note (visible only to admins in audit trail)…"
+              value={noteText}
+              onChange={e => { setNoteText(e.target.value); setNoteSaved(false) }}
+              rows={3}
+              maxLength={2000}
+            />
+            <div className="note-inline__footer">
+              <span className="note-char-count">{noteText.length}/2000</span>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={!noteText.trim() || noteSaving}
+                onClick={async () => {
+                  setNoteSaving(true)
+                  await fetch(`/api/studies/${study.id}/notes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note: noteText }),
+                  })
+                  setNoteText('')
+                  setNoteSaved(true)
+                  setNoteSaving(false)
+                  loadData()
+                }}
+              >
+                {noteSaving ? 'Saving…' : 'Save note'}
+              </button>
+              {noteSaved && <span className="note-saved">Saved</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detail tabs: Audit / Routing / Shares / Diagnostics */}
       <div className="study-detail__section">
         <div className="study-detail__tab-nav">
           <button type="button" className={`tab-btn${detailTab === 'audit' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('audit')}>
@@ -1282,6 +1523,12 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           </button>
           <button type="button" className={`tab-btn${detailTab === 'shares' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('shares')}>
             Shares ({shares.length})
+          </button>
+          <button type="button" className={`tab-btn${detailTab === 'diagnostics' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('diagnostics')}>
+            Diagnostics
+          </button>
+          <button type="button" className={`tab-btn${detailTab === 'labels' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('labels')}>
+            Labels ({labels.length})
           </button>
         </div>
 
@@ -1354,6 +1601,128 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             </tbody>
           </table>
         )}
+
+        {detailTab === 'labels' && (
+          <div className="labels-panel">
+            {/* Label chips */}
+            <div className="labels-panel__chips">
+              {labels.length === 0 && <span className="routing-desc">No labels yet.</span>}
+              {labels.map(lbl => (
+                <span key={lbl.id} className="label-chip" title={`Added by ${lbl.created_by}`}>
+                  {lbl.label}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      className="label-chip__remove"
+                      aria-label={`Remove label ${lbl.label}`}
+                      onClick={async () => {
+                        await fetch(`/api/studies/${studyId}/labels/${lbl.id}`, { method: 'DELETE' })
+                        loadData()
+                      }}
+                    >×</button>
+                  )}
+                </span>
+              ))}
+            </div>
+            {/* Add label form (admin only) */}
+            {isAdmin && (
+              <form
+                className="labels-panel__form"
+                onSubmit={async e => {
+                  e.preventDefault()
+                  if (!newLabel.trim()) return
+                  setLabelSaving(true)
+                  await fetch(`/api/studies/${studyId}/labels`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label: newLabel.trim() }),
+                  })
+                  setNewLabel('')
+                  setLabelSaving(false)
+                  loadData()
+                }}
+              >
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="Add label…"
+                  maxLength={80}
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value)}
+                />
+                <button type="submit" className="btn-primary" disabled={labelSaving || !newLabel.trim()}>
+                  {labelSaving ? 'Adding…' : 'Add'}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {detailTab === 'diagnostics' && (
+          <div className="diagnostics-panel">
+            {!diagnostics && <p className="state-empty">Diagnostics not available.</p>}
+            {diagnostics && (
+              <>
+                <div className={`diagnostics-summary diagnostics-summary--${diagnostics.summary.stuck ? 'stuck' : diagnostics.summary.terminal ? 'terminal' : 'ok'}`}>
+                  <div className="diagnostics-summary__status">
+                    {diagnostics.summary.terminal && <span className="diag-badge diag-badge--terminal">Terminal</span>}
+                    {diagnostics.summary.stuck && <span className="diag-badge diag-badge--stuck">Stuck</span>}
+                    {!diagnostics.summary.terminal && !diagnostics.summary.stuck && <span className="diag-badge diag-badge--ok">On track</span>}
+                    {diagnostics.summary.last_audit_action && (
+                      <span className="diag-last-action">Last: <code>{diagnostics.summary.last_audit_action}</code>{diagnostics.summary.last_audit_at ? ` at ${fmtDate(diagnostics.summary.last_audit_at)}` : ''}</span>
+                    )}
+                  </div>
+                  {diagnostics.summary.blockers.length > 0 && (
+                    <div className="diagnostics-summary__section">
+                      <strong>Blockers</strong>
+                      <ul className="diag-list">
+                        {diagnostics.summary.blockers.map((b, i) => <li key={i}>{b}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {diagnostics.summary.recommended_actions.length > 0 && (
+                    <div className="diagnostics-summary__section">
+                      <strong>Recommended actions</strong>
+                      <ul className="diag-list">
+                        {diagnostics.summary.recommended_actions.map((a, i) => <li key={i}>{a}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {diagnostics.dimse_retry.available && (
+                  <div className="diagnostics-summary__section">
+                    <strong>DIMSE Retry</strong>
+                    <table className="detail-table">
+                      <tbody>
+                        <tr><td>Pending</td><td>{diagnostics.dimse_retry.pending_total}</td></tr>
+                        <tr><td>Dead-letter</td><td>{diagnostics.dimse_retry.dead_letter_total}</td></tr>
+                        {diagnostics.dimse_retry.error && <tr><td>Error</td><td className="diag-error">{diagnostics.dimse_retry.error}</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="diagnostics-summary__section">
+                  <strong>Recent audit ({diagnostics.recent_audit.length})</strong>
+                  <table className="detail-table">
+                    <thead><tr><th>Time</th><th>Action</th><th>Actor</th></tr></thead>
+                    <tbody>
+                      {diagnostics.recent_audit.length === 0 && <tr><td colSpan={3}>No entries.</td></tr>}
+                      {diagnostics.recent_audit.map(e => (
+                        <tr key={e.id}>
+                          <td className="td-date">{fmtDate(e.created_at)}</td>
+                          <td><code>{e.action}</code></td>
+                          <td>{e.actor}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1361,7 +1730,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
 
 // ── Study Row ─────────────────────────────────────────────────────────────────
 
-function StudyRow({ study, onAction, onSelect, isAdmin }: { study: Study; onAction: () => void; onSelect: () => void; isAdmin: boolean }) {
+function StudyRow({ study, onAction, onSelect, isAdmin, checked, onToggle }: { study: Study; onAction: () => void; onSelect: () => void; isAdmin: boolean; checked: boolean; onToggle: () => void }) {
   const [shareOpen,  setShareOpen]  = useState(false)
   const [viewOpen,   setViewOpen]   = useState(false)
   const [defaceOpen, setDefaceOpen] = useState(false)
@@ -1421,7 +1790,8 @@ function StudyRow({ study, onAction, onSelect, isAdmin }: { study: Study; onActi
 
   return (
     <>
-      <tr>
+      <tr className={checked ? 'tr--selected' : ''}>
+        <td className="td-check"><input type="checkbox" checked={checked} onChange={onToggle} aria-label="Select study" /></td>
         <td className="td-uid"><button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button></td>
         <td>{study.modality || '—'}</td>
         <td>{study.body_part || '—'}</td>
@@ -2382,12 +2752,22 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
 
 // ── Notifications Panel ───────────────────────────────────────────────────────
 
-function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
+const WEBHOOK_EVENTS = [
+  'study.approved',
+  'study.rejected',
+  'study.phi_flagged',
+  'study.export_complete',
+  'study.stuck',
+]
+
+function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectId?: string }) {
   const [projects, setProjects]   = useState<Project[]>([])
   const [subs, setSubs]           = useState<DigestSubscription[]>([])
+  const [webhooks, setWebhooks]   = useState<WebhookSubscription[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
 
+  // Digest form state
   const [formEmail, setFormEmail]         = useState('')
   const [formProject, setFormProject]     = useState('')
   const [formFrequency, setFormFrequency] = useState<'weekly' | 'monthly'>('weekly')
@@ -2395,30 +2775,49 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [saving, setSaving]               = useState(false)
   const [formError, setFormError]         = useState<string | null>(null)
 
+  // Webhook form state
+  const [showWebhookForm, setShowWebhookForm]     = useState(false)
+  const [whURL, setWhURL]                         = useState('')
+  const [whEvents, setWhEvents]                   = useState<string[]>([])
+  const [whProject, setWhProject]                 = useState('')
+  const [whSecret, setWhSecret]                   = useState('')
+  const [whEnabled, setWhEnabled]                 = useState(true)
+  const [whSaving, setWhSaving]                   = useState(false)
+  const [whFormError, setWhFormError]             = useState<string | null>(null)
+  const [whEditId, setWhEditId]                   = useState<string | null>(null)
+
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [projRes, subRes] = await Promise.all([
+      const digestURL = projectId
+        ? `/api/projects/${projectId}/digest-subscriptions`
+        : '/api/digest-subscriptions'
+      const webhookURL = projectId
+        ? `/api/webhook-subscriptions?project_id=${projectId}`
+        : '/api/webhook-subscriptions'
+      const [projRes, subRes, whRes] = await Promise.all([
         fetch('/api/projects'),
-        fetch('/api/digest-subscriptions'),
+        fetch(digestURL),
+        fetch(webhookURL),
       ])
-      if (!projRes.ok || !subRes.ok) throw new Error('Failed to load data')
-      const [projs, subList] = await Promise.all([projRes.json(), subRes.json()])
+      if (!projRes.ok || !subRes.ok || !whRes.ok) throw new Error('Failed to load data')
+      const [projs, subList, whList] = await Promise.all([projRes.json(), subRes.json(), whRes.json()])
       setProjects(projs ?? [])
       setSubs(subList ?? [])
+      setWebhooks(whList ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [projectId])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
   function openCreate() {
     setFormEmail('')
-    setFormProject(projects[0]?.id ?? '')
+    setFormProject(projectId ?? projects[0]?.id ?? '')
     setFormFrequency('weekly')
     setFormError(null)
     setShowForm(true)
@@ -2448,6 +2847,64 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
   async function del(id: string, email: string) {
     if (!confirm(`Remove digest subscription for ${email}?`)) return
     await fetch(`/api/digest-subscriptions/${id}`, { method: 'DELETE' })
+    fetchAll()
+  }
+
+  // Webhook helpers
+  function openWebhookCreate() {
+    setWhEditId(null)
+    setWhURL('')
+    setWhEvents([])
+    setWhProject(projectId ?? '')
+    setWhSecret('')
+    setWhEnabled(true)
+    setWhFormError(null)
+    setShowWebhookForm(true)
+  }
+
+  function openWebhookEdit(wh: WebhookSubscription) {
+    setWhEditId(wh.id)
+    setWhURL(wh.url)
+    setWhEvents(wh.events)
+    setWhProject(wh.project_id ?? '')
+    setWhSecret('')
+    setWhEnabled(wh.enabled)
+    setWhFormError(null)
+    setShowWebhookForm(true)
+  }
+
+  function toggleWhEvent(ev: string) {
+    setWhEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev])
+  }
+
+  async function saveWebhook() {
+    if (!whURL) { setWhFormError('URL is required'); return }
+    if (whEvents.length === 0) { setWhFormError('Select at least one event'); return }
+    setWhSaving(true)
+    setWhFormError(null)
+    const body: Record<string, unknown> = {
+      url: whURL, events: whEvents, enabled: whEnabled,
+    }
+    if (whProject) body.project_id = whProject
+    if (whSecret)  body.secret = whSecret
+    try {
+      const res = await fetch(
+        whEditId ? `/api/webhook-subscriptions/${whEditId}` : '/api/webhook-subscriptions',
+        { method: whEditId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      )
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowWebhookForm(false)
+      fetchAll()
+    } catch (err) {
+      setWhFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setWhSaving(false)
+    }
+  }
+
+  async function deleteWebhook(id: string, url: string) {
+    if (!confirm(`Remove webhook for ${url}?`)) return
+    await fetch(`/api/webhook-subscriptions/${id}`, { method: 'DELETE' })
     fetchAll()
   }
 
@@ -2526,6 +2983,102 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
                       <div className="actions-cell">
                         <button type="button" className="btn btn--revoke"
                           onClick={() => del(sub.id, sub.email)}>Remove</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ── Webhook subscriptions ── */}
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Webhook Subscriptions</div>
+            <div className="routing-section-sub">
+              HTTP POST callbacks fired on study events, signed with HMAC-SHA256 when a secret is set.
+            </div>
+          </div>
+          {isAdmin && <button type="button" className="btn-primary" onClick={openWebhookCreate}>+ New webhook</button>}
+        </div>
+
+        {isAdmin && showWebhookForm && (
+          <div className="routing-form">
+            <h3>{whEditId ? 'Edit webhook' : 'New webhook'}</h3>
+            {whFormError && <div className="form-error">{whFormError}</div>}
+            <div className="form-grid">
+              <input className="form-input" type="url" placeholder="Endpoint URL (https://…) *"
+                value={whURL} onChange={e => setWhURL(e.target.value)} />
+              <select className="form-select" aria-label="Project scope"
+                value={whProject} onChange={e => setWhProject(e.target.value)}>
+                <option value="">All projects</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <input className="form-input" type="text" placeholder="Secret (optional, for HMAC signing)"
+                value={whSecret} onChange={e => setWhSecret(e.target.value)} />
+            </div>
+            <div className="form-row" style={{ gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>Events:</span>
+              {WEBHOOK_EVENTS.map(ev => (
+                <label key={ev} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={whEvents.includes(ev)} onChange={() => toggleWhEvent(ev)} />
+                  {ev}
+                </label>
+              ))}
+            </div>
+            <div className="form-row" style={{ marginBottom: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={whEnabled} onChange={e => setWhEnabled(e.target.checked)} />
+                Enabled
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveWebhook} disabled={whSaving}>
+                {whSaving ? 'Saving…' : (whEditId ? 'Update' : 'Create')}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowWebhookForm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading && <div className="state-loading">Loading…</div>}
+        {!loading && !error && webhooks.length === 0 && (
+          <div className="state-empty">No webhook subscriptions yet.</div>
+        )}
+        {!loading && !error && webhooks.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>URL</th>
+                <th>Events</th>
+                <th>Project</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {webhooks.map(wh => (
+                <tr key={wh.id}>
+                  <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
+                  <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
+                  <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="routing-desc">all</span>}</td>
+                  <td>
+                    <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
+                      {wh.enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </td>
+                  <td>
+                    {isAdmin && (
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--action"
+                          onClick={() => openWebhookEdit(wh)}>Edit</button>
+                        <button type="button" className="btn btn--revoke"
+                          onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
                       </div>
                     )}
                   </td>
@@ -2885,6 +3438,13 @@ const EMPTY_PROJECT: Omit<Project, 'id' | 'default_anon_profile_id' | 'created_a
   name: '', slug: '', description: '',
 }
 
+type ProjectPhiConfig = {
+  project_id: string
+  confidence_threshold: number
+  min_text_length: number
+  updated_at: string
+}
+
 function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [projects, setProjects]   = useState<Project[]>([])
   const [loading, setLoading]     = useState(true)
@@ -2895,6 +3455,42 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [showForm, setShowForm]   = useState(false)
   const [saving, setSaving]       = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  // PHI config editor state
+  const [phiProjectId, setPhiProjectId] = useState<string | null>(null)
+  const [phiConfig, setPhiConfig]       = useState<ProjectPhiConfig | null>(null)
+  const [phiSaving, setPhiSaving]       = useState(false)
+  const [phiError, setPhiError]         = useState<string | null>(null)
+
+  async function openPhiConfig(projectId: string) {
+    setPhiProjectId(projectId)
+    setPhiError(null)
+    const res = await fetch(`/api/projects/${projectId}/phi-config`)
+    if (res.ok) setPhiConfig(await res.json())
+  }
+
+  async function savePhiConfig() {
+    if (!phiConfig || !phiProjectId) return
+    setPhiSaving(true)
+    setPhiError(null)
+    try {
+      const res = await fetch(`/api/projects/${phiProjectId}/phi-config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confidence_threshold: phiConfig.confidence_threshold,
+          min_text_length: phiConfig.min_text_length,
+        }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setPhiConfig(await res.json())
+      setPhiProjectId(null)
+    } catch (err) {
+      setPhiError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setPhiSaving(false)
+    }
+  }
 
   const fetchProjects = useCallback(async () => {
     setLoading(true)
@@ -2988,6 +3584,38 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
 
+        {/* Inline PHI config editor */}
+        {phiProjectId && phiConfig && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>PHI Scan Config — {projects.find(p => p.id === phiProjectId)?.name}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Override the PHI detection sensitivity thresholds for this project.
+              These values are read by the PHI detection service at scan time.
+            </div>
+            {phiError && <div className="form-error">{phiError}</div>}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Confidence threshold (0–1, default 0.4)
+                <input className="form-input" type="number" min="0" max="1" step="0.05"
+                  value={phiConfig.confidence_threshold}
+                  onChange={e => setPhiConfig(c => c ? { ...c, confidence_threshold: parseFloat(e.target.value) } : c)} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Min text length (chars, default 3)
+                <input className="form-input" type="number" min="1" step="1"
+                  value={phiConfig.min_text_length}
+                  onChange={e => setPhiConfig(c => c ? { ...c, min_text_length: parseInt(e.target.value, 10) } : c)} />
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={savePhiConfig} disabled={phiSaving}>
+                {phiSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setPhiProjectId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {projects.length === 0 && !showForm ? (
           <div className="state-empty">No projects yet.</div>
         ) : projects.length > 0 && (
@@ -3019,6 +3647,22 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {isAdmin && (
                       <div className="actions-cell">
                         <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="btn btn--action"
+                          title="Dispatch export forwarding for all approved studies in this project"
+                          onClick={async () => {
+                            const res = await fetch(`/api/projects/${p.id}/export-batch`, { method: 'POST' })
+                            const data = await res.json()
+                            alert(res.ok
+                              ? `Export batch dispatched: ${data.dispatched} ${data.dispatched === 1 ? 'study' : 'studies'}`
+                              : `Export batch failed: ${data.error}`)
+                          }}>
+                          Export Batch
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Configure PHI scan sensitivity for this project"
+                          onClick={() => openPhiConfig(p.id)}>
+                          PHI Config
+                        </button>
                       </div>
                     )}
                   </td>
@@ -3627,11 +4271,180 @@ function DimseOpsPanel() {
   )
 }
 
+// ── API Keys Panel ────────────────────────────────────────────────────────────
+
+function APIKeysPanel() {
+  const [keys, setKeys]       = useState<APIKey[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [formName, setFormName]   = useState('')
+  const [formExpiry, setFormExpiry] = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/api-keys')
+      if (!res.ok) throw new Error('Failed to load')
+      setKeys((await res.json()) ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function create() {
+    if (!formName.trim()) { setFormError('Name is required'); return }
+    setSaving(true)
+    setFormError(null)
+    setNewKeyValue(null)
+    const body: Record<string, unknown> = { name: formName.trim() }
+    if (formExpiry) body.expires_at = new Date(formExpiry).toISOString()
+    try {
+      const res = await fetch('/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Create failed') }
+      const data = await res.json()
+      setNewKeyValue(data.key)
+      setFormName('')
+      setFormExpiry('')
+      setShowForm(false)
+      load()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Create failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function toggle(key: APIKey) {
+    const action = key.enabled ? 'disable' : 'enable'
+    await fetch(`/api/api-keys/${key.id}/${action}`, { method: 'PATCH' })
+    load()
+  }
+
+  async function del(key: APIKey) {
+    if (!confirm(`Permanently delete API key "${key.name}"? This cannot be undone.`)) return
+    await fetch(`/api/api-keys/${key.id}`, { method: 'DELETE' })
+    setNewKeyValue(null)
+    load()
+  }
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">API Keys</div>
+            <div className="routing-section-sub">
+              Machine-to-machine credentials for programmatic API access. The raw key is shown only once at creation.
+            </div>
+          </div>
+          <button type="button" className="btn-primary" onClick={() => { setShowForm(true); setNewKeyValue(null) }}>
+            + New API key
+          </button>
+        </div>
+
+        {newKeyValue && (
+          <div className="routing-form" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+            <strong style={{ color: '#166534' }}>API key created — copy it now, it will not be shown again:</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
+                {newKeyValue}
+              </code>
+              <button type="button" className="btn-secondary"
+                onClick={() => navigator.clipboard.writeText(newKeyValue!)}>Copy</button>
+            </div>
+            <button type="button" className="btn-secondary" style={{ marginTop: '8px' }} onClick={() => setNewKeyValue(null)}>Dismiss</button>
+          </div>
+        )}
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>New API key</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" type="text" placeholder="Key name *"
+                value={formName} onChange={e => setFormName(e.target.value)} />
+              <input className="form-input" type="date" placeholder="Expiry date (optional)"
+                value={formExpiry} onChange={e => setFormExpiry(e.target.value)}
+                title="Expiry date (optional)" />
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={create} disabled={saving}>
+                {saving ? 'Creating…' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {loading && <div className="state-loading">Loading…</div>}
+        {error   && <div className="state-error">{error}</div>}
+        {!loading && !error && keys.length === 0 && (
+          <div className="state-empty">No API keys yet.</div>
+        )}
+        {!loading && !error && keys.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Prefix</th>
+                <th>Created by</th>
+                <th>Last used</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {keys.map(k => (
+                <tr key={k.id}>
+                  <td>{k.name}</td>
+                  <td><code style={{ fontSize: '0.8rem' }}>{k.key_prefix}…</code></td>
+                  <td>{k.created_by}</td>
+                  <td>{k.last_used_at ? fmtDate(k.last_used_at) : <span className="routing-desc">never</span>}</td>
+                  <td>{k.expires_at ? fmtDate(k.expires_at) : <span className="routing-desc">never</span>}</td>
+                  <td>
+                    <span className={`status-badge status-badge--${k.enabled ? 'clean' : 'failed'}`}>
+                      {k.enabled ? 'active' : 'disabled'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--action" onClick={() => toggle(k)}>
+                        {k.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      <button type="button" className="btn btn--revoke" onClick={() => del(k)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 type StudiesState = 'loading' | 'loaded' | 'error'
 
 const PAGE_SIZE = 50
+
+const GLOBAL_PROJECT_KEY = 'aegis_global_project_id'
 
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
@@ -3642,6 +4455,12 @@ export function App() {
   const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null)
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [bulkWorking, setBulkWorking] = useState(false)
+  const [stuckCount, setStuckCount] = useState(0)
+
+  // Global project selector — persisted to localStorage.
+  const [globalProjectId, setGlobalProjectId] = useState<string>(() => localStorage.getItem(GLOBAL_PROJECT_KEY) ?? '')
 
   // Auth state
   const [currentUser, setCurrentUser] = useState<AuthIdentity | null>(null)
@@ -3666,6 +4485,18 @@ export function App() {
       .catch(() => { /* non-fatal — dev mode may not have auth */ })
   }, [])
 
+  // Poll stuck studies every 5 minutes for the warning badge.
+  useEffect(() => {
+    const fetchStuck = () =>
+      fetch('/api/studies/stuck?minutes=60')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => d && setStuckCount(d.total ?? 0))
+        .catch(() => {})
+    fetchStuck()
+    const id = setInterval(fetchStuck, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
   const isAdmin = currentUser?.role === 'admin'
 
   // Filters
@@ -3680,11 +4511,36 @@ export function App() {
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
 
+  // Persist global project selection to localStorage and sync to filterProject.
+  useEffect(() => {
+    if (globalProjectId) {
+      localStorage.setItem(GLOBAL_PROJECT_KEY, globalProjectId)
+    } else {
+      localStorage.removeItem(GLOBAL_PROJECT_KEY)
+    }
+    setFilterProject(globalProjectId)
+    setPage(0)
+    setBulkSelected(new Set())
+  }, [globalProjectId])
+
   // Projects for filter dropdown
   const [projects, setProjects] = useState<Project[]>([])
   useEffect(() => {
     fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
   }, [])
+
+  // Dashboard pipeline stats
+  type PipelineStats = {
+    study_counts: { received: number; defacing: number; clean: number; defaced: number; approved: number; rejected: number; total: number }
+    active_shares: number
+  }
+  const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null)
+  const fetchStats = useCallback(() => {
+    fetch('/api/stats').then(r => r.ok ? r.json() : null).then(data => {
+      if (data) setPipelineStats(data as PipelineStats)
+    }).catch(() => {})
+  }, [])
+  useEffect(() => { fetchStats() }, [fetchStats, refreshTick])
 
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
@@ -3717,14 +4573,14 @@ export function App() {
   }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterDateFrom, filterDateTo, refreshTick])
 
   // Filter change helpers — also reset page to 0
-  function setStatusF(v: string)   { setFilterStatus(v);   setPage(0) }
-  function setModalityF(v: string) { setFilterModality(v); setPage(0) }
-  function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0) }
-  function setSourceF(v: string)   { setFilterSource(v);   setPage(0) }
-  function setProjectF(v: string)  { setFilterProject(v);  setPage(0) }
-  function setSearchF(v: string)    { setFilterSearch(v);    setPage(0) }
-  function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0) }
-  function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0) }
+  function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
+  function setModalityF(v: string) { setFilterModality(v); setPage(0); setBulkSelected(new Set()) }
+  function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0); setBulkSelected(new Set()) }
+  function setSourceF(v: string)   { setFilterSource(v);   setPage(0); setBulkSelected(new Set()) }
+  function setProjectF(v: string)  { setFilterProject(v);  setPage(0); setBulkSelected(new Set()) }
+  function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
+  function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
+  function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
 
   const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterDateFrom || filterDateTo)
 
@@ -3732,10 +4588,63 @@ export function App() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
     setFilterSource(''); setFilterProject(''); setFilterSearch('')
     setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
+    setBulkSelected(new Set())
+  }
+
+  const allPageIds = studies.map(s => s.id)
+  const allPageSelected = allPageIds.length > 0 && allPageIds.every(id => bulkSelected.has(id))
+  const somePageSelected = allPageIds.some(id => bulkSelected.has(id))
+
+  function toggleSelectAll() {
+    if (allPageSelected) {
+      setBulkSelected(prev => {
+        const next = new Set(prev)
+        allPageIds.forEach(id => next.delete(id))
+        return next
+      })
+    } else {
+      setBulkSelected(prev => {
+        const next = new Set(prev)
+        allPageIds.forEach(id => next.add(id))
+        return next
+      })
+    }
+  }
+
+  async function doBulkAction(action: 'approve' | 'reject') {
+    const ids = Array.from(bulkSelected)
+    if (ids.length === 0) return
+    if (!confirm(`${action === 'approve' ? 'Approve' : 'Reject'} ${ids.length} selected ${ids.length === 1 ? 'study' : 'studies'}?`)) return
+    setBulkWorking(true)
+    try {
+      await fetch('/api/studies/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, study_ids: ids }),
+      })
+      setBulkSelected(new Set())
+      setRefreshTick(t => t + 1)
+    } finally {
+      setBulkWorking(false)
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
   const pageStart  = studiesTotal === 0 ? 0 : page * PAGE_SIZE + 1
+
+  const csvUrl = (() => {
+    const params = new URLSearchParams()
+    if (filterStatus)   params.set('status',     filterStatus)
+    if (filterModality) params.set('modality',   filterModality)
+    if (filterBodyPart) params.set('body_part',  filterBodyPart)
+    if (filterSource)   params.set('source',     filterSource)
+    if (filterProject)  params.set('project_id', filterProject)
+    if (filterSearch)   params.set('search',     filterSearch)
+    if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
+    if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
+    const qs = params.toString()
+    return `/api/studies.csv${qs ? '?' + qs : ''}`
+  })()
   const pageEnd    = Math.min((page + 1) * PAGE_SIZE, studiesTotal)
 
   return (
@@ -3752,6 +4661,25 @@ export function App() {
           <p>Study review, QC, and export management</p>
         </div>
         <div className="header-actions">
+          {/* Global project selector */}
+          {projects.length > 1 && (
+            <div className="tz-control">
+              <label className="tz-label" htmlFor="global-project-select">Project</label>
+              <select
+                id="global-project-select"
+                className="tz-select"
+                value={globalProjectId}
+                onChange={e => setGlobalProjectId(e.target.value)}
+              >
+                <option value="">All projects</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              {globalProjectId && (
+                <button type="button" className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                  onClick={() => setGlobalProjectId('')}>Clear</button>
+              )}
+            </div>
+          )}
           <div className="tz-control">
             <label className="tz-label" htmlFor="display-timezone-mode">Time Zone</label>
             <select
@@ -3798,6 +4726,7 @@ export function App() {
           onClick={() => setTab('studies')}
         >
           Studies
+          {stuckCount > 0 && <span className="tab-stuck-badge">{stuckCount} stuck</span>}
         </button>
         <button
           type="button"
@@ -3873,6 +4802,15 @@ export function App() {
             Users
           </button>
         )}
+        {isAdmin && (
+          <button
+            type="button"
+            className={`tab-btn${tab === 'api_keys' ? ' tab-btn--active' : ''}`}
+            onClick={() => setTab('api_keys')}
+          >
+            API Keys
+          </button>
+        )}
       </nav>
 
       {/* Studies tab */}
@@ -3886,6 +4824,37 @@ export function App() {
       )}
       {tab === 'studies' && !selectedStudyId && (
         <>
+          {/* Pipeline stats banner */}
+          {pipelineStats && (
+            <div className="stats-banner">
+              {(
+                [
+                  ['received', 'Received',  pipelineStats.study_counts.received],
+                  ['defacing', 'Defacing',  pipelineStats.study_counts.defacing],
+                  ['clean',    'Clean',     pipelineStats.study_counts.clean],
+                  ['defaced',  'Defaced',   pipelineStats.study_counts.defaced],
+                  ['approved', 'Approved',  pipelineStats.study_counts.approved],
+                  ['rejected', 'Rejected',  pipelineStats.study_counts.rejected],
+                ] as [string, string, number][]
+              ).map(([status, label, count]) => (
+                <button
+                  key={status}
+                  type="button"
+                  className={`stats-pill stats-pill--${status}${filterStatus === status ? ' stats-pill--active' : ''}`}
+                  onClick={() => setStatusF(filterStatus === status ? '' : status)}
+                  title={`Filter by ${label.toLowerCase()}`}
+                >
+                  <span className="stats-pill__count">{count}</span>
+                  <span className="stats-pill__label">{label}</span>
+                </button>
+              ))}
+              <span className="stats-banner__sep" />
+              <span className="stats-banner__shares" title="Active export shares">
+                {pipelineStats.active_shares} active {pipelineStats.active_shares === 1 ? 'share' : 'shares'}
+              </span>
+            </div>
+          )}
+
           {/* Filter bar */}
           <div className="filter-bar">
             <input
@@ -3962,6 +4931,9 @@ export function App() {
                     : `${studiesTotal} total`}
               </span>
             )}
+            {state === 'loaded' && studiesTotal > 0 && (
+              <a href={csvUrl} download="studies.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
+            )}
           </div>
 
           {state === 'loading' && <div className="state-loading">Loading studies…</div>}
@@ -3974,11 +4946,29 @@ export function App() {
             </div>
           )}
 
+          {state === 'loaded' && bulkSelected.size > 0 && isAdmin && (
+            <div className="bulk-action-bar">
+              <span className="bulk-action-bar__count">{bulkSelected.size} selected</span>
+              <button type="button" className="btn btn--approve" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
+              <button type="button" className="btn btn--reject" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
+              <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
+            </div>
+          )}
+
           {state === 'loaded' && studies.length > 0 && (
             <div className="studies-table-wrap">
               <table className="studies-table">
                 <thead>
                   <tr>
+                    <th className="th-check">
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        ref={el => { if (el) el.indeterminate = somePageSelected && !allPageSelected }}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all on page"
+                      />
+                    </th>
                     <th>Study UID</th>
                     <th>Modality</th>
                     <th>Body Part</th>
@@ -3997,7 +4987,20 @@ export function App() {
                 </thead>
                 <tbody>
                   {studies.map(study => (
-                    <StudyRow key={study.id} study={study} onAction={() => setRefreshTick(t => t + 1)} onSelect={() => setSelectedStudyId(study.id)} isAdmin={isAdmin} />
+                    <StudyRow
+                      key={study.id}
+                      study={study}
+                      onAction={() => setRefreshTick(t => t + 1)}
+                      onSelect={() => setSelectedStudyId(study.id)}
+                      isAdmin={isAdmin}
+                      checked={bulkSelected.has(study.id)}
+                      onToggle={() => setBulkSelected(prev => {
+                        const next = new Set(prev)
+                        if (next.has(study.id)) next.delete(study.id)
+                        else next.add(study.id)
+                        return next
+                      })}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -4053,13 +5056,16 @@ export function App() {
       {tab === 'protocol_templates' && <ProtocolTemplatesPanel isAdmin={isAdmin} />}
 
       {/* Notifications tab */}
-      {tab === 'notifications' && <NotificationsPanel isAdmin={isAdmin} />}
+      {tab === 'notifications' && <NotificationsPanel isAdmin={isAdmin} projectId={globalProjectId} />}
 
       {/* Projects tab */}
       {tab === 'projects' && <ProjectsPanel isAdmin={isAdmin} />}
 
       {/* Users tab — admin only */}
       {tab === 'users' && isAdmin && <UsersPanel />}
+
+      {/* API Keys tab — admin only */}
+      {tab === 'api_keys' && isAdmin && <APIKeysPanel />}
     </div>
   )
 }
