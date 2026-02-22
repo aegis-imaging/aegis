@@ -9,6 +9,7 @@ import { redactToolArgs } from "./redaction.js";
 import {
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
+  listAllSharesArgsSchema,
   listAuditArgsSchema,
   listStudiesArgsSchema,
   readToolNames,
@@ -215,13 +216,27 @@ const tools: Tool[] = [
   },
   {
     name: "list_export_shares",
-    description: "List export shares for a study UUID.",
+    description: "List export shares for a specific study UUID.",
     inputSchema: {
       type: "object",
       required: ["study_id"],
       properties: {
         request_id: { type: "string" },
         study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_all_shares",
+    description: "List all export shares across all studies with optional status filter and pagination. Returns {shares, total, limit, offset}. Use status='active' to audit currently accessible links, 'expired' to find stale shares, 'revoked' for revoked ones.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        limit: { type: "number", minimum: 1, maximum: 200, description: "Page size (default 50)" },
+        offset: { type: "number", minimum: 0 },
+        status: { type: "string", enum: ["active", "expired", "revoked"], description: "Filter by computed share status" }
       },
       additionalProperties: false
     }
@@ -479,6 +494,17 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "list_export_shares") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/shares`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_all_shares") {
+      const parsed = listAllSharesArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.limit !== undefined) params.set("limit", String(parsed.limit));
+      if (parsed.offset !== undefined) params.set("offset", String(parsed.offset));
+      if (parsed.status) params.set("status", parsed.status);
+      const qs = params.toString();
+      const data = await client.get(`/api/shares${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
