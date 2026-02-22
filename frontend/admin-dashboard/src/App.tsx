@@ -5141,6 +5141,7 @@ export function App() {
   const [agentPrefill, setAgentPrefill] = useState<{ studyId: string; studyUid: string } | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
+  const [bulkLabelInput, setBulkLabelInput] = useState('')
   const [stuckCount, setStuckCount] = useState(0)
 
   // Global project selector — persisted to localStorage.
@@ -5355,6 +5356,30 @@ export function App() {
       })
       setBulkSelected(new Set())
       setRefreshTick(t => t + 1)
+    } finally {
+      setBulkWorking(false)
+    }
+  }
+
+  async function doBulkLabel(action: 'add' | 'remove') {
+    const label = bulkLabelInput.trim()
+    if (!label) { alert('Enter a label first'); return }
+    const ids = Array.from(bulkSelected)
+    if (ids.length === 0) return
+    setBulkWorking(true)
+    try {
+      const res = await fetch('/api/studies/bulk-label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ study_ids: ids, label, action }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        const verb = action === 'add' ? 'Applied' : 'Removed'
+        const count = action === 'add' ? d.applied : d.removed
+        alert(`${verb} "${label}" on ${count} of ${ids.length} ${ids.length === 1 ? 'study' : 'studies'}`)
+        setBulkLabelInput('')
+      }
     } finally {
       setBulkWorking(false)
     }
@@ -5771,6 +5796,19 @@ export function App() {
               <span className="bulk-action-bar__count">{bulkSelected.size} selected</span>
               <button type="button" className="btn btn--approve" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
               <button type="button" className="btn btn--reject" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
+              <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
+              <input
+                type="text"
+                className="audit-actor-input"
+                placeholder="Label name…"
+                value={bulkLabelInput}
+                onChange={e => setBulkLabelInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && doBulkLabel('add')}
+                style={{width:'130px'}}
+                disabled={bulkWorking}
+              />
+              <button type="button" className="btn btn--action" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
+              <button type="button" className="btn btn--secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
               <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
             </div>
           )}

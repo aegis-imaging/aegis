@@ -264,6 +264,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{id}/labels", auth(srv.ListStudyLabels))
 	mux.HandleFunc("POST /api/studies/{id}/labels", adminOnly(srv.AddStudyLabel))
 	mux.HandleFunc("DELETE /api/studies/{id}/labels/{labelID}", adminOnly(srv.DeleteStudyLabel))
+	mux.HandleFunc("POST /api/studies/bulk-label", adminOnly(srv.BulkLabelStudies))
 
 	// Webhook subscriptions — HTTP callbacks for study lifecycle events.
 	mux.HandleFunc("GET /api/webhook-subscriptions", auth(srv.ListWebhooks))
