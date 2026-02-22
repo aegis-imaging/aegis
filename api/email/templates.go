@@ -32,7 +32,9 @@ Study UID:  {{ .StudyUID }}
 Modality:   {{ .Modality }}
 Files:      {{ .FileCount }}
 Received:   {{ .ReceivedAt }}
-
+{{ if .ProjectName }}
+Project:    {{ .ProjectName }}
+{{ end }}
 You will be notified once your study has been reviewed by an administrator.
 
 --
@@ -43,7 +45,8 @@ var studyApprovedTmpl = template.Must(template.New("study_approved").Parse(
 	`Your study submission has been reviewed and approved.
 
 Study UID:  {{ .StudyUID }}
-
+{{ if .ProjectName }}Project:    {{ .ProjectName }}
+{{ end }}
 The study is now eligible for sharing with collaborators.
 
 --
@@ -54,8 +57,8 @@ var studyRejectedTmpl = template.Must(template.New("study_rejected").Parse(
 	`Your study submission has been reviewed and rejected.
 
 Study UID:  {{ .StudyUID }}
-{{ if .Reason }}
-Reason:     {{ .Reason }}
+{{ if .ProjectName }}Project:    {{ .ProjectName }}
+{{ end }}{{ if .Reason }}Reason:     {{ .Reason }}
 {{ end }}
 Please contact your administrator if you have questions about this decision.
 
@@ -74,32 +77,37 @@ func ShareCreated(exportURL string, expiresAt time.Time, note string) (subject, 
 	return subject, buf.String()
 }
 
-func UploadConfirmed(studyUID, modality string, fileCount int, receivedAt time.Time) (subject, body string) {
+func UploadConfirmed(studyUID, modality, projectName string, fileCount int, receivedAt time.Time) (subject, body string) {
 	subject = "AEGIS — Upload Received"
 	var buf bytes.Buffer
 	uploadConfirmedTmpl.Execute(&buf, struct {
-		StudyUID   string
-		Modality   string
-		FileCount  int
-		ReceivedAt string
-	}{studyUID, modality, fileCount, receivedAt.UTC().Format("2006-01-02 15:04 UTC")})
+		StudyUID    string
+		Modality    string
+		ProjectName string
+		FileCount   int
+		ReceivedAt  string
+	}{studyUID, modality, projectName, fileCount, receivedAt.UTC().Format("2006-01-02 15:04 UTC")})
 	return subject, buf.String()
 }
 
-func StudyApproved(studyUID string) (subject, body string) {
+func StudyApproved(studyUID, projectName string) (subject, body string) {
 	subject = "AEGIS — Study Approved"
 	var buf bytes.Buffer
-	studyApprovedTmpl.Execute(&buf, struct{ StudyUID string }{studyUID})
+	studyApprovedTmpl.Execute(&buf, struct {
+		StudyUID    string
+		ProjectName string
+	}{studyUID, projectName})
 	return subject, buf.String()
 }
 
-func StudyRejected(studyUID, reason string) (subject, body string) {
+func StudyRejected(studyUID, reason, projectName string) (subject, body string) {
 	subject = "AEGIS — Study Rejected"
 	var buf bytes.Buffer
 	studyRejectedTmpl.Execute(&buf, struct {
-		StudyUID string
-		Reason   string
-	}{studyUID, reason})
+		StudyUID    string
+		Reason      string
+		ProjectName string
+	}{studyUID, reason, projectName})
 	return subject, buf.String()
 }
 

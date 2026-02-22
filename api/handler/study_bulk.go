@@ -67,7 +67,8 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 			}
 			model.CreateAuditEntry(r.Context(), s.db, "study.approved", actor, "study", study.ID, ip, nil)
 			if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
-				subject, body := email.StudyApproved(study.StudyInstanceUID)
+				projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
+				subject, body := email.StudyApproved(study.StudyInstanceUID, projectName)
 				if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
 					// non-fatal
 					_ = err
@@ -90,7 +91,8 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 			}
 			model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actor, "study", study.ID, ip, nil)
 			if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
-				subject, body := email.StudyRejected(study.StudyInstanceUID, "")
+				projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
+				subject, body := email.StudyRejected(study.StudyInstanceUID, "", projectName)
 				if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
 					// non-fatal
 					_ = err
