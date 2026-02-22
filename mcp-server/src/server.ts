@@ -133,6 +133,7 @@ const tools: Tool[] = [
         project_id: { type: "string", format: "uuid" },
         status: { type: "string", enum: ["received", "defacing", "clean", "defaced", "approved", "rejected"] },
         modality: { type: "string" },
+        body_part: { type: "string" },
         source: { type: "string", enum: ["external", "internal"] },
         search: { type: "string" }
       },
@@ -384,6 +385,7 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.project_id) query.set("project_id", parsed.project_id);
       if (parsed.status) query.set("status", parsed.status);
       if (parsed.modality) query.set("modality", parsed.modality);
+      if (parsed.body_part) query.set("body_part", parsed.body_part);
       if (parsed.source) query.set("source", parsed.source);
       if (parsed.search) query.set("search", parsed.search);
 
