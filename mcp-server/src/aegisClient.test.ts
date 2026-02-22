@@ -30,6 +30,18 @@ test("AegisApiClient allows approved paths", async () => {
   assert.deepEqual(classify, {});
 });
 
+test("AegisApiClient allows DIMSE retry summary and details paths", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+
+  const summary = await client.get("/api/dimse/retry/summary");
+  const details = await client.get("/api/dimse/retry/details?limit=10&study_instance_uid=1.2.3");
+
+  assert.deepEqual(summary, {});
+  assert.deepEqual(details, {});
+});
+
 test.after(() => {
   globalThis.fetch = originalFetch;
 });
