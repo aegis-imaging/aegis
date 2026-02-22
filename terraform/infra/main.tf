@@ -956,6 +956,17 @@ resource "google_cloud_run_service_iam_member" "iap_invoker_admin" {
   member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
 }
 
+# Grant the IAP service agent permission to invoke the API Cloud Run service.
+# Required so that admin.aegisimaging.ai/api/* requests (routed to the IAP-protected
+# api-admin backend) are forwarded to the API Cloud Run service by IAP.
+resource "google_cloud_run_service_iam_member" "iap_invoker_api" {
+  count    = var.enable_admin_iap ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.api.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
+}
+
 # --- Cloud Armor ---
 
 resource "google_compute_security_policy" "api" {
@@ -1018,6 +1029,17 @@ resource "google_compute_region_network_endpoint_group" "admin_neg" {
   }
 }
 
+# Separate NEG for the API Cloud Run service, used by the IAP-protected
+# api_admin backend service that handles admin.aegisimaging.ai/api/* traffic.
+resource "google_compute_region_network_endpoint_group" "api_admin_neg" {
+  name                  = "${local.name_prefix}-api-admin-neg"
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+  cloud_run {
+    service = google_cloud_run_v2_service.api.name
+  }
+}
+
 resource "google_compute_backend_service" "api" {
   name                  = "${local.name_prefix}-api-backend"
   load_balancing_scheme = "EXTERNAL_MANAGED"
@@ -1058,6 +1080,33 @@ resource "google_compute_backend_service" "admin" {
   }
 }
 
+# IAP-protected backend service for API calls originating from the admin dashboard.
+# Routes admin.aegisimaging.ai/api/* to the API Cloud Run service, with IAP enforced
+# so that X-Goog-Authenticated-User-Email is set for the API auth middleware.
+resource "google_compute_backend_service" "api_admin" {
+  name                  = "${local.name_prefix}-api-admin-backend"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  protocol              = "HTTP"
+
+  dynamic "iap" {
+    for_each = var.enable_admin_iap ? [1] : []
+    content {
+      enabled              = true
+      oauth2_client_id     = var.iap_oauth_client_id
+      oauth2_client_secret = var.iap_oauth_client_secret
+    }
+  }
+
+  log_config {
+    enable      = true
+    sample_rate = 1.0
+  }
+
+  backend {
+    group = google_compute_region_network_endpoint_group.api_admin_neg.id
+  }
+}
+
 resource "google_compute_url_map" "https" {
   name            = "${local.name_prefix}-https-map"
   default_service = google_compute_backend_service.api.id
@@ -1080,6 +1129,13 @@ resource "google_compute_url_map" "https" {
   path_matcher {
     name            = "admin"
     default_service = google_compute_backend_service.admin.id
+
+    # Route /api/* to the IAP-protected API backend so the React app's relative
+    # API calls (e.g. fetch("/api/studies")) resolve correctly on the admin domain.
+    path_rule {
+      paths   = ["/api", "/api/*"]
+      service = google_compute_backend_service.api_admin.id
+    }
   }
 }
 
@@ -1126,6 +1182,17 @@ resource "google_iap_web_backend_service_iam_binding" "admin_access" {
 
   project             = var.project_id
   web_backend_service = google_compute_backend_service.admin.name
+  role                = "roles/iap.httpsResourceAccessor"
+  members             = var.iap_access_members
+}
+
+# Grant the same IAP access members access to the api_admin backend so that
+# admin.aegisimaging.ai/api/* requests pass IAP authentication.
+resource "google_iap_web_backend_service_iam_binding" "api_admin_access" {
+  count = var.enable_admin_iap && length(var.iap_access_members) > 0 ? 1 : 0
+
+  project             = var.project_id
+  web_backend_service = google_compute_backend_service.api_admin.name
   role                = "roles/iap.httpsResourceAccessor"
   members             = var.iap_access_members
 }
