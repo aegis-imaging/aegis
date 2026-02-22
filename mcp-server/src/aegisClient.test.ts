@@ -150,6 +150,15 @@ test("AegisApiClient rejects disallowed DELETE paths", async () => {
   assert.equal(fetchCalls, 0);
 });
 
+test("AegisApiClient allows pipeline stats path", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+
+  const result = await client.get("/api/stats");
+  assert.deepEqual(result, {});
+});
+
 test.after(() => {
   globalThis.fetch = originalFetch;
 });
