@@ -158,6 +158,7 @@ func main() {
 
 	// Studies — list, detail, and shares readable by all; mutations require admin.
 	mux.HandleFunc("GET /api/studies", auth(srv.ListStudies))
+	mux.HandleFunc("GET /api/studies.csv", auth(srv.ExportStudiesCSV))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
 	mux.HandleFunc("GET /api/study-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/by-uid/{studyUID}", auth(srv.GetStudyByUID))
