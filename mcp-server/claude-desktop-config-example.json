@@ -1,0 +1,19 @@
+{
+  "_comment": "Add this block under 'mcpServers' in your Claude Desktop config.",
+  "_comment_location_mac": "~/Library/Application Support/Claude/claude_desktop_config.json",
+  "_comment_location_win": "%APPDATA%\\Claude\\claude_desktop_config.json",
+
+  "mcpServers": {
+    "aegis": {
+      "command": "node",
+      "args": ["/path/to/aegis/mcp-server/dist/server.js"],
+      "env": {
+        "AEGIS_API_BASE_URL": "https://api.aegisimaging.ai",
+        "AEGIS_API_TOKEN": "your-service-token-here",
+        "MCP_MODE": "readonly",
+        "MCP_ENABLE_WRITE_TOOLS": "false",
+        "MCP_CALLER_ID": "claude-desktop"
+      }
+    }
+  }
+}
