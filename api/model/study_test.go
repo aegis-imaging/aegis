@@ -3,6 +3,7 @@ package model_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/testutil"
@@ -308,4 +309,34 @@ func countStudyFields(s *model.Study) int {
 		count++
 	}
 	return count
+}
+
+func TestListStudies_DateFilter(t *testing.T) {
+	db := testutil.TestDB(t)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+
+	now := time.Now().UTC()
+	past := now.Add(-24 * time.Hour)
+	future := now.Add(24 * time.Hour)
+
+	// DateFrom in the past — study should be included.
+	entries, err := model.ListStudies(context.Background(), db, model.StudyFilters{DateFrom: past}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+
+	// DateTo in the future — study should be included.
+	entries, err = model.ListStudies(context.Background(), db, model.StudyFilters{DateTo: future}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+
+	// DateFrom in the future — study is before the lower bound, should be excluded.
+	entries, err = model.ListStudies(context.Background(), db, model.StudyFilters{DateFrom: future}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, entries, 0)
+
+	// DateTo in the past — study is after the upper bound, should be excluded.
+	entries, err = model.ListStudies(context.Background(), db, model.StudyFilters{DateTo: past}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, entries, 0)
 }

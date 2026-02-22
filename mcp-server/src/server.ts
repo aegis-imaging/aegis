@@ -9,6 +9,7 @@ import { redactToolArgs } from "./redaction.js";
 import {
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
+  listAuditArgsSchema,
   listStudiesArgsSchema,
   readToolNames,
   retryDimseArgsSchema,
@@ -135,7 +136,9 @@ const tools: Tool[] = [
         modality: { type: "string" },
         body_part: { type: "string" },
         source: { type: "string", enum: ["external", "internal"] },
-        search: { type: "string" }
+        search: { type: "string" },
+        date_from: { type: "string", format: "date-time", description: "ISO 8601 lower bound on created_at (inclusive)" },
+        date_to: { type: "string", format: "date-time", description: "ISO 8601 upper bound on created_at (inclusive)" }
       },
       additionalProperties: false
     }
@@ -228,6 +231,34 @@ const tools: Tool[] = [
           type: "string",
           pattern: "^[0-9.]+$",
           description: "Optional DICOM StudyInstanceUID — when provided, also fetches per-study retry details."
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_audit_log",
+    description:
+      "Query the system-wide audit trail with optional filters and server-side pagination. Returns {entries, total, limit, offset}. Filter by action prefix (e.g. 'study' matches study.approved, study.rejected), resource_type (e.g. 'study', 'admin_user'), or actor email.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        limit: { type: "number", minimum: 1, maximum: 500, description: "Page size (default 100)" },
+        offset: { type: "number", minimum: 0, description: "Row offset for pagination" },
+        action: {
+          type: "string",
+          pattern: "^[a-z0-9_.]+$",
+          description: "Prefix filter on action name, e.g. 'study' or 'study.approved'"
+        },
+        resource_type: {
+          type: "string",
+          pattern: "^[a-z0-9_]+$",
+          description: "Exact match on resource_type, e.g. 'study', 'admin_user'"
+        },
+        actor: {
+          type: "string",
+          description: "Exact match on actor email address"
         }
       },
       additionalProperties: false
@@ -388,6 +419,8 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.body_part) query.set("body_part", parsed.body_part);
       if (parsed.source) query.set("source", parsed.source);
       if (parsed.search) query.set("search", parsed.search);
+      if (parsed.date_from) query.set("date_from", parsed.date_from);
+      if (parsed.date_to) query.set("date_to", parsed.date_to);
 
       const suffix = query.toString() ? `?${query.toString()}` : "";
       const data = await client.get(`/api/studies${suffix}`);
@@ -439,6 +472,19 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         details = await client.get(`/api/dimse/retry/details?limit=10&study_instance_uid=${uid}`);
       }
       return formatSuccess(requestId, name, { summary, ...(details !== undefined ? { details } : {}) });
+    }
+
+    if (name === "get_audit_log") {
+      const parsed = listAuditArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.limit !== undefined) params.set("limit", String(parsed.limit));
+      if (parsed.offset !== undefined) params.set("offset", String(parsed.offset));
+      if (parsed.action) params.set("action", parsed.action);
+      if (parsed.resource_type) params.set("resource_type", parsed.resource_type);
+      if (parsed.actor) params.set("actor", parsed.actor);
+      const qs = params.toString();
+      const data = await client.get(`/api/audit${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
     }
 
     if (writeToolNames.includes(name)) {

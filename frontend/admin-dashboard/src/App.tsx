@@ -3521,6 +3521,8 @@ export function App() {
   const [filterSource,   setFilterSource]   = useState('')
   const [filterProject,  setFilterProject]  = useState('')
   const [filterSearch,   setFilterSearch]   = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo,   setFilterDateTo]   = useState('')
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -3541,6 +3543,8 @@ export function App() {
     if (filterSource)   params.set('source',     filterSource)
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
+    if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
+    if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
 
     fetch(`/api/studies?${params}`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
@@ -3556,7 +3560,7 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterDateFrom, filterDateTo, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0) }
@@ -3564,13 +3568,16 @@ export function App() {
   function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0) }
   function setSourceF(v: string)   { setFilterSource(v);   setPage(0) }
   function setProjectF(v: string)  { setFilterProject(v);  setPage(0) }
-  function setSearchF(v: string)   { setFilterSearch(v);   setPage(0) }
+  function setSearchF(v: string)    { setFilterSearch(v);    setPage(0) }
+  function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0) }
+  function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterDateFrom || filterDateTo)
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
-    setFilterSource(''); setFilterProject(''); setFilterSearch(''); setPage(0)
+    setFilterSource(''); setFilterProject(''); setFilterSearch('')
+    setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
   }
 
   const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
@@ -3767,6 +3774,21 @@ export function App() {
               <option value="">All projects</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            <input
+              type="date"
+              className="filter-date"
+              title="Created on or after"
+              value={filterDateFrom}
+              onChange={e => setDateFromF(e.target.value)}
+            />
+            <span className="filter-date-sep">–</span>
+            <input
+              type="date"
+              className="filter-date"
+              title="Created on or before"
+              value={filterDateTo}
+              onChange={e => setDateToF(e.target.value)}
+            />
             {hasFilters && (
               <button type="button" className="btn btn--secondary" onClick={clearFilters}>Clear</button>
             )}
