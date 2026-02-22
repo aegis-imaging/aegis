@@ -3883,6 +3883,7 @@ export function App() {
   const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
+  const [stuckCount, setStuckCount] = useState(0)
 
   // Auth state
   const [currentUser, setCurrentUser] = useState<AuthIdentity | null>(null)
@@ -3905,6 +3906,18 @@ export function App() {
         if (r.ok) return r.json().then(setCurrentUser)
       })
       .catch(() => { /* non-fatal — dev mode may not have auth */ })
+  }, [])
+
+  // Poll stuck studies every 5 minutes for the warning badge.
+  useEffect(() => {
+    const fetchStuck = () =>
+      fetch('/api/studies/stuck?minutes=60')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => d && setStuckCount(d.total ?? 0))
+        .catch(() => {})
+    fetchStuck()
+    const id = setInterval(fetchStuck, 5 * 60 * 1000)
+    return () => clearInterval(id)
   }, [])
 
   const isAdmin = currentUser?.role === 'admin'
@@ -4105,6 +4118,7 @@ export function App() {
           onClick={() => setTab('studies')}
         >
           Studies
+          {stuckCount > 0 && <span className="tab-stuck-badge">{stuckCount} stuck</span>}
         </button>
         <button
           type="button"
