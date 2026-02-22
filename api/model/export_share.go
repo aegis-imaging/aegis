@@ -81,6 +81,32 @@ func ListExportSharesByStudy(ctx context.Context, db *sql.DB, studyID string) ([
 	return shares, rows.Err()
 }
 
+func GetExportShareByID(ctx context.Context, db *sql.DB, shareID string) (*ExportShare, error) {
+	var s ExportShare
+	err := scanShare(db.QueryRowContext(ctx,
+		`SELECT`+shareColumns+` FROM export_shares WHERE id = $1`, shareID), &s)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// ExtendExportShare pushes the expiry forward by the given duration.
+// Returns an error if the share is already revoked.
+func ExtendExportShare(ctx context.Context, db *sql.DB, shareID string, newExpiry time.Time) error {
+	res, err := db.ExecContext(ctx,
+		`UPDATE export_shares SET expires_at = $1 WHERE id = $2 AND revoked_at IS NULL`,
+		newExpiry, shareID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func RevokeExportShare(ctx context.Context, db *sql.DB, shareID string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE export_shares SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, shareID)
