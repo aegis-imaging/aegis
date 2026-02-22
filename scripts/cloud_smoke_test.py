@@ -4,9 +4,11 @@
 Checks:
 1) API health
 2) auth identity endpoint
-3) upload init/file/complete
-4) one pipeline progression check (study detail)
-5) export share create/redeem/download
+3) at least one enabled admin user registered (first-admin bootstrap check)
+4) upload init/file/complete
+5) one pipeline progression check (study detail)
+6) study approve
+7) export share create/redeem/download
 """
 
 from __future__ import annotations
@@ -151,6 +153,12 @@ def main() -> int:
 
         run_step(
             results,
+            "admin.users.registered",
+            lambda: step_admin_users_registered(base_url, admin_headers, args.timeout),
+        )
+
+        run_step(
+            results,
             "upload.init",
             lambda: step_upload_init(base_url, args.project_slug, smoke_uploader, study_uid_seed, args.timeout, state),
         )
@@ -222,6 +230,33 @@ def step_auth_me(base_url: str, admin_headers: Dict[str, str], timeout: int) -> 
     if not email:
         raise SmokeFailure("auth.me: missing email in response")
     return f"email={email}, role={role or 'unknown'}"
+
+
+def step_admin_users_registered(base_url: str, admin_headers: Dict[str, str], timeout: int) -> str:
+    """Verify that at least one admin user is registered.
+
+    On a fresh deployment with no admin users, every protected endpoint will
+    return 403 'user not registered'. This step detects that configuration gap
+    early and surfaces the fix: set FIRST_ADMIN_EMAIL env var (or seed via
+    POST /api/admin-users when auth is disabled in dev mode).
+    """
+    status, body, _ = http_request(
+        "GET",
+        build_url(base_url, "/api/admin-users"),
+        headers=admin_headers,
+        timeout_s=timeout,
+    )
+    expect_status(status, {200}, "admin.users.registered", body)
+    payload = parse_json(body, "admin.users.registered")
+    users = payload if isinstance(payload, list) else payload.get("admin_users", [])
+    enabled = [u for u in users if u.get("enabled")]
+    if not enabled:
+        raise SmokeFailure(
+            "admin.users.registered: no enabled admin users found. "
+            "Set FIRST_ADMIN_EMAIL env var on the API and restart, "
+            "or seed via POST /api/admin-users (dev mode only)."
+        )
+    return f"count={len(enabled)} enabled admin user(s)"
 
 
 def step_upload_init(
