@@ -1327,6 +1327,27 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   // Viewer / review state
   const [viewOpen, setViewOpen] = useState(false)
   const [defaceOpen, setDefaceOpen] = useState(false)
+  const [tagsOpen, setTagsOpen] = useState(false)
+  const [dicomTags, setDicomTags] = useState<{ tag: string; keyword: string; vr: string; value: string }[] | null>(null)
+  const [tagsLoading, setTagsLoading] = useState(false)
+
+  const openDicomTags = async () => {
+    if (tagsOpen) { setTagsOpen(false); return }
+    if (!study) return
+    setTagsOpen(true)
+    if (dicomTags) return
+    setTagsLoading(true)
+    try {
+      const res = await fetch(`/api/studies/${study.study_instance_uid}/dicom-tags`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setDicomTags(data.tags ?? [])
+    } catch {
+      setDicomTags([])
+    } finally {
+      setTagsLoading(false)
+    }
+  }
 
   // Share form state
   const [shareEmail, setShareEmail] = useState('')
@@ -1523,8 +1544,32 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           )}
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
           <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View in OHIF'}</button>
+          <button type="button" className="btn btn--secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
         </div>
       </div>
+
+      {/* DICOM tag inspection panel */}
+      {tagsOpen && (
+        <div className="dicom-tags-panel">
+          {tagsLoading && <div className="state-loading">Loading tags…</div>}
+          {!tagsLoading && dicomTags && dicomTags.length === 0 && <div className="state-empty">No tags found.</div>}
+          {!tagsLoading && dicomTags && dicomTags.length > 0 && (
+            <table className="audit-table dicom-tags-table">
+              <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Value</th></tr></thead>
+              <tbody>
+                {dicomTags.map(t => (
+                  <tr key={t.tag}>
+                    <td><code>{t.tag}</code></td>
+                    <td>{t.keyword}</td>
+                    <td><code>{t.vr}</code></td>
+                    <td className="dicom-tag-value">{t.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* Inline viewer */}
       {viewOpen && <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />}
