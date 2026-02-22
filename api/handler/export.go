@@ -238,14 +238,15 @@ func (s *Server) ListAllShares(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := model.ShareStatusFilter(q.Get("status"))
+	projectID := q.Get("project_id")
 
-	total, err := model.CountAllExportShares(r.Context(), s.db, status)
+	total, err := model.CountAllExportShares(r.Context(), s.db, status, projectID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to count shares")
 		return
 	}
 
-	shares, err := model.ListAllExportShares(r.Context(), s.db, status, limit, offset)
+	shares, err := model.ListAllExportShares(r.Context(), s.db, status, limit, offset, projectID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list shares")
 		return
