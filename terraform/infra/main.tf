@@ -369,7 +369,12 @@ locals {
     protocol-service       = var.protocol_service_image
   }
 
-  lb_domains = distinct(compact([var.api_domain, var.admin_domain, var.landing_domain]))
+  lb_domains = distinct(compact([
+    var.api_domain,
+    var.admin_domain,
+    var.landing_domain,
+    var.landing_domain != "" ? "www.${var.landing_domain}" : "",
+  ]))
 
   resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : [
     "https://${var.api_domain}",
@@ -1130,7 +1135,7 @@ resource "google_compute_global_address" "lb_ip" {
 }
 
 resource "google_compute_managed_ssl_certificate" "lb_cert" {
-  name = "${local.name_prefix}-lb-cert-v2"
+  name = "${local.name_prefix}-lb-cert-v3"
   managed {
     domains = local.lb_domains
   }
