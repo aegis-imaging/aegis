@@ -103,6 +103,58 @@ func DeleteWebhookSubscription(ctx context.Context, db *sql.DB, id string) error
 	return err
 }
 
+// WebhookDelivery is one recorded delivery attempt for a webhook subscription.
+type WebhookDelivery struct {
+	ID             string     `json:"id"`
+	SubscriptionID string     `json:"subscription_id"`
+	Event          string     `json:"event"`
+	URL            string     `json:"url"`
+	Attempt        int        `json:"attempt"`
+	StatusCode     *int       `json:"status_code,omitempty"`
+	Success        bool       `json:"success"`
+	ErrorMessage   *string    `json:"error_message,omitempty"`
+	DeliveredAt    time.Time  `json:"delivered_at"`
+}
+
+// RecordWebhookDelivery persists one delivery attempt. Non-fatal on error (best-effort log).
+func RecordWebhookDelivery(ctx context.Context, db *sql.DB, d *WebhookDelivery) {
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO webhook_deliveries (subscription_id, event, url, attempt, status_code, success, error_message)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		d.SubscriptionID, d.Event, d.URL, d.Attempt, d.StatusCode, d.Success, d.ErrorMessage)
+	if err != nil {
+		// Delivery log is best-effort; don't propagate.
+		_ = err
+	}
+}
+
+// ListWebhookDeliveries returns the most recent delivery attempts for a subscription.
+func ListWebhookDeliveries(ctx context.Context, db *sql.DB, subscriptionID string, limit int) ([]WebhookDelivery, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, subscription_id, event, url, attempt, status_code, success, error_message, delivered_at
+		FROM webhook_deliveries
+		WHERE subscription_id = $1
+		ORDER BY delivered_at DESC
+		LIMIT $2`, subscriptionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var deliveries []WebhookDelivery
+	for rows.Next() {
+		var d WebhookDelivery
+		if err := rows.Scan(&d.ID, &d.SubscriptionID, &d.Event, &d.URL, &d.Attempt,
+			&d.StatusCode, &d.Success, &d.ErrorMessage, &d.DeliveredAt); err != nil {
+			return nil, err
+		}
+		deliveries = append(deliveries, d)
+	}
+	return deliveries, rows.Err()
+}
+
 // ListEnabledWebhooksForEvent returns all enabled webhook subscriptions that
 // subscribe to the given event, optionally scoped to a project.
 func ListEnabledWebhooksForEvent(ctx context.Context, db *sql.DB, event, projectID string) ([]WebhookSubscription, error) {
