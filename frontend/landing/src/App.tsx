@@ -6,6 +6,7 @@ import { Problem } from './components/Problem'
 import { Solution } from './components/Solution'
 import { HowItWorks } from './components/HowItWorks'
 import Demo from './components/Demo'
+import PipelineDemo from './components/PipelineDemo'
 import { Trust } from './components/Trust'
 import { Audiences } from './components/Audiences'
 import { Testimonials } from './components/Testimonials'
@@ -24,6 +25,7 @@ export function App() {
       <Solution />
       <HowItWorks />
       <Demo />
+      <PipelineDemo />
       <Trust />
       <Audiences />
       <Testimonials />
