@@ -325,6 +325,51 @@ func (s *Server) GetShareDownloads(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ExtendShare extends an export share's expiry by the requested number of hours.
+// PATCH /api/shares/{shareID}/extend
+func (s *Server) ExtendShare(w http.ResponseWriter, r *http.Request) {
+	shareID := r.PathValue("shareID")
+	var req struct {
+		ExtendHours int `json:"extend_hours"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if req.ExtendHours <= 0 {
+		s.writeError(w, http.StatusBadRequest, "extend_hours must be positive")
+		return
+	}
+
+	share, err := model.GetExportShareByID(r.Context(), s.db, shareID)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "share not found")
+		return
+	}
+	if share.RevokedAt != nil {
+		s.writeError(w, http.StatusConflict, "cannot extend a revoked share")
+		return
+	}
+
+	// Extend from whichever is later: current expiry or now (handles already-expired shares).
+	base := share.ExpiresAt
+	if now := time.Now().UTC(); now.After(base) {
+		base = now
+	}
+	newExpiry := base.Add(time.Duration(req.ExtendHours) * time.Hour)
+
+	if err := model.ExtendExportShare(r.Context(), s.db, shareID, newExpiry); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to extend share")
+		return
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "share.extended", actorEmail(r), "export_share", shareID, clientIP(r),
+		map[string]any{"extend_hours": req.ExtendHours, "new_expiry": newExpiry})
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"share_id":   shareID,
+		"expires_at": newExpiry,
+	})
+}
+
 // RevokeShare immediately revokes an export share.
 func (s *Server) RevokeShare(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareID")
