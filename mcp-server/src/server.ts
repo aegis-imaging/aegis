@@ -14,6 +14,7 @@ import {
   readToolNames,
   retryDimseArgsSchema,
   studyIdArgsSchema,
+  studyUidArgsSchema,
   ToolName,
   writeArgsSchema,
   writeToolNames
@@ -145,13 +146,30 @@ const tools: Tool[] = [
   },
   {
     name: "get_study_detail",
-    description: "Get detail for a specific study UUID.",
+    description: "Get detail for a specific study by its database UUID.",
     inputSchema: {
       type: "object",
       required: ["study_id"],
       properties: {
         request_id: { type: "string" },
         study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_study_by_uid",
+    description: "Get study detail by DICOM StudyInstanceUID (the UID from PACS/DICOM headers). Use this when you have a DICOM UID instead of the AEGIS database UUID.",
+    inputSchema: {
+      type: "object",
+      required: ["study_instance_uid"],
+      properties: {
+        request_id: { type: "string" },
+        study_instance_uid: {
+          type: "string",
+          pattern: "^[0-9.]+$",
+          description: "DICOM StudyInstanceUID (dot-separated numeric string)"
+        }
       },
       additionalProperties: false
     }
@@ -430,6 +448,13 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "get_study_detail") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_study_by_uid") {
+      const parsed = studyUidArgsSchema.parse(args);
+      const uid = encodeURIComponent(parsed.study_instance_uid);
+      const data = await client.get(`/api/studies/by-uid/${uid}`);
       return formatSuccess(requestId, name, data);
     }
 
