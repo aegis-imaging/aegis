@@ -64,6 +64,15 @@ func (l *Local) List(_ context.Context, prefix string) ([]string, error) {
 	return keys, nil
 }
 
+func (l *Local) Size(_ context.Context, key string) (int64, error) {
+	path := filepath.Join(l.baseDir, key)
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
 func (l *Local) Delete(_ context.Context, key string) error {
 	path := filepath.Join(l.baseDir, key)
 	return os.Remove(path)

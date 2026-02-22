@@ -138,6 +138,14 @@ func (g *GCS) Move(ctx context.Context, srcKey, dstKey string) error {
 	return src.Delete(ctx)
 }
 
+func (g *GCS) Size(ctx context.Context, key string) (int64, error) {
+	attrs, err := g.client.Bucket(g.bucket).Object(key).Attrs(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("gcs object attrs: %w", err)
+	}
+	return attrs.Size, nil
+}
+
 func (g *GCS) KeyToPath(_ string) string {
 	return ""
 }
