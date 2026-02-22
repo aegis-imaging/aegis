@@ -16,46 +16,56 @@ type ExportShare struct {
 	CreatedBy      string     `json:"created_by"`
 	RevokedAt      *time.Time `json:"revoked_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
+	MaxDownloads   *int       `json:"max_downloads,omitempty"`
 	DownloadCount  int        `json:"download_count"`
 	// Token is populated only when a new share is created; never read from DB.
 	Token string `json:"token,omitempty"`
 }
 
 const shareColumns = `
-	id, study_id, recipient_email, note, expires_at, created_by, revoked_at, created_at`
+	id, study_id, recipient_email, note, expires_at, created_by, revoked_at, created_at, max_downloads`
 
 // shareColumnsWithCount extends shareColumns with a download_count subquery.
 const shareColumnsWithCount = `
-	es.id, es.study_id, es.recipient_email, es.note, es.expires_at, es.created_by, es.revoked_at, es.created_at,
+	es.id, es.study_id, es.recipient_email, es.note, es.expires_at, es.created_by, es.revoked_at, es.created_at, es.max_downloads,
 	(SELECT count(*) FROM export_downloads ed WHERE ed.share_id = es.id)`
 
 func scanShare(row scannable, s *ExportShare) error {
 	return row.Scan(&s.ID, &s.StudyID, &s.RecipientEmail, &s.Note,
-		&s.ExpiresAt, &s.CreatedBy, &s.RevokedAt, &s.CreatedAt)
+		&s.ExpiresAt, &s.CreatedBy, &s.RevokedAt, &s.CreatedAt, &s.MaxDownloads)
 }
 
 func scanShareWithCount(row scannable, s *ExportShare) error {
 	return row.Scan(&s.ID, &s.StudyID, &s.RecipientEmail, &s.Note,
-		&s.ExpiresAt, &s.CreatedBy, &s.RevokedAt, &s.CreatedAt, &s.DownloadCount)
+		&s.ExpiresAt, &s.CreatedBy, &s.RevokedAt, &s.CreatedAt, &s.MaxDownloads, &s.DownloadCount)
 }
 
-func CreateExportShare(ctx context.Context, db *sql.DB, studyID, tokenHash, recipientEmail, note, createdBy string, expiresAt time.Time) (*ExportShare, error) {
+func CreateExportShare(ctx context.Context, db *sql.DB, studyID, tokenHash, recipientEmail, note, createdBy string, expiresAt time.Time, maxDownloads *int) (*ExportShare, error) {
 	var s ExportShare
 	err := scanShare(db.QueryRowContext(ctx, `
-		INSERT INTO export_shares (study_id, token_hash, recipient_email, note, expires_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO export_shares (study_id, token_hash, recipient_email, note, expires_at, created_by, max_downloads)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING`+shareColumns,
-		studyID, tokenHash, recipientEmail, note, expiresAt, createdBy), &s)
+		studyID, tokenHash, recipientEmail, note, expiresAt, createdBy, maxDownloads), &s)
 	if err != nil {
 		return nil, err
 	}
 	return &s, nil
 }
 
+// GetShareDownloadCount returns the number of times a share has been downloaded.
+func GetShareDownloadCount(ctx context.Context, db *sql.DB, shareID string) (int, error) {
+	var n int
+	err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM export_downloads WHERE share_id = $1`, shareID).Scan(&n)
+	return n, err
+}
+
 func GetExportShareByTokenHash(ctx context.Context, db *sql.DB, tokenHash string) (*ExportShare, error) {
 	var s ExportShare
-	err := scanShare(db.QueryRowContext(ctx,
-		`SELECT`+shareColumns+` FROM export_shares WHERE token_hash = $1`, tokenHash), &s)
+	// Use the aliased query so we also get download_count for limit enforcement.
+	err := scanShareWithCount(db.QueryRowContext(ctx,
+		`SELECT`+shareColumnsWithCount+` FROM export_shares es WHERE es.token_hash = $1`, tokenHash), &s)
 	if err != nil {
 		return nil, err
 	}
