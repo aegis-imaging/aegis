@@ -1353,6 +1353,37 @@
   padding: 8px 10px;
 }
 
+/* ── Bulk Action Bar ──────────────────────────────────────────────────────── */
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.bulk-action-bar__count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4ed8;
+  margin-right: 4px;
+}
+
+.td-check, .th-check {
+  width: 36px;
+  min-width: 36px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+.tr--selected td {
+  background: #eff6ff;
+}
+
 /* ── Diagnostics Panel ────────────────────────────────────────────────────── */
 .diagnostics-panel {
   padding: 12px 0;

@@ -163,6 +163,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/by-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/{id}/audit", auth(srv.ListStudyAudit))
 	mux.HandleFunc("GET /api/studies/{id}/diagnostics", auth(srv.GetStudyDiagnostics))
+	mux.HandleFunc("POST /api/studies/bulk", adminOnly(srv.BulkStudyAction))
 	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
 	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
 	mux.HandleFunc("POST /api/studies/{id}/share", adminOnly(srv.CreateShare))
