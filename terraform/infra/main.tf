@@ -61,6 +61,12 @@ variable "admin_domain" {
   type        = string
 }
 
+variable "landing_domain" {
+  description = "FQDN for the public marketing / landing page (example: aegisimaging.ai). Leave empty to skip landing page deployment."
+  type        = string
+  default     = ""
+}
+
 variable "export_portal_base_url" {
   description = "Public base URL of the export portal UI (example: https://export.aegisimaging.ai). When set, share email links point to the portal instead of the raw API endpoint. Leave empty to fall back to the API URL."
   type        = string
@@ -115,7 +121,7 @@ variable "api_image" {
 }
 
 variable "admin_dashboard_image" {
-  description = "Container image URI for the admin dashboard service"
+  description = "Container image URI for the admin dashboard (React + nginx) service"
   type        = string
 }
 
@@ -147,6 +153,12 @@ variable "classification_service_image" {
 variable "protocol_service_image" {
   description = "Container image URI for the protocol sidecar"
   type        = string
+}
+
+variable "landing_image" {
+  description = "Container image URI for the landing page (React + nginx). Empty = landing Cloud Run service not deployed."
+  type        = string
+  default     = ""
 }
 
 variable "ohif_image" {
@@ -357,7 +369,7 @@ locals {
     protocol-service       = var.protocol_service_image
   }
 
-  lb_domains = distinct([var.api_domain, var.admin_domain])
+  lb_domains = distinct(compact([var.api_domain, var.admin_domain, var.landing_domain]))
 
   resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : [
     "https://${var.api_domain}",
@@ -1003,6 +1015,55 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
   }
 }
 
+# --- Landing page Cloud Run service ---
+
+resource "google_cloud_run_v2_service" "landing" {
+  count    = var.landing_image != "" ? 1 : 0
+  name     = "${local.name_prefix}-landing"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+
+  deletion_protection = var.deletion_protection
+
+  template {
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
+
+    containers {
+      image = var.landing_image
+
+      resources {
+        limits = {
+          cpu    = "500m"
+          memory = "256Mi"
+        }
+      }
+
+      liveness_probe {
+        failure_threshold     = 3
+        initial_delay_seconds = 5
+        timeout_seconds       = 3
+        period_seconds        = 15
+
+        http_get {
+          path = "/healthz"
+        }
+      }
+    }
+  }
+}
+
+# Landing page is public — no IAP, no auth required.
+resource "google_cloud_run_service_iam_member" "landing_invoker" {
+  count    = var.landing_image != "" ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.landing[0].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 # When IAP is enabled the IAP service agent (iap_invoker_admin) is the
 # only identity that needs run.invoker on the admin Cloud Run service.
 # Removing allUsers provides defense-in-depth: even if the LB IAP config
@@ -1073,6 +1134,32 @@ resource "google_compute_managed_ssl_certificate" "lb_cert" {
   }
 }
 
+resource "google_compute_region_network_endpoint_group" "landing_neg" {
+  count                 = var.landing_image != "" ? 1 : 0
+  name                  = "${local.name_prefix}-landing-neg"
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+  cloud_run {
+    service = google_cloud_run_v2_service.landing[0].name
+  }
+}
+
+resource "google_compute_backend_service" "landing" {
+  count                 = var.landing_image != "" ? 1 : 0
+  name                  = "${local.name_prefix}-landing-backend"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  protocol              = "HTTP"
+
+  log_config {
+    enable      = true
+    sample_rate = 0.1
+  }
+
+  backend {
+    group = google_compute_region_network_endpoint_group.landing_neg[0].id
+  }
+}
+
 resource "google_compute_region_network_endpoint_group" "api_neg" {
   name                  = "${local.name_prefix}-api-neg"
   region                = var.region
@@ -1133,7 +1220,15 @@ resource "google_compute_backend_service" "admin" {
 
 resource "google_compute_url_map" "https" {
   name            = "${local.name_prefix}-https-map"
-  default_service = google_compute_backend_service.api.id
+  default_service = var.landing_image != "" ? google_compute_backend_service.landing[0].id : google_compute_backend_service.api.id
+
+  dynamic "host_rule" {
+    for_each = var.landing_domain != "" ? [1] : []
+    content {
+      hosts        = [var.landing_domain]
+      path_matcher = "landing"
+    }
+  }
 
   host_rule {
     hosts        = [var.api_domain]
@@ -1145,6 +1240,14 @@ resource "google_compute_url_map" "https" {
     path_matcher = "admin"
   }
 
+  dynamic "path_matcher" {
+    for_each = var.landing_image != "" ? [1] : []
+    content {
+      name            = "landing"
+      default_service = google_compute_backend_service.landing[0].id
+    }
+  }
+
   path_matcher {
     name            = "api"
     default_service = google_compute_backend_service.api.id
@@ -1154,8 +1257,6 @@ resource "google_compute_url_map" "https" {
     name            = "admin"
     default_service = google_compute_backend_service.admin.id
     # No path rules needed — nginx proxies /api/* to the API backend internally.
-    # All traffic hits the IAP-protected admin backend (nginx), which forwards
-    # API calls to api.aegisimaging.ai with the IAP identity headers intact.
   }
 }
 
@@ -1529,6 +1630,10 @@ output "sidecar_service_uris" {
 
 output "ohif_service_uri" {
   value = var.ohif_image != "" ? google_cloud_run_v2_service.ohif[0].uri : ""
+}
+
+output "landing_service_uri" {
+  value = var.landing_image != "" ? google_cloud_run_v2_service.landing[0].uri : ""
 }
 
 output "load_balancer_ip" {

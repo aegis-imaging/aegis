@@ -25,11 +25,11 @@ export function Hero() {
         </p>
 
         <div className="hero__ctas">
-          <button className="btn btn--white btn--lg" onClick={() => scrollTo('contact')}>
-            Get Early Access
+          <button className="btn btn--white btn--lg" onClick={() => scrollTo('demo')}>
+            Try Live Demo
           </button>
-          <button className="btn btn--ghost btn--lg" onClick={() => scrollTo('architecture')}>
-            View Architecture
+          <button className="btn btn--ghost btn--lg" onClick={() => scrollTo('contact')}>
+            Schedule a Demo →
           </button>
         </div>
 
