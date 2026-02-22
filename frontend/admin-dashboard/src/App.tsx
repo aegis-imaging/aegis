@@ -3563,6 +3563,17 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {isAdmin && (
                       <div className="actions-cell">
                         <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="btn btn--action"
+                          title="Dispatch export forwarding for all approved studies in this project"
+                          onClick={async () => {
+                            const res = await fetch(`/api/projects/${p.id}/export-batch`, { method: 'POST' })
+                            const data = await res.json()
+                            alert(res.ok
+                              ? `Export batch dispatched: ${data.dispatched} ${data.dispatched === 1 ? 'study' : 'studies'}`
+                              : `Export batch failed: ${data.error}`)
+                          }}>
+                          Export Batch
+                        </button>
                       </div>
                     )}
                   </td>
