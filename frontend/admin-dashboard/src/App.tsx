@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
+type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
 
 type AuditEntry = {
   id: string
@@ -648,6 +648,160 @@ function AuditLog() {
                   </>
                 )
               })}
+            </tbody>
+          </table>
+          <div className="audit-pagination-bar audit-pagination-bar--bottom">
+            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
+            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Global Shares Panel ───────────────────────────────────────────────────────
+
+const SHARES_PAGE_SIZE = 50
+
+type ShareRecord = {
+  id: string
+  study_id: string
+  recipient_email: string
+  note: string
+  expires_at: string
+  created_by: string
+  revoked_at: string | null
+  created_at: string
+  status: string
+  expires_in_seconds: number
+}
+
+function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
+  const [shares, setShares] = useState<ShareRecord[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [page, setPage] = useState(0)
+  const [revoking, setRevoking] = useState<string | null>(null)
+
+  const fetchShares = useCallback(async (sf: string, pg: number) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({ limit: String(SHARES_PAGE_SIZE), offset: String(pg * SHARES_PAGE_SIZE) })
+      if (sf) params.set('status', sf)
+      const res = await fetch(`/api/shares?${params}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setShares(data.shares ?? [])
+      setTotal(data.total ?? 0)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load shares')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchShares(statusFilter, page) }, [fetchShares, statusFilter, page])
+
+  const setStatusF = (v: string) => { setStatusFilter(v); setPage(0) }
+
+  const revokeShare = async (id: string) => {
+    if (!window.confirm('Revoke this share link? Recipients will lose access immediately.')) return
+    setRevoking(id)
+    try {
+      const res = await fetch(`/api/shares/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      fetchShares(statusFilter, page)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to revoke share')
+    } finally {
+      setRevoking(null)
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / SHARES_PAGE_SIZE))
+
+  const statusBadge = (s: ShareRecord) => {
+    const cls = s.status === 'active' ? 'badge--approved' : s.status === 'revoked' ? 'badge--rejected' : 'badge--neutral'
+    return <span className={`badge ${cls}`}>{s.status}</span>
+  }
+
+  return (
+    <div>
+      <div className="audit-toolbar">
+        <div className="audit-filters">
+          <span className="audit-filter-label">Status:</span>
+          {(['', 'active', 'expired', 'revoked'] as const).map(s => (
+            <button
+              key={s || 'all'}
+              type="button"
+              className={`audit-filter-btn${statusFilter === s ? ' audit-filter-btn--active' : ''}`}
+              onClick={() => setStatusF(s)}
+            >
+              {s || 'All'}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
+      </div>
+
+      {loading && <div className="state-loading">Loading shares…</div>}
+      {error && <div className="state-error">{error}</div>}
+      {!loading && !error && shares.length === 0 && (
+        <div className="state-empty">No export shares found.</div>
+      )}
+
+      {!loading && !error && shares.length > 0 && (
+        <div className="audit-table-wrap">
+          <div className="audit-pagination-bar">
+            <span className="audit-total">{total} shares</span>
+            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
+            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
+          <table className="audit-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Recipient</th>
+                <th>Study ID</th>
+                <th>Created By</th>
+                <th>Expires</th>
+                <th>Created</th>
+                {isAdmin && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {shares.map(s => (
+                <tr key={s.id} className="audit-row">
+                  <td>{statusBadge(s)}</td>
+                  <td className="audit-actor">{s.recipient_email}</td>
+                  <td className="audit-resource-id">{uidShort(s.study_id)}</td>
+                  <td className="audit-actor">{s.created_by || '—'}</td>
+                  <td className="audit-time">{fmtDate(s.expires_at)}</td>
+                  <td className="audit-time">{fmtDate(s.created_at)}</td>
+                  {isAdmin && (
+                    <td>
+                      {s.status === 'active' ? (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-danger-text"
+                          disabled={revoking === s.id}
+                          onClick={() => revokeShare(s.id)}
+                        >
+                          {revoking === s.id ? 'Revoking…' : 'Revoke'}
+                        </button>
+                      ) : (
+                        <span className="audit-no-detail">—</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
           <div className="audit-pagination-bar audit-pagination-bar--bottom">
@@ -3654,6 +3808,13 @@ export function App() {
         </button>
         <button
           type="button"
+          className={`tab-btn${tab === 'shares' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('shares')}
+        >
+          Shares
+        </button>
+        <button
+          type="button"
           className={`tab-btn${tab === 'routing' ? ' tab-btn--active' : ''}`}
           onClick={() => setTab('routing')}
         >
@@ -3872,6 +4033,9 @@ export function App() {
 
       {/* Audit log tab */}
       {tab === 'audit' && <AuditLog />}
+
+      {/* Global shares tab */}
+      {tab === 'shares' && <GlobalSharesPanel isAdmin={isAdmin} />}
 
       {/* Routing tab */}
       {tab === 'routing' && <RoutingPanel isAdmin={isAdmin} />}

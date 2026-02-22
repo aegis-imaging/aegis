@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -79,4 +80,73 @@ func CreateExportDownload(ctx context.Context, db *sql.DB, shareID, ipAddress st
 	_, err := db.ExecContext(ctx,
 		`INSERT INTO export_downloads (share_id, client_ip) VALUES ($1, $2)`, shareID, ipAddress)
 	return err
+}
+
+// ShareStatusFilter constrains ListAllExportShares to a computed status bucket.
+// "active" = not revoked AND expires_at > now()
+// "expired" = not revoked AND expires_at <= now()
+// "revoked" = revoked_at IS NOT NULL
+// "" (empty) = no filter (all shares)
+type ShareStatusFilter string
+
+const (
+	ShareStatusActive  ShareStatusFilter = "active"
+	ShareStatusExpired ShareStatusFilter = "expired"
+	ShareStatusRevoked ShareStatusFilter = "revoked"
+)
+
+func shareStatusWhere(status ShareStatusFilter, n int) (string, []any) {
+	now := time.Now().UTC()
+	switch status {
+	case ShareStatusActive:
+		return fmt.Sprintf(" AND revoked_at IS NULL AND expires_at > $%d", n), []any{now}
+	case ShareStatusExpired:
+		return fmt.Sprintf(" AND revoked_at IS NULL AND expires_at <= $%d", n), []any{now}
+	case ShareStatusRevoked:
+		return " AND revoked_at IS NOT NULL", nil
+	default:
+		return "", nil
+	}
+}
+
+func CountAllExportShares(ctx context.Context, db *sql.DB, status ShareStatusFilter) (int, error) {
+	where, args := shareStatusWhere(status, 1)
+	var n int
+	err := db.QueryRowContext(ctx, `SELECT count(*) FROM export_shares WHERE 1=1`+where, args...).Scan(&n)
+	return n, err
+}
+
+func ListAllExportShares(ctx context.Context, db *sql.DB, status ShareStatusFilter, limit, offset int) ([]ExportShare, error) {
+	n := 1
+	where, args := shareStatusWhere(status, n)
+	if len(args) > 0 {
+		n++
+	}
+
+	query := `SELECT` + shareColumns + ` FROM export_shares WHERE 1=1` + where + ` ORDER BY created_at DESC`
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", n)
+		args = append(args, limit)
+		n++
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", n)
+		args = append(args, offset)
+	}
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var shares []ExportShare
+	for rows.Next() {
+		var s ExportShare
+		if err := scanShare(rows, &s); err != nil {
+			return nil, err
+		}
+		shares = append(shares, s)
+	}
+	return shares, rows.Err()
 }

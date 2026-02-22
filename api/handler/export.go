@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/email"
@@ -196,6 +197,51 @@ func resolveShareExpiry(req createShareRequest, nowUTC time.Time) (time.Time, er
 		expiryHours = 168 // 7 days
 	}
 	return nowUTC.Add(time.Duration(expiryHours) * time.Hour), nil
+}
+
+// ListAllShares returns all export shares across all studies with optional status filter and pagination.
+func (s *Server) ListAllShares(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	status := model.ShareStatusFilter(q.Get("status"))
+
+	total, err := model.CountAllExportShares(r.Context(), s.db, status)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to count shares")
+		return
+	}
+
+	shares, err := model.ListAllExportShares(r.Context(), s.db, status, limit, offset)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to list shares")
+		return
+	}
+	if shares == nil {
+		shares = []model.ExportShare{}
+	}
+
+	now := time.Now().UTC()
+	type allSharesResponse struct {
+		Shares []listShareResponse `json:"shares"`
+		Total  int                 `json:"total"`
+		Limit  int                 `json:"limit"`
+		Offset int                 `json:"offset"`
+	}
+	s.writeJSON(w, http.StatusOK, allSharesResponse{
+		Shares: buildListShareResponses(shares, now),
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
 
 // ListShares returns all export shares for a study.

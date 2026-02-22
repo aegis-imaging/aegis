@@ -63,6 +63,18 @@ test("AegisApiClient allows study lookup by UID path", async () => {
   assert.deepEqual(result, {});
 });
 
+test("AegisApiClient allows global shares path with and without query params", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+
+  const all = await client.get("/api/shares");
+  const active = await client.get("/api/shares?status=active&limit=50");
+
+  assert.deepEqual(all, {});
+  assert.deepEqual(active, {});
+});
+
 test.after(() => {
   globalThis.fetch = originalFetch;
 });
