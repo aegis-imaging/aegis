@@ -11,6 +11,7 @@ import (
 	"time"
 
 	gcsapi "cloud.google.com/go/storage"
+	iamcredentials "google.golang.org/api/iamcredentials/v1"
 	"google.golang.org/api/iterator"
 )
 
@@ -30,23 +31,45 @@ func NewGCS(ctx context.Context, bucket string) (*GCS, error) {
 	return &GCS{client: client, bucket: bucket}, nil
 }
 
-func (g *GCS) signingOptions(key, method string, expiry time.Duration) (*gcsapi.SignedURLOptions, error) {
+// signingOptions builds SignedURLOptions using either an explicit private key
+// (GCS_SIGNING_PRIVATE_KEY) or IAM-based signing (recommended on Cloud Run).
+// Only GCS_SIGNING_EMAIL is required; the private key is optional.
+func (g *GCS) signingOptions(ctx context.Context, method string, expiry time.Duration) (*gcsapi.SignedURLOptions, error) {
 	email := os.Getenv("GCS_SIGNING_EMAIL")
-	pk := parsePrivateKey(os.Getenv("GCS_SIGNING_PRIVATE_KEY"))
-	if email == "" || len(pk) == 0 {
-		return nil, errors.New("GCS signed URL configuration missing: set GCS_SIGNING_EMAIL and GCS_SIGNING_PRIVATE_KEY")
+	if email == "" {
+		return nil, errors.New("GCS_SIGNING_EMAIL is required for GCS signed URLs")
 	}
-	return &gcsapi.SignedURLOptions{
+	opts := &gcsapi.SignedURLOptions{
 		GoogleAccessID: email,
-		PrivateKey:     pk,
 		Method:         method,
 		Expires:        time.Now().Add(expiry),
 		Scheme:         gcsapi.SigningSchemeV4,
-	}, nil
+	}
+	if pk := parsePrivateKey(os.Getenv("GCS_SIGNING_PRIVATE_KEY")); len(pk) > 0 {
+		opts.PrivateKey = pk
+	} else {
+		// Fall back to IAM-based signing. The Cloud Run service account needs
+		// roles/iam.serviceAccountTokenCreator on itself.
+		opts.SignBytes = func(b []byte) ([]byte, error) {
+			svc, err := iamcredentials.NewService(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("iam credentials service: %w", err)
+			}
+			resource := "projects/-/serviceAccounts/" + email
+			resp, err := svc.Projects.ServiceAccounts.SignBlob(resource,
+				&iamcredentials.SignBlobRequest{Payload: base64.StdEncoding.EncodeToString(b)},
+			).Context(ctx).Do()
+			if err != nil {
+				return nil, fmt.Errorf("iam sign blob: %w", err)
+			}
+			return base64.StdEncoding.DecodeString(resp.SignedBlob)
+		}
+	}
+	return opts, nil
 }
 
-func (g *GCS) GenerateUploadURL(_ context.Context, key string, expiry time.Duration) (string, error) {
-	opts, err := g.signingOptions(key, "PUT", expiry)
+func (g *GCS) GenerateUploadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	opts, err := g.signingOptions(ctx, "PUT", expiry)
 	if err != nil {
 		return "", err
 	}
@@ -58,8 +81,8 @@ func (g *GCS) GenerateUploadURL(_ context.Context, key string, expiry time.Durat
 	return url, nil
 }
 
-func (g *GCS) GenerateDownloadURL(_ context.Context, key string, expiry time.Duration) (string, error) {
-	opts, err := g.signingOptions(key, "GET", expiry)
+func (g *GCS) GenerateDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	opts, err := g.signingOptions(ctx, "GET", expiry)
 	if err != nil {
 		return "", err
 	}

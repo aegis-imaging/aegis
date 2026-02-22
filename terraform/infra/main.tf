@@ -646,6 +646,13 @@ resource "google_secret_manager_secret_iam_member" "api_db_password_access" {
   member    = "serviceAccount:${google_service_account.api.email}"
 }
 
+# Allow the API service account to sign blobs as itself (for GCS signed URLs).
+resource "google_service_account_iam_member" "api_self_token_creator" {
+  service_account_id = google_service_account.api.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.api.email}"
+}
+
 # --- Cloud Run sidecars ---
 
 resource "google_cloud_run_v2_service" "sidecars" {
@@ -777,6 +784,10 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "GCS_BUCKET"
         value = google_storage_bucket.staging.name
+      }
+      env {
+        name  = "GCS_SIGNING_EMAIL"
+        value = google_service_account.api.email
       }
       env {
         name  = "DICOM_DATASET"
