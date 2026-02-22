@@ -3,6 +3,7 @@ package model_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/testutil"
@@ -145,6 +146,33 @@ func TestListStudies_ModalityFilter(t *testing.T) {
 	assert.Equal(t, "CT", studies[0].Modality)
 }
 
+func TestListStudies_BodyPartFilter(t *testing.T) {
+	db := testutil.TestDB(t)
+	proj := testutil.SeedProject(t, db)
+
+	// CreateTestStudy uses body_part=HEAD
+	testutil.CreateTestStudy(t, db, proj.ID)
+
+	// Create a CHEST study
+	chest := &model.Study{
+		ProjectID: proj.ID, StudyInstanceUID: "2.3.4.5.chest",
+		Modality: "CT", BodyPart: "CHEST", Status: "received", DicomStore: "raw", Source: "external",
+	}
+	require.NoError(t, model.CreateStudy(context.Background(), db, chest))
+
+	// Filter by HEAD (case-insensitive)
+	head, err := model.ListStudies(context.Background(), db, model.StudyFilters{BodyPart: "head"}, 50, 0)
+	require.NoError(t, err)
+	assert.Len(t, head, 1)
+	assert.Equal(t, "HEAD", head[0].BodyPart)
+
+	// Filter by CHEST
+	chestResults, err := model.ListStudies(context.Background(), db, model.StudyFilters{BodyPart: "CHEST"}, 50, 0)
+	require.NoError(t, err)
+	assert.Len(t, chestResults, 1)
+	assert.Equal(t, "CHEST", chestResults[0].BodyPart)
+}
+
 func TestListStudies_SearchFilter(t *testing.T) {
 	db := testutil.TestDB(t)
 	proj := testutil.SeedProject(t, db)
@@ -281,4 +309,34 @@ func countStudyFields(s *model.Study) int {
 		count++
 	}
 	return count
+}
+
+func TestListStudies_DateFilter(t *testing.T) {
+	db := testutil.TestDB(t)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+
+	now := time.Now().UTC()
+	past := now.Add(-24 * time.Hour)
+	future := now.Add(24 * time.Hour)
+
+	// DateFrom in the past — study should be included.
+	entries, err := model.ListStudies(context.Background(), db, model.StudyFilters{DateFrom: past}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+
+	// DateTo in the future — study should be included.
+	entries, err = model.ListStudies(context.Background(), db, model.StudyFilters{DateTo: future}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+
+	// DateFrom in the future — study is before the lower bound, should be excluded.
+	entries, err = model.ListStudies(context.Background(), db, model.StudyFilters{DateFrom: future}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, entries, 0)
+
+	// DateTo in the past — study is after the upper bound, should be excluded.
+	entries, err = model.ListStudies(context.Background(), db, model.StudyFilters{DateTo: past}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, entries, 0)
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
 )
@@ -28,12 +29,27 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		limit = 200
 	}
 
+	var dateFrom, dateTo time.Time
+	if v := q.Get("date_from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			dateFrom = t.UTC()
+		}
+	}
+	if v := q.Get("date_to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			dateTo = t.UTC()
+		}
+	}
+
 	f := model.StudyFilters{
 		ProjectID: q.Get("project_id"),
 		Status:    q.Get("status"),
 		Modality:  q.Get("modality"),
+		BodyPart:  q.Get("body_part"),
 		Source:    q.Get("source"),
 		Search:    q.Get("search"),
+		DateFrom:  dateFrom,
+		DateTo:    dateTo,
 	}
 
 	total, err := model.CountStudies(r.Context(), s.db, f)
@@ -63,6 +79,22 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 func (s *Server) GetStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	study, err := model.GetStudyByID(r.Context(), s.db, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, study)
+}
+
+// GetStudyByUID returns a single study by DICOM StudyInstanceUID.
+// Useful for integrations that only have the DICOM UID and not the DB UUID.
+func (s *Server) GetStudyByUID(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("studyUID")
+	study, err := model.GetStudyByUID(r.Context(), s.db, uid)
 	if errors.Is(err, sql.ErrNoRows) {
 		s.writeError(w, http.StatusNotFound, "study not found")
 		return

@@ -4,7 +4,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
+type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
 
 type AuditEntry = {
   id: string
@@ -489,21 +489,32 @@ const ACTION_GROUPS: Record<string, string> = {
   'deface.failed':    'deface-err',
 }
 
+const AUDIT_PAGE_SIZE = 100
+const AUDIT_CATEGORIES = ['study', 'admin_user', 'pipeline', 'phi_scan', 'qc_check', 'bids', 'classification', 'protocol_check', 'export', 'routing', 'institution', 'project', 'digest', 'destination']
+
 function AuditLog() {
   const [entries, setEntries] = useState<AuditEntry[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState('')
+  const [actionFilter, setActionFilter] = useState('')
+  const [actorFilter, setActorFilter] = useState('')
+  const [actorInput, setActorInput] = useState('')
+  const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const fetchAudit = useCallback(async () => {
+  const fetchAudit = useCallback(async (actionF: string, actorF: string, pg: number) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/audit?limit=200')
+      const params = new URLSearchParams({ limit: String(AUDIT_PAGE_SIZE), offset: String(pg * AUDIT_PAGE_SIZE) })
+      if (actionF) params.set('action', actionF)
+      if (actorF) params.set('actor', actorF)
+      const res = await fetch(`/api/audit?${params}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setEntries(data)
+      setEntries(data.entries ?? [])
+      setTotal(data.total ?? 0)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load audit log')
     } finally {
@@ -511,52 +522,81 @@ function AuditLog() {
     }
   }, [])
 
-  useEffect(() => { fetchAudit() }, [fetchAudit])
+  useEffect(() => { fetchAudit(actionFilter, actorFilter, page) }, [fetchAudit, actionFilter, actorFilter, page])
 
-  const filtered = filter
-    ? entries.filter(e => e.action.startsWith(filter))
-    : entries
+  const setCategory = (cat: string) => {
+    setActionFilter(cat)
+    setPage(0)
+    setExpandedId(null)
+  }
 
-  const uniqueActions = [...new Set(entries.map(e => e.action.split('.')[0]))].sort()
+  const applyActorFilter = () => {
+    setActorFilter(actorInput.trim())
+    setPage(0)
+    setExpandedId(null)
+  }
+
+  const clearActorFilter = () => {
+    setActorInput('')
+    setActorFilter('')
+    setPage(0)
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
 
   return (
     <div>
       <div className="audit-toolbar">
         <div className="audit-filters">
-          <span className="audit-filter-label">Filter by category:</span>
+          <span className="audit-filter-label">Category:</span>
           <button
             type="button"
-            className={`audit-filter-btn${filter === '' ? ' audit-filter-btn--active' : ''}`}
-            onClick={() => setFilter('')}
+            className={`audit-filter-btn${actionFilter === '' ? ' audit-filter-btn--active' : ''}`}
+            onClick={() => setCategory('')}
           >
-            All ({entries.length})
+            All
           </button>
-          {uniqueActions.map(prefix => {
-            const count = entries.filter(e => e.action.startsWith(prefix)).length
-            return (
-              <button
-                key={prefix}
-                type="button"
-                className={`audit-filter-btn${filter === prefix ? ' audit-filter-btn--active' : ''}`}
-                onClick={() => setFilter(prefix === filter.split('.')[0] && filter === prefix ? '' : prefix)}
-              >
-                {prefix} ({count})
-              </button>
-            )
-          })}
+          {AUDIT_CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              className={`audit-filter-btn${actionFilter === cat ? ' audit-filter-btn--active' : ''}`}
+              onClick={() => setCategory(cat === actionFilter ? '' : cat)}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
-        <button type="button" className="btn-refresh" onClick={fetchAudit}>Refresh</button>
+        <div className="audit-actor-filter">
+          <input
+            type="text"
+            placeholder="Filter by actor (email)…"
+            value={actorInput}
+            onChange={e => setActorInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && applyActorFilter()}
+            className="audit-actor-input"
+          />
+          <button type="button" className="btn-secondary" onClick={applyActorFilter}>Apply</button>
+          {actorFilter && <button type="button" className="btn-secondary" onClick={clearActorFilter}>Clear</button>}
+        </div>
+        <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, page)}>Refresh</button>
       </div>
 
       {loading && <div className="state-loading">Loading audit log…</div>}
       {error   && <div className="state-error">{error}</div>}
 
-      {!loading && !error && filtered.length === 0 && (
+      {!loading && !error && entries.length === 0 && (
         <div className="state-empty">No audit entries yet.</div>
       )}
 
-      {!loading && !error && filtered.length > 0 && (
+      {!loading && !error && entries.length > 0 && (
         <div className="audit-table-wrap">
+          <div className="audit-pagination-bar">
+            <span className="audit-total">{total} entries</span>
+            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
+            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
           <table className="audit-table">
             <thead>
               <tr>
@@ -569,7 +609,7 @@ function AuditLog() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(e => {
+              {entries.map(e => {
                 const group = ACTION_GROUPS[e.action] ?? 'neutral'
                 const hasDetail = e.detail && Object.keys(e.detail).length > 0
                 const isExpanded = expandedId === e.id
@@ -610,6 +650,165 @@ function AuditLog() {
               })}
             </tbody>
           </table>
+          <div className="audit-pagination-bar audit-pagination-bar--bottom">
+            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
+            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Global Shares Panel ───────────────────────────────────────────────────────
+
+const SHARES_PAGE_SIZE = 50
+
+type ShareRecord = {
+  id: string
+  study_id: string
+  recipient_email: string
+  note: string
+  expires_at: string
+  created_by: string
+  revoked_at: string | null
+  created_at: string
+  status: string
+  expires_in_seconds: number
+}
+
+function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
+  const [shares, setShares] = useState<ShareRecord[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [page, setPage] = useState(0)
+  const [revoking, setRevoking] = useState<string | null>(null)
+
+  const fetchShares = useCallback(async (sf: string, pg: number) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({ limit: String(SHARES_PAGE_SIZE), offset: String(pg * SHARES_PAGE_SIZE) })
+      if (sf) params.set('status', sf)
+      const res = await fetch(`/api/shares?${params}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setShares(data.shares ?? [])
+      setTotal(data.total ?? 0)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load shares')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchShares(statusFilter, page) }, [fetchShares, statusFilter, page])
+
+  const setStatusF = (v: string) => { setStatusFilter(v); setPage(0) }
+
+  const revokeShare = async (id: string) => {
+    if (!window.confirm('Revoke this share link? Recipients will lose access immediately.')) return
+    setRevoking(id)
+    try {
+      const res = await fetch(`/api/shares/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      fetchShares(statusFilter, page)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to revoke share')
+    } finally {
+      setRevoking(null)
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / SHARES_PAGE_SIZE))
+
+  const statusBadge = (s: ShareRecord) => {
+    const cls = s.status === 'active' ? 'badge--approved' : s.status === 'revoked' ? 'badge--rejected' : 'badge--neutral'
+    return <span className={`badge ${cls}`}>{s.status}</span>
+  }
+
+  return (
+    <div>
+      <div className="audit-toolbar">
+        <div className="audit-filters">
+          <span className="audit-filter-label">Status:</span>
+          {(['', 'active', 'expired', 'revoked'] as const).map(s => (
+            <button
+              key={s || 'all'}
+              type="button"
+              className={`audit-filter-btn${statusFilter === s ? ' audit-filter-btn--active' : ''}`}
+              onClick={() => setStatusF(s)}
+            >
+              {s || 'All'}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
+      </div>
+
+      {loading && <div className="state-loading">Loading shares…</div>}
+      {error && <div className="state-error">{error}</div>}
+      {!loading && !error && shares.length === 0 && (
+        <div className="state-empty">No export shares found.</div>
+      )}
+
+      {!loading && !error && shares.length > 0 && (
+        <div className="audit-table-wrap">
+          <div className="audit-pagination-bar">
+            <span className="audit-total">{total} shares</span>
+            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
+            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
+          <table className="audit-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Recipient</th>
+                <th>Study ID</th>
+                <th>Created By</th>
+                <th>Expires</th>
+                <th>Created</th>
+                {isAdmin && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {shares.map(s => (
+                <tr key={s.id} className="audit-row">
+                  <td>{statusBadge(s)}</td>
+                  <td className="audit-actor">{s.recipient_email}</td>
+                  <td className="audit-resource-id">{uidShort(s.study_id)}</td>
+                  <td className="audit-actor">{s.created_by || '—'}</td>
+                  <td className="audit-time">{fmtDate(s.expires_at)}</td>
+                  <td className="audit-time">{fmtDate(s.created_at)}</td>
+                  {isAdmin && (
+                    <td>
+                      {s.status === 'active' ? (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-danger-text"
+                          disabled={revoking === s.id}
+                          onClick={() => revokeShare(s.id)}
+                        >
+                          {revoking === s.id ? 'Revoking…' : 'Revoke'}
+                        </button>
+                      ) : (
+                        <span className="audit-no-detail">—</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="audit-pagination-bar audit-pagination-bar--bottom">
+            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
+            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
         </div>
       )}
     </div>
@@ -3472,9 +3671,12 @@ export function App() {
   // Filters
   const [filterStatus,   setFilterStatus]   = useState('')
   const [filterModality, setFilterModality] = useState('')
+  const [filterBodyPart, setFilterBodyPart] = useState('')
   const [filterSource,   setFilterSource]   = useState('')
   const [filterProject,  setFilterProject]  = useState('')
   const [filterSearch,   setFilterSearch]   = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo,   setFilterDateTo]   = useState('')
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -3491,9 +3693,12 @@ export function App() {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) })
     if (filterStatus)   params.set('status',     filterStatus)
     if (filterModality) params.set('modality',   filterModality)
+    if (filterBodyPart) params.set('body_part',  filterBodyPart)
     if (filterSource)   params.set('source',     filterSource)
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
+    if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
+    if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
 
     fetch(`/api/studies?${params}`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
@@ -3509,20 +3714,24 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterSource, filterProject, filterSearch, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterDateFrom, filterDateTo, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0) }
   function setModalityF(v: string) { setFilterModality(v); setPage(0) }
+  function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0) }
   function setSourceF(v: string)   { setFilterSource(v);   setPage(0) }
   function setProjectF(v: string)  { setFilterProject(v);  setPage(0) }
-  function setSearchF(v: string)   { setFilterSearch(v);   setPage(0) }
+  function setSearchF(v: string)    { setFilterSearch(v);    setPage(0) }
+  function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0) }
+  function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterSource || filterProject || filterSearch)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterDateFrom || filterDateTo)
 
   function clearFilters() {
-    setFilterStatus(''); setFilterModality(''); setFilterSource('')
-    setFilterProject(''); setFilterSearch(''); setPage(0)
+    setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
+    setFilterSource(''); setFilterProject(''); setFilterSearch('')
+    setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
   }
 
   const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
@@ -3596,6 +3805,13 @@ export function App() {
           onClick={() => setTab('audit')}
         >
           Audit Log
+        </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'shares' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('shares')}
+        >
+          Shares
         </button>
         <button
           type="button"
@@ -3699,6 +3915,17 @@ export function App() {
               <option value="NM">NM</option>
               <option value="PT">PT</option>
             </select>
+            <select className="filter-select" title="Filter by body part" value={filterBodyPart} onChange={e => setBodyPartF(e.target.value)}>
+              <option value="">All body parts</option>
+              <option value="HEAD">Head</option>
+              <option value="BRAIN">Brain</option>
+              <option value="CHEST">Chest</option>
+              <option value="ABDOMEN">Abdomen</option>
+              <option value="SPINE">Spine</option>
+              <option value="EXTREMITY">Extremity</option>
+              <option value="NECK">Neck</option>
+              <option value="PELVIS">Pelvis</option>
+            </select>
             <select className="filter-select" title="Filter by source" value={filterSource} onChange={e => setSourceF(e.target.value)}>
               <option value="">All sources</option>
               <option value="external">External</option>
@@ -3708,6 +3935,21 @@ export function App() {
               <option value="">All projects</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            <input
+              type="date"
+              className="filter-date"
+              title="Created on or after"
+              value={filterDateFrom}
+              onChange={e => setDateFromF(e.target.value)}
+            />
+            <span className="filter-date-sep">–</span>
+            <input
+              type="date"
+              className="filter-date"
+              title="Created on or before"
+              value={filterDateTo}
+              onChange={e => setDateToF(e.target.value)}
+            />
             {hasFilters && (
               <button type="button" className="btn btn--secondary" onClick={clearFilters}>Clear</button>
             )}
@@ -3791,6 +4033,9 @@ export function App() {
 
       {/* Audit log tab */}
       {tab === 'audit' && <AuditLog />}
+
+      {/* Global shares tab */}
+      {tab === 'shares' && <GlobalSharesPanel isAdmin={isAdmin} />}
 
       {/* Routing tab */}
       {tab === 'routing' && <RoutingPanel isAdmin={isAdmin} />}

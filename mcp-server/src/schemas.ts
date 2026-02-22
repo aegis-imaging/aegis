@@ -7,13 +7,21 @@ export const listStudiesArgsSchema = z.object({
   project_id: z.string().uuid().optional(),
   status: z.enum(["received", "defacing", "clean", "defaced", "approved", "rejected"]).optional(),
   modality: z.string().min(1).max(16).regex(/^[A-Za-z0-9_]+$/).optional(),
+  body_part: z.string().min(1).max(64).regex(/^[A-Za-z0-9_]+$/).optional(),
   source: z.enum(["external", "internal"]).optional(),
-  search: z.string().min(1).max(256).optional()
+  search: z.string().min(1).max(256).optional(),
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional()
 });
 
 export const studyIdArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   study_id: z.string().uuid()
+});
+
+export const studyUidArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_instance_uid: z.string().min(4).max(256).regex(/^[0-9.]+$/)
 });
 
 export const emptyArgsSchema = z.object({
@@ -39,6 +47,43 @@ export const dimseRetryStatusArgsSchema = z.object({
   study_instance_uid: z.string().min(4).max(256).regex(/^[0-9.]+$/).optional()
 });
 
+export const listAuditArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
+  offset: z.number().int().min(0).optional(),
+  action: z.string().min(1).max(128).regex(/^[a-z0-9_.]+$/).optional(),
+  resource_type: z.string().min(1).max(64).regex(/^[a-z0-9_]+$/).optional(),
+  actor: z.string().min(1).max(256).optional()
+});
+
+export const listAllSharesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+  offset: z.number().int().min(0).optional(),
+  status: z.enum(["active", "expired", "revoked"]).optional()
+});
+
+export const approveStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const rejectStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const revokeShareArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  share_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -47,7 +92,10 @@ export const readToolNames = [
   "get_study_routing_log",
   "list_export_shares",
   "get_system_health",
-  "get_dimse_retry_status"
+  "get_dimse_retry_status",
+  "get_audit_log",
+  "get_study_by_uid",
+  "list_all_shares"
 ] as const;
 
 export const writeToolNames = [
@@ -58,7 +106,10 @@ export const writeToolNames = [
   "trigger_bids_convert",
   "trigger_export",
   "trigger_deface",
-  "retry_dimse_study"
+  "retry_dimse_study",
+  "approve_study",
+  "reject_study",
+  "revoke_share"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

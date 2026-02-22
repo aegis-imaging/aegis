@@ -109,10 +109,13 @@ func GetStudyByUID(ctx context.Context, db *sql.DB, uid string) (*Study, error) 
 // StudyFilters holds optional filter values for ListStudies / CountStudies.
 type StudyFilters struct {
 	ProjectID string
-	Status    string // received|defacing|clean|defaced|approved|rejected
-	Modality  string // MRI|CT|PET|… (case-insensitive prefix match)
-	Source    string // external|internal
-	Search    string // substring match on study_instance_uid or study_description
+	Status    string    // received|defacing|clean|defaced|approved|rejected
+	Modality  string    // MRI|CT|PET|… (case-insensitive exact match)
+	BodyPart  string    // HEAD|CHEST|… (case-insensitive exact match)
+	Source    string    // external|internal
+	Search    string    // substring match on study_instance_uid or study_description
+	DateFrom  time.Time // created_at >= DateFrom (zero = no lower bound)
+	DateTo    time.Time // created_at <= DateTo   (zero = no upper bound)
 }
 
 func studyWhere(f StudyFilters) (string, []any) {
@@ -135,6 +138,11 @@ func studyWhere(f StudyFilters) (string, []any) {
 		args = append(args, f.Modality)
 		n++
 	}
+	if f.BodyPart != "" {
+		clauses = append(clauses, fmt.Sprintf(`upper(body_part) = upper($%d)`, n))
+		args = append(args, f.BodyPart)
+		n++
+	}
 	if f.Source != "" {
 		clauses = append(clauses, fmt.Sprintf(`source = $%d`, n))
 		args = append(args, f.Source)
@@ -144,6 +152,16 @@ func studyWhere(f StudyFilters) (string, []any) {
 		clauses = append(clauses, fmt.Sprintf(
 			`(study_instance_uid ILIKE $%d OR study_description ILIKE $%d)`, n, n))
 		args = append(args, "%"+f.Search+"%")
+		n++
+	}
+	if !f.DateFrom.IsZero() {
+		clauses = append(clauses, fmt.Sprintf(`created_at >= $%d`, n))
+		args = append(args, f.DateFrom.UTC())
+		n++
+	}
+	if !f.DateTo.IsZero() {
+		clauses = append(clauses, fmt.Sprintf(`created_at <= $%d`, n))
+		args = append(args, f.DateTo.UTC())
 		n++
 	}
 	_ = n
