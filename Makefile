@@ -75,6 +75,22 @@ test-race:
 check:
 	@curl -sf http://localhost:8080/healthz | python3 -m json.tool 2>/dev/null || echo "API: DOWN"
 
+# Seed the first admin user when the admin_users table is empty (dev mode).
+# In production, set FIRST_ADMIN_EMAIL env var on the API Cloud Run service instead.
+# Usage: make first-admin EMAIL=ops@example.com [NAME="AEGIS Ops"] [API_URL=http://localhost:8080]
+first-admin:
+	@if [ -z "$(EMAIL)" ]; then \
+		echo "usage: make first-admin EMAIL=ops@example.com [NAME='AEGIS Ops'] [API_URL=http://localhost:8080]"; \
+		exit 1; \
+	fi
+	@URL="$${API_URL:-http://localhost:8080}"; \
+	NAME_VAL="$${NAME:-$(EMAIL)}"; \
+	echo "Creating admin user $(EMAIL) at $$URL ..."; \
+	curl -sf -X POST "$$URL/api/admin-users" \
+		-H "Content-Type: application/json" \
+		-d "{\"email\":\"$(EMAIL)\",\"name\":\"$$NAME_VAL\",\"role\":\"admin\",\"enabled\":true}" \
+	| python3 -m json.tool 2>/dev/null || echo "(API returned non-JSON or error — check that AUTH_ENABLED=false)"
+
 smoke:
 	@if [ -z "$(BASE_URL)" ]; then \
 		echo "usage: make smoke BASE_URL=https://api-dev.aegisimaging.ai [ADMIN_HEADER='Header: value'] [IAP_EMAIL=user@example.com] [PROJECT_SLUG=default]"; \
