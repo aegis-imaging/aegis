@@ -66,6 +66,7 @@ services:
       PROTOCOL_SERVICE_URL: "http://protocol-service:8080"
       DIMSE_RECEIVER_URL: "http://dimse-receiver:8080"
       DIMSE_OPERATOR_API_KEY: "${DIMSE_OPERATOR_API_KEY:-}"
+      SYNTH_SERVICE_URL: "http://synth-service:8080"
     volumes:
       - aegis-data:/app/data
     depends_on:
@@ -209,6 +210,25 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  synth-service:
+    build:
+      context: ./synth-service
+      args:
+        INCLUDE_MONAI: "${INCLUDE_MONAI:-false}"
+    environment:
+      SYNTH_DATA_DIR: "/app/data"
+      SYNTH_USE_GPU: "${SYNTH_USE_GPU:-false}"
+      SYNTH_MAX_SLICES: "${SYNTH_MAX_SLICES:-200}"
+      SYNTH_MAX_SIZE: "${SYNTH_MAX_SIZE:-512}"
+    volumes:
+      - aegis-data:/app/data
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
       interval: 15s
