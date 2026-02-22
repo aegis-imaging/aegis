@@ -1,561 +1,739 @@
 #!/usr/bin/env python3
-"""Generate AEGIS architecture diagram as PNG."""
+"""
+Generate AEGIS architecture diagram.
 
-from PIL import Image, ImageDraw, ImageFont
+Outputs:
+  AEGIS_Architecture_Diagram.html  — always written (open in any browser)
+  AEGIS_Architecture_Diagram.pdf   — via Chrome headless (or weasyprint fallback)
+  AEGIS_Architecture_Diagram.png   — via Chrome headless screenshot
+
+Run: python3 scripts/generate_architecture_diagram.py
+"""
+
+import base64
 import os
+import subprocess
+import shutil
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 
-# ── Canvas ─────────────────────────────────────────────────────────────
-W, H = 3000, 2500
-img = Image.new("RGB", (W, H), "#F8FAFC")
-draw = ImageDraw.Draw(img)
+# ── Color palette ──────────────────────────────────────────────────────────────
+C = {
+    "go":     "#00ADD8",
+    "py":     "#3776AB",
+    "react":  "#0EA5E9",
+    "gcp":    "#4285F4",
+    "orange": "#EA580C",
+    "purple": "#7C3AED",
+    "amber":  "#D97706",
+    "cyan":   "#0891B2",
+    "red":    "#DC2626",
+    "green":  "#15803D",
+    "navy":   "#1D4ED8",
+    "slate":  "#374151",
+    "emerald":"#059669",
+}
 
 
-def font(size):
-    try:
-        return ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", size)
-    except Exception:
-        return ImageFont.truetype("/System/Library/Fonts/SFNSMono.ttf", size)
+# ── HTML helpers ───────────────────────────────────────────────────────────────
+
+def card(title, items, color):
+    """Service card: filled coloured header + bullet list body."""
+    lis = "".join(f"<li>{item}</li>" for item in items)
+    return (
+        f'<div class="card" style="--c:{C[color]}">'
+        f'<div class="card-hdr">{title}</div>'
+        f"<ul>{lis}</ul>"
+        f"</div>"
+    )
 
 
-TITLE  = font(38)
-H1     = font(24)
-H2     = font(20)
-BODY   = font(17)
-SMALL  = font(14)
-BOLD   = font(20)
-TINY   = font(12)
-
-# ── Color palette ──────────────────────────────────────────────────────
-C_BG          = "#F8FAFC"
-C_HOSP        = "#EFF6FF"
-C_GCP         = "#F0FDF4"
-C_WHITE       = "#FFFFFF"
-C_HOSP_BORDER = "#1D4ED8"
-C_GCP_BORDER  = "#15803D"
-C_GO          = "#00ADD8"
-C_PYTHON      = "#3776AB"
-C_REACT       = "#0EA5E9"
-C_GCP_SVC     = "#4285F4"
-C_ORANGE      = "#EA580C"
-C_PURPLE      = "#7C3AED"
-C_AMBER       = "#D97706"
-C_CYAN        = "#0891B2"
-C_RED         = "#DC2626"
-C_GREEN       = "#15803D"
-C_EMERALD     = "#059669"
-C_ARROW       = "#64748B"
-C_TEXT        = "#0F172A"
-C_MED         = "#334155"
-C_LIGHT       = "#64748B"
-C_RULE        = "#CBD5E1"
-M             = 75   # margin
+def info_box(title, sections, color, bg):
+    """Multi-section panel with coloured title (no filled bar)."""
+    body = ""
+    for heading, items in sections:
+        lis = "".join(f"<li>{item}</li>" for item in items)
+        body += f'<div class="ib-sec">{heading}</div><ul>{lis}</ul>'
+    return (
+        f'<div class="info-box" style="--c:{C[color]};background:{bg}">'
+        f'<div class="ib-title">{title}</div>'
+        f"{body}"
+        f"</div>"
+    )
 
 
-# ── Drawing helpers ────────────────────────────────────────────────────
-def rrect(xy, fill, outline, width=2, r=12):
-    draw.rounded_rectangle(xy, radius=r, fill=fill, outline=outline, width=width)
+def kv_table(rows):
+    """Key-value rows for tech stack / multi-cloud sections."""
+    html = ""
+    for key, val, color in rows:
+        html += (
+            f'<div class="kv">'
+            f'<span class="kv-k" style="color:{C[color]}">{key}</span>'
+            f'<span class="kv-v">{val}</span>'
+            f"</div>"
+        )
+    return html
 
 
-def arrow_down(x, y1, y2, label=None, c=None):
-    c = c or C_ARROW
-    draw.line([(x, y1), (x, y2 - 9)], fill=c, width=3)
-    draw.polygon([(x - 8, y2 - 14), (x + 8, y2 - 14), (x, y2)], fill=c)
-    if label:
-        tw = draw.textlength(label, font=TINY)
-        draw.text((x - tw / 2, (y1 + y2) // 2 - 9), label, fill=c, font=TINY)
+# ── CSS ────────────────────────────────────────────────────────────────────────
+
+CSS = """
+*  { box-sizing: border-box; margin: 0; padding: 0; }
+
+@page {
+  size: 500mm 345mm;   /* ~20" × 13.6" landscape */
+  margin: 5mm;
+}
+
+body {
+  font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #0F172A;
+  background: #F8FAFC;
+}
+
+.page {
+  width: 1875px;          /* matches 500mm @ 96 dpi exactly */
+  padding: 6px 10px 10px;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.hdr {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 7px;
+  border-bottom: 1.5px solid #CBD5E1;
+  margin-bottom: 7px;
+}
+.hdr img   { height: 58px; }
+.hdr-title { font-size: 24px; font-weight: 700; color: #0F172A; }
+.hdr-sub   { font-size: 13px; color: #64748B; margin-top: 2px; }
+
+/* ── Zone wrapper ────────────────────────────────────────────────────────── */
+.zone {
+  border-radius: 8px;
+  border: 1.5px solid #CBD5E1;
+  padding: 7px 9px;
+  margin-bottom: 6px;
+}
+.zone-hdr {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.zone-sub { font-size: 9.5px; color: #64748B; font-weight: normal; }
+
+.z-src  { background: #EFF6FF; border-color: #1D4ED8; }
+.z-src  .zone-hdr { color: #1D4ED8; }
+.z-gcp  { background: #F0FDF4; border-color: #15803D; }
+.z-gcp  .zone-hdr { color: #15803D; }
+.z-pipe { background: #EFF6FF; border-color: #1D4ED8; }
+.z-pipe .zone-hdr { color: #1D4ED8; }
+.z-ph   { background: #FAF5FF; border-color: #7C3AED; }
+.z-ph   .zone-hdr { color: #7C3AED; }
+.z-tech { background: #F8FAFC; border-color: #CBD5E1; }
+
+/* ── Service cards ───────────────────────────────────────────────────────── */
+.card {
+  border: 1.5px solid var(--c);
+  border-radius: 7px;
+  background: #fff;
+  overflow: hidden;          /* header bar stays clipped */
+  display: flex;
+  flex-direction: column;
+}
+.card-hdr {
+  background: var(--c);
+  color: #fff;
+  font-weight: 700;
+  font-size: 10.5px;
+  padding: 5px 10px;
+  flex-shrink: 0;
+}
+.card ul {
+  list-style: none;
+  padding: 6px 10px 7px;
+  flex: 1;
+}
+.card li {
+  font-size: 9px;
+  color: #334155;
+  padding: 1.5px 0;
+}
+.card li::before { content: "• "; color: var(--c); font-weight: 700; }
+
+/* ── Info boxes (no filled header) ──────────────────────────────────────── */
+.info-box {
+  border: 1.5px solid var(--c);
+  border-radius: 7px;
+  padding: 6px 9px 7px;
+  overflow: hidden;
+}
+.ib-title { font-size: 10.5px; font-weight: 700; color: var(--c); margin-bottom: 5px; }
+.ib-sec   { font-size: 9.5px;  font-weight: 700; color: var(--c); margin: 5px 0 2px; }
+.info-box ul  { list-style: none; }
+.info-box li  { font-size: 9px; color: #334155; padding: 1px 0; }
+.info-box li::before { content: "• "; color: var(--c); font-weight: 700; }
+
+/* ── LB bar ──────────────────────────────────────────────────────────────── */
+.lb-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+  background: #DBEAFE;
+  border: 1.5px solid #4285F4;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 9.5px;
+  color: #334155;
+  margin-bottom: 6px;
+}
+.lb-bar strong { color: #4285F4; font-size: 10px; font-weight: 700; margin-right: 6px; }
+.lb-bar span   { margin-right: 18px; }
+
+/* ── Grid helpers ────────────────────────────────────────────────────────── */
+.g2 { display: grid; grid-template-columns: 1fr 1fr;           gap: 7px; }
+.g3 { display: grid; grid-template-columns: repeat(3,1fr);     gap: 7px; }
+.g4 { display: grid; grid-template-columns: repeat(4,1fr);     gap: 7px; }
+.g5 { display: grid; grid-template-columns: repeat(5,1fr);     gap: 7px; }
+
+/* core: API(29%) | Dashboard(32%) | Infra(39%) */
+.core-grid {
+  display: grid;
+  grid-template-columns: 29fr 32fr 39fr;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+.infra-stack { display: flex; flex-direction: column; gap: 7px; }
+
+/* sidecars */
+.sidecar-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  color: #3776AB;
+  margin: 6px 0 4px;
+}
+/* row2: 3 cards same width as 1 of 4 in row1 */
+.row2 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  width: 75%;          /* ≈ 3/4 of parent so each card ≈ 1/4 */
+  margin-top: 6px;
+}
+
+/* ── Privacy callout ─────────────────────────────────────────────────────── */
+.privacy {
+  background: #FFF7ED;
+  border: 1.5px solid #EA580C;
+  border-radius: 7px;
+  padding: 7px 10px;
+}
+.privacy-title { font-size: 10.5px; font-weight: 700; color: #EA580C; margin-bottom: 4px; }
+.privacy-main  { font-size: 10px;   font-weight: 700; color: #0F172A; margin-bottom: 5px; }
+.privacy ul    { list-style: none; }
+.privacy li    { font-size: 9px; color: #334155; padding: 1.5px 0; }
+.privacy li::before { content: "• "; color: #EA580C; font-weight: 700; }
+
+/* ── Pipeline stages ─────────────────────────────────────────────────────── */
+.pipe-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-top: 5px;
+}
+.stage {
+  border-radius: 6px;
+  padding: 6px 6px 5px;
+  text-align: center;
+  background: var(--c);
+}
+.stage-name { font-size: 10px;  font-weight: 700; color: #fff; }
+.stage-desc { font-size: 8px;   color: rgba(255,255,255,.85); margin-top: 3px; }
+
+/* ── Phase cards ─────────────────────────────────────────────────────────── */
+.phase {
+  border: 1.5px solid var(--c);
+  border-radius: 7px;
+  background: #fff;
+  padding: 7px 9px;
+}
+.phase-title { font-size: 9.5px; font-weight: 700; color: var(--c); margin-bottom: 4px; }
+.phase-desc  { font-size: 8.5px; color: #334155; line-height: 1.4; }
+
+/* ── Tech / multi-cloud ──────────────────────────────────────────────────── */
+.kv-box { background: #fff; border: 1.5px solid #CBD5E1; border-radius: 7px; padding: 7px 10px; }
+.kv-box-title { font-size: 11px; font-weight: 700; color: #0F172A; margin-bottom: 6px; }
+.kv   { display: flex; gap: 8px; margin: 2.5px 0; font-size: 9px; }
+.kv-k { font-weight: 700; min-width: 80px; flex-shrink: 0; }
+.kv-v { color: #334155; }
+"""
 
 
-def arrow_right(x1, x2, y, label=None, c=None):
-    c = c or C_ARROW
-    draw.line([(x1, y), (x2 - 10, y)], fill=c, width=3)
-    draw.polygon([(x2 - 14, y - 8), (x2 - 14, y + 8), (x2, y)], fill=c)
-    if label:
-        draw.text(((x1 + x2) // 2 - 12, y - 20), label, fill=c, font=TINY)
+# ── Build HTML ─────────────────────────────────────────────────────────────────
 
+def build_html():
+    # Logo: embed as data URI so HTML is fully self-contained
+    logo_html = ""
+    logo_path = os.path.join(PROJECT_DIR, "AEGIS_Logo.png")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        logo_html = f'<img src="data:image/png;base64,{b64}">'
 
-def sbox(xy, title, items, accent, row_h=24):
-    """Service box with coloured header strip."""
-    x0, y0, x1, y1 = xy
-    rrect(xy, fill=C_WHITE, outline=accent, width=2)
-    draw.rounded_rectangle((x0, y0, x1, y0 + 40), radius=12, fill=accent, outline=accent)
-    draw.rectangle((x0 + 1, y0 + 28, x1 - 1, y0 + 40), fill=accent)
-    tw = draw.textlength(title, font=BOLD)
-    draw.text((x0 + (x1 - x0 - tw) / 2, y0 + 9), title, fill="#FFFFFF", font=BOLD)
-    for i, item in enumerate(items):
-        draw.text((x0 + 18, y0 + 52 + i * row_h), f"• {item}", fill=C_MED, font=SMALL)
+    # ── Sending sources ──────────────────────────────────────────────────────
+    upload = card("React Upload Portal  (PWA)", [
+        "Drag-and-drop: files, folders, DICOM directories",
+        "Client-side tag de-identification (DICOM PS3.15)",
+        "Anonymization preview — before / after tag diff",
+        "Multi-study detection with per-study upload cards",
+        "Per-project retained-tag anonymization profiles",
+        "Auto-retry: 3× exponential backoff per file",
+    ], "react")
 
+    dimse = card("DIMSE Receiver  (pynetdicom)", [
+        "C-STORE SCP listening on port 11112",
+        "Receives studies from PACS systems / scanners",
+        "Institution attribution (AE title or IP CIDR)",
+        "Calls POST /api/ingest on DICOM association close",
+        "Durable retry queue + dead-letter (disk-persistent)",
+        "Exponential backoff · operator control API",
+    ], "py")
 
-def info_box(xy, heading, items, accent, bg):
-    """Info panel with coloured heading (no filled header bar)."""
-    x0, y0, x1, y1 = xy
-    rrect(xy, fill=bg, outline=accent, width=2)
-    draw.text((x0 + 16, y0 + 12), heading, fill=accent, font=BOLD)
-    for i, item in enumerate(items):
-        draw.text((x0 + 16, y0 + 48 + i * 24), f"• {item}", fill=C_MED, font=SMALL)
+    privacy = """
+    <div class="privacy">
+      <div class="privacy-title">Key Privacy Principle</div>
+      <div class="privacy-main">PHI is stripped in the browser<br>BEFORE data leaves the hospital.</div>
+      <ul>
+        <li>Only tag-de-identified DICOM is transmitted</li>
+        <li>HIPAA Safe Harbor — 18 identifier types removed</li>
+        <li>Deterministic UID hashing + date shifting</li>
+        <li>Zero software install required at sending site</li>
+        <li>DIMSE path ingests raw files (internal-only path)</li>
+      </ul>
+    </div>"""
 
+    # ── Core GCP services ────────────────────────────────────────────────────
+    api = card("API Backend  (Go / Cloud Run)", [
+        "Upload orchestration (sessions, chunked PUT)",
+        "Study / project / institution management",
+        "Routing rules engine → auto-pipeline dispatch",
+        "DICOMweb proxy  (QIDO-RS + WADO-RS)",
+        "Export shares: token-auth, ZIP download",
+        "Email digest scheduler + SMTP relay",
+        "DIMSE retry control proxy",
+        "MCP tool backend + batch import CLI",
+        "distroless image — minimal CVE surface",
+    ], "go")
 
-# ══════════════════════════════════════════════════════════════════════
-# HEADER
-# ══════════════════════════════════════════════════════════════════════
-logo_path = os.path.join(PROJECT_DIR, "AEGIS_Logo.png")
-if os.path.exists(logo_path):
-    logo = Image.open(logo_path).convert("RGBA")
-    lh = 90
-    lw = int(lh * logo.width / logo.height)
-    logo = logo.resize((lw, lh), Image.LANCZOS)
-    lx, ly = W // 2 - 260, 8
-    img.paste(logo, (lx, ly), mask=logo.split()[3])
-    draw = ImageDraw.Draw(img)
-    tx = lx + lw + 18
-    draw.text((tx, 10), "AEGIS Architecture", fill=C_TEXT, font=TITLE)
-    draw.text((tx, 58), "Anonymization & Exchange Gateway for Imaging Studies", fill=C_LIGHT, font=H1)
-else:
-    draw.text((W // 2 - 240, 16), "AEGIS Architecture", fill=C_TEXT, font=TITLE)
-    draw.text((W // 2 - 310, 62), "Anonymization & Exchange Gateway for Imaging Studies", fill=C_LIGHT, font=H1)
+    dashboard = card("Admin Dashboard + OHIF  (React / Cloud Run)", [
+        "Behind Identity-Aware Proxy (IAP)",
+        "Study browser: filter, search, paginate, bulk ops",
+        "OHIF Viewer — before/after defacing side-by-side",
+        "7-stage pipeline visualization per study",
+        "RBAC: admin (write) + viewer (read-only)",
+        "Routing rules, institutions, anon profiles",
+        "Protocol templates, API keys, webhooks",
+        "Audit log + CSV export, share management",
+        "Federation peers, project lifecycle",
+    ], "cyan")
 
-draw.line([(M, 112), (W - M, 112)], fill=C_RULE, width=2)
+    sql = card("Cloud SQL  (PostgreSQL 15)", [
+        "Studies, projects, institutions, admin users",
+        "Routing rules, audit trail, export shares",
+        "Private IP · Secret Manager credentials",
+        "Point-in-time recovery (7-day retention)",
+    ], "amber")
 
+    gcs = card("Cloud Storage  (GCS)", [
+        "dicom/raw/{uid}/   — tag-de-identified",
+        "dicom/clean/{uid}/ — defaced + processed",
+        "bids/{uid}/        — NIfTI / BIDS output",
+        "Shared volume (Go API + all 8 sidecars)",
+    ], "gcp")
 
-# ══════════════════════════════════════════════════════════════════════
-# SENDING SOURCES
-# ══════════════════════════════════════════════════════════════════════
-SRC_Y0, SRC_Y1 = 124, 395
-rrect((M, SRC_Y0, W - M, SRC_Y1), fill=C_HOSP, outline=C_HOSP_BORDER, width=2)
-draw.text((M + 22, SRC_Y0 + 13), "SENDING SOURCES", fill=C_HOSP_BORDER, font=BOLD)
-draw.text((M + 240, SRC_Y0 + 15),
-          "External Browser Upload  ·  DICOM Network (DIMSE C-STORE)  ·  Programmatic Batch Ingest",
-          fill=C_LIGHT, font=BODY)
-
-inner = W - 2 * M - 40
-bw = (inner - 2 * 18) // 3
-bx = M + 20
-BY0, BY1 = SRC_Y0 + 52, SRC_Y1 - 16
-
-sbox((bx, BY0, bx + bw, BY1), "React Upload Portal  (PWA)", [
-    "Drag-and-drop: files, folders, DICOM dirs",
-    "Client-side tag de-identification (PS3.15)",
-    "Anonymization preview — before/after diff",
-    "Multi-study detection with per-study cards",
-    "Per-project retained-tag profiles",
-    "Auto-retry: 3× exponential backoff",
-], C_REACT)
-bx += bw + 18
-
-sbox((bx, BY0, bx + bw, BY1), "DIMSE Receiver  (pynetdicom)", [
-    "C-STORE SCP on port 11112",
-    "Receives studies from PACS / scanners",
-    "Institution attribution (AE title / IP range)",
-    "POST /api/ingest on DICOM association close",
-    "Durable retry queue + dead-letter state",
-    "Exponential backoff, operator control API",
-], C_PYTHON)
-bx += bw + 18
-
-rrect((bx, BY0, bx + bw, BY1), fill="#FFF7ED", outline=C_ORANGE, width=2)
-draw.text((bx + 18, BY0 + 12), "Key Privacy Principle", fill=C_ORANGE, font=BOLD)
-draw.text((bx + 18, BY0 + 46), "PHI is stripped in the browser", fill=C_TEXT, font=BODY)
-draw.text((bx + 18, BY0 + 70), "BEFORE data leaves the hospital.", fill=C_TEXT, font=BODY)
-for i, t in enumerate([
-    "• Only tag-de-identified DICOM is transmitted",
-    "• HIPAA Safe Harbor: 18 identifier types removed",
-    "• Deterministic UID hashing + date shifting",
-    "• No software install required at sending site",
-    "• DIMSE path ingests raw files (internal only)",
-]):
-    draw.text((bx + 18, BY0 + 112 + i * 28), t, fill=C_MED, font=SMALL)
-
-
-# ══════════════════════════════════════════════════════════════════════
-# GCP PROJECT
-# ══════════════════════════════════════════════════════════════════════
-arrow_down(W // 2, SRC_Y1, SRC_Y1 + 48, "HTTPS (TLS 1.2+)  ·  DICOM C-STORE (11112)")
-
-GCP_Y0, GCP_Y1 = SRC_Y1 + 48, 1930
-rrect((M, GCP_Y0, W - M, GCP_Y1), fill=C_GCP, outline=C_GCP_BORDER, width=2)
-draw.text((M + 22, GCP_Y0 + 12), "GCP PROJECT", fill=C_GCP_BORDER, font=BOLD)
-draw.text((M + 186, GCP_Y0 + 14),
-          "aegis-prod-488120  ·  us-central1  ·  Live, February 2026",
-          fill=C_LIGHT, font=BODY)
-
-# ── Cloud Armor / LB bar ──────────────────────────────────────────────
-LB_Y = GCP_Y0 + 52
-rrect((M + 20, LB_Y, W - M - 20, LB_Y + 50), fill="#DBEAFE", outline=C_GCP_SVC, width=2)
-draw.text((M + 40, LB_Y + 11), "Cloud Armor  (DDoS / WAF)", fill=C_GCP_SVC, font=BOLD)
-for col, txt in [
-    (340, "+ Global HTTPS Load Balancer"),
-    (660, "+ Identity-Aware Proxy (admin routes)"),
-    (1070, "+ Managed SSL cert v3  (api · admin · aegisimaging.ai · www)"),
-    (1670, "+ Cloud Run  (API · Dashboard · Landing · 8 sidecars)"),
-]:
-    draw.text((M + col, LB_Y + 14), txt, fill=C_MED, font=BODY)
-
-# ── Core services ─────────────────────────────────────────────────────
-arrow_down(W // 2, LB_Y + 50, LB_Y + 92)
-CORE_Y0 = LB_Y + 92
-CORE_Y1 = CORE_Y0 + 330
-IX0, IX1 = M + 20, W - M - 20       # inner left/right
-IW = IX1 - IX0                       # 2830
-
-API_W  = int(IW * 0.295)             # ~835
-DASH_W = int(IW * 0.305)             # ~864
-INFRA_W = IW - API_W - DASH_W - 36  # ~1095, split into SQL+GCS
-
-sbox((IX0, CORE_Y0, IX0 + API_W, CORE_Y1), "API Backend  (Go / Cloud Run)", [
-    "Upload orchestration (sessions, chunked PUT)",
-    "Study / project / institution management",
-    "Routing rules engine → auto-pipeline dispatch",
-    "DICOMweb proxy (QIDO-RS + WADO-RS)",
-    "Export shares: token-auth, ZIP download",
-    "Email digest scheduler + SMTP relay",
-    "DIMSE retry control proxy",
-    "MCP tool backend, bulk import CLI",
-    "distroless image — minimal CVE surface",
-], C_GO)
-
-sbox((IX0 + API_W + 18, CORE_Y0, IX0 + API_W + 18 + DASH_W, CORE_Y1),
-     "Admin Dashboard + OHIF  (React / Cloud Run)", [
-    "Behind Identity-Aware Proxy (IAP)",
-    "Study browser: filter, search, paginate, bulk ops",
-    "OHIF Viewer — before/after defacing review",
-    "7-stage pipeline visualization per study",
-    "RBAC: admin (write) + viewer (read-only)",
-    "Routing rules, institutions, anon profiles",
-    "Protocol templates, API keys, webhooks",
-    "Audit log + CSV export, share management",
-    "Federation peers, project lifecycle",
-], C_CYAN)
-
-# SQL + GCS stacked on the right
-INFRA_X = IX0 + API_W + 18 + DASH_W + 18
-SQL_H = 148
-sbox((INFRA_X, CORE_Y0, INFRA_X + INFRA_W, CORE_Y0 + SQL_H), "Cloud SQL  (PostgreSQL 15)", [
-    "Studies, projects, institutions, admin users",
-    "Routing rules, audit trail, export shares",
-    "Private IP · Secret Manager credentials",
-    "Point-in-time recovery (7-day retention)",
-], C_AMBER)
-
-GCS_Y0 = CORE_Y0 + SQL_H + 14
-sbox((INFRA_X, GCS_Y0, INFRA_X + INFRA_W, CORE_Y1), "Cloud Storage  (GCS)", [
-    "dicom/raw/{uid}/   — tag-de-identified",
-    "dicom/clean/{uid}/ — defaced + processed",
-    "bids/{uid}/        — NIfTI / BIDS output",
-    "Shared volume (Go API + all 8 sidecars)",
-], C_GCP_SVC)
-
-# Connector arrows
-arrow_right(IX0 + API_W, IX0 + API_W + 18, CORE_Y0 + 165)
-arrow_right(IX0 + API_W + 18 + DASH_W, INFRA_X, CORE_Y0 + 80, "SQL")
-arrow_right(IX0 + API_W + 18 + DASH_W, INFRA_X, GCS_Y0 + 70, "GCS")
-
-# ── Processing Sidecars ───────────────────────────────────────────────
-SIDE_LABEL_Y = CORE_Y1 + 22
-draw.text((IX0, SIDE_LABEL_Y),
-          "Processing Sidecars  (Python / Cloud Run)  —  dispatched async by Go API, runs hands-free via routing rules",
-          fill=C_PYTHON, font=BOLD)
-arrow_down(IX0 + API_W // 2, CORE_Y1, SIDE_LABEL_Y + 2, c=C_PYTHON)
-
-# Row 1: 4 sidecars
-R1_Y0 = SIDE_LABEL_Y + 34
-SVC_H  = 220
-SVC_W  = (IW - 3 * 14) // 4   # ~697
-SVC_G  = 14
-
-row1 = [
-    ("Defacing  (Python)", [
-        "Head MRI/PET/CT — facial feature removal",
-        "mri_reface / DeepDefacer / mri_deface",
-        "nibabel fallback (dev / test only)",
-        "dcm2niix — DICOM → NIfTI pre-process",
+    # ── Processing sidecars row 1 ────────────────────────────────────────────
+    sc_deface = card("Defacing  (Python)", [
+        "Head MRI / PET / CT — facial feature removal",
+        "mri_reface / DeepDefacer / mri_deface backends",
+        "nibabel fallback for dev / testing only",
         "Writes defaced DICOM to clean/ store",
-        "Defacing QA score (SSIM similarity)",
-    ], C_PYTHON),
-    ("PHI Detection  (Python)", [
+        "SSIM-based QA score per study",
+    ], "py")
+
+    sc_phi = card("PHI Detection  (Python)", [
         "Burned-in text OCR on DICOM pixel data",
         "Tesseract (local) / Cloud Vision / Textract",
-        "Per-file findings with confidence score",
-        "Per-project threshold configuration",
+        "Per-file findings with confidence scores",
+        "Per-project confidence threshold config",
         "Informational — non-blocking to pipeline",
-        "Sets phi_scan_status: clean | flagged",
-    ], C_PYTHON),
-    ("QC Automation  (Python)", [
+    ], "py")
+
+    sc_qc = card("QC Automation  (Python)", [
         "File integrity + required DICOM tag check",
-        "Slice consistency (rows/cols/pixel spacing)",
+        "Slice consistency (rows / cols / pixel spacing)",
         "SNR estimation (signal mean / corner noise)",
         "Coverage completeness by body part",
         "Missing slice gap detection",
-        "Sets qc_status: pass | warn | fail",
-    ], C_PYTHON),
-    ("Classification  (Python)", [
+    ], "py")
+
+    sc_cls = card("Classification  (Python)", [
         "Fills modality + body_part from DICOM headers",
-        "Heuristic: tags → SOP UID → series desc",
+        "Heuristic: tags → SOP UID → series description",
         "Cloud Vision / Rekognition image fallback",
         "Re-evaluates routing rules after classify",
         "Confidence threshold gating (≥ 0.5)",
-        "Sets classification_status: classified",
-    ], C_PYTHON),
-]
+    ], "py")
 
-sx = IX0
-for title, items, accent in row1:
-    sbox((sx, R1_Y0, sx + SVC_W, R1_Y0 + SVC_H), title, items, accent)
-    sx += SVC_W + SVC_G
-
-# Row 2: 3 sidecars — centred
-R2_Y0 = R1_Y0 + SVC_H + 16
-row2 = [
-    ("BIDS Conversion  (Python)", [
+    # ── Processing sidecars row 2 ────────────────────────────────────────────
+    sc_bids = card("BIDS Conversion  (Python)", [
         "DICOM → NIfTI via dcm2niix",
         "BIDS-compliant directory structure",
         "sub-{hash8}/anat | func | dwi | perf | pet/",
         "JSON sidecar metadata per series",
-        "Privacy: UID-hashed subject label",
+        "Privacy: UID-hashed subject labels",
         "ZIP download via Go API",
-    ], C_PYTHON),
-    ("Protocol Check  (Python)", [
+    ], "py")
+
+    sc_proto = card("Protocol Check  (Python)", [
         "Verifies TR / TE / flip / thickness vs template",
         "Classic + Enhanced DICOM (multi-frame)",
         "Per-project protocol templates with CRUD",
         "numeric / exact / range / contains_all match",
         "critical / warning / info severity levels",
-        "Sets protocol_status: compliant | deviations",
-    ], C_PYTHON),
-    ("Synth MRI  (Python)  ★ new", [
+    ], "py")
+
+    sc_synth = card("Synth MRI  (Python)  ★", [
         "Synthetic brain MRI generation",
         "CPU: Shepp-Logan phantom (numpy + pydicom)",
-        "GPU: MONAI BraTS LDM  (INCLUDE_MONAI=true)",
+        "GPU: MONAI BraTS LDM (INCLUDE_MONAI=true)",
         "T1w contrast, Rician noise, face anatomy",
         "Seeded + reproducible, 20 – 200 slices",
         "Imports via normal pipeline (auto-dispatch)",
-    ], C_PYTHON),
-]
+    ], "py")
 
-row2_w = len(row2) * SVC_W + (len(row2) - 1) * SVC_G
-row2_x = IX0 + (IW - row2_w) // 2
-sx = row2_x
-for title, items, accent in row2:
-    sbox((sx, R2_Y0, sx + SVC_W, R2_Y0 + SVC_H), title, items, accent)
-    sx += SVC_W + SVC_G
+    # ── Secondary info boxes ─────────────────────────────────────────────────
+    security = info_box("Security Layers", [
+        ("", [
+            "VPC private subnets + Cloud NAT",
+            "Cloud Armor DDoS / WAF",
+            "TLS 1.2+ on all endpoints",
+            "CMEK (Cloud KMS)",
+            "IAM least privilege",
+            "Secret Manager (DB creds, API keys)",
+            "Cloud Audit Logs",
+            "Artifact Registry vuln scanning",
+            "distroless containers (Go API)",
+            "IAP on all admin routes",
+            "No PHI in email / audit entries",
+        ]),
+    ], "red", "#FFF1F2")
 
-# ── Secondary info boxes ──────────────────────────────────────────────
-SEC_Y0 = R2_Y0 + SVC_H + 22
-SEC_Y1 = GCP_Y1 - 22
-SEC_W  = (IW - 3 * 18) // 4
+    export = info_box("Export &amp; Sharing", [
+        ("Export Portal  (React / public SPA)", [
+            "Token-authenticated share links",
+            "Study info, expiry countdown (server-anchored)",
+            "ZIP download of approved DICOM files",
+        ]),
+        ("DICOM Forwarding  (route_to)", [
+            "DICOMweb STOW-RS destinations",
+            "DIMSE C-STORE to remote AE Title",
+            "Auto-forwards on study approval",
+        ]),
+        ("Share Lifecycle", [
+            "Extend / revoke anytime",
+            "Immutable download log per share",
+            "Export analytics dashboard",
+        ]),
+    ], "green", "#F0FDF4")
 
-sx = IX0
+    mcp = info_box("MCP Server + AI Agent Tools", [
+        ("Model Context Protocol  (Claude)", [
+            "17 read tools: studies, audit, stats, health",
+            "13 write tools (confirm:true + reason required)",
+            "Zod-validated schemas — read-safe by default",
+            "DIMSE retry proxy: process, replay, dead-letter",
+        ]),
+        ("Batch Import + Webhooks + API Keys", [
+            "aegis-import CLI — bulk historical migration",
+            "5 webhook events, HMAC-SHA256 signed payloads",
+            "Machine-to-machine bearer tokens (hashed)",
+        ]),
+    ], "purple", "#F5F3FF")
 
-# Security
-info_box((sx, SEC_Y0, sx + SEC_W, SEC_Y1), "Security Layers", [
-    "VPC private subnets + Cloud NAT",
-    "Cloud Armor DDoS / WAF",
-    "TLS 1.2+ on all endpoints",
-    "CMEK (Cloud KMS)",
-    "IAM least privilege",
-    "Secret Manager (DB creds, keys)",
-    "Cloud Audit Logs",
-    "Artifact Registry vuln scanning",
-    "distroless containers (Go API)",
-    "IAP on all admin routes",
-    "No PHI in email / audit entries",
-], C_RED, "#FFF1F2")
-sx += SEC_W + 18
+    landing = card("Landing Page  (nginx / Cloud Run)", [
+        "aegisimaging.ai — public marketing site",
+        "React + Vite built, served by nginx",
+        "Interactive synthetic DICOM demo widget",
+        "Schedule Demo / Contact form",
+        "Market opportunity: $45B imaging market",
+        "LB default backend — no IAP required",
+        "www + apex domains on SSL cert v3",
+    ], "react")
 
-# Export & Sharing
-rrect((sx, SEC_Y0, sx + SEC_W, SEC_Y1), fill="#F0FDF4", outline=C_GCP_BORDER, width=2)
-draw.text((sx + 16, SEC_Y0 + 12), "Export & Sharing", fill=C_GCP_BORDER, font=BOLD)
-sections = [
-    ("Export Portal  (React / public SPA)", [
-        "Token-authenticated share links",
-        "Study info, expiry countdown",
-        "ZIP download of approved DICOM",
-    ]),
-    ("DICOM Forwarding  (route_to)", [
-        "DICOMweb STOW-RS destinations",
-        "DIMSE C-STORE to remote AE Title",
-        "Auto-forwards on study approval",
-    ]),
-    ("Share Lifecycle", [
-        "Extend / revoke anytime",
-        "Immutable download log per share",
-        "Export analytics dashboard",
-    ]),
-]
-for i, (h, ls) in enumerate(sections):
-    draw.text((sx + 16, SEC_Y0 + 52 + i * 80), h, fill=C_GCP_BORDER, font=BODY)
-    for j, l in enumerate(ls):
-        draw.text((sx + 16, SEC_Y0 + 76 + i * 80 + j * 24), f"• {l}", fill=C_MED, font=SMALL)
-sx += SEC_W + 18
+    # ── Pipeline stages ──────────────────────────────────────────────────────
+    stages = [
+        ("1. Classify",   "#6D28D9", "fills modality<br>body_part"),
+        ("2. PHI Scan",   "#DC2626", "OCR pixels<br>flag burned-in text"),
+        ("3. Protocol",   "#C2410C", "TR / TE / flip<br>vs template"),
+        ("4. Deface",     "#1D4ED8", "remove face<br>head imaging only"),
+        ("5. QC Check",   "#166534", "SNR · coverage<br>slice consistency"),
+        ("6. BIDS",       "#065F46", "NIfTI + sidecar<br>BIDS structure"),
+        ("7. Export Fwd", "#374151", "STOW-RS or<br>DIMSE forward"),
+    ]
+    pipe_html = "\n".join(
+        f'<div class="stage" style="--c:{c}">'
+        f'<div class="stage-name">{n}</div>'
+        f'<div class="stage-desc">{d}</div>'
+        f"</div>"
+        for n, c, d in stages
+    )
 
-# MCP Server
-rrect((sx, SEC_Y0, sx + SEC_W, SEC_Y1), fill="#F5F3FF", outline=C_PURPLE, width=2)
-draw.text((sx + 16, SEC_Y0 + 12), "MCP Server + Operator Tooling", fill=C_PURPLE, font=BOLD)
-mcp_sections = [
-    ("Model Context Protocol  (Claude tools)", [
-        "17 read tools: studies, audit, stats, health",
-        "13 write tools (confirm:true + reason)",
-        "Zod-validated — read-safe by default",
-    ]),
-    ("Batch Import CLI  (aegis-import)", [
-        "Bulk DICOM migration from local dir",
-        "Institution provenance, dry-run mode",
-        "POST /api/import/batch endpoint",
-    ]),
-    ("Webhooks + API Keys", [
-        "5 events: HMAC-SHA256 signed payloads",
-        "Machine-to-machine bearer tokens",
-        "Delivery log per subscription",
-    ]),
-]
-for i, (h, ls) in enumerate(mcp_sections):
-    draw.text((sx + 16, SEC_Y0 + 52 + i * 80), h, fill=C_PURPLE, font=BODY)
-    for j, l in enumerate(ls):
-        draw.text((sx + 16, SEC_Y0 + 76 + i * 80 + j * 24), f"• {l}", fill=C_MED, font=SMALL)
-sx += SEC_W + 18
+    # ── Phases ───────────────────────────────────────────────────────────────
+    phases = [
+        ("Phase 1: Foundation  ✓",
+         "Terraform (GCP + AWS) · Go API · Upload Portal · Admin Dashboard · PostgreSQL · CI/CD",
+         "#15803D"),
+        ("Phase 2: Processing  ✓",
+         "Defacing · PHI Detection · QC · BIDS · Classification · Protocol · DIMSE Receiver",
+         "#1D4ED8"),
+        ("Phase 3: Operations  ✓",
+         "Routing rules · Institutions · Audit · Export Portal · Shares · Email · MCP Server",
+         "#D97706"),
+        ("Phase 4: Production  ✓",
+         "GCP live (aegis-prod) · Landing Page · Batch import · Synth MRI sidecar (8th) · RBAC",
+         "#7C3AED"),
+        ("Phase 5: Enterprise  🚧",
+         "AEGIS AI Agent · Observability dashboard · Multi-tenant federation · Repo split",
+         "#DC2626"),
+    ]
+    phases_html = "\n".join(
+        f'<div class="phase" style="--c:{c}">'
+        f'<div class="phase-title">{t}</div>'
+        f'<div class="phase-desc">{d}</div>'
+        f"</div>"
+        for t, d, c in phases
+    )
 
-# Landing Page
-sbox((sx, SEC_Y0, sx + SEC_W, SEC_Y1), "Landing Page  (nginx / Cloud Run)", [
-    "aegisimaging.ai — public marketing site",
-    "React + Vite built, served by nginx",
-    "Interactive synthetic DICOM demo widget",
-    "Schedule Demo / Contact form",
-    "Market opportunity: $45B imaging market",
-    "LB default backend — no IAP",
-    "www + apex covered by SSL cert v3",
-], C_REACT)
+    # ── Tech stack ───────────────────────────────────────────────────────────
+    deps = [
+        ("Go:",       "suyashkumar/dicom · pgx · testcontainers-go · testify",          "go"),
+        ("Browser:",  "dcmjs · dicomParser · OHIF Viewer (MIT) · React 19 · Vite",      "react"),
+        ("Defacing:", "mri_reface · DeepDefacer · mri_deface · dcm2niix · nibabel",     "py"),
+        ("PHI/OCR:",  "pytesseract · Google Cloud Vision · AWS Textract · Pillow",      "py"),
+        ("QC/BIDS:",  "pydicom · numpy · dcm2niix · pynetdicom (C-STORE SCP)",          "py"),
+        ("Synth:",    "numpy · pydicom · MONAI Generative · torch · huggingface-hub",   "py"),
+        ("Infra:",    "Terraform Google + AWS providers · Docker distroless/slim",       "slate"),
+    ]
+
+    mcols = [
+        ("GCP:",     "Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · KMS · Pub/Sub",   "gcp"),
+        ("AWS:",     "ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager",    "orange"),
+        ("Local:",   "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem",        "slate"),
+        ("Auth:",    "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth",     "orange"),
+        ("Storage:", "STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes",    "go"),
+        ("CI:",      "Go tests (273+) · Python tests (244+) · TS typecheck · Docker (9)", "green"),
+        ("Domains:", "aegisimaging.ai · www · api · admin  —  SSL cert v3",               "py"),
+    ]
+
+    # ── Assemble ─────────────────────────────────────────────────────────────
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AEGIS Architecture</title>
+<style>{CSS}</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    {logo_html}
+    <div>
+      <div class="hdr-title">AEGIS Architecture</div>
+      <div class="hdr-sub">Anonymization &amp; Exchange Gateway for Imaging Studies</div>
+    </div>
+  </div>
+
+  <!-- SENDING SOURCES -->
+  <div class="zone z-src">
+    <div class="zone-hdr">
+      SENDING SOURCES
+      <span class="zone-sub">External Browser Upload &nbsp;·&nbsp; DICOM Network (C-STORE SCP, port 11112) &nbsp;·&nbsp; Programmatic Batch Ingest</span>
+    </div>
+    <div class="g3">
+      {upload}
+      {dimse}
+      {privacy}
+    </div>
+  </div>
+
+  <!-- GCP PROJECT -->
+  <div class="zone z-gcp">
+    <div class="zone-hdr">
+      GCP PROJECT
+      <span class="zone-sub">aegis-prod-488120 &nbsp;·&nbsp; us-central1 &nbsp;·&nbsp; Live, February 2026</span>
+    </div>
+
+    <!-- Cloud Armor / LB -->
+    <div class="lb-bar">
+      <strong>Cloud Armor (DDoS / WAF)</strong>
+      <span>+ Global HTTPS Load Balancer</span>
+      <span>+ Identity-Aware Proxy (admin routes)</span>
+      <span>+ Managed SSL cert v3 &nbsp;(api · admin · aegisimaging.ai · www)</span>
+      <span>+ Cloud Run &nbsp;(API · Dashboard · Landing · 8 sidecars)</span>
+    </div>
+
+    <!-- Core services -->
+    <div class="core-grid">
+      {api}
+      {dashboard}
+      <div class="infra-stack">
+        {sql}
+        {gcs}
+      </div>
+    </div>
+
+    <!-- Processing sidecars -->
+    <div class="sidecar-lbl">Processing Sidecars &nbsp;(Python / Cloud Run) &nbsp;— dispatched async by Go API, runs hands-free via routing rules</div>
+    <div class="g4">{sc_deface}{sc_phi}{sc_qc}{sc_cls}</div>
+    <div class="row2">{sc_bids}{sc_proto}{sc_synth}</div>
+
+    <!-- Security / Export / MCP / Landing -->
+    <div class="g4" style="margin-top:6px">
+      {security}
+      {export}
+      {mcp}
+      {landing}
+    </div>
+  </div>
+
+  <!-- PIPELINE -->
+  <div class="zone z-pipe">
+    <div class="zone-hdr">
+      Automated Processing Pipeline
+      <span class="zone-sub">routing rules define which steps are required → pipeline dispatches each step in dependency order, hands-free</span>
+    </div>
+    <div class="pipe-row">{pipe_html}</div>
+  </div>
+
+  <!-- PHASES -->
+  <div class="zone z-ph">
+    <div class="zone-hdr">Implementation Phases</div>
+    <div class="g5">{phases_html}</div>
+  </div>
+
+  <!-- TECH STACK + MULTI-CLOUD -->
+  <div class="zone z-tech">
+    <div class="g2">
+      <div class="kv-box">
+        <div class="kv-box-title">Key Open-Source Dependencies</div>
+        {kv_table([(k, v, c) for k, v, c in deps])}
+      </div>
+      <div class="kv-box">
+        <div class="kv-box-title">Multi-Cloud + Test Coverage</div>
+        {kv_table([(k, v, c) for k, v, c in mcols])}
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>"""
 
 
-# ══════════════════════════════════════════════════════════════════════
-# PIPELINE FLOW
-# ══════════════════════════════════════════════════════════════════════
-PIPE_Y0 = GCP_Y1 + 28
-PIPE_H  = 120
-rrect((M, PIPE_Y0, W - M, PIPE_Y0 + PIPE_H), fill="#EFF6FF", outline=C_HOSP_BORDER, width=2)
-draw.text((M + 22, PIPE_Y0 + 11),
-          "Automated Processing Pipeline  (routing rules define requirements → pipeline runs hands-free)",
-          fill=C_HOSP_BORDER, font=BOLD)
+# ── Conversion ─────────────────────────────────────────────────────────────────
 
-stages = [
-    ("1. Classify",   "#7C3AED", "fills modality\nbody_part"),
-    ("2. PHI Scan",   "#DC2626", "OCR on pixels\nflag burned-in text"),
-    ("3. Protocol",   "#C2410C", "TR/TE/flip vs\nproject template"),
-    ("4. Deface",     "#1D4ED8", "remove face\n(head imaging only)"),
-    ("5. QC Check",   "#166534", "SNR · coverage\nslice consistency"),
-    ("6. BIDS",       "#065F46", "NIfTI + sidecar\nBIDS structure"),
-    ("7. Export Fwd", "#374151", "STOW-RS or\nDIMSE forward"),
-]
-
-aw = W - 2 * M - 40
-sw = (aw - 6 * 12) // 7
-px = M + 20
-for i, (name, color, desc) in enumerate(stages):
-    sy0, sy1 = PIPE_Y0 + 38, PIPE_Y0 + PIPE_H - 8
-    rrect((px, sy0, px + sw, sy1), fill=color, outline=color, width=0, r=7)
-    tw = draw.textlength(name, font=BOLD)
-    draw.text((px + (sw - tw) // 2, sy0 + 6), name, fill="#FFFFFF", font=BOLD)
-    for j, line in enumerate(desc.split("\n")):
-        tw2 = draw.textlength(line, font=TINY)
-        draw.text((px + (sw - tw2) // 2, sy0 + 31 + j * 16), line, fill="#E2E8F0", font=TINY)
-    if i < len(stages) - 1:
-        ax, ay = px + sw + 2, (sy0 + sy1) // 2
-        draw.polygon([(ax, ay - 8), (ax, ay + 8), (ax + 10, ay)], fill=C_HOSP_BORDER)
-    px += sw + 12
+def find_chrome():
+    candidates = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        shutil.which("google-chrome"),
+        shutil.which("chromium-browser"),
+        shutil.which("chromium"),
+    ]
+    return next((c for c in candidates if c and os.path.exists(c)), None)
 
 
-# ══════════════════════════════════════════════════════════════════════
-# IMPLEMENTATION PHASES
-# ══════════════════════════════════════════════════════════════════════
-PH_Y0 = PIPE_Y0 + PIPE_H + 22
-PH_H  = 150
-rrect((M, PH_Y0, W - M, PH_Y0 + PH_H), fill="#FAF5FF", outline=C_PURPLE, width=2)
-draw.text((M + 22, PH_Y0 + 11), "Implementation Phases", fill=C_PURPLE, font=BOLD)
+def convert(html_path, pdf_path, png_path):
+    chrome = find_chrome()
 
-phases = [
-    ("Phase 1: Foundation  ✓",
-     "Terraform (GCP + AWS) · Go API · Upload Portal · Admin Dashboard · PostgreSQL · CI/CD",
-     "#15803D"),
-    ("Phase 2: Processing  ✓",
-     "Defacing · PHI Detection · QC · BIDS · Classification · Protocol · DIMSE Receiver",
-     "#1D4ED8"),
-    ("Phase 3: Operations  ✓",
-     "Routing rules · Institutions · Audit · Export Portal · Shares · Email · MCP Server",
-     "#D97706"),
-    ("Phase 4: Production  ✓",
-     "GCP live (aegis-prod) · Landing Page · Batch import · Synth MRI sidecar (8th) · RBAC",
-     "#7C3AED"),
-    ("Phase 5: Enterprise  🚧",
-     "AEGIS AI Agent · Observability dashboard · Multi-tenant federation · Repo split",
-     "#DC2626"),
-]
+    if chrome:
+        file_url = f"file://{html_path}"
 
-pw  = (W - 2 * M - 40 - 4 * 14) // 5
-ppx = M + 20
-for title, desc, color in phases:
-    rrect((ppx, PH_Y0 + 42, ppx + pw, PH_Y0 + PH_H - 10),
-          fill=C_WHITE, outline=color, width=2, r=8)
-    draw.text((ppx + 14, PH_Y0 + 52), title, fill=color, font=BOLD)
-    words, line, ly = desc.split(" · "), "", PH_Y0 + 80
-    for w in words:
-        test = f"{line} · {w}" if line else w
-        if draw.textlength(test, font=TINY) > pw - 28:
-            draw.text((ppx + 14, ly), line, fill=C_MED, font=TINY)
-            ly += 17
-            line = w
+        # PDF
+        r = subprocess.run(
+            [
+                chrome,
+                "--headless=new",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--run-all-compositor-stages-before-draw",
+                "--virtual-time-budget=2000",
+                f"--print-to-pdf={pdf_path}",
+                "--print-to-pdf-no-header",
+                "--no-margins",
+                file_url,
+            ],
+            capture_output=True, text=True, timeout=60,
+        )
+        if os.path.exists(pdf_path):
+            print(f"Saved PDF  → {pdf_path}  (Chrome headless)")
         else:
-            line = test
-    if line:
-        draw.text((ppx + 14, ly), line, fill=C_MED, font=TINY)
-    ppx += pw + 14
+            print(f"Chrome PDF failed:\n{r.stderr[:400]}")
+
+        # PNG — full-page screenshot at 2x DPI
+        r2 = subprocess.run(
+            [
+                chrome,
+                "--headless=new",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--virtual-time-budget=2000",
+                "--window-size=1875,1410",
+                "--force-device-scale-factor=2",
+                f"--screenshot={png_path}",
+                file_url,
+            ],
+            capture_output=True, text=True, timeout=60,
+        )
+        if os.path.exists(png_path):
+            print(f"Saved PNG  → {png_path}  (Chrome headless, 2×)")
+        else:
+            print(f"Chrome PNG failed:\n{r2.stderr[:400]}")
+
+        if os.path.exists(pdf_path) or os.path.exists(png_path):
+            return
+
+    # Fallback: weasyprint (PDF only)
+    try:
+        from weasyprint import HTML as WP
+        WP(filename=html_path).write_pdf(pdf_path)
+        print(f"Saved PDF  → {pdf_path}  (weasyprint)")
+    except ImportError:
+        print("No PDF/PNG converter found.")
+        print("  Open the HTML in Chrome and use Cmd+P → Save as PDF.")
 
 
-# ══════════════════════════════════════════════════════════════════════
-# TECH STACK + MULTI-CLOUD
-# ══════════════════════════════════════════════════════════════════════
-ST_Y0 = PH_Y0 + PH_H + 22
-ST_H  = 200
-MID   = M + (W - 2 * M) // 2
+# ── Entry point ────────────────────────────────────────────────────────────────
 
-rrect((M, ST_Y0, MID - 12, ST_Y0 + ST_H), fill="#F8FAFC", outline=C_RULE, width=2)
-draw.text((M + 22, ST_Y0 + 12), "Key Open-Source Dependencies", fill=C_TEXT, font=BOLD)
-deps = [
-    ("Go:",       "suyashkumar/dicom · pgx · testcontainers-go · testify",          C_GO),
-    ("Browser:",  "dcmjs · dicomParser · OHIF Viewer (MIT) · React 19 · Vite",      C_REACT),
-    ("Defacing:", "mri_reface · DeepDefacer · mri_deface · dcm2niix · nibabel",     C_PYTHON),
-    ("PHI/OCR:",  "pytesseract · Google Cloud Vision · AWS Textract · Pillow",      C_PYTHON),
-    ("QC/BIDS:",  "pydicom · numpy · dcm2niix · pynetdicom (C-STORE SCP)",          C_PYTHON),
-    ("Synth:",    "numpy · pydicom · MONAI Generative · torch · huggingface-hub",   C_PYTHON),
-    ("Infra:",    "Terraform Google + AWS providers · Docker distroless/slim",       "#795548"),
-]
-for i, (cat, desc, color) in enumerate(deps):
-    y = ST_Y0 + 48 + i * 22
-    draw.text((M + 22, y), cat, fill=color, font=BOLD)
-    draw.text((M + 138, y + 1), desc, fill=C_MED, font=SMALL)
+if __name__ == "__main__":
+    html     = build_html()
+    html_path = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.html")
+    pdf_path  = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.pdf")
+    png_path  = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.png")
 
-rrect((MID + 12, ST_Y0, W - M, ST_Y0 + ST_H), fill="#F8FAFC", outline=C_RULE, width=2)
-draw.text((MID + 34, ST_Y0 + 12), "Multi-Cloud + Test Coverage", fill=C_TEXT, font=BOLD)
-mcols = [
-    ("GCP:",      "Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · KMS · Pub/Sub",   C_GCP_SVC),
-    ("AWS:",      "ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager",    "#FF9900"),
-    ("Local:",    "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem",        "#546E7A"),
-    ("Auth:",     "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth",     C_ORANGE),
-    ("Storage:",  "STORAGE_MODE=gcs | s3 | local  —  same Go API, no changes",         C_GO),
-    ("CI:",       "Go tests (273+) · Python tests (244+) · TS typecheck · Docker (9)", C_GCP_BORDER),
-    ("Domains:",  "aegisimaging.ai · www · api · admin  —  SSL cert v3 provisioning",  C_PYTHON),
-]
-for i, (cat, desc, color) in enumerate(mcols):
-    y = ST_Y0 + 48 + i * 22
-    draw.text((MID + 34, y), cat, fill=color, font=BOLD)
-    draw.text((MID + 150, y + 1), desc, fill=C_MED, font=SMALL)
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"Saved HTML → {html_path}")
 
-# ── Save ──────────────────────────────────────────────────────────────
-png_path = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.png")
-pdf_path = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.pdf")
-
-img.save(png_path, "PNG", quality=95)
-print(f"Saved PNG → {png_path}")
-
-# PDF: embed at 200 DPI → 15" × 12.5" landscape (readable in any PDF viewer)
-img.save(pdf_path, "PDF", resolution=200.0)
-print(f"Saved PDF → {pdf_path}")
+    convert(html_path, pdf_path, png_path)
