@@ -165,6 +165,8 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
 	mux.HandleFunc("PUT /api/projects/{id}", adminOnly(srv.UpdateProject))
 	mux.HandleFunc("PUT /api/projects/{id}/retention", adminOnly(srv.SetProjectRetention))
+	mux.HandleFunc("POST /api/projects/{id}/archive", adminOnly(srv.ArchiveProject))
+	mux.HandleFunc("POST /api/projects/{id}/restore", adminOnly(srv.RestoreProject))
 	mux.HandleFunc("GET /api/projects/{id}/phi-config", auth(srv.GetProjectPhiConfig))
 	mux.HandleFunc("PUT /api/projects/{id}/phi-config", adminOnly(srv.UpdateProjectPhiConfig))
 
