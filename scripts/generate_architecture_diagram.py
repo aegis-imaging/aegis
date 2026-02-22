@@ -82,7 +82,7 @@ CSS = """
 *  { box-sizing: border-box; margin: 0; padding: 0; }
 
 @page {
-  size: 500mm 345mm;   /* ~20" × 13.6" landscape */
+  size: 500mm 420mm;   /* wide landscape — height sized to hold all content on one page */
   margin: 5mm;
 }
 
@@ -664,13 +664,57 @@ def find_chrome():
     return next((c for c in candidates if c and os.path.exists(c)), None)
 
 
+def get_page_height(chrome, html_path):
+    """Measure document.body.scrollHeight via Chrome headless DOM dump."""
+    import re
+    import tempfile
+
+    with open(html_path, encoding="utf-8") as f:
+        html = f.read()
+
+    # Inject a one-liner that writes the height into the page title
+    html2 = html.replace(
+        "</body>",
+        '<script>document.title="H:"+document.body.scrollHeight;</script></body>',
+    )
+    tmp = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")
+    tmp.write(html2)
+    tmp.close()
+
+    try:
+        r = subprocess.run(
+            [
+                chrome,
+                "--headless=new",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--virtual-time-budget=3000",
+                "--run-all-compositor-stages-before-draw",
+                "--dump-dom",
+                f"file://{tmp.name}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        m = re.search(r"<title>H:(\d+)</title>", r.stdout)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    finally:
+        os.unlink(tmp.name)
+
+    return None
+
+
 def convert(html_path, pdf_path, png_path):
     chrome = find_chrome()
 
     if chrome:
         file_url = f"file://{html_path}"
 
-        # PDF
+        # PDF — @page size is set to 420mm tall; all content fits on one page
         r = subprocess.run(
             [
                 chrome,
@@ -691,7 +735,14 @@ def convert(html_path, pdf_path, png_path):
         else:
             print(f"Chrome PDF failed:\n{r.stderr[:400]}")
 
-        # PNG — full-page screenshot at 2x DPI
+        # PNG — measure actual page height first, then add a 100px buffer
+        page_h = get_page_height(chrome, html_path)
+        if page_h:
+            png_h = page_h + 100
+            print(f"  (detected page height: {page_h}px → using {png_h}px for PNG viewport)")
+        else:
+            png_h = 1600  # safe fallback
+
         r2 = subprocess.run(
             [
                 chrome,
@@ -699,7 +750,7 @@ def convert(html_path, pdf_path, png_path):
                 "--disable-gpu",
                 "--no-sandbox",
                 "--virtual-time-budget=2000",
-                "--window-size=1875,1410",
+                f"--window-size=1875,{png_h}",
                 "--force-device-scale-factor=2",
                 f"--screenshot={png_path}",
                 file_url,
