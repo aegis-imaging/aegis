@@ -153,6 +153,7 @@ func (s *Server) runDefacing(study *model.Study) {
 			"tool":      svcResp.ToolUsed,
 			"error":     errMsg,
 		})
+		s.notifyPipelineFailure(ctx, studyUID, "defacing", errMsg)
 		return
 	}
 
