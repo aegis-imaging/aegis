@@ -58,6 +58,10 @@ type Config struct {
 	// Optional operator key used by API when proxying DIMSE retry-control endpoints.
 	DimseOperatorAPIKey string
 
+	// Synthetic MRI generation service (Python Cloud Run sidecar).
+	// Empty string disables the endpoint (returns 503 until configured).
+	SynthServiceURL string
+
 	// CORS
 	AllowedOrigins []string
 
@@ -148,6 +152,7 @@ func Load() *Config {
 		ProtocolServiceURL:       os.Getenv("PROTOCOL_SERVICE_URL"),       // e.g. http://localhost:8086
 		DimseReceiverURL:         os.Getenv("DIMSE_RECEIVER_URL"),         // e.g. http://localhost:8087
 		DimseOperatorAPIKey:      os.Getenv("DIMSE_OPERATOR_API_KEY"),
+		SynthServiceURL:          os.Getenv("SYNTH_SERVICE_URL"),          // e.g. http://localhost:8088
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 

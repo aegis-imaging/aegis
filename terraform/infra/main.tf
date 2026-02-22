@@ -1023,7 +1023,8 @@ resource "google_cloud_run_v2_service" "landing" {
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
-  deletion_protection = var.deletion_protection
+  # Landing is a stateless nginx container — no data to protect, safe to replace.
+  deletion_protection = false
 
   template {
     scaling {
@@ -1036,9 +1037,10 @@ resource "google_cloud_run_v2_service" "landing" {
 
       resources {
         limits = {
-          cpu    = "500m"
+          cpu    = "1"
           memory = "256Mi"
         }
+        cpu_idle = true
       }
 
       liveness_probe {
@@ -1128,9 +1130,12 @@ resource "google_compute_global_address" "lb_ip" {
 }
 
 resource "google_compute_managed_ssl_certificate" "lb_cert" {
-  name = "${local.name_prefix}-lb-cert"
+  name = "${local.name_prefix}-lb-cert-v2"
   managed {
     domains = local.lb_domains
+  }
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
