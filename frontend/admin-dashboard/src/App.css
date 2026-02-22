@@ -1538,3 +1538,47 @@
 }
 .btn--rerun:hover { background: #e5e7eb; }
 .btn--rerun:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Study Labels ────────────────────────────────────────────────────────── */
+.labels-panel { padding: 12px 0; }
+.labels-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  min-height: 32px;
+  align-items: center;
+}
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  border-radius: 9999px;
+  padding: 2px 10px 2px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.label-chip__remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0 0 2px;
+  display: flex;
+  align-items: center;
+}
+.label-chip__remove:hover { color: #ef4444; }
+.labels-panel__form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.labels-panel__form .form-input {
+  flex: 1;
+  max-width: 300px;
+}
