@@ -166,6 +166,8 @@ jobs:
         service:
           - { context: api, name: api }
           - { context: frontend/admin-dashboard, name: admin-dashboard }
+          # landing uses @aegis/client (workspace dep) so it builds from repo root
+          - { context: ".", dockerfile: frontend/landing/Dockerfile, name: landing }
           - { context: defacing, name: defacing }
           - { context: phi-detection, name: phi-detection }
           - { context: qc-service, name: qc-service }
@@ -178,17 +180,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image (retry on transient registry errors)
+        env:
+          SERVICE_NAME: ${{ matrix.service.name }}
+          BUILD_CONTEXT: ${{ matrix.service.context }}
+          BUILD_DOCKERFILE: ${{ matrix.service.dockerfile }}
         shell: bash
         run: |
           set -euo pipefail
-          image="aegis-${{ matrix.service.name }}:ci"
-          context="${{ matrix.service.context }}"
+          image="aegis-${SERVICE_NAME}:ci"
           attempts=5
           delay_seconds=10
 
           for attempt in $(seq 1 "${attempts}"); do
-            echo "Docker build attempt ${attempt}/${attempts}: ${image} from ${context}"
-            if docker build -t "${image}" "${context}"; then
+            echo "Docker build attempt ${attempt}/${attempts}: ${image} from ${BUILD_CONTEXT}"
+            if [ -n "${BUILD_DOCKERFILE}" ]; then
+              build_cmd=(docker build -f "${BUILD_DOCKERFILE}" -t "${image}" "${BUILD_CONTEXT}")
+            else
+              build_cmd=(docker build -t "${image}" "${BUILD_CONTEXT}")
+            fi
+            if "${build_cmd[@]}"; then
               exit 0
             fi
 
