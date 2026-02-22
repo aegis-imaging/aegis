@@ -46,7 +46,9 @@ const allowedPostPathPatterns = [
   /^\/api\/dimse\/retry\/process\/[0-9.]+$/,
   /^\/api\/dimse\/retry\/replay\/[0-9.]+$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/approve$/,
-  /^\/api\/studies\/[0-9a-fA-F-]{36}\/reject$/
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/reject$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/share$/,
+  /^\/api\/routing-rules\/evaluate\/[0-9a-fA-F-]{36}$/
 ] as const;
 
 const allowedDeletePathPatterns = [

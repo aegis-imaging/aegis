@@ -84,6 +84,23 @@ export const revokeShareArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const createShareArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  recipient_email: z.string().email().max(256),
+  note: z.string().max(512).optional(),
+  expiry_hours: z.number().int().min(1).max(8760).optional(), // max 1 year
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const reEvaluateRoutingArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -109,7 +126,9 @@ export const writeToolNames = [
   "retry_dimse_study",
   "approve_study",
   "reject_study",
-  "revoke_share"
+  "revoke_share",
+  "create_share",
+  "re_evaluate_routing"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
