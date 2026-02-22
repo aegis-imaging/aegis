@@ -3429,6 +3429,13 @@ const EMPTY_PROJECT: Omit<Project, 'id' | 'default_anon_profile_id' | 'created_a
   name: '', slug: '', description: '',
 }
 
+type ProjectPhiConfig = {
+  project_id: string
+  confidence_threshold: number
+  min_text_length: number
+  updated_at: string
+}
+
 function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [projects, setProjects]   = useState<Project[]>([])
   const [loading, setLoading]     = useState(true)
@@ -3439,6 +3446,42 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [showForm, setShowForm]   = useState(false)
   const [saving, setSaving]       = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  // PHI config editor state
+  const [phiProjectId, setPhiProjectId] = useState<string | null>(null)
+  const [phiConfig, setPhiConfig]       = useState<ProjectPhiConfig | null>(null)
+  const [phiSaving, setPhiSaving]       = useState(false)
+  const [phiError, setPhiError]         = useState<string | null>(null)
+
+  async function openPhiConfig(projectId: string) {
+    setPhiProjectId(projectId)
+    setPhiError(null)
+    const res = await fetch(`/api/projects/${projectId}/phi-config`)
+    if (res.ok) setPhiConfig(await res.json())
+  }
+
+  async function savePhiConfig() {
+    if (!phiConfig || !phiProjectId) return
+    setPhiSaving(true)
+    setPhiError(null)
+    try {
+      const res = await fetch(`/api/projects/${phiProjectId}/phi-config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confidence_threshold: phiConfig.confidence_threshold,
+          min_text_length: phiConfig.min_text_length,
+        }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setPhiConfig(await res.json())
+      setPhiProjectId(null)
+    } catch (err) {
+      setPhiError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setPhiSaving(false)
+    }
+  }
 
   const fetchProjects = useCallback(async () => {
     setLoading(true)
@@ -3532,6 +3575,38 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
 
+        {/* Inline PHI config editor */}
+        {phiProjectId && phiConfig && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>PHI Scan Config — {projects.find(p => p.id === phiProjectId)?.name}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Override the PHI detection sensitivity thresholds for this project.
+              These values are read by the PHI detection service at scan time.
+            </div>
+            {phiError && <div className="form-error">{phiError}</div>}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Confidence threshold (0–1, default 0.4)
+                <input className="form-input" type="number" min="0" max="1" step="0.05"
+                  value={phiConfig.confidence_threshold}
+                  onChange={e => setPhiConfig(c => c ? { ...c, confidence_threshold: parseFloat(e.target.value) } : c)} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Min text length (chars, default 3)
+                <input className="form-input" type="number" min="1" step="1"
+                  value={phiConfig.min_text_length}
+                  onChange={e => setPhiConfig(c => c ? { ...c, min_text_length: parseInt(e.target.value, 10) } : c)} />
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={savePhiConfig} disabled={phiSaving}>
+                {phiSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setPhiProjectId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {projects.length === 0 && !showForm ? (
           <div className="state-empty">No projects yet.</div>
         ) : projects.length > 0 && (
@@ -3573,6 +3648,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                               : `Export batch failed: ${data.error}`)
                           }}>
                           Export Batch
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Configure PHI scan sensitivity for this project"
+                          onClick={() => openPhiConfig(p.id)}>
+                          PHI Config
                         </button>
                       </div>
                     )}
