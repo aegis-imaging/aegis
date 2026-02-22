@@ -303,6 +303,12 @@ Returns a single study by UUID. Used by the admin dashboard's study detail panel
 
 Returns a single study by DICOM StudyInstanceUID. Useful for integrations (PACS, DIMSE receivers, external tools) that only have the DICOM UID and not the database UUID. Returns the same payload as `GET /api/studies/{id}`. Returns 404 if no study with that UID exists.
 
+### Study Series (`GET /api/studies/{id}/series`)
+
+Returns per-series DICOM metadata for a study: `{study_id, series: [{id, series_instance_uid, series_description, modality, body_part, instance_count, created_at}], total}`.
+
+Populated at ingest time by the batch importer and the internal ingest endpoint (when the caller provides `series` in `study_metadata`). Upload-portal studies start with no series rows; the classification service may backfill them. Shown in the admin dashboard study detail panel under a "Series" tab (tab only appears when series rows exist).
+
 ### Study Audit (`GET /api/studies/{id}/audit`)
 
 Returns all audit trail entries for a specific study (by `resource_id`). Used by the study detail panel's audit tab.

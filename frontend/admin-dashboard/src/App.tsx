@@ -27,6 +27,17 @@ type StudyLabel = {
   created_at: string
 }
 
+type SeriesRow = {
+  id: string
+  study_id: string
+  series_instance_uid: string
+  series_description: string
+  modality: string
+  body_part: string
+  instance_count: number
+  created_at: string
+}
+
 type AuditEntry = {
   id: string
   action: string
@@ -1471,8 +1482,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shares, setShares] = useState<Share[]>([])
   const [diagnostics, setDiagnostics] = useState<StudyDiagnosticsResponse | null>(null)
   const [labels, setLabels] = useState<StudyLabel[]>([])
+  const [seriesList, setSeriesList] = useState<SeriesRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series'>('audit')
   const [newLabel, setNewLabel] = useState('')
   const [labelSaving, setLabelSaving] = useState(false)
 
@@ -1532,7 +1544,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/shares`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/diagnostics`).then(r => r.ok ? r.json() : null),
       fetch(`/api/studies/${studyId}/labels`).then(r => r.ok ? r.json() : []),
-    ]).then(([s, a, rl, sh, diag, lbls]) => {
+      fetch(`/api/studies/${studyId}/series`).then(r => r.ok ? r.json() : { series: [] }),
+    ]).then(([s, a, rl, sh, diag, lbls, sr]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
@@ -1541,6 +1554,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       setShares(shareRows.map(row => withShareExpiryAnchor(row, now)))
       setDiagnostics(diag ?? null)
       setLabels(lbls ?? [])
+      setSeriesList((sr?.series ?? []) as SeriesRow[])
       setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -1889,6 +1903,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           <button type="button" className={`tab-btn${detailTab === 'labels' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('labels')}>
             Labels ({labels.length})
           </button>
+          {seriesList.length > 0 && (
+            <button type="button" className={`tab-btn${detailTab === 'series' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('series')}>
+              Series ({seriesList.length})
+            </button>
+          )}
         </div>
 
         {detailTab === 'audit' && (
@@ -2020,6 +2039,36 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               </form>
             )}
           </div>
+        )}
+
+        {detailTab === 'series' && (
+          <table className="detail-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Series UID</th>
+                <th>Description</th>
+                <th>Modality</th>
+                <th>Body Part</th>
+                <th>Instances</th>
+              </tr>
+            </thead>
+            <tbody>
+              {seriesList.length === 0 && (
+                <tr><td colSpan={6} style={{textAlign:'center',color:'var(--color-gray-500)'}}>No series metadata recorded.</td></tr>
+              )}
+              {seriesList.map((s, i) => (
+                <tr key={s.id}>
+                  <td style={{color:'var(--color-gray-500)'}}>{i + 1}</td>
+                  <td style={{fontFamily:'monospace',fontSize:'0.78rem'}}>{s.series_instance_uid}</td>
+                  <td>{s.series_description || '—'}</td>
+                  <td>{s.modality || '—'}</td>
+                  <td>{s.body_part || '—'}</td>
+                  <td>{s.instance_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
 
         {detailTab === 'diagnostics' && (

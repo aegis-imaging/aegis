@@ -101,6 +101,24 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Upsert per-series metadata when the caller provides it.
+	for _, sm := range req.Metadata.Series {
+		if sm.SeriesInstanceUID == "" {
+			continue
+		}
+		sr := &model.StudySeries{
+			StudyID:           study.ID,
+			SeriesInstanceUID: sm.SeriesInstanceUID,
+			SeriesDescription: sm.SeriesDescription,
+			Modality:          sm.Modality,
+			BodyPart:          sm.BodyPart,
+			InstanceCount:     sm.InstanceCount,
+		}
+		if err := model.UpsertStudySeries(r.Context(), s.db, sr); err != nil {
+			log.Printf("upsert series %s: %v", sm.SeriesInstanceUID, err)
+		}
+	}
+
 	// Evaluate routing rules — may mutate study (e.g. auto_approve, require_defacing).
 	routing.EvaluateRules(r.Context(), s.db, s.store, study)
 
