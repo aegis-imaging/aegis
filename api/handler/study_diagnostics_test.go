@@ -119,7 +119,7 @@ func TestGetStudyDiagnostics_ReportsDimseSignals(t *testing.T) {
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The sidecar health loop probes /healthz on startup; ignore those requests.
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
