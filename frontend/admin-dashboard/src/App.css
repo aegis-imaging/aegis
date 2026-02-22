@@ -1582,3 +1582,15 @@
   flex: 1;
   max-width: 300px;
 }
+
+/* ── Defacing QA Score ───────────────────────────────────────────────────── */
+.deface-qa-score {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.85em;
+}
+.deface-qa-score--good { background: #d1fae5; color: #065f46; }
+.deface-qa-score--warn { background: #fef3c7; color: #92400e; }
+.deface-qa-score--poor { background: #fee2e2; color: #991b1b; }

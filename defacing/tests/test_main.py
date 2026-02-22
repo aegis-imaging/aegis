@@ -95,9 +95,40 @@ class TestDeface:
         assert body["output_paths"] == mock_output_paths
         assert body["duration_seconds"] >= 0
         assert body["error"] is None
+        assert "ssim_score" in body  # field always present (None when unavailable)
 
         # Verify run_pipeline was called with correct args
         mock_pipeline.assert_called_once_with(input_files, output_dir, mock_backend)
+
+    def test_deface_success_with_ssim_score(self, tmp_path):
+        """
+        When _compute_ssim_score returns a value, the response includes ssim_score.
+        """
+        input_file = tmp_path / "0000.dcm"
+        input_file.write_bytes(b"\x00" * 128)
+        output_dir = str(tmp_path / "output")
+        mock_output_paths = [str(tmp_path / "output" / "0000.dcm")]
+
+        mock_backend = MagicMock()
+        mock_backend.name = "mock-backend"
+        mock_backend.available.return_value = True
+
+        with patch("app.main._backend", mock_backend), \
+             patch("app.main.get_backend", return_value=mock_backend), \
+             patch("app.main.run_pipeline", return_value=mock_output_paths), \
+             patch("app.main._compute_ssim_score", return_value=0.9321):
+
+            client = TestClient(app)
+            resp = client.post("/deface", json={
+                "study_uid": "1.2.3.4.5",
+                "input_paths": [str(input_file)],
+                "output_dir": output_dir,
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "complete"
+        assert abs(body["ssim_score"] - 0.9321) < 1e-6
 
     def test_deface_empty_input_paths(self):
         """POST with empty input_paths returns HTTP 400."""
