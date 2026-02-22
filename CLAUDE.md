@@ -1065,6 +1065,252 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - "Export" trigger button for admin (approved + export_required + pending/failed)
 - `require_export` option in routing rules action dropdown
 
+### Study Operations — Bulk, CSV, Notes, SLA, Re-processing, Expiry
+
+**Bulk approve/reject** (`POST /api/studies/bulk`, admin-only):
+- Body: `{"action": "approve"|"reject", "study_ids": ["<uuid>", ...]}` (max 200 IDs per call)
+- Returns `{processed, errors[]}` — partial success supported; already-terminal studies are skipped with an error entry
+- Triggers export forwarding and uploader notification emails on bulk approve (same as single approve)
+
+**Studies CSV export** (`GET /api/studies.csv`, admin-read):
+- Accepts same filter params as `GET /api/studies` (`project_id`, `status`, `modality`, `body_part`, `source`, `search`, plus `date_from`/`date_to` in RFC3339)
+- Streams response with `Content-Disposition: attachment; filename="studies.csv"`
+- Capped at 10 000 rows to prevent runaway exports
+
+**Admin study notes** (`POST /api/studies/{id}/notes`, admin-only):
+- Body: `{"note": "free text"}` (max 2 000 chars)
+- Stored as `study.note` audit entry (no separate DB table) — visible in study audit trail
+- Returns `{"status": "ok"}`
+
+**SLA / stuck studies** (`GET /api/studies/stuck`, admin-read):
+- Returns studies that have not advanced beyond a non-terminal state within a configurable idle window
+- Query params: `minutes` (default 60), `project_id` (optional)
+- Response: `{stuck: [], total, minutes}`
+- Alerts are stored in `study_sla_alerts` table (migration 020); admin dashboard highlights stuck studies
+
+**Pipeline step reset / re-processing** (`POST /api/studies/{id}/reset-pipeline-step`, admin-only):
+- Body: `{"step": "deface"|"phi_scan"|"qc"|"bids"|"classify"|"protocol"|"export"}`
+- Resets the chosen step's status back to `pending`; auto-pipeline re-dispatches if `PIPELINE_AUTO=true`
+- Returns `409 Conflict` if the step is currently in-flight
+- Returns `400` if the step is not required for the study (enable it via a routing rule first)
+- Emits `study.pipeline_reset` audit entry
+
+**Study expiry + reactivation** (`POST /api/studies/{id}/reactivate`, admin-only):
+- Studies in `expired` status cannot be approved or rejected
+- `POST /api/studies/{id}/reactivate` — sets status back to `approved` for expired studies; emits `study.reactivated` audit entry
+- Admin dashboard shows "Reactivate" button for expired studies in place of Approve/Reject
+
+### DICOM Tag Inspection (`api/handler/dicom_tags.go`)
+
+Reads all non-pixel DICOM tags from the first file of a study and returns them as a structured list. Useful for debugging de-identification issues and verifying that protocol parameters are present.
+
+**API:**
+- `GET /api/studies/{studyUID}/dicom-tags` — returns `{tags: [{tag, keyword, vr, value}], file, store}`
+- Reads from the study's current `dicom_store` (`raw` or `clean`) — runs against de-identified files post-defacing
+- Uses `suyashkumar/dicom` with `SkipPixelData()` for performance
+
+**Admin dashboard:**
+- "Inspect DICOM Tags" button on the study detail panel opens a searchable tag table
+
+### Study Labels / Annotations (`api/handler/label.go`)
+
+Free-text labels (up to 80 characters each) that admins can attach to studies for triage, cohort tagging, or workflow notes. Stored in the `study_labels` table (migration 022).
+
+**REST API:**
+- `GET /api/studies/{id}/labels` — list all labels for a study
+- `POST /api/studies/{id}/labels` — add a label (`{"label": "text"}`); emits `study.label_added` audit entry
+- `DELETE /api/studies/{id}/labels/{labelID}` — remove a label; emits `study.label_removed` audit entry
+
+Labels are displayed as coloured chips on the study detail panel. Viewers can see labels; only admins can add or remove them.
+
+### Subject/Session Linking (`api/handler/subject.go`)
+
+Associates studies with a research subject identifier (`subject_id`). Enables grouping of longitudinal imaging sessions from the same participant across multiple studies. The `subject_id` field is stored on the study record (migration 026).
+
+**REST API:**
+- `GET /api/subjects?project_id=<uuid>` — list unique subject IDs with study counts for a project
+- `PUT /api/studies/{id}/subject` — set or clear `subject_id` (`{"subject_id": "SUB-001"}` or `{"subject_id": ""}` to clear)
+- Emits `study.subject_set` audit entry
+
+**Admin dashboard:** Subject input field in the study detail panel; Subjects tab lists all subjects for the current project with a count of associated studies.
+
+### Webhook Subscriptions (`api/handler/webhook.go`, `api/webhook/deliver.go`)
+
+Push notifications to external HTTP endpoints when study events occur. Payloads are signed with HMAC-SHA256 using the subscriber's `secret` (`X-AEGIS-Signature` header) so receivers can verify origin.
+
+**REST API** (`/api/webhook-subscriptions`): CRUD — list, create, get, update, delete.
+
+| Field | Notes |
+|-------|-------|
+| `project_id` | Scope to one project (null = all projects) |
+| `url` | HTTPS endpoint that receives `POST` notifications |
+| `events` | Array of event names to subscribe to |
+| `secret` | HMAC-SHA256 signing key (stored, included in signature header) |
+| `enabled` | Enable/disable without deleting |
+
+**Supported events:**
+
+| Event | Trigger |
+|-------|---------|
+| `study.approved` | Study moves to `approved` status |
+| `study.rejected` | Study moves to `rejected` status |
+| `study.phi_flagged` | PHI scan returns `flagged` |
+| `study.export_complete` | Export forwarding completes successfully |
+| `study.stuck` | Study is detected as stuck by SLA monitor |
+
+**Delivery:** `deliver.go` retries up to 3 times (immediate, +5 s, +30 s). Each attempt — success or failure — is recorded in the `webhook_deliveries` table (migration 030).
+
+**Delivery log API:**
+- `GET /api/webhook-subscriptions/{id}/deliveries` — returns immutable log of all HTTP delivery attempts for a subscription (`{id, subscription_id, event, url, attempt, status_code, success, error_message, delivered_at}`)
+
+**Admin dashboard:** Webhook list in Notifications tab; "Log" button per row opens inline delivery history table.
+
+### API Keys (`api/handler/api_key.go`)
+
+Machine-to-machine bearer tokens for programmatic access to the admin API. Stored hashed (SHA-256) in the `api_keys` table (migration 023) — the raw key is shown exactly once at creation and never retrievable again.
+
+**REST API** (`/api/api-keys`):
+- `GET /api/api-keys` — list all keys (shows prefix, not raw key)
+- `POST /api/api-keys` — create key (`{"name": "...", "expires_at": "RFC3339 or omit"}`) — response includes `key` field with raw value
+- `PATCH /api/api-keys/{id}/enable` / `PATCH /api/api-keys/{id}/disable` — toggle enabled state
+- `DELETE /api/api-keys/{id}` — revoke and delete
+
+Key format: `aegis_<base64url(32 random bytes)>`. Use as `Authorization: Bearer <key>` header. The auth middleware validates API keys alongside IAP/Azure/AWS identity headers when `AUTH_ENABLED=true`.
+
+### Per-Project PHI Detection Config (`api/handler/phi_config.go`)
+
+Overrides the global `PHI_CONFIDENCE_THRESHOLD` and `PHI_MIN_TEXT_LENGTH` env vars on a per-project basis. Stored in the `project_phi_config` table (migration 024) — upserted on first write, inherits global defaults if no record exists.
+
+**REST API:**
+- `GET /api/projects/{id}/phi-config` — returns `{project_id, confidence_threshold, min_text_length}`
+- `PUT /api/projects/{id}/phi-config` — partial update; omitted fields keep their current values; emits `phi_config.updated` audit entry
+
+**Admin dashboard:** PHI Config panel in the project detail view.
+
+### Defacing QA Score (`api/handler/deface.go`, migration 025)
+
+After defacing completes, the `deface_qa_score` field (NUMERIC(5,4), range 0.0–1.0) on the study record holds an SSIM-based visual similarity score comparing the original and defaced volumes. Higher is more similar (face successfully removed without corrupting brain tissue).
+
+- Score is computed by the defacing service and returned in the callback payload
+- Stored on the study record; visible in the study detail panel alongside the defacing status
+- Score of `null` means no QA was performed (non-head study, nibabel backend, or older study)
+
+### Study Retention Policy + Project Lifecycle (`api/handler/project.go`)
+
+**Retention policy** (`PUT /api/projects/{id}/retention`, admin-only):
+- Body: `{"retention_days": 90}` or `{"retention_days": null}` to clear the policy
+- Positive integer only; `null` means keep studies indefinitely (default)
+- A background worker (planned) will soft-expire approved studies older than `retention_days`
+- Emits `project.retention_updated` audit entry; returns updated project
+
+**Project archive/restore:**
+- `POST /api/projects/{id}/archive` — marks project `archived=true`; emits `project.archived` audit entry
+- `POST /api/projects/{id}/restore` — clears `archived` flag; emits `project.restored` audit entry
+- Archived projects are visually flagged in the Projects tab; studies remain accessible
+
+### Federation Peers (`api/handler/federation_peer.go`, migration 028)
+
+Stub registry for future cross-tenant federation. Defines trusted remote AEGIS instances that will eventually be able to pull approved studies. **No data flows yet** — this is a placeholder with full CRUD, ready to be activated in a future release.
+
+**REST API** (`/api/federation-peers`): CRUD — list, create, get, update, delete.
+
+| Field | Notes |
+|-------|-------|
+| `name` | Human-readable peer name |
+| `slug` | URL-safe identifier (unique) |
+| `api_url` | Base URL of the remote AEGIS instance |
+| `api_key_hash` | SHA-256 of the bearer token sent to the peer (stored hashed) |
+| `enabled` | Enable/disable without deleting |
+| `notes` | Free-text notes |
+
+**Admin dashboard:** Federation Peers tab lists all peers with CRUD controls.
+
+### Batch DICOM Export (`api/handler/export_batch.go`)
+
+Triggers export forwarding for all eligible approved studies in a project in one call, instead of clicking study-by-study.
+
+**API:**
+- `POST /api/projects/{id}/export-batch` — dispatches `route_to` forwarding for all studies matching `status=approved AND export_required=true AND export_status IN ('pending','failed')`
+- Returns `{dispatched, study_ids[], message}`
+- Each study's `export_status` is reset to `pending` if previously `failed`, then claimed for forwarding
+
+### Audit Trail CSV Export (`api/handler/audit_csv.go`)
+
+Streams the audit trail as a CSV download with the same filters as `GET /api/audit`.
+
+**API:**
+- `GET /api/audit.csv` — returns `Content-Disposition: attachment; filename="audit.csv"`
+- Query params: `actor`, `action`, `resource_type`, `resource_id`, `date_from`, `date_to` (RFC3339), `limit` (default 1000, max 10 000)
+- Columns: `id`, `action`, `actor`, `resource_type`, `resource_id`, `ip`, `created_at`, `metadata` (JSON)
+
+**Admin dashboard:** "Export CSV" button in the Audit Log tab.
+
+### Export Download Analytics (`api/handler/export.go`)
+
+Aggregated statistics on how export shares are being redeemed.
+
+**REST API:**
+- `GET /api/export-analytics` — returns `{total_shares, total_downloads, unique_recipients, avg_downloads_per_share, shares_by_status: {active, expired, revoked}}` across all projects
+- `GET /api/shares/{shareID}/downloads` — returns immutable per-share download log (`{share_id, downloads[], total}`) with `downloaded_at`, `ip`, and `user_agent` for each download event
+
+**Admin dashboard:** Analytics row at the top of the Shares tab showing total shares, total downloads, and unique recipients.
+
+### Institution Stats (`api/handler/institution.go`)
+
+Per-institution aggregate statistics derived from the studies table.
+
+**API:**
+- `GET /api/institutions/{id}/stats` — returns `{institution_id, total_studies, studies_by_status: {received, approved, rejected, ...}, studies_by_modality: {...}, last_study_at}`
+
+**Admin dashboard:** Stats panel shown when an institution is selected in the Institutions tab.
+
+### Stats: Breakdown, Storage, and Activity Summary
+
+**Modality/body part breakdown** (`GET /api/stats/breakdown`, admin-read):
+- Returns `{rows: [{modality, body_part, count}]}` ordered by count descending
+- Uses `GROUP BY modality, body_part` across all studies
+- **Admin dashboard:** collapsible breakdown table in the Studies tab header
+
+**DICOM storage stats** (`GET /api/storage/stats`, admin-read):
+- Returns `{raw_file_count, clean_file_count, total_file_count, total_studies}` derived from `studies.instance_count` using SQL `FILTER (WHERE dicom_store = ...)` aggregation — cloud-agnostic, no filesystem walk
+- **Admin dashboard:** raw/clean file counts displayed in the stats banner
+
+**Admin activity summary** (`GET /api/audit/actors`, admin-read):
+- Returns `{actors: [{actor, action_count, last_seen_at, last_action}]}` for the last 30 days, ordered by `action_count DESC`
+- Query param: `limit` (default 20)
+- **Admin dashboard:** collapsible "Recent admin activity" table in the Audit Log tab
+
+### Protocol Template Export (`api/handler/protocol_template.go`)
+
+Exports all protocol templates for a project as a formatted JSON file.
+
+**API:**
+- `GET /api/projects/{projectID}/protocol-templates/export` — returns `Content-Disposition: attachment; filename="protocol-templates.json"` with `{"project_id", "templates": [...], "count"}` indented JSON
+- Emits `protocol_template.exported` audit entry with count
+
+**Admin dashboard:** "Export JSON" download link in the Protocol Templates section header.
+
+### Export Share Extension (`api/handler/export.go`)
+
+Extends the expiry of an active or already-expired export share without revoking and re-creating it.
+
+**API:**
+- `PATCH /api/shares/{shareID}/extend` — body: `{"extend_hours": 48}`
+- Extension base is `max(expires_at, now())` — works even after expiry
+- Returns `409 Conflict` if the share has been revoked
+- Emits `share.extended` audit entry
+
+**Admin dashboard:** "Extend" button in the Shares tab for active and expired (but not revoked) shares.
+
+### Per-IP Rate Limiting (`api/middleware/`)
+
+Token-bucket rate limiting on public upload endpoints prevents abuse without affecting authenticated admin traffic.
+
+- Applied to: `POST /api/upload/session`, `POST /api/upload/{id}/complete`, `POST /api/ingest`, `POST /api/contact`
+- Each source IP gets its own bucket (configurable capacity and refill rate via env vars or defaults)
+- Exceeding the limit returns `429 Too Many Requests`
+- Admin and sidecar endpoints are not rate-limited
+
 ### Terraform
 ```bash
 cd terraform/project && terraform init && terraform plan
