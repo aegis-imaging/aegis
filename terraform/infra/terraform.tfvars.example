@@ -13,6 +13,10 @@ iap_access_members = [
   "user:you@example.com",
 ]
 
+# Seeds the first admin user in the DB on initial API startup (idempotent).
+# Use the same account as iap_access_members so the user can log in immediately.
+first_admin_email = "you@example.com"
+
 # Container images (build + push these before terraform apply).
 api_image                    = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/api:latest"
 admin_dashboard_image        = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/admin-dashboard:latest"
