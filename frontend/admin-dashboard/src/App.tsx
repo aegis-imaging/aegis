@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
@@ -5422,6 +5422,95 @@ export function App() {
     else setShowTimeline(v => !v)
   }
 
+  // ── Quick-search palette (Cmd/Ctrl+K) ──────────────────────────────────────
+  type PaletteNavItem  = { kind: 'nav';   label: string; tab: AppTab; icon: string }
+  type PaletteStudyItem = { kind: 'study'; label: string; sub: string; id: string }
+  type PaletteItem = PaletteNavItem | PaletteStudyItem
+
+  const NAV_ITEMS: PaletteNavItem[] = [
+    { kind: 'nav', label: 'Studies',              tab: 'studies',            icon: '🗂' },
+    { kind: 'nav', label: 'Audit Log',             tab: 'audit',              icon: '📋' },
+    { kind: 'nav', label: 'Shares',                tab: 'shares',             icon: '🔗' },
+    { kind: 'nav', label: 'Routing Rules',         tab: 'routing',            icon: '🔀' },
+    { kind: 'nav', label: 'DIMSE Operations',      tab: 'dimse_ops',          icon: '📡' },
+    { kind: 'nav', label: 'Institutions',          tab: 'institutions',       icon: '🏥' },
+    { kind: 'nav', label: 'Anonymization Profiles',tab: 'profiles',           icon: '🔒' },
+    { kind: 'nav', label: 'Protocol Templates',    tab: 'protocol_templates', icon: '📐' },
+    { kind: 'nav', label: 'Notifications',         tab: 'notifications',      icon: '🔔' },
+    { kind: 'nav', label: 'Projects',              tab: 'projects',           icon: '📁' },
+    { kind: 'nav', label: 'Federation Peers',      tab: 'federation',         icon: '🌐' },
+    ...(isAdmin ? [
+      { kind: 'nav' as const, label: 'Users',     tab: 'users' as AppTab,    icon: '👤' },
+      { kind: 'nav' as const, label: 'API Keys',  tab: 'api_keys' as AppTab, icon: '🔑' },
+    ] : []),
+  ]
+
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteQuery, setPaletteQuery] = useState('')
+  const [paletteStudies, setPaletteStudies] = useState<PaletteStudyItem[]>([])
+  const [paletteHighlight, setPaletteHighlight] = useState(0)
+  const paletteInputRef = useRef<HTMLInputElement>(null)
+
+  // Open with Cmd/Ctrl+K
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setPaletteOpen(v => { if (!v) { setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }; return !v })
+      }
+      if (e.key === 'Escape') setPaletteOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Focus input when palette opens
+  useEffect(() => {
+    if (paletteOpen) setTimeout(() => paletteInputRef.current?.focus(), 0)
+  }, [paletteOpen])
+
+  // Debounced study search
+  useEffect(() => {
+    if (!paletteOpen || paletteQuery.trim().length < 2) { setPaletteStudies([]); return }
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/studies?search=${encodeURIComponent(paletteQuery.trim())}&limit=6`)
+      if (!res.ok) return
+      const data = await res.json()
+      setPaletteStudies((data.studies ?? []).map((s: Study) => ({
+        kind: 'study' as const,
+        label: uidShort(s.study_instance_uid),
+        sub: [s.modality, s.body_part, s.status].filter(Boolean).join(' · '),
+        id: s.id,
+      })))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [paletteQuery, paletteOpen])
+
+  const paletteNavFiltered = NAV_ITEMS.filter(n =>
+    !paletteQuery.trim() || n.label.toLowerCase().includes(paletteQuery.trim().toLowerCase())
+  )
+  const paletteItems: PaletteItem[] = [...paletteNavFiltered, ...paletteStudies]
+
+  const paletteSelect = (item: PaletteItem) => {
+    setPaletteOpen(false)
+    if (item.kind === 'nav') {
+      setTab(item.tab)
+    } else {
+      setTab('studies')
+      setSelectedStudyId(item.id)
+    }
+  }
+
+  const paletteKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteHighlight(h => Math.min(h + 1, paletteItems.length - 1)) }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setPaletteHighlight(h => Math.max(h - 1, 0)) }
+    if (e.key === 'Enter' && paletteItems[paletteHighlight]) paletteSelect(paletteItems[paletteHighlight])
+  }
+
+  // Reset highlight when results change
+  useEffect(() => { setPaletteHighlight(0) }, [paletteItems.length])
+  // ── end palette ─────────────────────────────────────────────────────────────
+
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
     let cancelled = false
@@ -5555,6 +5644,71 @@ export function App() {
 
   return (
     <div className="admin-root">
+      {/* Cmd/Ctrl+K quick-search palette */}
+      {paletteOpen && (
+        <div className="palette-overlay" onClick={() => setPaletteOpen(false)}>
+          <div className="palette-modal" onClick={e => e.stopPropagation()}>
+            <div className="palette-search-row">
+              <span className="palette-search-icon">⌕</span>
+              <input
+                ref={paletteInputRef}
+                className="palette-input"
+                placeholder="Search studies, navigate…"
+                value={paletteQuery}
+                onChange={e => setPaletteQuery(e.target.value)}
+                onKeyDown={paletteKeyDown}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <kbd className="palette-esc-hint">Esc</kbd>
+            </div>
+            {paletteItems.length > 0 ? (
+              <ul className="palette-results">
+                {paletteNavFiltered.length > 0 && (
+                  <li className="palette-group-label">Navigate</li>
+                )}
+                {paletteNavFiltered.map((item, i) => (
+                  <li
+                    key={item.tab}
+                    className={`palette-result${paletteHighlight === i ? ' palette-result--active' : ''}`}
+                    onMouseEnter={() => setPaletteHighlight(i)}
+                    onClick={() => paletteSelect(item)}
+                  >
+                    <span className="palette-result__icon">{item.icon}</span>
+                    <span className="palette-result__label">{item.label}</span>
+                  </li>
+                ))}
+                {paletteStudies.length > 0 && (
+                  <li className="palette-group-label">Studies</li>
+                )}
+                {paletteStudies.map((item, j) => {
+                  const idx = paletteNavFiltered.length + j
+                  return (
+                    <li
+                      key={item.id}
+                      className={`palette-result${paletteHighlight === idx ? ' palette-result--active' : ''}`}
+                      onMouseEnter={() => setPaletteHighlight(idx)}
+                      onClick={() => paletteSelect(item)}
+                    >
+                      <span className="palette-result__icon">🔬</span>
+                      <span className="palette-result__label">{item.label}</span>
+                      <span className="palette-result__sub">{item.sub}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : paletteQuery.trim().length >= 2 ? (
+              <div className="palette-empty">No results</div>
+            ) : null}
+            <div className="palette-footer">
+              <span><kbd>↑↓</kbd> navigate</span>
+              <span><kbd>↵</kbd> select</span>
+              <span><kbd>Esc</kbd> close</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {authError && (
         <div className="auth-error-banner">
           Access denied: {authError}
@@ -5618,6 +5772,15 @@ export function App() {
               {currentUser.name || currentUser.email} ({currentUser.role})
             </span>
           )}
+          <button
+            type="button"
+            className="btn-palette-trigger"
+            onClick={() => { setPaletteOpen(true); setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }}
+            title="Quick search (⌘K)"
+          >
+            <span>Search…</span>
+            <kbd>⌘K</kbd>
+          </button>
           {tab === 'studies' && (
             <button type="button" className="btn-refresh" onClick={() => setRefreshTick(t => t + 1)}>Refresh</button>
           )}
