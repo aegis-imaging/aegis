@@ -769,6 +769,7 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [emailSearch, setEmailSearch] = useState('')
   const [page, setPage] = useState(0)
   const [revoking, setRevoking] = useState<string | null>(null)
+  const [extending, setExtending] = useState<string | null>(null)
   const [expandedShare, setExpandedShare] = useState<string | null>(null)
   const [downloads, setDownloads] = useState<Record<string, DownloadRecord[]>>({})
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -827,6 +828,27 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
       alert(err instanceof Error ? err.message : 'Failed to revoke share')
     } finally {
       setRevoking(null)
+    }
+  }
+
+  const extendShare = async (id: string) => {
+    const input = window.prompt('Extend by how many hours?', '48')
+    if (!input) return
+    const hours = parseInt(input, 10)
+    if (!hours || hours <= 0) { alert('Enter a positive number of hours.'); return }
+    setExtending(id)
+    try {
+      const res = await fetch(`/api/shares/${id}/extend`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extend_hours: hours }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      fetchShares(statusFilter, page)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to extend share')
+    } finally {
+      setExtending(null)
     }
   }
 
@@ -954,15 +976,28 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
                     <td className="audit-time td-note">{s.note || '—'}</td>
                     <td className="audit-time">{fmtDate(s.created_at)}</td>
                     <td>
-                      {isAdmin && s.status === 'active' ? (
-                        <button
-                          type="button"
-                          className="btn-secondary btn-danger-text"
-                          disabled={revoking === s.id}
-                          onClick={() => revokeShare(s.id)}
-                        >
-                          {revoking === s.id ? 'Revoking…' : 'Revoke'}
-                        </button>
+                      {isAdmin && (s.status === 'active' || s.status === 'expired') ? (
+                        <div className="actions-cell">
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={extending === s.id}
+                            onClick={() => extendShare(s.id)}
+                            title="Extend share expiry"
+                          >
+                            {extending === s.id ? 'Extending…' : 'Extend'}
+                          </button>
+                          {s.status === 'active' && (
+                            <button
+                              type="button"
+                              className="btn-secondary btn-danger-text"
+                              disabled={revoking === s.id}
+                              onClick={() => revokeShare(s.id)}
+                            >
+                              {revoking === s.id ? 'Revoking…' : 'Revoke'}
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <span className="audit-no-detail">—</span>
                       )}
@@ -1127,6 +1162,20 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
     if (newShare?.id === shareId) setNewShare(null)
   }
 
+  const handleExtend = async (shareId: string) => {
+    const input = window.prompt('Extend by how many hours?', '48')
+    if (!input) return
+    const hours = parseInt(input, 10)
+    if (!hours || hours <= 0) { alert('Enter a positive number of hours.'); return }
+    const res = await fetch(`/api/shares/${shareId}/extend`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extend_hours: hours }),
+    })
+    if (!res.ok) { alert('Failed to extend share.'); return }
+    fetchShares()
+  }
+
   const handleCopy = () => {
     if (newShare?.export_url) {
       navigator.clipboard.writeText(newShare.export_url)
@@ -1233,11 +1282,14 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
                   <td className={statusClass}>{shareStatus}</td>
                   <td className="td-muted">{fmtDate(s.created_at)}</td>
                   <td>
-                    {shareStatus === 'active' && (
-                      <button type="button" className="btn btn--revoke" onClick={() => handleRevoke(s.id)}>
-                        Revoke
-                      </button>
-                    )}
+                    {(shareStatus === 'active' || shareStatus === 'expired') ? (
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--share" onClick={() => handleExtend(s.id)} title="Extend share expiry">Extend</button>
+                        {shareStatus === 'active' && (
+                          <button type="button" className="btn btn--revoke" onClick={() => handleRevoke(s.id)}>Revoke</button>
+                        )}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               )
