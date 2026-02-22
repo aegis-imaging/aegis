@@ -36,6 +36,7 @@ type Study struct {
 	ExportStatus           string    `json:"export_status"`
 	DefaceQaScore          *float64  `json:"deface_qa_score,omitempty"`
 	SubjectID              *string   `json:"subject_id,omitempty"`
+	RejectionReason        *string   `json:"rejection_reason,omitempty"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
@@ -49,6 +50,7 @@ const studyColumns = `
 	export_required, export_status,
 	deface_qa_score,
 	subject_id,
+	rejection_reason,
 	created_at, updated_at`
 
 type scannable interface {
@@ -67,6 +69,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.ExportRequired, &s.ExportStatus,
 		&s.DefaceQaScore,
 		&s.SubjectID,
+		&s.RejectionReason,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -231,6 +234,18 @@ func CountStudies(ctx context.Context, db *sql.DB, f StudyFilters) (int, error) 
 func UpdateStudyStatus(ctx context.Context, db *sql.DB, id, status string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET status = $1, updated_at = now() WHERE id = $2`, status, id)
+	return err
+}
+
+// UpdateStudyRejected sets status to 'rejected' and stores an optional reason.
+func UpdateStudyRejected(ctx context.Context, db *sql.DB, id, reason string) error {
+	var reasonVal *string
+	if reason != "" {
+		reasonVal = &reason
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET status = 'rejected', rejection_reason = $1, updated_at = now()
+		WHERE id = $2`, reasonVal, id)
 	return err
 }
 

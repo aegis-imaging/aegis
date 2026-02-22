@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/email"
@@ -54,6 +55,7 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 }
 
 // RejectStudy transitions a study to 'rejected'.
+// Accepts an optional JSON body: {"reason": "..."} (max 500 chars).
 func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	study, err := model.GetStudyByID(r.Context(), s.db, id)
@@ -65,15 +67,35 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "study is already rejected")
 		return
 	}
-	if err := model.UpdateStudyStatus(r.Context(), s.db, study.ID, "rejected"); err != nil {
+
+	// Parse optional reason from request body.
+	var reason string
+	if r.ContentLength != 0 {
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			reason = strings.TrimSpace(body.Reason)
+			if len(reason) > 500 {
+				reason = reason[:500]
+			}
+		}
+	}
+
+	if err := model.UpdateStudyRejected(r.Context(), s.db, study.ID, reason); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to update status")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actorEmail(r), "study", study.ID, clientIP(r), nil)
+
+	var auditMeta map[string]any
+	if reason != "" {
+		auditMeta = map[string]any{"rejection_reason": reason}
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actorEmail(r), "study", study.ID, clientIP(r), auditMeta)
 	webhook.Deliver(r.Context(), s.db, "study.rejected", study)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
-		subject, body := email.StudyRejected(study.StudyInstanceUID)
+		subject, body := email.StudyRejected(study.StudyInstanceUID, reason)
 		if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
 			log.Printf("reject email to %s: %v", uploaderEmail, err)
 		}
