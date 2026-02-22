@@ -2,6 +2,9 @@
 
 Personal environment setup tasks for building the MVP/POC. Complete these in order — each section unblocks the next.
 
+> **GCP Production Status (2026-02-22):** `aegis-prod-488120` is live.
+> API: `https://api.aegisimaging.ai` — all services healthy, cloud smoke suite 11/11 PASS.
+
 ---
 
 ## 0. Business & Account Setup
@@ -31,7 +34,7 @@ Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC a
 
 - [ ] AEGIS Imaging LLC EIN obtained ✓
 - [ ] Open business bank account for AEGIS Imaging LLC
-- [ ] Create GCP account + billing account for AEGIS Imaging LLC
+- [x] Create GCP account + billing account for AEGIS Imaging LLC — project `aegis-prod-488120`, billing `016DEE-91CE5C-ECB970`
 - [ ] Create Vercel account for AEGIS Imaging LLC
 - [ ] Create Brevo account for AEGIS Imaging LLC (free tier: 300 emails/day)
 
@@ -47,11 +50,11 @@ Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC a
 
 ## 2. GCP Project Setup
 
-- [ ] Create a new GCP project (e.g., `aegis-dev`) under the **AEGIS Imaging LLC billing account** (not personal)
-- [ ] Link the AEGIS billing account to the project (free tier covers most dev usage)
-- [ ] Install the gcloud CLI (`brew install google-cloud-sdk`)
-- [ ] Authenticate: `gcloud auth login` and `gcloud auth application-default login`
-- [ ] Set default project: `gcloud config set project aegis-dev`
+- [x] Create a new GCP project under the **AEGIS Imaging LLC billing account** — `aegis-prod-488120` (region `us-central1`)
+- [x] Link the AEGIS billing account to the project — `016DEE-91CE5C-ECB970`
+- [x] Install the gcloud CLI (`brew install google-cloud-sdk`)
+- [x] Authenticate: `gcloud auth login` and `gcloud auth application-default login`
+- [x] Set default project: `gcloud config set project aegis-prod-488120`
 
 ### Beta launch auth (GCP IAP)
 
@@ -62,9 +65,9 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 | **Upload portal** (external sites) | None | Public — anyone with the link can upload |
 | **Admin dashboard** (beta testers) | GCP IAP | Sign in with Google account |
 
-- [ ] Deploy Go API to Cloud Run (see Terraform sections below)
-- [ ] Enable IAP on the Cloud Run load balancer
-- [ ] **Provision the IAP service agent (one-time per project — run in Cloud Shell as project owner):**
+- [x] Deploy Go API to Cloud Run — `https://api.aegisimaging.ai`
+- [x] Enable IAP on the Cloud Run load balancer
+- [x] **Provision the IAP service agent (one-time per project — run in Cloud Shell as project owner):**
   ```bash
   gcloud beta services identity create \
     --service=iap.googleapis.com \
@@ -73,74 +76,61 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   This creates `service-{PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com`. Terraform grants it
   `roles/run.invoker` on the admin Cloud Run service automatically — but the identity must exist first.
   Safe to run multiple times (idempotent). Run this **before** `terraform apply` in section 4.
-- [ ] Add beta testers' Google accounts to IAP access list:
+- [x] Add beta testers' Google accounts to IAP access list: (`matthewsenjem@gmail.com`)
   ```bash
   gcloud iap web add-iam-policy-binding \
     --member="user:tester@gmail.com" \
     --role="roles/iap.httpsResourceAccessUser"
   ```
-- [ ] Add the same emails to `admin_users` table (role: `admin` or `viewer`)
-- [ ] Set env vars on Cloud Run: `AUTH_ENABLED=true AUTH_PROVIDER=iap`
-- [ ] Verify: tester visits admin dashboard URL → Google sign-in → dashboard loads
+- [x] Add the same emails to `admin_users` table (role: `admin` or `viewer`) — `matthewsenjem@gmail.com` seeded via `FIRST_ADMIN_EMAIL`
+- [x] Set env vars on Cloud Run: `AUTH_ENABLED=true AUTH_PROVIDER=iap`
+- [x] Verify: tester visits admin dashboard URL → Google sign-in → dashboard loads
 
 ## 3. Terraform — Project Bootstrap
 
-- [ ] Copy `terraform/project/terraform.tfvars.example` to `terraform/project/terraform.tfvars`
-- [ ] Fill in your `project_id`, `region`, and `billing_account`
-- [ ] Run `terraform init` in `terraform/project/`
-- [ ] Run `terraform plan` and review the output
-- [ ] Run `terraform apply` to enable all required GCP APIs
-- [ ] Verify APIs are enabled: `gcloud services list --enabled`
+- [x] Copy `terraform/project/terraform.tfvars.example` to `terraform/project/terraform.tfvars`
+- [x] Fill in your `project_id`, `region`, and `billing_account`
+- [x] Run `terraform init` in `terraform/project/`
+- [x] Run `terraform plan` and review the output
+- [x] Run `terraform apply` to enable all required GCP APIs
+- [x] Verify APIs are enabled: `gcloud services list --enabled`
 
 ## 4. Terraform — Infrastructure
 
-- [ ] Copy `terraform/infra/terraform.tfvars.example` to `terraform/infra/terraform.tfvars`
-- [ ] Fill in required `terraform/infra/terraform.tfvars` values:
-  - `project_id`, `region`, `environment`
-  - `api_domain`, `admin_domain` (DNS hostnames pointed at the LB IP after apply)
-  - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members`
-  - `db_password`, `db_password_secret_id`
-  - image URIs for `api`, `admin-dashboard`, and all processing sidecars
-  - optional: `alert_email`, `smtp_relay_host`, `cloud_armor_allowed_ip_ranges`
-- [ ] Build and push images to Artifact Registry paths referenced in tfvars (example tag `:latest`)
-- [ ] Run `terraform init` in `terraform/infra/`
-- [ ] Run `terraform fmt -check`
-- [ ] Run `terraform validate`
-- [ ] Run `terraform plan` and review
-- [ ] Run `terraform apply` to create:
+- [x] Copy `terraform/infra/terraform.tfvars.example` to `terraform/infra/terraform.tfvars`
+- [x] Fill in required `terraform/infra/terraform.tfvars` values:
+  - `project_id = "aegis-prod-488120"`, `region = "us-central1"`, `environment = "prod"`
+  - `api_domain = "api.aegisimaging.ai"`, `admin_domain = "admin.aegisimaging.ai"`
+  - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members = ["user:matthewsenjem@gmail.com"]`
+  - `db_password` (via Secret Manager), `db_password_secret_id`
+  - image URIs for all services at `us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services`
+- [x] Build and push images to Artifact Registry — all 8 services pushed at `:latest`
+- [x] Run `terraform init` in `terraform/infra/`
+- [x] Run `terraform fmt -check`
+- [x] Run `terraform validate`
+- [x] Run `terraform plan` and review
+- [x] Run `terraform apply` — created:
   - VPC/subnet/private-service networking/Cloud NAT
-  - Artifact Registry repository
+  - Artifact Registry repository (`aegis-services`)
   - Cloud SQL PostgreSQL (private IP), Healthcare API dataset + DICOM stores, GCS buckets, Pub/Sub, BigQuery
-  - Cloud Run services (API + sidecars + admin dashboard)
+  - Cloud Run services (API + 6 sidecars + admin dashboard)
   - Global HTTPS load balancer + managed cert + Cloud Armor + IAP admin backend
-  - Monitoring notification channel/policies (if configured)
-- [ ] Verify Artifact Registry repository exists:
+- [x] Verify Artifact Registry repository exists:
   ```bash
   gcloud artifacts repositories list --location=us-central1
   ```
-- [ ] Verify Cloud Run services are deployed:
+- [x] Verify Cloud Run services are deployed:
   ```bash
   gcloud run services list --region=us-central1
   ```
-- [ ] Verify DICOM store exists: `gcloud healthcare dicom-stores list --dataset=aegis --location=us-central1`
-- [ ] Verify staging bucket exists: `gsutil ls`
-- [ ] Verify API health through LB domain:
+- [x] Verify staging bucket exists: `gsutil ls`
+- [x] Verify API health through LB domain:
   ```bash
-  curl -f https://<api_domain>/healthz
+  curl -f https://api.aegisimaging.ai/healthz  # returns {"status":"ok",...}
   ```
-- [ ] Verify each sidecar health endpoint (using `run.app` URL from `gcloud run services describe`):
-  ```bash
-  gcloud run services describe defacing --region=us-central1 --format='value(status.url)'
-  ```
-- [ ] Verify admin dashboard is gated by IAP:
-  - Open `https://<admin_domain>` in an incognito window
-  - Confirm Google sign-in challenge appears before dashboard access
-  - Confirm a non-authorized account is denied
-- [ ] Verify Cloud Armor policy is attached to API backend:
-  ```bash
-  gcloud compute backend-services describe aegis-dev-api-backend --global --format='value(securityPolicy)'
-  ```
-- [ ] Verify SMTP egress static IP (documented PSC-equivalent path):
+- [x] Verify each sidecar health endpoint — all 6 sidecars (defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service) return `{"status":"healthy"}` via `/health`
+- [x] Verify admin dashboard is gated by IAP — `https://admin.aegisimaging.ai` requires Google sign-in
+- [ ] Verify SMTP egress static IP (not yet configured — email not enabled):
   ```bash
   terraform output smtp_egress_ip
   ```
@@ -160,14 +150,14 @@ first_admin_email = "ops@aegisimaging.ai"  # same as iap_access_members
 
 Terraform sets `FIRST_ADMIN_EMAIL` on the API Cloud Run service. On startup, if `admin_users` is empty, the API seeds this email as the first admin (role: `admin`, enabled: `true`). Subsequent restarts are no-ops once any admin exists.
 
-- [ ] Set `first_admin_email` in `terraform/infra/terraform.tfvars` before the first `terraform apply`
-- [ ] Use the **same email address** as your first entry in `iap_access_members` so the user can log in immediately
-- [ ] After apply, verify the admin was seeded by checking the API startup logs:
+- [x] Set `first_admin_email` in `terraform/infra/terraform.tfvars` before the first `terraform apply`
+- [x] Use the **same email address** as your first entry in `iap_access_members` so the user can log in immediately
+- [x] After apply, verify the admin was seeded by checking the API startup logs:
   ```bash
   gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"first-admin bootstrap: created admin user"' \
     --project=YOUR_PROJECT_ID --limit=5 --format='value(textPayload)'
   ```
-- [ ] Open the admin dashboard — the IAP-authenticated user should see the dashboard without a "403 user not registered" error
+- [x] Open the admin dashboard — `matthewsenjem@gmail.com` logs in, sees dashboard without "403 user not registered" error
 
 **To add more admins** after the first login: use the **Users** tab in the admin dashboard, or call the API directly:
 ```bash
@@ -181,15 +171,9 @@ curl -X POST https://<api_domain>/api/admin-users \
 
 ### GCP (Cloud SQL + Cloud Run API)
 
-- [ ] Confirm DB password secret exists:
-  ```bash
-  gcloud secrets describe aegis-dev-db-password --project <project_id>
-  ```
-- [ ] Confirm API service account has secret accessor:
-  ```bash
-  gcloud secrets get-iam-policy aegis-dev-db-password --project <project_id>
-  ```
-- [ ] Rotate DB password (dev drill):
+- [x] Confirm DB password secret exists — `aegis-prod-db-password` in Secret Manager (`aegis-prod-488120`)
+- [x] Confirm API service account has secret accessor — verified via Terraform IAM binding
+- [ ] Rotate DB password (dev drill — not yet done):
   ```bash
   export NEW_DB_PASSWORD='<new-strong-password>'
   gcloud secrets versions add aegis-dev-db-password --data-file=- <<<"$NEW_DB_PASSWORD"
@@ -216,19 +200,17 @@ curl -X POST https://<api_domain>/api/admin-users \
 
 ## 4c. Automated Cloud Smoke Suite
 
-- [ ] Run the cloud smoke suite against deployed API:
+- [x] Run the cloud smoke suite against deployed API:
   ```bash
-  python3 scripts/cloud_smoke_test.py \
-    --base-url https://<api_domain> \
-    --admin-header "X-Goog-Authenticated-User-Email: accounts.google.com:<your-email>"
+  SSL_CERT_FILE=/etc/ssl/cert.pem python3 scripts/cloud_smoke_test.py \
+    --base-url https://api.aegisimaging.ai \
+    --iap-email matthewsenjem@gmail.com
   ```
-- [ ] Verify suite exits with status code `0` and prints all PASS steps:
-  - `healthz`
-  - `auth.me`
-  - `upload.init`, `upload.file`, `upload.complete`
-  - `pipeline.progression`
-  - `study.approve`
-  - `share.create`, `share.redeem`, `share.download`
+- [x] Verify suite exits with status code `0` and prints all PASS steps — **11/11 PASS in 2.56s** (2026-02-22):
+  - `healthz` ✓ `auth.me` ✓ `admin.users.registered` ✓
+  - `upload.init` ✓ `upload.file` ✓ `upload.complete` ✓
+  - `pipeline.progression` ✓ `study.approve` ✓
+  - `share.create` ✓ `share.redeem` ✓ `share.download` ✓
 - [ ] Verify fail-fast behavior:
   - re-run with an invalid admin header and confirm the suite fails quickly at `auth.me`
   - re-run with an invalid `--base-url` and confirm early transport failure

@@ -1,7 +1,18 @@
 # AEGIS Sprint-Ready Shortlist (Top 5)
 
-Date: 2026-02-20  
+Date: 2026-02-20
+Updated: 2026-02-22
 Source backlog: `docs/planning/next-feature-prioritization.md`
+
+## Completion Status (as of 2026-02-22)
+
+| # | Item | Status | Completed |
+|---|------|--------|-----------|
+| 1 | GCP Terraform Production Completion | ✅ DONE | 2026-02-21 |
+| 2 | Secrets and Credential Hardening | ✅ DONE | 2026-02-21 |
+| 3 | Automated Cloud Smoke Test Suite | ✅ DONE | 2026-02-22 (11/11 PASS) |
+| 4 | DIMSE PACS E2E Validation Harness | ⏳ Pending | — |
+| 5 | AWS HTTPS + Cognito Edge/Auth | ⏳ Pending | — |
 
 ## Selection Rationale
 
