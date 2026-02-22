@@ -12,10 +12,13 @@ import {
   createShareArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
+  getAuditActorsArgsSchema,
   getShareDownloadsArgsSchema,
+  getStuckStudiesArgsSchema,
   listAllSharesArgsSchema,
   listAuditArgsSchema,
   listStudiesArgsSchema,
+  projectScopedArgsSchema,
   readToolNames,
   reEvaluateRoutingArgsSchema,
   rejectStudyArgsSchema,
@@ -263,11 +266,12 @@ const tools: Tool[] = [
   },
   {
     name: "get_pipeline_stats",
-    description: "Get a lightweight snapshot of the study pipeline: study counts by status (received/defacing/clean/defaced/approved/rejected/total) plus active export share count. Use for a quick pipeline health check or to answer 'how many studies are pending/approved/stuck?'.",
+    description: "Get a lightweight snapshot of the study pipeline: study counts by status (received/defacing/clean/defaced/approved/rejected/total) plus active export share count. Optionally scope to a single project. Use for a quick pipeline health check.",
     inputSchema: {
       type: "object",
       properties: {
-        request_id: { type: "string" }
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
       },
       additionalProperties: false
     }
@@ -303,27 +307,19 @@ const tools: Tool[] = [
   {
     name: "get_audit_log",
     description:
-      "Query the system-wide audit trail with optional filters and server-side pagination. Returns {entries, total, limit, offset}. Filter by action prefix (e.g. 'study' matches study.approved, study.rejected), resource_type (e.g. 'study', 'admin_user'), or actor email.",
+      "Query the system-wide audit trail with optional filters and server-side pagination. Returns {entries, total, limit, offset}. Filter by action prefix, resource_type, actor email, keyword search (across actor/action/resource_id/detail), or date range.",
     inputSchema: {
       type: "object",
       properties: {
         request_id: { type: "string" },
         limit: { type: "number", minimum: 1, maximum: 500, description: "Page size (default 100)" },
         offset: { type: "number", minimum: 0, description: "Row offset for pagination" },
-        action: {
-          type: "string",
-          pattern: "^[a-z0-9_.]+$",
-          description: "Prefix filter on action name, e.g. 'study' or 'study.approved'"
-        },
-        resource_type: {
-          type: "string",
-          pattern: "^[a-z0-9_]+$",
-          description: "Exact match on resource_type, e.g. 'study', 'admin_user'"
-        },
-        actor: {
-          type: "string",
-          description: "Exact match on actor email address"
-        }
+        action: { type: "string", pattern: "^[a-z0-9_.]+$", description: "Prefix filter on action name, e.g. 'study' or 'study.approved'" },
+        resource_type: { type: "string", pattern: "^[a-z0-9_]+$", description: "Exact match on resource_type, e.g. 'study', 'admin_user'" },
+        actor: { type: "string", description: "Exact match on actor email address" },
+        search: { type: "string", description: "Case-insensitive substring search across actor, action, resource_id, and detail JSON" },
+        date_from: { type: "string", format: "date-time", description: "ISO 8601 lower bound on created_at (inclusive)" },
+        date_to: { type: "string", format: "date-time", description: "ISO 8601 upper bound on created_at (inclusive)" }
       },
       additionalProperties: false
     }
@@ -452,6 +448,55 @@ const tools: Tool[] = [
         share_id: { type: "string", format: "uuid" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_stuck_studies",
+    description: "List studies stuck in a non-terminal pipeline state for longer than `minutes` (default 60). Returns studies with their current status and pipeline flags for triage. Optionally scope to a single project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        minutes: { type: "integer", minimum: 1, maximum: 10080, description: "Age threshold in minutes (default 60)" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_breakdown_stats",
+    description: "Get study counts grouped by modality and body part. Useful for understanding the composition of the study corpus. Optionally scope to a single project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_storage_stats",
+    description: "Get aggregate DICOM file storage counts: raw file count, clean file count, total file count, and total study count. Optionally scope to a single project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_audit_actors",
+    description: "Get recent admin actor activity summary: top actors by recency with action counts and last-seen timestamp. Only covers the last 30 days. Useful for access auditing and detecting unusual activity.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Max actors to return (default 20)" }
       },
       additionalProperties: false
     }
@@ -624,8 +669,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     }
 
     if (name === "get_pipeline_stats") {
-      emptyArgsSchema.parse(args);
-      const data = await client.get("/api/stats");
+      const parsed = projectScopedArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/stats${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
@@ -654,8 +702,48 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.action) params.set("action", parsed.action);
       if (parsed.resource_type) params.set("resource_type", parsed.resource_type);
       if (parsed.actor) params.set("actor", parsed.actor);
+      if (parsed.search) params.set("search", parsed.search);
+      if (parsed.date_from) params.set("date_from", parsed.date_from);
+      if (parsed.date_to) params.set("date_to", parsed.date_to);
       const qs = params.toString();
       const data = await client.get(`/api/audit${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_stuck_studies") {
+      const parsed = getStuckStudiesArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.minutes !== undefined) params.set("minutes", String(parsed.minutes));
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/studies/stuck${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_breakdown_stats") {
+      const parsed = projectScopedArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/breakdown${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_storage_stats") {
+      const parsed = projectScopedArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/storage/stats${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_audit_actors") {
+      const parsed = getAuditActorsArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.limit !== undefined) params.set("limit", String(parsed.limit));
+      const qs = params.toString();
+      const data = await client.get(`/api/audit/actors${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
