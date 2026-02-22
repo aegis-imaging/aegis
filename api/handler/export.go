@@ -38,7 +38,8 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 	webhook.Deliver(r.Context(), s.db, "study.approved", study)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
-		subject, body := email.StudyApproved(study.StudyInstanceUID)
+		projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
+		subject, body := email.StudyApproved(study.StudyInstanceUID, projectName)
 		if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
 			log.Printf("approve email to %s: %v", uploaderEmail, err)
 		}
@@ -95,7 +96,8 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 	webhook.Deliver(r.Context(), s.db, "study.rejected", study)
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
-		subject, body := email.StudyRejected(study.StudyInstanceUID, reason)
+		projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
+		subject, body := email.StudyRejected(study.StudyInstanceUID, reason, projectName)
 		if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
 			log.Printf("reject email to %s: %v", uploaderEmail, err)
 		}
