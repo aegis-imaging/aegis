@@ -4,7 +4,19 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
+type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users' | 'api_keys'
+
+type APIKey = {
+  id: string
+  name: string
+  key_prefix: string
+  created_by: string
+  enabled: boolean
+  last_used_at: string | null
+  expires_at: string | null
+  created_at: string
+  updated_at: string
+}
 
 type StudyLabel = {
   id: string
@@ -4159,6 +4171,173 @@ function DimseOpsPanel() {
   )
 }
 
+// ── API Keys Panel ────────────────────────────────────────────────────────────
+
+function APIKeysPanel() {
+  const [keys, setKeys]       = useState<APIKey[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [formName, setFormName]   = useState('')
+  const [formExpiry, setFormExpiry] = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/api-keys')
+      if (!res.ok) throw new Error('Failed to load')
+      setKeys((await res.json()) ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function create() {
+    if (!formName.trim()) { setFormError('Name is required'); return }
+    setSaving(true)
+    setFormError(null)
+    setNewKeyValue(null)
+    const body: Record<string, unknown> = { name: formName.trim() }
+    if (formExpiry) body.expires_at = new Date(formExpiry).toISOString()
+    try {
+      const res = await fetch('/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Create failed') }
+      const data = await res.json()
+      setNewKeyValue(data.key)
+      setFormName('')
+      setFormExpiry('')
+      setShowForm(false)
+      load()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Create failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function toggle(key: APIKey) {
+    const action = key.enabled ? 'disable' : 'enable'
+    await fetch(`/api/api-keys/${key.id}/${action}`, { method: 'PATCH' })
+    load()
+  }
+
+  async function del(key: APIKey) {
+    if (!confirm(`Permanently delete API key "${key.name}"? This cannot be undone.`)) return
+    await fetch(`/api/api-keys/${key.id}`, { method: 'DELETE' })
+    setNewKeyValue(null)
+    load()
+  }
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">API Keys</div>
+            <div className="routing-section-sub">
+              Machine-to-machine credentials for programmatic API access. The raw key is shown only once at creation.
+            </div>
+          </div>
+          <button type="button" className="btn-primary" onClick={() => { setShowForm(true); setNewKeyValue(null) }}>
+            + New API key
+          </button>
+        </div>
+
+        {newKeyValue && (
+          <div className="routing-form" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+            <strong style={{ color: '#166534' }}>API key created — copy it now, it will not be shown again:</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
+                {newKeyValue}
+              </code>
+              <button type="button" className="btn-secondary"
+                onClick={() => navigator.clipboard.writeText(newKeyValue!)}>Copy</button>
+            </div>
+            <button type="button" className="btn-secondary" style={{ marginTop: '8px' }} onClick={() => setNewKeyValue(null)}>Dismiss</button>
+          </div>
+        )}
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>New API key</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input className="form-input" type="text" placeholder="Key name *"
+                value={formName} onChange={e => setFormName(e.target.value)} />
+              <input className="form-input" type="date" placeholder="Expiry date (optional)"
+                value={formExpiry} onChange={e => setFormExpiry(e.target.value)}
+                title="Expiry date (optional)" />
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={create} disabled={saving}>
+                {saving ? 'Creating…' : 'Create'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {loading && <div className="state-loading">Loading…</div>}
+        {error   && <div className="state-error">{error}</div>}
+        {!loading && !error && keys.length === 0 && (
+          <div className="state-empty">No API keys yet.</div>
+        )}
+        {!loading && !error && keys.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Prefix</th>
+                <th>Created by</th>
+                <th>Last used</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {keys.map(k => (
+                <tr key={k.id}>
+                  <td>{k.name}</td>
+                  <td><code style={{ fontSize: '0.8rem' }}>{k.key_prefix}…</code></td>
+                  <td>{k.created_by}</td>
+                  <td>{k.last_used_at ? fmtDate(k.last_used_at) : <span className="routing-desc">never</span>}</td>
+                  <td>{k.expires_at ? fmtDate(k.expires_at) : <span className="routing-desc">never</span>}</td>
+                  <td>
+                    <span className={`status-badge status-badge--${k.enabled ? 'clean' : 'failed'}`}>
+                      {k.enabled ? 'active' : 'disabled'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="actions-cell">
+                      <button type="button" className="btn btn--action" onClick={() => toggle(k)}>
+                        {k.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      <button type="button" className="btn btn--revoke" onClick={() => del(k)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 type StudiesState = 'loading' | 'loaded' | 'error'
@@ -4523,6 +4702,15 @@ export function App() {
             Users
           </button>
         )}
+        {isAdmin && (
+          <button
+            type="button"
+            className={`tab-btn${tab === 'api_keys' ? ' tab-btn--active' : ''}`}
+            onClick={() => setTab('api_keys')}
+          >
+            API Keys
+          </button>
+        )}
       </nav>
 
       {/* Studies tab */}
@@ -4775,6 +4963,9 @@ export function App() {
 
       {/* Users tab — admin only */}
       {tab === 'users' && isAdmin && <UsersPanel />}
+
+      {/* API Keys tab — admin only */}
+      {tab === 'api_keys' && isAdmin && <APIKeysPanel />}
     </div>
   )
 }

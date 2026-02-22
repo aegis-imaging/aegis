@@ -222,6 +222,13 @@ func main() {
 	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", adminOnly(srv.CreateDigestSubscription))
 	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", adminOnly(srv.DeleteDigestSubscription))
 
+	// API keys — long-lived machine-to-machine credentials.
+	mux.HandleFunc("GET /api/api-keys", auth(srv.ListAPIKeys))
+	mux.HandleFunc("POST /api/api-keys", adminOnly(srv.CreateAPIKey))
+	mux.HandleFunc("PATCH /api/api-keys/{id}/enable", adminOnly(srv.EnableAPIKey))
+	mux.HandleFunc("PATCH /api/api-keys/{id}/disable", adminOnly(srv.DisableAPIKey))
+	mux.HandleFunc("DELETE /api/api-keys/{id}", adminOnly(srv.DeleteAPIKey))
+
 	// Study labels — free-text tags applied by admin users for structured triage.
 	mux.HandleFunc("GET /api/studies/{id}/labels", auth(srv.ListStudyLabels))
 	mux.HandleFunc("POST /api/studies/{id}/labels", adminOnly(srv.AddStudyLabel))
