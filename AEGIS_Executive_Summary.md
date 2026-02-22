@@ -38,7 +38,7 @@ css: |
   <p style="font-size: 16px; color: #6b7280; margin: 0.5em 0;">A multi-cloud platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
   <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
   <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
-  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 20, 2026</p>
+  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 22, 2026</p>
 </div>
 
 ---
@@ -215,7 +215,7 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Phased Roadmap
 
-> **Development status note:** Phases 1–4 are **code-complete** — all features are implemented, compile, and pass CI. Recent hardening shipped includes timezone-stable rendering controls across UIs and strict importer contract validation (canonical selectors, strict JSON, absolute-path requirement). The platform has not yet been deployed to a cloud environment or tested with real clinical data. A test deployment on GCP or AWS is planned as the next milestone.
+> **Production status:** Phases 1–4 are **deployed and running** on GCP (project `aegis-prod-488120`, region `us-central1`). The full platform stack — Go API, admin dashboard with OHIF viewer, DIMSE receiver, and all 6 Python processing sidecars — is live at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. Infrastructure is managed by Terraform (Cloud Run, Cloud SQL, GCS, Cloud Armor, IAP). Recent hardening includes operator tooling (bulk study approve/reject, CSV export, admin study notes, diagnostics panel), DIMSE C-STORE ingress with durable retry/dead-letter, and an MCP server for AI-assisted study operations.
 
 ### Phase 1 — Foundation (Code Complete)
 - Cloud infrastructure (Terraform for GCP and AWS)
@@ -243,11 +243,21 @@ XNAT and Flywheel serve research well but require software installation at sendi
 - Batch import tools for historical data migration
 - Multi-cloud support — AWS S3 storage backend, ALB + Cognito auth, Terraform AWS module
 
-### Next Milestone — Test Deployment
-- Deploy to GCP or AWS using Terraform modules
-- End-to-end testing with sample DICOM datasets (TCIA public data)
-- Validate full pipeline: upload → de-identify → deface → QC → approve → export
-- Performance benchmarking and cost validation
+### GCP Production Deployment (Complete, February 2026)
+- Full platform deployed to GCP via Terraform (`aegis-prod-488120`, `us-central1`)
+- All 10 services live on Cloud Run with private VPC, Cloud SQL, GCS, Cloud Armor
+- IAP-protected admin dashboard at `admin.aegisimaging.ai`
+- API at `api.aegisimaging.ai` with HTTPS load balancer
+- CI/CD via GitHub Actions; all 8 service images in Artifact Registry
+
+### Operator Tooling (Complete, February 2026)
+- Bulk study approve/reject (`POST /api/studies/bulk`) with multi-select dashboard UI
+- Study CSV export (`GET /api/studies.csv`) with active-filter propagation
+- Admin internal study notes stored as audit trail entries
+- Study diagnostics panel ("why stuck?") in study detail view
+- Shares tab enhancements: email search, countdown display, note column
+- OHIF Viewer fully deployed to Cloud Run; docker-compose uses local build
+- Export portal enriched with modality badges, study UID, and instance count
 
 ### Phase 5 — Enterprise Radiology
 - DIMSE service-class expansion — add C-FIND/C-MOVE workflows beyond current C-STORE ingest
