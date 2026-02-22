@@ -489,21 +489,32 @@ const ACTION_GROUPS: Record<string, string> = {
   'deface.failed':    'deface-err',
 }
 
+const AUDIT_PAGE_SIZE = 100
+const AUDIT_CATEGORIES = ['study', 'admin_user', 'pipeline', 'phi_scan', 'qc_check', 'bids', 'classification', 'protocol_check', 'export', 'routing', 'institution', 'project', 'digest', 'destination']
+
 function AuditLog() {
   const [entries, setEntries] = useState<AuditEntry[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState('')
+  const [actionFilter, setActionFilter] = useState('')
+  const [actorFilter, setActorFilter] = useState('')
+  const [actorInput, setActorInput] = useState('')
+  const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const fetchAudit = useCallback(async () => {
+  const fetchAudit = useCallback(async (actionF: string, actorF: string, pg: number) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/audit?limit=200')
+      const params = new URLSearchParams({ limit: String(AUDIT_PAGE_SIZE), offset: String(pg * AUDIT_PAGE_SIZE) })
+      if (actionF) params.set('action', actionF)
+      if (actorF) params.set('actor', actorF)
+      const res = await fetch(`/api/audit?${params}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setEntries(data)
+      setEntries(data.entries ?? [])
+      setTotal(data.total ?? 0)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load audit log')
     } finally {
@@ -511,52 +522,81 @@ function AuditLog() {
     }
   }, [])
 
-  useEffect(() => { fetchAudit() }, [fetchAudit])
+  useEffect(() => { fetchAudit(actionFilter, actorFilter, page) }, [fetchAudit, actionFilter, actorFilter, page])
 
-  const filtered = filter
-    ? entries.filter(e => e.action.startsWith(filter))
-    : entries
+  const setCategory = (cat: string) => {
+    setActionFilter(cat)
+    setPage(0)
+    setExpandedId(null)
+  }
 
-  const uniqueActions = [...new Set(entries.map(e => e.action.split('.')[0]))].sort()
+  const applyActorFilter = () => {
+    setActorFilter(actorInput.trim())
+    setPage(0)
+    setExpandedId(null)
+  }
+
+  const clearActorFilter = () => {
+    setActorInput('')
+    setActorFilter('')
+    setPage(0)
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
 
   return (
     <div>
       <div className="audit-toolbar">
         <div className="audit-filters">
-          <span className="audit-filter-label">Filter by category:</span>
+          <span className="audit-filter-label">Category:</span>
           <button
             type="button"
-            className={`audit-filter-btn${filter === '' ? ' audit-filter-btn--active' : ''}`}
-            onClick={() => setFilter('')}
+            className={`audit-filter-btn${actionFilter === '' ? ' audit-filter-btn--active' : ''}`}
+            onClick={() => setCategory('')}
           >
-            All ({entries.length})
+            All
           </button>
-          {uniqueActions.map(prefix => {
-            const count = entries.filter(e => e.action.startsWith(prefix)).length
-            return (
-              <button
-                key={prefix}
-                type="button"
-                className={`audit-filter-btn${filter === prefix ? ' audit-filter-btn--active' : ''}`}
-                onClick={() => setFilter(prefix === filter.split('.')[0] && filter === prefix ? '' : prefix)}
-              >
-                {prefix} ({count})
-              </button>
-            )
-          })}
+          {AUDIT_CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              className={`audit-filter-btn${actionFilter === cat ? ' audit-filter-btn--active' : ''}`}
+              onClick={() => setCategory(cat === actionFilter ? '' : cat)}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
-        <button type="button" className="btn-refresh" onClick={fetchAudit}>Refresh</button>
+        <div className="audit-actor-filter">
+          <input
+            type="text"
+            placeholder="Filter by actor (email)…"
+            value={actorInput}
+            onChange={e => setActorInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && applyActorFilter()}
+            className="audit-actor-input"
+          />
+          <button type="button" className="btn-secondary" onClick={applyActorFilter}>Apply</button>
+          {actorFilter && <button type="button" className="btn-secondary" onClick={clearActorFilter}>Clear</button>}
+        </div>
+        <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, page)}>Refresh</button>
       </div>
 
       {loading && <div className="state-loading">Loading audit log…</div>}
       {error   && <div className="state-error">{error}</div>}
 
-      {!loading && !error && filtered.length === 0 && (
+      {!loading && !error && entries.length === 0 && (
         <div className="state-empty">No audit entries yet.</div>
       )}
 
-      {!loading && !error && filtered.length > 0 && (
+      {!loading && !error && entries.length > 0 && (
         <div className="audit-table-wrap">
+          <div className="audit-pagination-bar">
+            <span className="audit-total">{total} entries</span>
+            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
+            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
           <table className="audit-table">
             <thead>
               <tr>
@@ -569,7 +609,7 @@ function AuditLog() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(e => {
+              {entries.map(e => {
                 const group = ACTION_GROUPS[e.action] ?? 'neutral'
                 const hasDetail = e.detail && Object.keys(e.detail).length > 0
                 const isExpanded = expandedId === e.id
@@ -610,6 +650,11 @@ function AuditLog() {
               })}
             </tbody>
           </table>
+          <div className="audit-pagination-bar audit-pagination-bar--bottom">
+            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
+            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
         </div>
       )}
     </div>
