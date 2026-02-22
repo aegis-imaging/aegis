@@ -7,13 +7,16 @@ import { InMemoryIdempotencyCache } from "./idempotencyCache.js";
 import { InMemoryRateLimiter } from "./rateLimiter.js";
 import { redactToolArgs } from "./redaction.js";
 import {
+  approveStudyArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
   listAllSharesArgsSchema,
   listAuditArgsSchema,
   listStudiesArgsSchema,
   readToolNames,
+  rejectStudyArgsSchema,
   retryDimseArgsSchema,
+  revokeShareArgsSchema,
   studyIdArgsSchema,
   studyUidArgsSchema,
   ToolName,
@@ -346,6 +349,51 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "approve_study",
+    description: "Approve a study (transitions status to 'approved', enables export sharing, triggers auto-export if required). Study must not already be approved or rejected. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "reject_study",
+    description: "Reject a study (transitions status to 'rejected'). Study must not already be rejected. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "revoke_share",
+    description: "Immediately revoke an export share link by share UUID. Recipients lose access immediately. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["share_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        share_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -544,6 +592,21 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleRetryDimseStudy(parsed.request_id ?? buildRequestId(), parsed);
       }
 
+      if (name === "approve_study") {
+        const parsedApprove = approveStudyArgsSchema.parse(args);
+        return handleApproveStudy(parsedApprove.request_id ?? buildRequestId(), parsedApprove);
+      }
+
+      if (name === "reject_study") {
+        const parsedReject = rejectStudyArgsSchema.parse(args);
+        return handleRejectStudy(parsedReject.request_id ?? buildRequestId(), parsedReject);
+      }
+
+      if (name === "revoke_share") {
+        const parsedRevoke = revokeShareArgsSchema.parse(args);
+        return handleRevokeShare(parsedRevoke.request_id ?? buildRequestId(), parsedRevoke);
+      }
+
       const parsed = writeArgsSchema.parse(args);
 
       if (name === "trigger_classification") {
@@ -642,6 +705,12 @@ function extractRequestedBy(args: Record<string, unknown>): string | undefined {
 function extractWriteTarget(name: ToolName, args: Record<string, unknown>): string | null {
   if (name === "retry_dimse_study") {
     return typeof args.study_instance_uid === "string" ? args.study_instance_uid : null;
+  }
+  if (name === "approve_study" || name === "reject_study") {
+    return typeof args.study_id === "string" ? args.study_id : null;
+  }
+  if (name === "revoke_share") {
+    return typeof args.share_id === "string" ? args.share_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -1230,6 +1299,78 @@ function formatError(
     isError: true,
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }]
   };
+}
+
+async function handleApproveStudy(
+  requestId: string,
+  parsed: { study_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "approve_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow approve_study", false, "approve_study");
+  }
+
+  const study = await client.get(`/api/studies/${encodeURIComponent(parsed.study_id)}`) as Record<string, unknown>;
+  const currentStatus = study?.status as string | undefined;
+  if (currentStatus === "approved" || currentStatus === "rejected") {
+    return formatError(requestId, "CONFLICT", `Study is already ${currentStatus}`, false, "approve_study");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/approve`);
+  return formatSuccess(requestId, "approve_study", {
+    accepted: true,
+    study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleRejectStudy(
+  requestId: string,
+  parsed: { study_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reject_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow reject_study", false, "reject_study");
+  }
+
+  const study = await client.get(`/api/studies/${encodeURIComponent(parsed.study_id)}`) as Record<string, unknown>;
+  const currentStatus = study?.status as string | undefined;
+  if (currentStatus === "rejected") {
+    return formatError(requestId, "CONFLICT", "Study is already rejected", false, "reject_study");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reject`);
+  return formatSuccess(requestId, "reject_study", {
+    accepted: true,
+    study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleRevokeShare(
+  requestId: string,
+  parsed: { share_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "revoke_share");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow revoke_share", false, "revoke_share");
+  }
+
+  const data = await client.delete(`/api/shares/${encodeURIComponent(parsed.share_id)}`);
+  return formatSuccess(requestId, "revoke_share", {
+    accepted: true,
+    share_id: parsed.share_id,
+    reason: parsed.reason,
+    result: data
+  });
 }
 
 function buildRequestId() {
