@@ -92,6 +92,10 @@ type Config struct {
 	SLACooldownHours   int    // SLA_COOLDOWN_HOURS — re-alert cooldown per study (default 24)
 	SLAAlertEmail      string // SLA_ALERT_EMAIL — recipient for stuck-study alerts
 
+	// Pipeline failure alerting — sends email whenever a pipeline service step fails.
+	// Disabled when PipelineAlertEmail is empty or SMTP is not configured.
+	PipelineAlertEmail string // PIPELINE_ALERT_EMAIL — recipient for pipeline step failure alerts
+
 	// First-admin bootstrap — seeds the first admin user on startup when admin_users is empty.
 	// Idempotent: has no effect once any admin user exists.
 	FirstAdminEmail string // FIRST_ADMIN_EMAIL
@@ -169,6 +173,7 @@ func Load() *Config {
 		SLAPipelineMinutes: envInt("SLA_PIPELINE_MINUTES", 0),
 		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),
 		SLAAlertEmail:      os.Getenv("SLA_ALERT_EMAIL"),
+		PipelineAlertEmail: os.Getenv("PIPELINE_ALERT_EMAIL"),
 
 		FirstAdminEmail: os.Getenv("FIRST_ADMIN_EMAIL"),
 		FirstAdminName:  envOr("FIRST_ADMIN_NAME", os.Getenv("FIRST_ADMIN_EMAIL")),

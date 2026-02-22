@@ -138,6 +138,7 @@ func (s *Server) runClassification(study *model.Study) {
 			"tool":      svcResp.ToolUsed,
 			"error":     errMsg,
 		})
+		s.notifyPipelineFailure(ctx, studyUID, "classification", errMsg)
 		return
 	}
 
