@@ -156,6 +156,53 @@ export default function Demo() {
           </p>
         </div>
 
+        {/* ── Step guide ── */}
+        <div
+          className={`animate--fade-up animate--delay-1${isVisible ? ' animate--visible' : ''}`}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '0',
+            marginBottom: '28px',
+            background: 'rgba(15,23,42,0.7)',
+            border: '1px solid #1e293b',
+            borderRadius: '12px',
+            overflow: 'hidden',
+          }}
+        >
+          {[
+            { n: '1', icon: '📂', title: 'Get a DICOM file', body: 'Have a .dcm file from any modality. No DICOM? Hit "Use sample data" below.' },
+            { n: '2', icon: '⬇️', title: 'Drop it in the box', body: 'Drag and drop or click to browse. The file is processed entirely in your browser.' },
+            { n: '3', icon: '🔍', title: 'See what AEGIS strips', body: 'Every tag the PS3.15 profile touches appears instantly — with the original value alongside.' },
+          ].map((step, i) => (
+            <div
+              key={step.n}
+              style={{
+                padding: '20px 22px',
+                borderRight: i < 2 ? '1px solid #1e293b' : undefined,
+                display: 'flex', gap: '14px', alignItems: 'flex-start',
+              }}
+            >
+              <div style={{
+                width: '28px', height: '28px', borderRadius: '50%',
+                background: 'rgba(59,130,246,0.15)', color: '#60a5fa',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 800, fontSize: '0.8rem', flexShrink: 0,
+              }}>
+                {step.n}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#e2e8f0', marginBottom: '4px' }}>
+                  {step.icon} {step.title}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+                  {step.body}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* ── Drop zone ── */}
         {state === 'idle' && (
           <div className={`animate--fade-up animate--delay-1${isVisible ? ' animate--visible' : ''}`}>
