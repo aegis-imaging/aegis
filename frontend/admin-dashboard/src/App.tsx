@@ -156,6 +156,7 @@ type Project = {
   slug: string
   description: string
   default_anon_profile_id?: string | null
+  retention_days?: number | null
   created_at: string
 }
 
@@ -3612,6 +3613,12 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [phiSaving, setPhiSaving]       = useState(false)
   const [phiError, setPhiError]         = useState<string | null>(null)
 
+  // Retention policy editor state
+  const [retentionProjectId, setRetentionProjectId]   = useState<string | null>(null)
+  const [retentionDraft, setRetentionDraft]           = useState<string>('')
+  const [retentionSaving, setRetentionSaving]         = useState(false)
+  const [retentionError, setRetentionError]           = useState<string | null>(null)
+
   async function openPhiConfig(projectId: string) {
     setPhiProjectId(projectId)
     setPhiError(null)
@@ -3639,6 +3646,37 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
       setPhiError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setPhiSaving(false)
+    }
+  }
+
+  function openRetention(p: Project) {
+    setRetentionProjectId(p.id)
+    setRetentionDraft(p.retention_days != null ? String(p.retention_days) : '')
+    setRetentionError(null)
+  }
+
+  async function saveRetention() {
+    if (!retentionProjectId) return
+    const days = retentionDraft.trim() === '' ? null : parseInt(retentionDraft, 10)
+    if (days !== null && (isNaN(days) || days <= 0)) {
+      setRetentionError('Must be a positive integer or leave blank to disable')
+      return
+    }
+    setRetentionSaving(true)
+    setRetentionError(null)
+    try {
+      const res = await fetch(`/api/projects/${retentionProjectId}/retention`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retention_days: days }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setRetentionProjectId(null)
+      fetchProjects()
+    } catch (err) {
+      setRetentionError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setRetentionSaving(false)
     }
   }
 
@@ -3766,6 +3804,32 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
 
+        {/* Inline retention policy editor */}
+        {retentionProjectId && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>Retention Policy — {projects.find(p => p.id === retentionProjectId)?.name}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Approved studies older than this threshold are automatically marked as expired.
+              Leave blank to keep studies indefinitely.
+            </div>
+            {retentionError && <div className="form-error">{retentionError}</div>}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Retention period (days, blank = unlimited)
+                <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 90"
+                  value={retentionDraft}
+                  onChange={e => setRetentionDraft(e.target.value)} />
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveRetention} disabled={retentionSaving}>
+                {retentionSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setRetentionProjectId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {projects.length === 0 && !showForm ? (
           <div className="state-empty">No projects yet.</div>
         ) : projects.length > 0 && (
@@ -3775,6 +3839,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Project</th>
                 <th>Slug</th>
                 <th>Default profile</th>
+                <th>Retention</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -3791,6 +3856,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {p.default_anon_profile_id
                       ? <span className="badge badge--enabled">profile set</span>
                       : <span className="routing-desc">none</span>}
+                  </td>
+                  <td>
+                    {p.retention_days != null
+                      ? <span className="badge badge--status">{p.retention_days}d</span>
+                      : <span className="routing-desc">unlimited</span>}
                   </td>
                   <td className="td-date">{fmtDate(p.created_at)}</td>
                   <td>
@@ -3812,6 +3882,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           title="Configure PHI scan sensitivity for this project"
                           onClick={() => openPhiConfig(p.id)}>
                           PHI Config
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Set study retention period for this project"
+                          onClick={() => openRetention(p)}>
+                          Retention
                         </button>
                       </div>
                     )}

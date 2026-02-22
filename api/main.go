@@ -17,6 +17,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/migrate"
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/retention"
 	"github.com/aegis-imaging/aegis/api/sla"
 	"github.com/aegis-imaging/aegis/api/storage"
 
@@ -163,6 +164,7 @@ func main() {
 	mux.HandleFunc("POST /api/projects", adminOnly(srv.CreateProject))
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
 	mux.HandleFunc("PUT /api/projects/{id}", adminOnly(srv.UpdateProject))
+	mux.HandleFunc("PUT /api/projects/{id}/retention", adminOnly(srv.SetProjectRetention))
 	mux.HandleFunc("GET /api/projects/{id}/phi-config", auth(srv.GetProjectPhiConfig))
 	mux.HandleFunc("PUT /api/projects/{id}/phi-config", adminOnly(srv.UpdateProjectPhiConfig))
 
@@ -317,6 +319,11 @@ func main() {
 	slaCtx, slaCancel := context.WithCancel(context.Background())
 	defer slaCancel()
 	sla.Start(slaCtx, db, mailer, cfg.SLAPipelineMinutes, cfg.SLACooldownHours, cfg.SLAAlertEmail)
+
+	// Start the study retention worker (daily sweep, no-op when no projects have retention_days set).
+	retentionCtx, retentionCancel := context.WithCancel(context.Background())
+	defer retentionCancel()
+	retention.Start(retentionCtx, db)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
