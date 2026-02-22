@@ -1416,8 +1416,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     { label: 'Export', required: study.export_required, status: study.export_status, step: 'export' },
   ]
 
-  const canApprove = !['approved', 'rejected'].includes(study.status)
-  const canReject = study.status !== 'rejected'
+  const canApprove = !['approved', 'rejected', 'expired'].includes(study.status)
+  const canReject = !['rejected', 'expired'].includes(study.status)
+  const canReactivate = study.status === 'expired'
   const canShare = study.status === 'approved'
   const canReviewDeface = study.defacing_required && ['defaced', 'approved'].includes(study.status)
   const canPhiScan = study.phi_scan_required && study.phi_scan_status === 'pending'
@@ -1534,6 +1535,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="study-detail__actions">
           {isAdmin && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
           {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={() => { if (confirm('Reject this study?')) doAction(`/api/studies/${study.id}/reject`) }}>Reject</button>}
+          {isAdmin && canReactivate && <button type="button" className="btn btn--approve" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
           {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
           {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
           {isAdmin && canProtocolCheck && <button type="button" className="btn btn--protocol-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/protocol-check`)}>Check Protocol</button>}
@@ -1890,8 +1892,9 @@ function StudyRow({
     onAction()
   }
 
-  const canApprove    = !['approved', 'rejected'].includes(study.status)
-  const canReject     = study.status !== 'rejected'
+  const canApprove    = !['approved', 'rejected', 'expired'].includes(study.status)
+  const canReject     = !['rejected', 'expired'].includes(study.status)
+  const canReactivate = study.status === 'expired'
   const canShare      = study.status === 'approved'
   // Show "Review defacing" for head studies that have been defaced (raw files preserved).
   const canReviewDeface = study.defacing_required &&
@@ -1956,6 +1959,9 @@ function StudyRow({
             )}
             {isAdmin && canReject && (
               <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>
+            )}
+            {isAdmin && canReactivate && (
+              <button type="button" className="btn btn--approve" onClick={async () => { if (confirm('Reactivate this expired study?')) { await fetch(`/api/studies/${study.id}/reactivate`, { method: 'POST' }); onAction() } }} title="Restore expired study to approved">Reactivate</button>
             )}
             {isAdmin && canShare && (
               <button type="button" className="btn btn--share" onClick={() => setShareOpen(o => !o)}>
@@ -4942,7 +4948,7 @@ export function App() {
 
   // Dashboard pipeline stats
   type PipelineStats = {
-    study_counts: { received: number; defacing: number; clean: number; defaced: number; approved: number; rejected: number; total: number }
+    study_counts: { received: number; defacing: number; clean: number; defaced: number; approved: number; rejected: number; expired: number; total: number }
     active_shares: number
   }
   const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null)
@@ -5268,6 +5274,7 @@ export function App() {
                   ['defaced',  'Defaced',   pipelineStats.study_counts.defaced],
                   ['approved', 'Approved',  pipelineStats.study_counts.approved],
                   ['rejected', 'Rejected',  pipelineStats.study_counts.rejected],
+                  ['expired',  'Expired',   pipelineStats.study_counts.expired ?? 0],
                 ] as [string, string, number][]
               ).map(([status, label, count]) => (
                 <button
@@ -5305,6 +5312,7 @@ export function App() {
               <option value="defaced">Defaced</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
+              <option value="expired">Expired</option>
             </select>
             <select className="filter-select" title="Filter by modality" value={filterModality} onChange={e => setModalityF(e.target.value)}>
               <option value="">All modalities</option>
