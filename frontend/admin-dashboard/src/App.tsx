@@ -601,6 +601,14 @@ function AuditLog() {
 
   const totalPages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
 
+  const auditCsvUrl = (() => {
+    const params = new URLSearchParams()
+    if (actionFilter) params.set('action', actionFilter)
+    if (actorFilter)  params.set('actor',  actorFilter)
+    const qs = params.toString()
+    return `/api/audit.csv${qs ? '?' + qs : ''}`
+  })()
+
   return (
     <div>
       <div className="audit-toolbar">
@@ -637,6 +645,7 @@ function AuditLog() {
           {actorFilter && <button type="button" className="btn-secondary" onClick={clearActorFilter}>Clear</button>}
         </div>
         <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, page)}>Refresh</button>
+        <a href={auditCsvUrl} download="audit.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
       </div>
 
       {loading && <div className="state-loading">Loading audit log…</div>}
