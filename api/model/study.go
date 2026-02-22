@@ -540,9 +540,16 @@ type StudyStatusCounts struct {
 }
 
 // GetStudyStatusCounts returns a snapshot count of studies by status.
-func GetStudyStatusCounts(ctx context.Context, db *sql.DB) (StudyStatusCounts, error) {
+// An optional projectID filters to a single project.
+func GetStudyStatusCounts(ctx context.Context, db *sql.DB, projectID ...string) (StudyStatusCounts, error) {
+	where := ""
+	var args []any
+	if len(projectID) > 0 && projectID[0] != "" {
+		where = " WHERE project_id = $1"
+		args = append(args, projectID[0])
+	}
 	rows, err := db.QueryContext(ctx,
-		`SELECT status, count(*) FROM studies GROUP BY status`)
+		`SELECT status, count(*) FROM studies`+where+` GROUP BY status`, args...)
 	if err != nil {
 		return StudyStatusCounts{}, err
 	}
@@ -583,12 +590,19 @@ type BreakdownRow struct {
 
 // GetStudyBreakdown returns study counts grouped by (modality, body_part).
 // Empty modality/body_part values are normalised to the empty string.
-func GetStudyBreakdown(ctx context.Context, db *sql.DB) ([]BreakdownRow, error) {
+// An optional projectID filters to a single project.
+func GetStudyBreakdown(ctx context.Context, db *sql.DB, projectID ...string) ([]BreakdownRow, error) {
+	where := ""
+	var args []any
+	if len(projectID) > 0 && projectID[0] != "" {
+		where = " WHERE project_id = $1"
+		args = append(args, projectID[0])
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT coalesce(modality, ''), coalesce(body_part, ''), count(*)
-		FROM studies
+		FROM studies`+where+`
 		GROUP BY modality, body_part
-		ORDER BY count(*) DESC`)
+		ORDER BY count(*) DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -615,14 +629,21 @@ type StorageStats struct {
 }
 
 // GetStorageStats returns aggregate DICOM file counts derived from the studies table.
-func GetStorageStats(ctx context.Context, db *sql.DB) (*StorageStats, error) {
+// An optional projectID filters to a single project.
+func GetStorageStats(ctx context.Context, db *sql.DB, projectID ...string) (*StorageStats, error) {
+	where := ""
+	var args []any
+	if len(projectID) > 0 && projectID[0] != "" {
+		where = " WHERE project_id = $1"
+		args = append(args, projectID[0])
+	}
 	row := db.QueryRowContext(ctx, `
 		SELECT
 		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'raw'),   0)::int,
 		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'clean'), 0)::int,
 		  coalesce(sum(instance_count), 0)::int,
 		  count(*)::int
-		FROM studies`)
+		FROM studies`+where, args...)
 	var s StorageStats
 	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies); err != nil {
 		return nil, err

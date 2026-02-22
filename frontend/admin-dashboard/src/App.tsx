@@ -5194,6 +5194,8 @@ export function App() {
     setFilterProject(globalProjectId)
     setPage(0)
     setBulkSelected(new Set())
+    setBreakdown(null)
+    setShowBreakdown(false)
   }, [globalProjectId])
 
   // Projects for filter dropdown
@@ -5209,28 +5211,37 @@ export function App() {
   }
   const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null)
   const fetchStats = useCallback(() => {
-    fetch('/api/stats').then(r => r.ok ? r.json() : null).then(data => {
+    const params = new URLSearchParams()
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const qs = params.toString()
+    fetch(`/api/stats${qs ? '?' + qs : ''}`).then(r => r.ok ? r.json() : null).then(data => {
       if (data) setPipelineStats(data as PipelineStats)
     }).catch(() => {})
-  }, [])
+  }, [globalProjectId])
   useEffect(() => { fetchStats() }, [fetchStats, refreshTick])
 
   type BreakdownRow = { modality: string; body_part: string; count: number }
   const [breakdown, setBreakdown] = useState<BreakdownRow[] | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
   const loadBreakdown = async () => {
-    if (breakdown) { setShowBreakdown(v => !v); return }
-    const res = await fetch('/api/stats/breakdown')
+    const params = new URLSearchParams()
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const qs = params.toString()
+    const res = await fetch(`/api/stats/breakdown${qs ? '?' + qs : ''}`)
     if (res.ok) { const d = await res.json(); setBreakdown(d.breakdown ?? []); setShowBreakdown(true) }
+    else setShowBreakdown(v => !v)
   }
 
   type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number }
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
-  const loadStorageStats = async () => {
-    const res = await fetch('/api/storage/stats')
+  const loadStorageStats = useCallback(async () => {
+    const params = new URLSearchParams()
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const qs = params.toString()
+    const res = await fetch(`/api/storage/stats${qs ? '?' + qs : ''}`)
     if (res.ok) setStorageStats(await res.json())
-  }
-  useEffect(() => { loadStorageStats() }, [])
+  }, [globalProjectId])
+  useEffect(() => { loadStorageStats() }, [loadStorageStats])
 
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
