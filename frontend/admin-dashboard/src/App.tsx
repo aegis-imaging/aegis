@@ -752,6 +752,12 @@ type DownloadRecord = {
   accessed_at: string
 }
 
+type DownloadAnalytics = {
+  total_downloads: number
+  last_30_days: { date: string; count: number }[]
+  top_shares: { share_id: string; recipient_email: string; study_id: string; download_count: number }[]
+}
+
 function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [shares, setShares] = useState<ShareRecord[]>([])
   const [total, setTotal] = useState(0)
@@ -764,6 +770,14 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [expandedShare, setExpandedShare] = useState<string | null>(null)
   const [downloads, setDownloads] = useState<Record<string, DownloadRecord[]>>({})
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [analytics, setAnalytics] = useState<DownloadAnalytics | null>(null)
+
+  useEffect(() => {
+    fetch('/api/export-analytics')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAnalytics(d) })
+      .catch(() => {})
+  }, [])
 
   const fetchShares = useCallback(async (sf: string, pg: number) => {
     setLoading(true)
@@ -863,6 +877,24 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
         </div>
         <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
       </div>
+
+      {analytics && (
+        <div className="pipeline-stats-bar">
+          <span className="pipeline-stat">
+            <strong>{analytics.total_downloads}</strong> total downloads
+          </span>
+          {analytics.last_30_days.length > 0 && (
+            <span className="pipeline-stat">
+              <strong>{analytics.last_30_days.reduce((s, d) => s + d.count, 0)}</strong> in last 30 days
+            </span>
+          )}
+          {analytics.top_shares.length > 0 && (
+            <span className="pipeline-stat">
+              Top share: <strong>{analytics.top_shares[0].download_count}</strong> downloads ({analytics.top_shares[0].recipient_email})
+            </span>
+          )}
+        </div>
+      )}
 
       {loading && <div className="state-loading">Loading shares…</div>}
       {error && <div className="state-error">{error}</div>}
