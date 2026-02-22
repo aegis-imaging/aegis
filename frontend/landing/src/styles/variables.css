@@ -13,15 +13,15 @@
   --color-blue-100: #dbeafe;
   --color-blue-50: #eff6ff;
 
-  /* Success — Green */
-  --color-green-600: #059669;
-  --color-green-500: #10b981;
-  --color-green-100: #d1fae5;
-  --color-green-50: #ecfdf5;
+  /* Success — Teal (colorblind-safe: distinguishable from orange by all colorblind types) */
+  --color-green-600: #0d9488;
+  --color-green-500: #14b8a6;
+  --color-green-100: #ccfbf1;
+  --color-green-50: #f0fdfa;
 
-  /* Problem — Red */
-  --color-red-600: #dc2626;
-  --color-red-100: #fee2e2;
+  /* Problem — Orange (colorblind-safe: blue-orange pair is safe for deuteranopia/protanopia) */
+  --color-red-600: #ea580c;
+  --color-red-100: #ffedd5;
 
   /* Purple accent */
   --color-purple-600: #7c3aed;
