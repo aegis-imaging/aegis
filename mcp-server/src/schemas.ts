@@ -34,6 +34,11 @@ export const retryDimseArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const dimseRetryStatusArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_instance_uid: z.string().min(4).max(256).regex(/^[0-9.]+$/).optional()
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -41,7 +46,8 @@ export const readToolNames = [
   "get_study_audit",
   "get_study_routing_log",
   "list_export_shares",
-  "get_system_health"
+  "get_system_health",
+  "get_dimse_retry_status"
 ] as const;
 
 export const writeToolNames = [

@@ -5,6 +5,7 @@ import { AegisApiClient, DisallowedPathError, UpstreamHttpError } from "./aegisC
 import { loadConfig } from "./config.js";
 import { redactToolArgs } from "./redaction.js";
 import {
+  dimseRetryStatusArgsSchema,
   emptyArgsSchema,
   listStudiesArgsSchema,
   readToolNames,
@@ -213,6 +214,23 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_dimse_retry_status",
+    description:
+      "Get DIMSE ingest retry queue status: pending/dead-letter counts, queue utilization, age metrics, and optional per-study detail when study_instance_uid is provided.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        study_instance_uid: {
+          type: "string",
+          pattern: "^[0-9.]+$",
+          description: "Optional DICOM StudyInstanceUID — when provided, also fetches per-study retry details."
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "trigger_classification",
     description: "Trigger metadata classification for one study UID with precondition checks.",
     inputSchema: writeInputSchema
@@ -406,6 +424,17 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       emptyArgsSchema.parse(args);
       const data = await client.get("/healthz");
       return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_dimse_retry_status") {
+      const parsed = dimseRetryStatusArgsSchema.parse(args);
+      const summary = await client.get("/api/dimse/retry/summary");
+      let details: unknown = undefined;
+      if (parsed.study_instance_uid) {
+        const uid = encodeURIComponent(parsed.study_instance_uid);
+        details = await client.get(`/api/dimse/retry/details?limit=10&study_instance_uid=${uid}`);
+      }
+      return formatSuccess(requestId, name, { summary, ...(details !== undefined ? { details } : {}) });
     }
 
     if (writeToolNames.includes(name)) {
