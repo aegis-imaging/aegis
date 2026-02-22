@@ -79,6 +79,12 @@ variable "iap_access_members" {
   default     = []
 }
 
+variable "first_admin_email" {
+  description = "Email address to seed as the first admin user on initial API startup (FIRST_ADMIN_EMAIL). Idempotent — ignored once any admin user exists."
+  type        = string
+  default     = ""
+}
+
 variable "enable_admin_iap" {
   description = "Enable IAP on the admin dashboard backend service"
   type        = bool
@@ -312,6 +318,11 @@ variable "allowed_origins" {
 provider "google" {
   project = var.project_id
   region  = var.region
+}
+
+# Resolve project metadata (number required for IAP service agent email).
+data "google_project" "this" {
+  project_id = var.project_id
 }
 
 locals {
@@ -788,6 +799,10 @@ resource "google_cloud_run_v2_service" "api" {
         value = "iap"
       }
       env {
+        name  = "FIRST_ADMIN_EMAIL"
+        value = var.first_admin_email
+      }
+      env {
         name  = "SMTP_HOST"
         value = var.smtp_relay_host
       }
@@ -901,6 +916,18 @@ resource "google_cloud_run_service_iam_member" "admin_invoker" {
   service  = google_cloud_run_v2_service.admin_dashboard.name
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# Grant the IAP service agent permission to invoke the admin Cloud Run service.
+# The IAP service agent must be provisioned before this binding takes effect:
+#   gcloud beta services identity create --service=iap.googleapis.com --project=PROJECT_ID
+# This is a one-time bootstrap step per project (safe to run multiple times).
+resource "google_cloud_run_service_iam_member" "iap_invoker_admin" {
+  count    = var.enable_admin_iap ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.admin_dashboard.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
 }
 
 # --- Cloud Armor ---

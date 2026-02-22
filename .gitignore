@@ -9,6 +9,8 @@ tsconfig.tsbuildinfo
 
 # Go
 api/aegis-api
+api/api
+api/aegis-import
 
 # Terraform
 terraform/**/.terraform/
