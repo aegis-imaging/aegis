@@ -142,7 +142,11 @@ export const readToolNames = [
   "get_stuck_studies",
   "get_breakdown_stats",
   "get_storage_stats",
-  "get_audit_actors"
+  "get_audit_actors",
+  "list_projects",
+  "list_institutions",
+  "list_routing_rules",
+  "list_destinations"
 ] as const;
 
 export const writeToolNames = [

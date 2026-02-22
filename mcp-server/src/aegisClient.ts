@@ -34,7 +34,11 @@ const allowedGetPathPatterns = [
   /^\/api\/studies\/by-uid\/[0-9.]+$/,
   /^\/api\/audit(?:\?.*)?$/,
   /^\/api\/shares(?:\?.*)?$/,
-  /^\/api\/shares\/[0-9a-fA-F-]{36}\/downloads$/
+  /^\/api\/shares\/[0-9a-fA-F-]{36}\/downloads$/,
+  /^\/api\/projects(?:\?.*)?$/,
+  /^\/api\/institutions(?:\?.*)?$/,
+  /^\/api\/routing-rules(?:\?.*)?$/,
+  /^\/api\/destinations(?:\?.*)?$/
 ] as const;
 
 const allowedPostPathPatterns = [

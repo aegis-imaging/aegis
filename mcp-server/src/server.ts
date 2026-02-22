@@ -500,6 +500,50 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "list_projects",
+    description: "List all AEGIS projects. Returns array of {id, name, slug, description, archived, retention_days, created_at}. Use project IDs to scope other tools (list_studies, get_pipeline_stats, get_stuck_studies, etc.) to a specific project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_institutions",
+    description: "List all registered institutions (senders, receivers, or both). Returns array of {id, name, slug, institution_type, ae_title, ip_ranges, enabled, created_at}. Use institution IDs to look up study provenance or to configure routing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_routing_rules",
+    description: "List all routing rules ordered by priority. Returns array of {id, name, priority, project_id, modality, body_part, source, action, destination_id, enabled}. Use this to understand how studies are classified, processed, and forwarded automatically at ingest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_destinations",
+    description: "List all DICOM forwarding destinations. Returns array of {id, name, type, dicomweb_url, ae_title, host, port, enabled, created_at}. Destinations are referenced by routing rules with action=route_to to forward approved studies via DICOMweb STOW-RS or DIMSE C-STORE.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -744,6 +788,30 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.limit !== undefined) params.set("limit", String(parsed.limit));
       const qs = params.toString();
       const data = await client.get(`/api/audit/actors${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_projects") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/projects");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_institutions") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/institutions");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_routing_rules") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/routing-rules");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_destinations") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/destinations");
       return formatSuccess(requestId, name, data);
     }
 
