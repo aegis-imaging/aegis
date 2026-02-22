@@ -44,13 +44,14 @@ await page.goto(`file://${htmlPath}`, { waitUntil: 'networkidle0' });
 const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
 await page.setViewport({ width: 1660, height: bodyHeight + 60, deviceScaleFactor: 2 });
 
-// PNG (2× retina for crisp rendering)
+// PNG — canonical location: served directly by the landing page
+const pngPath = path.join(repoRoot, 'frontend', 'landing', 'public', 'architecture.png');
 await page.screenshot({
-  path: path.join(repoRoot, 'AEGIS_Architecture_Diagram.png'),
+  path: pngPath,
   fullPage: true,
   omitBackground: false,
 });
-console.log('✓ AEGIS_Architecture_Diagram.png');
+console.log('✓ architecture.png →', pngPath);
 
 // PDF (single page, exact fit)
 await page.pdf({

@@ -141,7 +141,7 @@ function Field({ label, value, sensitive }: { label: string; value: string; sens
       </div>
       <div style={{
         fontFamily: 'monospace',
-        color: sensitive && value ? '#dc2626' : '#111827',
+        color: sensitive && value ? '#ea580c' : '#111827',
         fontWeight: sensitive && value ? 600 : 400,
       }}>
         {value || '(empty)'}
@@ -149,8 +149,8 @@ function Field({ label, value, sensitive }: { label: string; value: string; sens
           <span style={{
             marginLeft: '8px',
             fontSize: '11px',
-            color: '#dc2626',
-            backgroundColor: '#fef2f2',
+            color: '#ea580c',
+            backgroundColor: '#fff7ed',
             padding: '1px 6px',
             borderRadius: '4px',
           }}>
