@@ -5162,6 +5162,14 @@ export function App() {
     if (res.ok) { const d = await res.json(); setBreakdown(d.breakdown ?? []); setShowBreakdown(true) }
   }
 
+  type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number }
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
+  const loadStorageStats = async () => {
+    const res = await fetch('/api/storage/stats')
+    if (res.ok) setStorageStats(await res.json())
+  }
+  useEffect(() => { loadStorageStats() }, [])
+
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
     let cancelled = false
@@ -5495,6 +5503,14 @@ export function App() {
               <span className="stats-banner__shares" title="Active export shares">
                 {pipelineStats.active_shares} active {pipelineStats.active_shares === 1 ? 'share' : 'shares'}
               </span>
+              {storageStats && (
+                <>
+                  <span className="stats-banner__sep" />
+                  <span className="stats-banner__shares" title="DICOM file counts (raw / clean)">
+                    {storageStats.total_file_count} files ({storageStats.raw_file_count} raw, {storageStats.clean_file_count} clean)
+                  </span>
+                </>
+              )}
             </div>
           )}
 
