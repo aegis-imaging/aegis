@@ -35,35 +35,66 @@ func CreateAuditEntry(ctx context.Context, db *sql.DB, action, actor, resourceTy
 	return err
 }
 
-func ListAuditEntries(ctx context.Context, db *sql.DB, action, resourceType string, limit int) ([]AuditEntry, error) {
-	query := `SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at FROM audit_trail`
-	var conditions []string
+// AuditFilters holds optional filter values for ListAuditEntries / CountAuditEntries.
+type AuditFilters struct {
+	Action       string // exact match on action
+	ResourceType string // exact match on resource_type
+	Actor        string // exact match on actor (user email)
+}
+
+func auditWhere(f AuditFilters) (string, []any) {
+	var clauses []string
 	var args []any
-	argN := 1
+	n := 1
 
-	if action != "" {
-		conditions = append(conditions, fmt.Sprintf("action = $%d", argN))
-		args = append(args, action)
-		argN++
+	if f.Action != "" {
+		clauses = append(clauses, fmt.Sprintf("action LIKE $%d || '%%'", n))
+		args = append(args, f.Action)
+		n++
 	}
-	if resourceType != "" {
-		conditions = append(conditions, fmt.Sprintf("resource_type = $%d", argN))
-		args = append(args, resourceType)
-		argN++
+	if f.ResourceType != "" {
+		clauses = append(clauses, fmt.Sprintf("resource_type = $%d", n))
+		args = append(args, f.ResourceType)
+		n++
 	}
+	if f.Actor != "" {
+		clauses = append(clauses, fmt.Sprintf("actor = $%d", n))
+		args = append(args, f.Actor)
+		n++
+	}
+	_ = n
 
-	if len(conditions) > 0 {
-		query += " WHERE " + conditions[0]
-		for _, c := range conditions[1:] {
-			query += " AND " + c
+	where := ""
+	if len(clauses) > 0 {
+		where = " WHERE " + clauses[0]
+		for _, c := range clauses[1:] {
+			where += " AND " + c
 		}
 	}
+	return where, args
+}
 
-	query += " ORDER BY created_at DESC"
+func CountAuditEntries(ctx context.Context, db *sql.DB, f AuditFilters) (int, error) {
+	where, args := auditWhere(f)
+	var n int
+	err := db.QueryRowContext(ctx, `SELECT count(*) FROM audit_trail`+where, args...).Scan(&n)
+	return n, err
+}
+
+func ListAuditEntries(ctx context.Context, db *sql.DB, f AuditFilters, limit, offset int) ([]AuditEntry, error) {
+	where, args := auditWhere(f)
+	argN := len(args) + 1
+
+	query := `SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at FROM audit_trail` + where + ` ORDER BY created_at DESC`
 
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argN)
 		args = append(args, limit)
+		argN++
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", argN)
+		args = append(args, offset)
 	}
 
 	rows, err := db.QueryContext(ctx, query, args...)
