@@ -17,6 +17,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/migrate"
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/sla"
 	"github.com/aegis-imaging/aegis/api/storage"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -159,6 +160,7 @@ func main() {
 	// Studies — list, detail, and shares readable by all; mutations require admin.
 	mux.HandleFunc("GET /api/studies", auth(srv.ListStudies))
 	mux.HandleFunc("GET /api/studies.csv", auth(srv.ExportStudiesCSV))
+	mux.HandleFunc("GET /api/studies/stuck", auth(srv.GetStuckStudies))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
 	mux.HandleFunc("GET /api/study-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/by-uid/{studyUID}", auth(srv.GetStudyByUID))
@@ -256,10 +258,17 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	mailer := email.New(cfg)
+
 	// Start the email digest scheduler (hourly check, no-op when SMTP is disabled).
 	digestCtx, digestCancel := context.WithCancel(context.Background())
 	defer digestCancel()
-	digest.Start(digestCtx, db, email.New(cfg))
+	digest.Start(digestCtx, db, mailer)
+
+	// Start the SLA stuck-study alert scheduler (hourly, no-op when SLA_PIPELINE_MINUTES=0).
+	slaCtx, slaCancel := context.WithCancel(context.Background())
+	defer slaCancel()
+	sla.Start(slaCtx, db, mailer, cfg.SLAPipelineMinutes, cfg.SLACooldownHours, cfg.SLAAlertEmail)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
