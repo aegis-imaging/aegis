@@ -1564,6 +1564,134 @@ resource "google_monitoring_alert_policy" "cloudsql_connections" {
   }
 }
 
+# --- Log-based metrics for AEGIS pipeline observability ---
+
+resource "google_logging_metric" "pipeline_failures" {
+  name   = "aegis-${var.environment}-pipeline-failures"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"pipeline: send failure alert\""
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+    display_name = "AEGIS pipeline step failures"
+  }
+}
+
+resource "google_logging_metric" "study_stuck" {
+  name   = "aegis-${var.environment}-study-stuck"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"sla: sent alert\""
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+    display_name = "AEGIS stuck study SLA alerts"
+  }
+}
+
+# --- Additional alert policies ---
+
+resource "google_monitoring_alert_policy" "cloud_run_memory" {
+  display_name = "AEGIS Cloud Run memory high (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Cloud Run container memory utilisation > 90% for 10m"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND resource.label.service_name = \"${google_cloud_run_v2_service.api.name}\" AND metric.type = \"run.googleapis.com/container/memory/utilizations\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.9
+      duration        = "600s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_PERCENTILE_99"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "API container memory is above 90%. Review for memory leaks, large DICOM upload processing, or undersized Cloud Run memory limits."
+  }
+
+  user_labels = {
+    service  = "api"
+    severity = "warning"
+  }
+}
+
+resource "google_monitoring_alert_policy" "study_stuck_alert" {
+  display_name = "AEGIS study stuck in pipeline > 30 min (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Stuck study SLA alert log events"
+    condition_threshold {
+      filter          = "metric.type = \"logging.googleapis.com/user/${var.project_id}/${google_logging_metric.study_stuck.name}\" AND resource.type = \"cloud_run_revision\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "One or more studies have been stuck in a pipeline stage for longer than the SLA threshold. Check GET /api/studies/stuck for details and review the pipeline dashboard for failed sidecar services."
+  }
+
+  user_labels = {
+    service  = "pipeline"
+    severity = "warning"
+  }
+}
+
+resource "google_monitoring_alert_policy" "pipeline_failure_alert" {
+  display_name = "AEGIS pipeline step failure (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Pipeline failure log events > 3 in 5m"
+    condition_threshold {
+      filter          = "metric.type = \"logging.googleapis.com/user/${var.project_id}/${google_logging_metric.pipeline_failures.name}\" AND resource.type = \"cloud_run_revision\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 3
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "Pipeline step failures are elevated. Check Cloud Run logs for the API service with filter textPayload:\"pipeline: send failure alert\". Review sidecar service health endpoints and study audit trails."
+  }
+
+  user_labels = {
+    service  = "pipeline"
+    severity = "critical"
+  }
+}
+
 # --- Cloud Monitoring Dashboard ---
 
 resource "google_monitoring_dashboard" "aegis" {
