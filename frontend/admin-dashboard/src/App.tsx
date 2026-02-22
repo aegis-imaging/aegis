@@ -572,6 +572,10 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
   const [actionFilter, setActionFilter] = useState('')
   const [actorFilter, setActorFilter] = useState('')
   const [actorInput, setActorInput] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [searchFilter, setSearchFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -584,13 +588,16 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
     if (res.ok) { const d = await res.json(); setActors(d.actors ?? []); setShowActors(true) }
   }
 
-  const fetchAudit = useCallback(async (actionF: string, actorF: string, pg: number) => {
+  const fetchAudit = useCallback(async (actionF: string, actorF: string, searchF: string, dateFromF: string, dateToF: string, pg: number) => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ limit: String(AUDIT_PAGE_SIZE), offset: String(pg * AUDIT_PAGE_SIZE) })
       if (actionF) params.set('action', actionF)
       if (actorF) params.set('actor', actorF)
+      if (searchF) params.set('search', searchF)
+      if (dateFromF) params.set('date_from', new Date(dateFromF).toISOString())
+      if (dateToF) params.set('date_to', new Date(dateToF + 'T23:59:59Z').toISOString())
       const res = await fetch(`/api/audit?${params}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
@@ -603,7 +610,7 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
     }
   }, [])
 
-  useEffect(() => { fetchAudit(actionFilter, actorFilter, page) }, [fetchAudit, actionFilter, actorFilter, page])
+  useEffect(() => { fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page) }, [fetchAudit, actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page])
 
   const setCategory = (cat: string) => {
     setActionFilter(cat)
@@ -623,12 +630,29 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
     setPage(0)
   }
 
+  const applySearch = () => {
+    setSearchFilter(searchInput.trim())
+    setPage(0)
+    setExpandedId(null)
+  }
+
+  const clearSearch = () => {
+    setSearchInput('')
+    setSearchFilter('')
+    setDateFrom('')
+    setDateTo('')
+    setPage(0)
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
 
   const auditCsvUrl = (() => {
     const params = new URLSearchParams()
     if (actionFilter) params.set('action', actionFilter)
     if (actorFilter)  params.set('actor',  actorFilter)
+    if (searchFilter) params.set('search', searchFilter)
+    if (dateFrom) params.set('date_from', new Date(dateFrom).toISOString())
+    if (dateTo)   params.set('date_to',   new Date(dateTo + 'T23:59:59Z').toISOString())
     const qs = params.toString()
     return `/api/audit.csv${qs ? '?' + qs : ''}`
   })()
@@ -668,7 +692,26 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
           <button type="button" className="btn-secondary" onClick={applyActorFilter}>Apply</button>
           {actorFilter && <button type="button" className="btn-secondary" onClick={clearActorFilter}>Clear</button>}
         </div>
-        <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, page)}>Refresh</button>
+        <div className="audit-actor-filter">
+          <input
+            type="text"
+            placeholder="Search across actor, action, resource…"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && applySearch()}
+            className="audit-actor-input"
+            style={{minWidth:'220px'}}
+          />
+          <button type="button" className="btn-secondary" onClick={applySearch}>Search</button>
+          {(searchFilter || dateFrom || dateTo) && <button type="button" className="btn-secondary" onClick={clearSearch}>Clear</button>}
+        </div>
+        <div className="audit-actor-filter" style={{gap:'6px'}}>
+          <label style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>From</label>
+          <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(0) }} className="audit-actor-input" style={{width:'130px'}} />
+          <label style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>To</label>
+          <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0) }} className="audit-actor-input" style={{width:'130px'}} />
+        </div>
+        <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page)}>Refresh</button>
         <a href={auditCsvUrl} download="audit.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
       </div>
 
