@@ -911,7 +911,13 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
   }
 }
 
+# When IAP is enabled the IAP service agent (iap_invoker_admin) is the
+# only identity that needs run.invoker on the admin Cloud Run service.
+# Removing allUsers provides defense-in-depth: even if the LB IAP config
+# is misconfigured, the Cloud Run service itself requires the IAP SA.
+# When IAP is disabled, allUsers is still required so the LB can forward.
 resource "google_cloud_run_service_iam_member" "admin_invoker" {
+  count    = var.enable_admin_iap ? 0 : 1
   location = var.region
   service  = google_cloud_run_v2_service.admin_dashboard.name
   role     = "roles/run.invoker"
