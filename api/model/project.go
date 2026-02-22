@@ -13,14 +13,15 @@ type Project struct {
 	Description          string    `json:"description"`
 	DefaultAnonProfileID *string   `json:"default_anon_profile_id,omitempty"`
 	RetentionDays        *int      `json:"retention_days,omitempty"` // nil = keep indefinitely
+	Archived             bool      `json:"archived"`
 	CreatedAt            time.Time `json:"created_at"`
 	UpdatedAt            time.Time `json:"updated_at"`
 }
 
-const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, created_at, updated_at`
+const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, archived, created_at, updated_at`
 
 func scanProject(row scannable, p *Project) error {
-	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.CreatedAt, &p.UpdatedAt)
+	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.Archived, &p.CreatedAt, &p.UpdatedAt)
 }
 
 func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
@@ -116,6 +117,20 @@ func ProjectsWithRetentionPolicy(ctx context.Context, db *sql.DB) ([]Project, er
 		projects = append(projects, p)
 	}
 	return projects, rows.Err()
+}
+
+// ArchiveProject sets archived=true for a project.
+func ArchiveProject(ctx context.Context, db *sql.DB, id string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE projects SET archived = true, updated_at = now() WHERE id = $1`, id)
+	return err
+}
+
+// RestoreProject sets archived=false for a project.
+func RestoreProject(ctx context.Context, db *sql.DB, id string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE projects SET archived = false, updated_at = now() WHERE id = $1`, id)
+	return err
 }
 
 // ExpireStudiesByRetention soft-expires approved studies in a project that were created
