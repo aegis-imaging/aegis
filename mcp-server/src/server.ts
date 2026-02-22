@@ -11,6 +11,7 @@ import {
   createShareArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
+  getShareDownloadsArgsSchema,
   listAllSharesArgsSchema,
   listAuditArgsSchema,
   listStudiesArgsSchema,
@@ -242,6 +243,19 @@ const tools: Tool[] = [
         limit: { type: "number", minimum: 1, maximum: 200, description: "Page size (default 50)" },
         offset: { type: "number", minimum: 0 },
         status: { type: "string", enum: ["active", "expired", "revoked"], description: "Filter by computed share status" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_share_downloads",
+    description: "Get the complete download history for one export share by its UUID. Returns {share_id, downloads: [{id, share_id, client_ip, accessed_at}], total}. Use for compliance auditing to see who downloaded a study and from which IP.",
+    inputSchema: {
+      type: "object",
+      required: ["share_id"],
+      properties: {
+        request_id: { type: "string" },
+        share_id: { type: "string", format: "uuid" }
       },
       additionalProperties: false
     }
@@ -588,6 +602,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.status) params.set("status", parsed.status);
       const qs = params.toString();
       const data = await client.get(`/api/shares${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_share_downloads") {
+      const parsed = getShareDownloadsArgsSchema.parse(args);
+      const data = await client.get(`/api/shares/${encodeURIComponent(parsed.share_id)}/downloads`);
       return formatSuccess(requestId, name, data);
     }
 

@@ -272,6 +272,24 @@ func buildListShareResponses(shares []model.ExportShare, now time.Time) []listSh
 	return out
 }
 
+// GetShareDownloads returns the immutable download history for one export share.
+func (s *Server) GetShareDownloads(w http.ResponseWriter, r *http.Request) {
+	shareID := r.PathValue("shareID")
+	downloads, err := model.ListExportDownloadsByShare(r.Context(), s.db, shareID)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to list downloads")
+		return
+	}
+	if downloads == nil {
+		downloads = []model.ExportDownload{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"share_id":  shareID,
+		"downloads": downloads,
+		"total":     len(downloads),
+	})
+}
+
 // RevokeShare immediately revokes an export share.
 func (s *Server) RevokeShare(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareID")
