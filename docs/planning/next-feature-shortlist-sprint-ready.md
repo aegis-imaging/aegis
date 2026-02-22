@@ -1,175 +1,172 @@
 # AEGIS Sprint-Ready Shortlist (Top 5)
 
-Date: 2026-02-20
-Updated: 2026-02-22
+Date: 2026-02-22
 Source backlog: `docs/planning/next-feature-prioritization.md`
 
-## Completion Status (as of 2026-02-22)
+## Status: Pilot-Ready — Moving to Production Hardening
+
+All previous P0/P1/P2 backlog items are complete. GCP is live (`aegis-prod-488119`).
+This shortlist covers the next sprint for post-pilot production hardening.
+
+## Completion Status (previous sprint)
 
 | # | Item | Status | Completed |
 |---|------|--------|-----------|
 | 1 | GCP Terraform Production Completion | ✅ DONE | 2026-02-21 |
 | 2 | Secrets and Credential Hardening | ✅ DONE | 2026-02-21 |
 | 3 | Automated Cloud Smoke Test Suite | ✅ DONE | 2026-02-22 (11/11 PASS) |
-| 4 | DIMSE PACS E2E Validation Harness | ⏳ Pending | — |
-| 5 | AWS HTTPS + Cognito Edge/Auth | ⏳ Pending | — |
+| 4 | DIMSE PACS E2E Validation Harness | ✅ DONE | 2026-02-21 |
+| 5 | AWS HTTPS + Cognito Edge/Auth | ✅ DONE | 2026-02-21 |
 
-## Selection Rationale
+## New Sprint Shortlist (Top 5)
 
-This shortlist focuses on the fastest path to pilot readiness and production risk reduction:
-- close infra TODOs that block real cloud deployment,
-- harden secrets/auth posture,
-- automate release confidence checks,
-- validate enterprise DIMSE ingress behavior end-to-end.
+### 1) Production Observability Dashboard
 
-## 1) GCP Terraform Production Completion
+Suggested branch: `feature/prod-observability-dashboard`
 
-Suggested branch: `feature/terraform-gcp-prod-completion`
+**Goal**: Real-time visibility into the live GCP deployment — study ingestion rate, pipeline stage
+latency, sidecar error rates, DIMSE queue depth, Cloud Run CPU/memory.
 
-### Goal
-Make the GCP path deployable and operationally complete for pilot use.
+**In Scope**:
+- Cloud Monitoring dashboard JSON export committed to `terraform/monitoring/`
+- Key metrics: studies received/day, pipeline stage durations, sidecar HTTP 5xx rate,
+  DIMSE pending/dead-letter counts, Cloud Run revision health, DB connection pool utilization
+- Alert policies linked to notification channels (already provisioned in Terraform)
+- Dashboard accessible at GCP Console link from `SETUP_CHECKLIST.md`
 
-### In Scope
-- `terraform/infra/` TODOs:
-  - Artifact Registry repository
-  - Cloud Run service definitions (API + required sidecars)
-  - Cloud Armor policy
-  - VPC/subnets/Cloud NAT
-  - IAP configuration for admin dashboard
-  - Private Service Connect SMTP endpoint (or documented equivalent)
-  - Monitoring/alerting baseline
-- Required variables/outputs and documentation updates.
+**Acceptance Criteria**:
+- Dashboard covers at least 6 key operational metrics with meaningful thresholds
+- At least 2 alert policies: high 5xx rate + study stuck > 30 min
+- Dashboard snapshot included in docs/
 
-### Acceptance Criteria
-- `terraform/infra/main.tf` no longer contains placeholder TODO blocks for the listed production resources.
-- `terraform init`, `terraform validate`, and `terraform plan` pass cleanly with documented `tfvars`.
-- Apply in a dev GCP project deploys API + sidecars with reachable health checks.
-- Admin dashboard auth is gated by IAP in deployed environment.
-- `SETUP_CHECKLIST.md` includes exact deployment verification steps for the new infra resources.
+**Test Plan**:
+- Deploy dashboard with `gcloud monitoring dashboards create`
+- Verify metrics populate within 5 min of live traffic
+- Trigger test alert by pushing a known-bad request
 
-### Test Plan
-- Static: `terraform fmt -check`, `terraform validate`.
-- Deploy: `terraform apply` in isolated dev project.
-- Runtime:
-  - `GET /healthz` from API returns healthy DB/storage/services map.
-  - Upload one synthetic DICOM study through upload portal.
-  - Verify study appears in admin dashboard and can be approved/exported.
+---
 
-## 2) Secrets and Credential Hardening (Terraform + Runtime)
+### 2) Study SLA / Stuck-Detection Alerting
 
-Suggested branch: `feature/secrets-hardening-infra`
+Suggested branch: `feature/study-sla-alerting`
 
-### Goal
-Remove static credential patterns and enforce secret-manager driven runtime config.
+**Goal**: Proactively notify operators when a study has been in any pipeline stage longer than a
+configurable threshold — replacing manual dashboard polling.
 
-### In Scope
-- Replace hardcoded/placeholder DB credentials in Terraform modules.
-- Use cloud-native secret services (GCP Secret Manager, AWS Secrets Manager) patterns.
-- Document bootstrap and rotation procedure.
+**In Scope**:
+- New API: `GET /api/studies/stuck` — returns studies stuck in a given stage > N minutes
+- Config: per-stage SLA thresholds (env vars or DB-backed project settings)
+- Scheduler: hourly check (same pattern as email digest), emits `study.stuck` audit entry
+- Email alert: reuses existing SMTP mailer with plain-text "studies stuck in pipeline" digest
+- Dashboard badge: stuck count indicator in Studies tab header
 
-### Acceptance Criteria
-- No static DB password placeholders remain in Terraform resources for deployed environments.
-- API/sidecar runtime config reads credentials from secret manager paths/references.
-- Rotation runbook exists in docs and is tested once in dev.
-- CI/lint guard added to fail if known insecure placeholder strings are introduced.
+**Acceptance Criteria**:
+- Stuck studies surface in `/api/studies/stuck` response within one scheduler cycle
+- Email alert fires when at least one study exceeds threshold
+- Scheduler is a no-op when SMTP is not configured
+- Alert does not re-fire for the same study on every cycle (cooldown per study per stage)
 
-### Test Plan
-- Static grep guard in CI (e.g., reject `CHANGE_ME` credentials in infra code).
-- Deploy updated infra and verify API DB connectivity succeeds.
-- Rotate secret once in dev and confirm service recovers/restarts correctly.
+**Test Plan**:
+- Unit test: stuck threshold logic with mock time
+- Integration test: seed a study with old `updated_at` and verify it appears in stuck response
+- E2E: confirm email fires in Mailpit during local dev
 
-## 3) Automated Cloud Smoke Test Suite
+---
 
-Suggested branch: `feature/cloud-smoke-test-suite`
+### 3) Webhook / Event Notification System
 
-### Goal
-Convert manual pilot checks into a repeatable gate.
+Suggested branch: `feature/webhook-event-notifications`
 
-### In Scope
-- New smoke harness (scripts + docs) for deployed environment.
-- Minimal critical flow checks:
-  - API health
-  - Auth identity endpoint
-  - Upload/init/complete path
-  - One pipeline progression check
-  - Export share create/redeem/download basic check
-- Exit non-zero on failures.
+**Goal**: Allow external systems to subscribe to study status changes without polling the API.
 
-### Acceptance Criteria
-- Single command executes cloud smoke suite against target environment.
-- Suite produces human-readable pass/fail summary with failed-step context.
-- Suite integrated into pre-pilot checklist and documented in `SETUP_CHECKLIST.md`.
-- At least one CI/manual workflow can run suite with environment secrets.
+**In Scope**:
+- New DB table: `webhook_subscriptions` (url, events[], project_id, secret, enabled)
+- New API: CRUD `/api/webhook-subscriptions` (admin-only)
+- Delivery: async goroutine, POST JSON payload to subscriber URL on study status change
+- Payload: `{event, study_id, study_instance_uid, project_id, timestamp}`; HMAC-SHA256 signature header
+- Retry: 3× exponential backoff; failure logged to audit trail
+- Events: `study.approved`, `study.rejected`, `study.phi_flagged`, `study.export_complete`
+- Dashboard: Webhooks tab under Notifications showing subscriptions and recent delivery log
 
-### Test Plan
-- Local dry run (mock or dev stack target).
-- Cloud dev environment run with real credentials.
-- Intentionally break one dependency and verify smoke suite fails fast with clear diagnostics.
+**Acceptance Criteria**:
+- Webhook fires within 5 seconds of study status change
+- HMAC-SHA256 `X-Aegis-Signature` header allows receiver to verify origin
+- Delivery failures are logged and don't block the study workflow
+- CRUD API covered by handler tests
 
-## 4) DIMSE PACS End-to-End Validation Harness + Runbook
+**Test Plan**:
+- Unit test: HMAC signature generation and verification
+- Integration test: stub HTTP server receives webhook POST with correct payload
+- E2E: approve a study via dashboard, verify webhook fires against test receiver
 
-Suggested branch: `feature/dimse-pacs-e2e-validation`
+---
 
-### Goal
-Prove enterprise ingress reliability from PACS sender through AEGIS ingest and retry controls.
+### 4) Study Re-Processing Workflow
 
-### In Scope
-- Repeatable DIMSE sender test harness (e.g., `pynetdicom` sender or `storescu` based).
-- Scenario coverage:
-  - successful C-STORE ingest
-  - transient API failure leading to retry queue entry
-  - replay/process controls restoring ingestion
-  - dead-letter path + operator recovery
-- Operator runbook with expected API/health/queue signals.
+Suggested branch: `feature/study-reprocessing`
 
-### Acceptance Criteria
-- Harness can send at least one deterministic synthetic study to DIMSE receiver.
-- All four scenarios above have reproducible steps and expected outcomes.
-- Runbook links specific endpoints (`/healthz`, `/ingest/retry*`) and expected fields.
-- Results captured in doc-friendly output format for pilot evidence.
+**Goal**: Allow operators to re-trigger any pipeline step on an already-processed study without
+requiring a full re-upload. Essential for fixing defacing errors, re-scanning with an updated
+PHI model, or re-classifying after model improvement.
 
-### Test Plan
-- Automated harness run in Docker Compose dev stack.
-- One scripted fault-injection test (API unavailable during association release).
-- Verify queue/dead-letter metrics and action endpoints produce expected transitions.
+**In Scope**:
+- New admin endpoints: `POST /api/studies/{id}/reset-pipeline-step` with `{step}` param
+  (`deface`, `phi_scan`, `qc`, `bids`, `classify`, `protocol`)
+- Resets the relevant `*_status` field back to `pending` (or `required+pending`)
+- `PIPELINE_AUTO=true` picks it up automatically and re-dispatches
+- Dashboard: "Re-run" button per pipeline stage dot in study detail panel
+- Audit trail: `study.pipeline_reset` entry with which step was reset and by whom
 
-## 5) AWS HTTPS + Cognito Edge/Auth Completion
+**Acceptance Criteria**:
+- Each pipeline step can be individually reset to `pending` via API
+- Auto-pipeline picks up and re-dispatches without duplicate processing
+- Admin-only (requires `role=admin`)
+- Cannot reset a step that is currently `in-flight` (returns 409 Conflict)
 
-Suggested branch: `feature/terraform-aws-https-cognito`
+**Test Plan**:
+- Unit test: reset logic with various status combinations
+- Integration test: set status to `complete`, reset, verify pending state
+- E2E: reset a defaced study in dev, verify defacing re-triggers
 
-### Goal
-Close AWS auth/edge TODOs so AWS path is production-credible.
+---
 
-### In Scope
-- `terraform/aws/main.tf` TODOs:
-  - ACM-backed HTTPS listener
-  - ALB listener/auth integration
-  - Cognito user pool/client/domain resources
-- Redirect + protected route behavior docs.
+### 5) Per-Project Dashboard Views
 
-### Acceptance Criteria
-- ALB serves HTTPS with ACM certificate.
-- Admin/API routes requiring auth are protected by Cognito at ALB.
-- Terraform plan/apply works with documented required inputs.
-- AWS deployment verification section added to `SETUP_CHECKLIST.md`.
+Suggested branch: `feature/per-project-dashboard-views`
 
-### Test Plan
-- Terraform validate/plan/apply in AWS dev account.
-- Verify HTTP→HTTPS redirect.
-- Verify unauthenticated request is blocked and authenticated request passes.
-- Verify API `AUTH_PROVIDER=aws` flow and `/api/auth/me` behavior.
+**Goal**: Allow operators managing multiple projects to filter the entire admin dashboard to a
+single project context — studies, audit, routing rules, institutions, shares, and stats.
 
-## Suggested Sprint Sequence
+**In Scope**:
+- Global project selector dropdown in top navigation (persisted in localStorage)
+- "All Projects" option (default, current behavior)
+- When a project is selected:
+  - Studies panel: auto-applies `project_id` filter
+  - Stats panel: shows project-scoped counts
+  - Audit panel: filters to project-related entries
+  - Routing panel: shows only rules and destinations linked to the project
+  - Shares panel: shows only shares from studies in the project
+- URL query param `?project=<slug>` for shareable project-scoped links
+- Dashboard title/header shows active project name when scoped
 
-1. GCP Terraform Production Completion  
-2. Secrets and Credential Hardening  
-3. Automated Cloud Smoke Test Suite  
-4. DIMSE PACS End-to-End Validation Harness  
-5. AWS HTTPS + Cognito Completion
+**Acceptance Criteria**:
+- Project selector updates all visible panels simultaneously
+- Selection persists across page refresh (localStorage)
+- "All Projects" returns to current unfiltered behavior
+- Deep-linked URLs with `?project=slug` restore the project filter on load
+
+**Test Plan**:
+- TypeScript strict check passes
+- Manually verify each panel respects project filter in dev
+- Verify localStorage persistence across hard refresh
+- Verify URL sharing with `?project=slug`
+
+---
 
 ## Definition of Done (applies to each item)
 
-- Code merged to `develop` via feature PR.
-- Automated tests/smoke checks included and passing.
-- Docs updated (`CLAUDE.md` + `SETUP_CHECKLIST.md` when behavior changes).
-- Deployment/runbook steps are reproducible by another engineer without tribal context.
+- Code merged to `develop` via feature branch
+- Automated tests included and passing (Go unit/integration or Python pytest)
+- TypeScript strict check passes (`npx tsc --noEmit`)
+- `CLAUDE.md` updated when new env vars, endpoints, or behaviors are added
+- Deployment/runbook steps reproducible by another engineer without tribal context
