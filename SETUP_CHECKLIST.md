@@ -64,6 +64,15 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 
 - [ ] Deploy Go API to Cloud Run (see Terraform sections below)
 - [ ] Enable IAP on the Cloud Run load balancer
+- [ ] **Provision the IAP service agent (one-time per project — run in Cloud Shell as project owner):**
+  ```bash
+  gcloud beta services identity create \
+    --service=iap.googleapis.com \
+    --project=YOUR_PROJECT_ID
+  ```
+  This creates `service-{PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com`. Terraform grants it
+  `roles/run.invoker` on the admin Cloud Run service automatically — but the identity must exist first.
+  Safe to run multiple times (idempotent). Run this **before** `terraform apply` in section 4.
 - [ ] Add beta testers' Google accounts to IAP access list:
   ```bash
   gcloud iap web add-iam-policy-binding \
@@ -141,7 +150,34 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   gcloud monitoring policies list --format='value(displayName)'
   ```
 
-## 4a. Secrets Bootstrap and Rotation
+## 4a. First Admin Bootstrap
+
+On the first deployment, the `admin_users` table is empty, so no one can log in to create admin users (chicken-and-egg). The API solves this with the `FIRST_ADMIN_EMAIL` env var — set it in `terraform/infra/terraform.tfvars` before `terraform apply`:
+
+```hcl
+first_admin_email = "ops@aegisimaging.ai"  # same as iap_access_members
+```
+
+Terraform sets `FIRST_ADMIN_EMAIL` on the API Cloud Run service. On startup, if `admin_users` is empty, the API seeds this email as the first admin (role: `admin`, enabled: `true`). Subsequent restarts are no-ops once any admin exists.
+
+- [ ] Set `first_admin_email` in `terraform/infra/terraform.tfvars` before the first `terraform apply`
+- [ ] Use the **same email address** as your first entry in `iap_access_members` so the user can log in immediately
+- [ ] After apply, verify the admin was seeded by checking the API startup logs:
+  ```bash
+  gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"first-admin bootstrap: created admin user"' \
+    --project=YOUR_PROJECT_ID --limit=5 --format='value(textPayload)'
+  ```
+- [ ] Open the admin dashboard — the IAP-authenticated user should see the dashboard without a "403 user not registered" error
+
+**To add more admins** after the first login: use the **Users** tab in the admin dashboard, or call the API directly:
+```bash
+curl -X POST https://<api_domain>/api/admin-users \
+  -H "Authorization: Bearer <IAP_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"colleague@example.com","name":"Alice","role":"admin","enabled":true}'
+```
+
+## 4b. Secrets Bootstrap and Rotation
 
 ### GCP (Cloud SQL + Cloud Run API)
 
@@ -178,7 +214,7 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
     --rotate-master-user-password --apply-immediately
   ```
 
-## 4b. Automated Cloud Smoke Suite
+## 4c. Automated Cloud Smoke Suite
 
 - [ ] Run the cloud smoke suite against deployed API:
   ```bash
@@ -201,7 +237,7 @@ Manual trigger via GitHub Actions:
 - Workflow: **Cloud Smoke** (`.github/workflows/cloud-smoke.yml`)
 - Set input `base_url` and (optional) repository secret `CLOUD_SMOKE_ADMIN_HEADER`
 
-## 4c. Terraform — AWS HTTPS + Cognito Edge/Auth
+## 4d. Terraform — AWS HTTPS + Cognito Edge/Auth
 
 - [ ] Copy `terraform/aws/terraform.tfvars.example` to `terraform/aws/terraform.tfvars`
 - [ ] Fill required values:
