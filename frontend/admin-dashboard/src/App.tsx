@@ -2667,7 +2667,7 @@ const WEBHOOK_EVENTS = [
   'study.stuck',
 ]
 
-function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
+function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectId?: string }) {
   const [projects, setProjects]   = useState<Project[]>([])
   const [subs, setSubs]           = useState<DigestSubscription[]>([])
   const [webhooks, setWebhooks]   = useState<WebhookSubscription[]>([])
@@ -2697,10 +2697,16 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
     setLoading(true)
     setError(null)
     try {
+      const digestURL = projectId
+        ? `/api/projects/${projectId}/digest-subscriptions`
+        : '/api/digest-subscriptions'
+      const webhookURL = projectId
+        ? `/api/webhook-subscriptions?project_id=${projectId}`
+        : '/api/webhook-subscriptions'
       const [projRes, subRes, whRes] = await Promise.all([
         fetch('/api/projects'),
-        fetch('/api/digest-subscriptions'),
-        fetch('/api/webhook-subscriptions'),
+        fetch(digestURL),
+        fetch(webhookURL),
       ])
       if (!projRes.ok || !subRes.ok || !whRes.ok) throw new Error('Failed to load data')
       const [projs, subList, whList] = await Promise.all([projRes.json(), subRes.json(), whRes.json()])
@@ -2712,13 +2718,13 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [projectId])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
   function openCreate() {
     setFormEmail('')
-    setFormProject(projects[0]?.id ?? '')
+    setFormProject(projectId ?? projects[0]?.id ?? '')
     setFormFrequency('weekly')
     setFormError(null)
     setShowForm(true)
@@ -2756,7 +2762,7 @@ function NotificationsPanel({ isAdmin }: { isAdmin: boolean }) {
     setWhEditId(null)
     setWhURL('')
     setWhEvents([])
-    setWhProject('')
+    setWhProject(projectId ?? '')
     setWhSecret('')
     setWhEnabled(true)
     setWhFormError(null)
@@ -4087,6 +4093,8 @@ type StudiesState = 'loading' | 'loaded' | 'error'
 
 const PAGE_SIZE = 50
 
+const GLOBAL_PROJECT_KEY = 'aegis_global_project_id'
+
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
   const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
@@ -4099,6 +4107,9 @@ export function App() {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
   const [stuckCount, setStuckCount] = useState(0)
+
+  // Global project selector — persisted to localStorage.
+  const [globalProjectId, setGlobalProjectId] = useState<string>(() => localStorage.getItem(GLOBAL_PROJECT_KEY) ?? '')
 
   // Auth state
   const [currentUser, setCurrentUser] = useState<AuthIdentity | null>(null)
@@ -4148,6 +4159,18 @@ export function App() {
   const [filterDateTo,   setFilterDateTo]   = useState('')
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
+
+  // Persist global project selection to localStorage and sync to filterProject.
+  useEffect(() => {
+    if (globalProjectId) {
+      localStorage.setItem(GLOBAL_PROJECT_KEY, globalProjectId)
+    } else {
+      localStorage.removeItem(GLOBAL_PROJECT_KEY)
+    }
+    setFilterProject(globalProjectId)
+    setPage(0)
+    setBulkSelected(new Set())
+  }, [globalProjectId])
 
   // Projects for filter dropdown
   const [projects, setProjects] = useState<Project[]>([])
@@ -4287,6 +4310,25 @@ export function App() {
           <p>Study review, QC, and export management</p>
         </div>
         <div className="header-actions">
+          {/* Global project selector */}
+          {projects.length > 1 && (
+            <div className="tz-control">
+              <label className="tz-label" htmlFor="global-project-select">Project</label>
+              <select
+                id="global-project-select"
+                className="tz-select"
+                value={globalProjectId}
+                onChange={e => setGlobalProjectId(e.target.value)}
+              >
+                <option value="">All projects</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              {globalProjectId && (
+                <button type="button" className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                  onClick={() => setGlobalProjectId('')}>Clear</button>
+              )}
+            </div>
+          )}
           <div className="tz-control">
             <label className="tz-label" htmlFor="display-timezone-mode">Time Zone</label>
             <select
@@ -4654,7 +4696,7 @@ export function App() {
       {tab === 'protocol_templates' && <ProtocolTemplatesPanel isAdmin={isAdmin} />}
 
       {/* Notifications tab */}
-      {tab === 'notifications' && <NotificationsPanel isAdmin={isAdmin} />}
+      {tab === 'notifications' && <NotificationsPanel isAdmin={isAdmin} projectId={globalProjectId} />}
 
       {/* Projects tab */}
       {tab === 'projects' && <ProjectsPanel isAdmin={isAdmin} />}
