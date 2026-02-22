@@ -1858,7 +1858,23 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
 
 // ── Study Row ─────────────────────────────────────────────────────────────────
 
-function StudyRow({ study, onAction, onSelect, isAdmin, checked, onToggle }: { study: Study; onAction: () => void; onSelect: () => void; isAdmin: boolean; checked: boolean; onToggle: () => void }) {
+function StudyRow({
+  study,
+  onAction,
+  onSelect,
+  onAskAgent,
+  isAdmin,
+  checked,
+  onToggle
+}: {
+  study: Study
+  onAction: () => void
+  onSelect: () => void
+  onAskAgent: () => void
+  isAdmin: boolean
+  checked: boolean
+  onToggle: () => void
+}) {
   const [shareOpen,  setShareOpen]  = useState(false)
   const [viewOpen,   setViewOpen]   = useState(false)
   const [defaceOpen, setDefaceOpen] = useState(false)
@@ -1977,6 +1993,9 @@ function StudyRow({ study, onAction, onSelect, isAdmin, checked, onToggle }: { s
             )}
             <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>
               {viewOpen ? 'Close viewer' : 'View'}
+            </button>
+            <button type="button" className="btn btn--agent" onClick={onAskAgent}>
+              Ask agent
             </button>
           </div>
         </td>
@@ -4845,6 +4864,7 @@ export function App() {
   const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null)
+  const [agentPrefill, setAgentPrefill] = useState<{ studyId: string; studyUid: string } | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
   const [stuckCount, setStuckCount] = useState(0)
@@ -5230,7 +5250,10 @@ export function App() {
         />
       )}
       {tab === 'agent' && (
-        <AgentPanel />
+        <AgentPanel
+          prefillStudyId={agentPrefill?.studyId}
+          prefillStudyUid={agentPrefill?.studyUid}
+        />
       )}
       {tab === 'studies' && !selectedStudyId && (
         <>
@@ -5409,6 +5432,10 @@ export function App() {
                       study={study}
                       onAction={() => setRefreshTick(t => t + 1)}
                       onSelect={() => setSelectedStudyId(study.id)}
+                      onAskAgent={() => {
+                        setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
+                        setTab('agent')
+                      }}
                       isAdmin={isAdmin}
                       checked={bulkSelected.has(study.id)}
                       onToggle={() => setBulkSelected(prev => {
