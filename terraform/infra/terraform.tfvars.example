@@ -30,6 +30,7 @@ qc_service_image             = "us-central1-docker.pkg.dev/aegis-prod/aegis-serv
 bids_service_image           = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/bids-service:latest"
 classification_service_image = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/classification-service:latest"
 protocol_service_image       = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/protocol-service:latest"
+ohif_image                   = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/ohif:latest"
 
 # Cloud SQL runtime DB password handling.
 # Preferred: generated password persisted to Secret Manager.
