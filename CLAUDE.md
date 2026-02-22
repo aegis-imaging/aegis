@@ -1386,6 +1386,10 @@ cd mcp-server && npm install && npm run build
 | `get_breakdown_stats` | Modality/body part breakdown (optional project_id) |
 | `get_storage_stats` | Raw/clean file counts (optional project_id) |
 | `get_audit_actors` | Top admin actors in the last 30 days |
+| `list_projects` | All projects with id/name/slug/archived/retention_days |
+| `list_institutions` | All institutions with type/ae_title/ip_ranges |
+| `list_routing_rules` | All routing rules ordered by priority |
+| `list_destinations` | All DICOM forwarding destinations |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
