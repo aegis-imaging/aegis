@@ -48,7 +48,7 @@ export function Hero() {
           </div>
           <div className="hero__trust-badge">
             <ServerIcon size={16} />
-            <span>6 Processing Services</span>
+            <span>7 Processing Services</span>
           </div>
         </div>
       </div>
