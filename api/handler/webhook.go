@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // ValidWebhookEvents is the set of events subscribers can listen to.
@@ -144,6 +146,61 @@ func (s *Server) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "webhook.deleted", actorEmail(r), "webhook", id, clientIP(r), nil)
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// TestWebhookDelivery POST /api/webhook-subscriptions/{id}/test
+// Sends a synthetic test payload to the subscriber's URL and returns the delivery outcome.
+func (s *Server) TestWebhookDelivery(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sub, err := model.GetWebhookSubscription(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	testEvent := "study.approved"
+	payload := webhook.Payload{
+		Event:            testEvent,
+		StudyID:          "00000000-0000-0000-0000-000000000000",
+		StudyInstanceUID: "1.2.3.4.5.6.7.8.9.test",
+		ProjectID:        "",
+		Timestamp:        time.Now().UTC().Format(time.RFC3339),
+	}
+	if sub.ProjectID != nil {
+		payload.ProjectID = *sub.ProjectID
+	}
+
+	statusCode, deliveryErr := webhook.PostTest(*sub, payload)
+
+	success := deliveryErr == nil
+	rec := &model.WebhookDelivery{
+		SubscriptionID: sub.ID,
+		Event:          testEvent,
+		URL:            sub.URL,
+		Attempt:        1,
+		Success:        success,
+	}
+	if statusCode != 0 {
+		rec.StatusCode = &statusCode
+	}
+	if deliveryErr != nil {
+		msg := deliveryErr.Error()
+		rec.ErrorMessage = &msg
+	}
+	model.RecordWebhookDelivery(r.Context(), s.db, rec)
+	model.CreateAuditEntry(r.Context(), s.db, "webhook.test", actorEmail(r), "webhook", id, clientIP(r), map[string]any{
+		"url": sub.URL, "success": success, "status_code": statusCode,
+	})
+
+	resp := map[string]any{
+		"success":     success,
+		"status_code": statusCode,
+		"url":         sub.URL,
+	}
+	if deliveryErr != nil {
+		resp["error"] = deliveryErr.Error()
+	}
+	s.writeJSON(w, http.StatusOK, resp)
 }
 
 func validateWebhookRequest(req webhookRequest) error {
