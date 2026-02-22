@@ -297,6 +297,10 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 
 Returns a single study by UUID. Used by the admin dashboard's study detail panel.
 
+### Study Lookup by DICOM UID (`GET /api/studies/by-uid/{studyInstanceUID}`)
+
+Returns a single study by DICOM StudyInstanceUID. Useful for integrations (PACS, DIMSE receivers, external tools) that only have the DICOM UID and not the database UUID. Returns the same payload as `GET /api/studies/{id}`. Returns 404 if no study with that UID exists.
+
 ### Study Audit (`GET /api/studies/{id}/audit`)
 
 Returns all audit trail entries for a specific study (by `resource_id`). Used by the study detail panel's audit tab.
