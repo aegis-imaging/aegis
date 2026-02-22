@@ -3752,6 +3752,19 @@ export function App() {
     fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
   }, [])
 
+  // Dashboard pipeline stats
+  type PipelineStats = {
+    study_counts: { received: number; defacing: number; clean: number; defaced: number; approved: number; rejected: number; total: number }
+    active_shares: number
+  }
+  const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null)
+  const fetchStats = useCallback(() => {
+    fetch('/api/stats').then(r => r.ok ? r.json() : null).then(data => {
+      if (data) setPipelineStats(data as PipelineStats)
+    }).catch(() => {})
+  }, [])
+  useEffect(() => { fetchStats() }, [fetchStats, refreshTick])
+
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
     let cancelled = false
@@ -3952,6 +3965,37 @@ export function App() {
       )}
       {tab === 'studies' && !selectedStudyId && (
         <>
+          {/* Pipeline stats banner */}
+          {pipelineStats && (
+            <div className="stats-banner">
+              {(
+                [
+                  ['received', 'Received',  pipelineStats.study_counts.received],
+                  ['defacing', 'Defacing',  pipelineStats.study_counts.defacing],
+                  ['clean',    'Clean',     pipelineStats.study_counts.clean],
+                  ['defaced',  'Defaced',   pipelineStats.study_counts.defaced],
+                  ['approved', 'Approved',  pipelineStats.study_counts.approved],
+                  ['rejected', 'Rejected',  pipelineStats.study_counts.rejected],
+                ] as [string, string, number][]
+              ).map(([status, label, count]) => (
+                <button
+                  key={status}
+                  type="button"
+                  className={`stats-pill stats-pill--${status}${filterStatus === status ? ' stats-pill--active' : ''}`}
+                  onClick={() => setStatusF(filterStatus === status ? '' : status)}
+                  title={`Filter by ${label.toLowerCase()}`}
+                >
+                  <span className="stats-pill__count">{count}</span>
+                  <span className="stats-pill__label">{label}</span>
+                </button>
+              ))}
+              <span className="stats-banner__sep" />
+              <span className="stats-banner__shares" title="Active export shares">
+                {pipelineStats.active_shares} active {pipelineStats.active_shares === 1 ? 'share' : 'shares'}
+              </span>
+            </div>
+          )}
+
           {/* Filter bar */}
           <div className="filter-bar">
             <input

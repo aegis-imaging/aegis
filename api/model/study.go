@@ -466,3 +466,49 @@ func ClaimExport(ctx context.Context, db *sql.DB, id string) (bool, error) {
 	n, _ := res.RowsAffected()
 	return n > 0, nil
 }
+
+// StudyStatusCounts holds per-status study counts for the dashboard overview.
+type StudyStatusCounts struct {
+	Received  int `json:"received"`
+	Defacing  int `json:"defacing"`
+	Clean     int `json:"clean"`
+	Defaced   int `json:"defaced"`
+	Approved  int `json:"approved"`
+	Rejected  int `json:"rejected"`
+	Total     int `json:"total"`
+}
+
+// GetStudyStatusCounts returns a snapshot count of studies by status.
+func GetStudyStatusCounts(ctx context.Context, db *sql.DB) (StudyStatusCounts, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT status, count(*) FROM studies GROUP BY status`)
+	if err != nil {
+		return StudyStatusCounts{}, err
+	}
+	defer rows.Close()
+
+	var c StudyStatusCounts
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return StudyStatusCounts{}, err
+		}
+		switch status {
+		case "received":
+			c.Received = n
+		case "defacing":
+			c.Defacing = n
+		case "clean":
+			c.Clean = n
+		case "defaced":
+			c.Defaced = n
+		case "approved":
+			c.Approved = n
+		case "rejected":
+			c.Rejected = n
+		}
+		c.Total += n
+	}
+	return c, rows.Err()
+}
