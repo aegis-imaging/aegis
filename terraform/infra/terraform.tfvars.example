@@ -17,6 +17,10 @@ iap_access_members = [
 # Use the same account as iap_access_members so the user can log in immediately.
 first_admin_email = "you@example.com"
 
+# Public base URL of the export portal UI.
+# When set, share email links point to the portal (?token=...) instead of the raw API endpoint.
+# export_portal_base_url = "https://export.aegisimaging.ai"
+
 # Container images (build + push these before terraform apply).
 api_image                    = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/api:latest"
 admin_dashboard_image        = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/admin-dashboard:latest"

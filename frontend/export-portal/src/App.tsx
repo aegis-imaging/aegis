@@ -165,6 +165,11 @@ function fmtRemaining(seconds: number) {
   return `${secs}s remaining`
 }
 
+// API base URL for cross-origin deployments (e.g. export portal on Vercel,
+// API on Cloud Run). Defaults to '' (relative paths) for same-origin deploys.
+// Set VITE_API_URL=https://api.aegisimaging.ai when deploying to a separate domain.
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
+
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
   const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
@@ -191,7 +196,7 @@ export function App() {
       return
     }
 
-    fetch(`/api/export/${token}`)
+    fetch(`${API_BASE}/api/export/${token}`)
       .then(async (resp) => {
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({ error: 'Unknown error' }))
@@ -199,8 +204,8 @@ export function App() {
           return
         }
         const json: ExportData = await resp.json()
-        // Build download URL relative to current origin
-        json.download_url = `/api/export/${token}/download`
+        // Build download URL — use API_BASE prefix for cross-origin deployments.
+        json.download_url = `${API_BASE}/api/export/${token}/download`
         let nextExpiryEpochMs: number | null = null
         if (typeof json.expires_in_seconds === 'number') {
           // Anchor countdown to server-derived remaining seconds, then tick locally from epoch.
