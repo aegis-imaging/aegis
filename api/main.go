@@ -278,6 +278,7 @@ func main() {
 	// Subject-session linking — group studies by de-identified subject pseudonym.
 	mux.HandleFunc("GET /api/subjects", auth(srv.ListSubjects))
 	mux.HandleFunc("PUT /api/studies/{id}/subject", adminOnly(srv.SetStudySubject))
+	mux.HandleFunc("PUT /api/studies/{id}/project", adminOnly(srv.ReassignStudy))
 
 	// Federation peers — trusted remote AEGIS instances (stub for future cross-tenant federation).
 	mux.HandleFunc("GET /api/federation-peers", auth(srv.ListFederationPeers))
