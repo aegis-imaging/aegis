@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -80,6 +81,12 @@ type Config struct {
 	// Contact form recipient
 	ContactEmail string // CONTACT_EMAIL — where contact form submissions go (default: contact@aegisimaging.ai)
 
+	// SLA stuck-study alerting — sends email when studies idle too long in pipeline.
+	// Disabled when SLAPipelineMinutes == 0 or SLAAlertEmail is empty.
+	SLAPipelineMinutes int    // SLA_PIPELINE_MINUTES — alert when study idle > N min (0 = disabled)
+	SLACooldownHours   int    // SLA_COOLDOWN_HOURS — re-alert cooldown per study (default 24)
+	SLAAlertEmail      string // SLA_ALERT_EMAIL — recipient for stuck-study alerts
+
 	// First-admin bootstrap — seeds the first admin user on startup when admin_users is empty.
 	// Idempotent: has no effect once any admin user exists.
 	FirstAdminEmail string // FIRST_ADMIN_EMAIL
@@ -150,6 +157,10 @@ func Load() *Config {
 
 		ContactEmail: envOr("CONTACT_EMAIL", "contact@aegisimaging.ai"),
 
+		SLAPipelineMinutes: envInt("SLA_PIPELINE_MINUTES", 0),
+		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),
+		SLAAlertEmail:      os.Getenv("SLA_ALERT_EMAIL"),
+
 		FirstAdminEmail: os.Getenv("FIRST_ADMIN_EMAIL"),
 		FirstAdminName:  envOr("FIRST_ADMIN_NAME", os.Getenv("FIRST_ADMIN_EMAIL")),
 	}
@@ -158,6 +169,15 @@ func Load() *Config {
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func envInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return fallback
 }
