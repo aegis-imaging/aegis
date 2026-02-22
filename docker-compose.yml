@@ -50,6 +50,7 @@ services:
       ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
       SMTP_HOST: "mailpit"
       SMTP_PORT: "1025"
+      CONTACT_EMAIL: "${CONTACT_EMAIL:-contact@aegisimaging.ai}"
       DEFACING_SERVICE_URL: "http://defacing:8080"
       PHI_DETECTION_SERVICE_URL: "http://phi-detection:8080"
       QC_SERVICE_URL: "http://qc-service:8080"

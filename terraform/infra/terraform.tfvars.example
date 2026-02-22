@@ -37,6 +37,10 @@ smtp_relay_host = "smtp-relay.example.org"
 smtp_relay_port = 587
 smtp_from       = "noreply@aegisimaging.ai"
 
+# Recipient for contact form submissions from the landing page.
+# Defaults to contact@aegisimaging.ai — override here to route to a different inbox.
+contact_email = "contact@aegisimaging.ai"
+
 # Sidecar warmup: set sidecar_min_instances=1 to keep all processing services
 # always-warm (eliminates ~14s cold-start on first use, costs ~$38/month per sidecar).
 # Leave at 0 (default) for cost-efficient scale-to-zero behaviour.
