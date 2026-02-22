@@ -1,0 +1,14 @@
+{
+  "name": "aegis-agent-tools",
+  "version": "v1",
+  "mode": "read-only",
+  "tools": [
+    { "name": "list_studies", "endpoint": "GET /api/studies" },
+    { "name": "get_study_detail", "endpoint": "GET /api/studies/{id}" },
+    { "name": "get_study_by_uid", "endpoint": "GET /api/studies/by-uid/{studyInstanceUID}" },
+    { "name": "get_study_diagnostics", "endpoint": "GET /api/studies/{id}/diagnostics" },
+    { "name": "get_study_audit", "endpoint": "GET /api/studies/{id}/audit" },
+    { "name": "get_study_routing_log", "endpoint": "GET /api/studies/{id}/routing-log" },
+    { "name": "get_system_health", "endpoint": "GET /healthz" }
+  ]
+}

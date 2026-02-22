@@ -2,6 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { AegisApiClient, DisallowedPathError, UpstreamHttpError } from "./aegisClient.js";
+import { startAgentHttpServer } from "./agentServer.js";
 import { loadConfig } from "./config.js";
 import { InMemoryIdempotencyCache } from "./idempotencyCache.js";
 import { InMemoryRateLimiter } from "./rateLimiter.js";
@@ -826,6 +827,21 @@ const rateLimiter = new InMemoryRateLimiter();
 const writeIdempotencyCache = new InMemoryIdempotencyCache<ToolResponse>();
 
 async function main(): Promise<void> {
+  if (config.agentHttpPort) {
+    startAgentHttpServer(client, {
+      port: config.agentHttpPort,
+      allowedOrigin: config.agentAllowedOrigin,
+      apiKey: config.agentApiKey,
+      bearerToken: config.agentBearerToken,
+      requireAuth: config.agentRequireAuth,
+      rateLimitPerMinute: config.agentRateLimitPerMinute,
+      llmBaseUrl: config.agentLlmBaseUrl,
+      llmApiKey: config.agentLlmApiKey,
+      llmModel: config.agentLlmModel,
+      llmTemperature: config.agentLlmTemperature,
+      llmMaxTokens: config.agentLlmMaxTokens
+    });
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`AEGIS MCP server started in ${config.mcpMode} mode`);
