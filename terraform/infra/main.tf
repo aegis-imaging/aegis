@@ -315,6 +315,12 @@ variable "smtp_from" {
   default     = "noreply@aegis.local"
 }
 
+variable "contact_email" {
+  description = "Recipient address for contact form submissions (CONTACT_EMAIL). Defaults to contact@aegisimaging.ai."
+  type        = string
+  default     = "contact@aegisimaging.ai"
+}
+
 variable "allowed_origins" {
   description = "Optional CORS origins override. If empty, defaults to API + admin domains."
   type        = list(string)
@@ -823,6 +829,10 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "SMTP_FROM"
         value = var.smtp_from
+      }
+      env {
+        name  = "CONTACT_EMAIL"
+        value = var.contact_email
       }
       env {
         name  = "DEFACING_SERVICE_URL"
