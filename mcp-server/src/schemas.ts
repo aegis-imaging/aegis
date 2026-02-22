@@ -9,7 +9,9 @@ export const listStudiesArgsSchema = z.object({
   modality: z.string().min(1).max(16).regex(/^[A-Za-z0-9_]+$/).optional(),
   body_part: z.string().min(1).max(64).regex(/^[A-Za-z0-9_]+$/).optional(),
   source: z.enum(["external", "internal"]).optional(),
-  search: z.string().min(1).max(256).optional()
+  search: z.string().min(1).max(256).optional(),
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional()
 });
 
 export const studyIdArgsSchema = z.object({
@@ -40,6 +42,15 @@ export const dimseRetryStatusArgsSchema = z.object({
   study_instance_uid: z.string().min(4).max(256).regex(/^[0-9.]+$/).optional()
 });
 
+export const listAuditArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
+  offset: z.number().int().min(0).optional(),
+  action: z.string().min(1).max(128).regex(/^[a-z0-9_.]+$/).optional(),
+  resource_type: z.string().min(1).max(64).regex(/^[a-z0-9_]+$/).optional(),
+  actor: z.string().min(1).max(256).optional()
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -48,7 +59,8 @@ export const readToolNames = [
   "get_study_routing_log",
   "list_export_shares",
   "get_system_health",
-  "get_dimse_retry_status"
+  "get_dimse_retry_status",
+  "get_audit_log"
 ] as const;
 
 export const writeToolNames = [
