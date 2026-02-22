@@ -3232,6 +3232,18 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
     }
   }
 
+  async function testWebhook(id: string, url: string) {
+    const res = await fetch(`/api/webhook-subscriptions/${id}/test`, { method: 'POST' })
+    const data = res.ok ? await res.json() : null
+    if (data?.success) {
+      alert(`Test delivery succeeded (HTTP ${data.status_code}) → ${url}`)
+    } else {
+      const errMsg = data?.error ?? `HTTP ${res.status}`
+      alert(`Test delivery failed → ${url}\n\n${errMsg}`)
+    }
+    fetchAll()
+  }
+
   async function deleteWebhook(id: string, url: string) {
     if (!confirm(`Remove webhook for ${url}?`)) return
     await fetch(`/api/webhook-subscriptions/${id}`, { method: 'DELETE' })
@@ -3412,6 +3424,9 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                         </button>
                         {isAdmin && (
                           <>
+                            <button type="button" className="btn btn--action"
+                              title="Send a test study.approved payload"
+                              onClick={() => testWebhook(wh.id, wh.url)}>Test</button>
                             <button type="button" className="btn btn--action"
                               onClick={() => openWebhookEdit(wh)}>Edit</button>
                             <button type="button" className="btn btn--revoke"
