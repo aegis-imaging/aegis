@@ -28,6 +28,7 @@ type defaceServiceResponse struct {
 	OutputPaths     []string `json:"output_paths"`
 	ToolUsed        string   `json:"tool_used"`
 	DurationSeconds float64  `json:"duration_seconds"`
+	SsimScore       *float64 `json:"ssim_score"`
 	Error           *string  `json:"error"`
 }
 
@@ -160,15 +161,25 @@ func (s *Server) runDefacing(study *model.Study) {
 		return
 	}
 
+	if svcResp.SsimScore != nil {
+		if err := model.UpdateDefaceQaScore(ctx, s.db, study.ID, *svcResp.SsimScore); err != nil {
+			log.Printf("deface: store qa score for %s: %v", studyUID, err)
+		}
+	}
+
 	log.Printf("deface: complete for %s — %d files in %.1fs using %s",
 		studyUID, len(svcResp.OutputPaths), svcResp.DurationSeconds, svcResp.ToolUsed)
 
-	model.CreateAuditEntry(ctx, s.db, "deface.complete", "system", "study", study.ID, "", map[string]any{
+	auditDetails := map[string]any{
 		"study_uid":        studyUID,
 		"tool":             svcResp.ToolUsed,
 		"output_files":     len(svcResp.OutputPaths),
 		"duration_seconds": fmt.Sprintf("%.1f", svcResp.DurationSeconds),
-	})
+	}
+	if svcResp.SsimScore != nil {
+		auditDetails["ssim_score"] = fmt.Sprintf("%.4f", *svcResp.SsimScore)
+	}
+	model.CreateAuditEntry(ctx, s.db, "deface.complete", "system", "study", study.ID, "", auditDetails)
 
 	// Advance pipeline — unblocks Phase 2 (QC, BIDS) which wait for defacing.
 	s.AdvancePipeline(ctx, study.ID)

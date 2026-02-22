@@ -34,6 +34,7 @@ type Study struct {
 	ProtocolStatus         string    `json:"protocol_status"`
 	ExportRequired         bool      `json:"export_required"`
 	ExportStatus           string    `json:"export_status"`
+	DefaceQaScore          *float64  `json:"deface_qa_score,omitempty"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
@@ -45,6 +46,7 @@ const studyColumns = `
 	bids_required, bids_status, classification_required, classification_status,
 	protocol_required, protocol_status,
 	export_required, export_status,
+	deface_qa_score,
 	created_at, updated_at`
 
 type scannable interface {
@@ -61,6 +63,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.ClassificationRequired, &s.ClassificationStatus,
 		&s.ProtocolRequired, &s.ProtocolStatus,
 		&s.ExportRequired, &s.ExportStatus,
+		&s.DefaceQaScore,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -246,6 +249,14 @@ func UpdateStudyDefaced(ctx context.Context, db *sql.DB, id string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET status = 'defaced', dicom_store = 'clean', updated_at = now()
 		WHERE id = $1`, id)
+	return err
+}
+
+// UpdateDefaceQaScore stores the SSIM-based visual QA score from the defacing service.
+func UpdateDefaceQaScore(ctx context.Context, db *sql.DB, id string, score float64) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET deface_qa_score = $1, updated_at = now()
+		WHERE id = $2`, score, id)
 	return err
 }
 
