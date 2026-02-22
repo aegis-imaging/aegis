@@ -575,6 +575,15 @@ function AuditLog() {
   const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
+  type ActorSummary = { actor: string; action_count: number; last_seen_at: string; last_action: string }
+  const [actors, setActors] = useState<ActorSummary[] | null>(null)
+  const [showActors, setShowActors] = useState(false)
+  const loadActors = async () => {
+    if (actors) { setShowActors(v => !v); return }
+    const res = await fetch('/api/audit/actors')
+    if (res.ok) { const d = await res.json(); setActors(d.actors ?? []); setShowActors(true) }
+  }
+
   const fetchAudit = useCallback(async (actionF: string, actorF: string, pg: number) => {
     setLoading(true)
     setError(null)
@@ -661,6 +670,32 @@ function AuditLog() {
         </div>
         <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, page)}>Refresh</button>
         <a href={auditCsvUrl} download="audit.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
+      </div>
+
+      {/* Recent actors summary */}
+      <div style={{marginBottom:'8px'}}>
+        <button type="button" className="btn-secondary" onClick={loadActors} style={{fontSize:'0.8rem'}}>
+          {showActors ? '▲ Hide activity summary' : '▼ Recent admin activity'}
+        </button>
+        {showActors && actors && (
+          <div style={{marginTop:'6px',overflowX:'auto'}}>
+            <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'700px'}}>
+              <thead><tr><th>Actor</th><th>Actions (30d)</th><th>Last action</th><th>Last seen</th></tr></thead>
+              <tbody>
+                {actors.length === 0
+                  ? <tr><td colSpan={4} className="td-muted">No activity in last 30 days.</td></tr>
+                  : actors.map(a => (
+                    <tr key={a.actor}>
+                      <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{a.actor}</td>
+                      <td>{a.action_count}</td>
+                      <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{a.last_action}</td>
+                      <td className="td-date">{fmtDate(a.last_seen_at)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {loading && <div className="state-loading">Loading audit log…</div>}

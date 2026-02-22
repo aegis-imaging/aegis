@@ -138,3 +138,45 @@ func ListAuditEntriesForStudy(ctx context.Context, db *sql.DB, studyID string) (
 	}
 	return entries, rows.Err()
 }
+
+// ActorSummary is one row in the recent-activity-by-actor query.
+type ActorSummary struct {
+	Actor       string    `json:"actor"`
+	ActionCount int       `json:"action_count"`
+	LastSeenAt  time.Time `json:"last_seen_at"`
+	LastAction  string    `json:"last_action"`
+}
+
+// GetActorSummary returns the top N actors by recency with action counts.
+// Only the last 30 days are considered.
+func GetActorSummary(ctx context.Context, db *sql.DB, limit int) ([]ActorSummary, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	qrows, err := db.QueryContext(ctx, `
+		SELECT actor,
+		       count(*)                                         AS action_count,
+		       max(created_at)                                  AS last_seen_at,
+		       (SELECT action FROM audit_trail a2
+		          WHERE a2.actor = a.actor
+		          ORDER BY created_at DESC LIMIT 1)             AS last_action
+		FROM audit_trail a
+		WHERE created_at >= now() - INTERVAL '30 days'
+		  AND actor <> ''
+		GROUP BY actor
+		ORDER BY max(created_at) DESC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer qrows.Close()
+	var result []ActorSummary
+	for qrows.Next() {
+		var s ActorSummary
+		if err := qrows.Scan(&s.Actor, &s.ActionCount, &s.LastSeenAt, &s.LastAction); err != nil {
+			return nil, err
+		}
+		result = append(result, s)
+	}
+	return result, qrows.Err()
+}
