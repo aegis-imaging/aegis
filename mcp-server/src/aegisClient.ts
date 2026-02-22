@@ -38,7 +38,7 @@ const allowedPostPathPatterns = [
   /^\/api\/studies\/[0-9.]+\/qc-check$/,
   /^\/api\/studies\/[0-9.]+\/protocol-check$/,
   /^\/api\/studies\/[0-9.]+\/phi-scan$/,
-  /^\/api\/deface\/[0-9.]+$/,
+  /^\/api\/studies\/[0-9.]+\/trigger-deface$/,
   /^\/api\/dimse\/retry\/process\/[0-9.]+$/,
   /^\/api\/dimse\/retry\/replay\/[0-9.]+$/
 ] as const;
