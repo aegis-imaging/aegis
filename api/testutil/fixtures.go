@@ -75,6 +75,21 @@ func CreateTestDestination(t *testing.T, db *sql.DB, name string) *model.Destina
 	return d
 }
 
+// CreateTestInstitution creates an enabled institution and returns it.
+func CreateTestInstitution(t *testing.T, db *sql.DB, name string) *model.Institution {
+	t.Helper()
+	inst := &model.Institution{
+		Name:    name,
+		Slug:    name,
+		Type:    "sender",
+		Enabled: true,
+	}
+	if err := model.CreateInstitution(context.Background(), db, inst); err != nil {
+		t.Fatalf("create test institution: %v", err)
+	}
+	return inst
+}
+
 // CreateTestRoutingRule creates an enabled routing rule and returns it.
 func CreateTestRoutingRule(t *testing.T, db *sql.DB, name, action string) *model.RoutingRule {
 	t.Helper()
