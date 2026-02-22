@@ -97,6 +97,21 @@ func main() {
 	auth := middleware.RequireAuth(db, cfg)
 	adminOnly := middleware.RequireRole("admin", db, cfg)
 
+	// Per-IP rate limiter for public endpoints (upload, ingest, contact).
+	// Enabled via RATE_LIMIT_ENABLED=true; defaults to 20 req/s, burst 50.
+	var rl *middleware.RateLimiter
+	if cfg.RateLimitEnabled {
+		rl = middleware.NewRateLimiter(cfg.RateLimitRPS, cfg.RateLimitBurst)
+		log.Printf("rate limiting enabled: %.0f req/s per IP, burst %d", cfg.RateLimitRPS, cfg.RateLimitBurst)
+	}
+	// rateLimit wraps a HandlerFunc with the IP limiter when enabled.
+	rateLimit := func(h http.HandlerFunc) http.Handler {
+		if rl == nil {
+			return h
+		}
+		return rl.Handler(h)
+	}
+
 	mux := http.NewServeMux()
 
 	// ── Public routes (no auth) ──────────────────────────────────────
@@ -107,13 +122,13 @@ func main() {
 	mux.HandleFunc("GET /api/projects", srv.ListProjects)
 	mux.HandleFunc("GET /api/projects/{slug}/active-anon-profile", srv.GetDefaultAnonProfile)
 
-	// Upload portal — public-facing, no auth.
-	mux.HandleFunc("POST /api/upload/init", srv.UploadInit)
-	mux.HandleFunc("PUT /api/upload/file/{sessionID}/{index}", srv.UploadFile)
-	mux.HandleFunc("POST /api/upload/complete", srv.UploadComplete)
+	// Upload portal — public-facing, rate-limited.
+	mux.Handle("POST /api/upload/init", rateLimit(srv.UploadInit))
+	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(srv.UploadFile))
+	mux.Handle("POST /api/upload/complete", rateLimit(srv.UploadComplete))
 
-	// Contact form — public, called from landing page (Vercel or local dev).
-	mux.HandleFunc("POST /api/contact", srv.ContactForm)
+	// Contact form — public, rate-limited.
+	mux.Handle("POST /api/contact", rateLimit(srv.ContactForm))
 
 	// Public export endpoints — token-authenticated, no session required.
 	mux.HandleFunc("GET /api/export/{token}/download", srv.ServeDicomDownloadByToken)
