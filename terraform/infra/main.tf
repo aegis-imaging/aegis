@@ -1599,7 +1599,7 @@ resource "time_sleep" "wait_for_log_metrics" {
     google_logging_metric.pipeline_failures,
     google_logging_metric.study_stuck,
   ]
-  create_duration = "120s"
+  create_duration = "600s"
 }
 
 # --- Additional alert policies ---
