@@ -101,6 +101,11 @@ export const reEvaluateRoutingArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const getShareDownloadsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  share_id: z.string().uuid()
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -112,7 +117,8 @@ export const readToolNames = [
   "get_dimse_retry_status",
   "get_audit_log",
   "get_study_by_uid",
-  "list_all_shares"
+  "list_all_shares",
+  "get_share_downloads"
 ] as const;
 
 export const writeToolNames = [

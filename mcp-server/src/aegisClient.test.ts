@@ -75,6 +75,16 @@ test("AegisApiClient allows global shares path with and without query params", a
   assert.deepEqual(active, {});
 });
 
+test("AegisApiClient allows share download history path", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+  const uuid = "550e8400-e29b-41d4-a716-446655440000";
+
+  const result = await client.get(`/api/shares/${uuid}/downloads`);
+  assert.deepEqual(result, {});
+});
+
 test("AegisApiClient allows create share and re-evaluate routing POST paths", async () => {
   globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
 
