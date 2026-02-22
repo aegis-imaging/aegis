@@ -65,12 +65,11 @@ func GetProjectByID(ctx context.Context, db *sql.DB, id string) (*Project, error
 
 func UpdateProject(ctx context.Context, db *sql.DB, id, name, slug, description string) (*Project, error) {
 	var p Project
-	err := db.QueryRowContext(ctx, `
+	err := scanProject(db.QueryRowContext(ctx, `
 		UPDATE projects SET name=$1, slug=$2, description=$3, updated_at=now()
 		WHERE id=$4
 		RETURNING `+projectColumns,
-		name, slug, description, id).
-		Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.CreatedAt, &p.UpdatedAt)
+		name, slug, description, id), &p)
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +86,11 @@ func UpdateProjectRetentionDays(ctx context.Context, db *sql.DB, projectID strin
 
 func CreateProject(ctx context.Context, db *sql.DB, name, slug, description string) (*Project, error) {
 	var p Project
-	err := db.QueryRowContext(ctx, `
+	err := scanProject(db.QueryRowContext(ctx, `
 		INSERT INTO projects (name, slug, description)
 		VALUES ($1, $2, $3)
-		RETURNING id, name, slug, description, NULL, NULL, created_at, updated_at`,
-		name, slug, description).
-		Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.CreatedAt, &p.UpdatedAt)
+		RETURNING `+projectColumns,
+		name, slug, description), &p)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +140,7 @@ func ExpireStudiesByRetention(ctx context.Context, db *sql.DB, projectID string,
 		SET status = 'expired', updated_at = now()
 		WHERE project_id = $1
 		  AND status = 'approved'
-		  AND created_at < now() - ($2 || ' days')::INTERVAL`,
+		  AND created_at < now() - ($2 * INTERVAL '1 day')`,
 		projectID, retentionDays)
 	if err != nil {
 		return 0, err

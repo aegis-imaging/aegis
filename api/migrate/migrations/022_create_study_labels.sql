@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE study_labels (
     id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     study_id   UUID        NOT NULL REFERENCES studies(id) ON DELETE CASCADE,
@@ -8,3 +9,6 @@ CREATE TABLE study_labels (
 
 CREATE INDEX study_labels_study_id_idx ON study_labels (study_id);
 CREATE UNIQUE INDEX study_labels_study_label_uidx ON study_labels (study_id, lower(label));
+
+-- +goose Down
+DROP TABLE IF EXISTS study_labels;

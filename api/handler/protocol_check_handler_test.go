@@ -131,7 +131,7 @@ func TestTriggerProtocolCheck_WithMockService(t *testing.T) {
 	require.NoError(t, model.CreateProtocolTemplate(t.Context(), db, tmpl))
 
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
