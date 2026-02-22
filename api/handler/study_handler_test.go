@@ -60,7 +60,7 @@ func TestGetStudyByUID_Handler(t *testing.T) {
 	proj := testutil.SeedProject(t, db)
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
-	req := httptest.NewRequest("GET", "/api/studies/by-uid/"+study.StudyInstanceUID, nil)
+	req := httptest.NewRequest("GET", "/api/study-uid/"+study.StudyInstanceUID, nil)
 	req.SetPathValue("studyUID", study.StudyInstanceUID)
 	rr := httptest.NewRecorder()
 	srv.GetStudyByUID(rr, req)
@@ -76,7 +76,7 @@ func TestGetStudyByUID_NotFound(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
 
-	req := httptest.NewRequest("GET", "/api/studies/by-uid/9.9.9.notexist", nil)
+	req := httptest.NewRequest("GET", "/api/study-uid/9.9.9.notexist", nil)
 	req.SetPathValue("studyUID", "9.9.9.notexist")
 	rr := httptest.NewRecorder()
 	srv.GetStudyByUID(rr, req)
