@@ -24,13 +24,22 @@ type uploadInitRequest struct {
 	Metadata      studyMetadata `json:"study_metadata"`
 }
 
+type seriesMetadata struct {
+	SeriesInstanceUID string `json:"series_instance_uid"`
+	SeriesDescription string `json:"series_description"`
+	Modality          string `json:"modality"`
+	BodyPart          string `json:"body_part"`
+	InstanceCount     int    `json:"instance_count"`
+}
+
 type studyMetadata struct {
-	StudyInstanceUID string `json:"study_instance_uid"`
-	Modality         string `json:"modality"`
-	BodyPart         string `json:"body_part"`
-	StudyDescription string `json:"study_description"`
-	SeriesCount      int    `json:"series_count"`
-	InstanceCount    int    `json:"instance_count"`
+	StudyInstanceUID string           `json:"study_instance_uid"`
+	Modality         string           `json:"modality"`
+	BodyPart         string           `json:"body_part"`
+	StudyDescription string           `json:"study_description"`
+	SeriesCount      int              `json:"series_count"`
+	InstanceCount    int              `json:"instance_count"`
+	Series           []seriesMetadata `json:"series,omitempty"`
 }
 
 type uploadInitResponse struct {
