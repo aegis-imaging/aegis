@@ -302,7 +302,13 @@ def step_upload_file(timeout: int, state: Dict[str, str]) -> str:
     if not upload_url:
         raise SmokeFailure("upload.file: missing upload_url state")
     synthetic_dicom = b"DICM-SMOKE-" + uuid.uuid4().hex.encode("ascii")
-    status, body, _ = http_request("PUT", upload_url, raw_body=synthetic_dicom, timeout_s=timeout)
+    status, body, _ = http_request(
+        "PUT",
+        upload_url,
+        headers={"Content-Type": "application/dicom"},
+        raw_body=synthetic_dicom,
+        timeout_s=timeout,
+    )
     expect_status(status, {200}, "upload.file", body)
     return f"bytes={len(synthetic_dicom)}"
 
