@@ -144,6 +144,7 @@ func (s *Server) runQcCheck(study *model.Study) {
 			"tool":      svcResp.ToolUsed,
 			"error":     errMsg,
 		})
+		s.notifyPipelineFailure(ctx, studyUID, "qc_check", errMsg)
 		return
 	}
 
