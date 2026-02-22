@@ -31,6 +31,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
   }
 }
 
@@ -1570,9 +1574,9 @@ resource "google_logging_metric" "pipeline_failures" {
   name   = "aegis-${var.environment}-pipeline-failures"
   filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"pipeline: send failure alert\""
   metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    unit        = "1"
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
     display_name = "AEGIS pipeline step failures"
   }
 }
@@ -1581,11 +1585,21 @@ resource "google_logging_metric" "study_stuck" {
   name   = "aegis-${var.environment}-study-stuck"
   filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"sla: sent alert\""
   metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    unit        = "1"
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
     display_name = "AEGIS stuck study SLA alerts"
   }
+}
+
+# GCP log-based metrics take up to 10 minutes to propagate before alert
+# policies can reference them. This sleep guards against a race on first apply.
+resource "time_sleep" "wait_for_log_metrics" {
+  depends_on = [
+    google_logging_metric.pipeline_failures,
+    google_logging_metric.study_stuck,
+  ]
+  create_duration = "120s"
 }
 
 # --- Additional alert policies ---
@@ -1628,6 +1642,7 @@ resource "google_monitoring_alert_policy" "study_stuck_alert" {
   display_name = "AEGIS study stuck in pipeline > 30 min (${var.environment})"
   combiner     = "OR"
   enabled      = var.enable_monitoring_alerts
+  depends_on   = [time_sleep.wait_for_log_metrics]
 
   conditions {
     display_name = "Stuck study SLA alert log events"
@@ -1662,6 +1677,7 @@ resource "google_monitoring_alert_policy" "pipeline_failure_alert" {
   display_name = "AEGIS pipeline step failure (${var.environment})"
   combiner     = "OR"
   enabled      = var.enable_monitoring_alerts
+  depends_on   = [time_sleep.wait_for_log_metrics]
 
   conditions {
     display_name = "Pipeline failure log events > 3 in 5m"
