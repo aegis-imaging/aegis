@@ -94,7 +94,7 @@ func (s *Server) runSidecarHealthLoop() {
 				defer wg.Done()
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/healthz", nil)
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/health", nil)
 				status := "unhealthy"
 				if err == nil {
 					if resp, err := s.httpClient.Do(req); err == nil {
