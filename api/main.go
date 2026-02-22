@@ -195,6 +195,7 @@ func main() {
 	mux.HandleFunc("GET /api/institutions", auth(srv.ListInstitutions))
 	mux.HandleFunc("POST /api/institutions", adminOnly(srv.CreateInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}", auth(srv.GetInstitution))
+	mux.HandleFunc("GET /api/institutions/{id}/stats", auth(srv.GetInstitutionStats))
 	mux.HandleFunc("PUT /api/institutions/{id}", adminOnly(srv.UpdateInstitution))
 	mux.HandleFunc("DELETE /api/institutions/{id}", adminOnly(srv.DeleteInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}/projects", auth(srv.ListInstitutionProjects))

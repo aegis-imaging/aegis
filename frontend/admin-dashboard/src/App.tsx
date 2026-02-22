@@ -3234,6 +3234,7 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [selectedInst, setSelectedInst]   = useState<Institution | null>(null)
   const [instProjects, setInstProjects]   = useState<InstitutionProject[]>([])
   const [projLoading, setProjLoading]     = useState(false)
+  const [instStats, setInstStats]         = useState<{ total_studies: number; by_status: Record<string, number>; by_modality: Record<string, number>; last_study_at?: string } | null>(null)
 
   // Form
   const [form, setForm]               = useState<Omit<Institution, 'id' | 'created_at'>>(EMPTY_INSTITUTION)
@@ -3268,9 +3269,14 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
   const fetchInstProjects = useCallback(async (instId: string) => {
     setProjLoading(true)
     try {
-      const res = await fetch(`/api/institutions/${instId}/projects`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setInstProjects(await res.json())
+      const [projRes, statsRes] = await Promise.all([
+        fetch(`/api/institutions/${instId}/projects`),
+        fetch(`/api/institutions/${instId}/stats`),
+      ])
+      if (projRes.ok) setInstProjects(await projRes.json())
+      else setInstProjects([])
+      if (statsRes.ok) setInstStats(await statsRes.json())
+      else setInstStats(null)
     } catch {
       setInstProjects([])
     } finally {
@@ -3496,6 +3502,24 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
       {selectedInst && (
         <div className="inst-projects-panel">
           <h3>Projects — {selectedInst.name}</h3>
+
+          {/* Institution stats */}
+          {instStats && (
+            <div className="pipeline-stats-bar">
+              <span className="pipeline-stat"><strong>{instStats.total_studies}</strong> total studies</span>
+              {Object.entries(instStats.by_status).map(([k, v]) => (
+                <span key={k} className="pipeline-stat"><strong>{v}</strong> {k}</span>
+              ))}
+              {Object.keys(instStats.by_modality).length > 0 && (
+                <span className="pipeline-stat">
+                  {Object.entries(instStats.by_modality).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                </span>
+              )}
+              {instStats.last_study_at && (
+                <span className="pipeline-stat">Last study: {new Date(instStats.last_study_at).toLocaleDateString()}</span>
+              )}
+            </div>
+          )}
 
           {/* Link form */}
           {isAdmin && (
