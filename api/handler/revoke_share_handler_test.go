@@ -20,7 +20,7 @@ func TestRevokeShare_Handler(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	share, err := model.CreateExportShare(t.Context(), db, study.ID, "hash-revoke-ok",
-		"recipient@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour))
+		"recipient@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour), nil)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("DELETE", "/api/shares/"+share.ID, nil)
@@ -41,7 +41,7 @@ func TestRevokeShare_VerifiesRevokedAtSet(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	share, err := model.CreateExportShare(t.Context(), db, study.ID, "hash-revoke-verify",
-		"user@test.com", "", "admin@test.com", time.Now().Add(48*time.Hour))
+		"user@test.com", "", "admin@test.com", time.Now().Add(48*time.Hour), nil)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("DELETE", "/api/shares/"+share.ID, nil)
@@ -69,7 +69,7 @@ func TestRevokeShare_IdempotentSecondRevoke(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	share, err := model.CreateExportShare(t.Context(), db, study.ID, "hash-revoke-idem",
-		"user@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour))
+		"user@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour), nil)
 	require.NoError(t, err)
 
 	// Revoke once.

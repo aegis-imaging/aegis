@@ -131,6 +131,7 @@ type createShareRequest struct {
 	Note           string `json:"note"`
 	ExpiryHours    int    `json:"expiry_hours"`         // default 168 (7 days)
 	ExpiresAt      string `json:"expires_at,omitempty"` // optional RFC3339 timestamp
+	MaxDownloads   *int   `json:"max_downloads,omitempty"` // nil = unlimited
 }
 
 type createShareResponse struct {
@@ -176,6 +177,11 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.MaxDownloads != nil && *req.MaxDownloads <= 0 {
+		s.writeError(w, http.StatusBadRequest, "max_downloads must be a positive integer")
+		return
+	}
+
 	rawToken, tokenHash, err := generateShareToken()
 	if err != nil {
 		log.Printf("generate share token: %v", err)
@@ -184,7 +190,7 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	share, err := model.CreateExportShare(r.Context(), s.db,
-		study.ID, tokenHash, req.RecipientEmail, req.Note, actorEmail(r), expiresAt)
+		study.ID, tokenHash, req.RecipientEmail, req.Note, actorEmail(r), expiresAt, req.MaxDownloads)
 	if err != nil {
 		log.Printf("create export share: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to create share")
