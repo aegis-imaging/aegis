@@ -268,6 +268,30 @@ type DimseRetryAlert = {
   snapshot?: Record<string, number>
 }
 
+type StudyDiagnosticsSummary = {
+  terminal: boolean
+  stuck: boolean
+  blockers: string[]
+  recommended_actions: string[]
+  last_audit_action?: string
+  last_audit_at?: string
+}
+
+type StudyDiagnosticsResponse = {
+  study: Study
+  summary: StudyDiagnosticsSummary
+  recent_audit: AuditEntry[]
+  routing_log: RoutingLogEntry[]
+  dimse_retry: {
+    available: boolean
+    pending_total: number
+    dead_letter_total: number
+    pending_items?: Record<string, unknown>[]
+    dead_letter_items?: Record<string, unknown>[]
+    error?: string
+  }
+}
+
 type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1161,8 +1185,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [audit, setAudit] = useState<AuditEntry[]>([])
   const [routingLog, setRoutingLog] = useState<RoutingLogEntry[]>([])
   const [shares, setShares] = useState<Share[]>([])
+  const [diagnostics, setDiagnostics] = useState<StudyDiagnosticsResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics'>('audit')
 
   // Viewer / review state
   const [viewOpen, setViewOpen] = useState(false)
@@ -1182,13 +1207,15 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/audit`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/routing-log`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/shares`).then(r => r.ok ? r.json() : []),
-    ]).then(([s, a, rl, sh]) => {
+      fetch(`/api/studies/${studyId}/diagnostics`).then(r => r.ok ? r.json() : null),
+    ]).then(([s, a, rl, sh, diag]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
       setRoutingLog(rl ?? [])
       const shareRows = (sh ?? []) as Share[]
       setShares(shareRows.map(row => withShareExpiryAnchor(row, now)))
+      setDiagnostics(diag ?? null)
       setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -1337,7 +1364,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         </div>
       )}
 
-      {/* Detail tabs: Audit / Routing / Shares */}
+      {/* Detail tabs: Audit / Routing / Shares / Diagnostics */}
       <div className="study-detail__section">
         <div className="study-detail__tab-nav">
           <button type="button" className={`tab-btn${detailTab === 'audit' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('audit')}>
@@ -1348,6 +1375,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           </button>
           <button type="button" className={`tab-btn${detailTab === 'shares' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('shares')}>
             Shares ({shares.length})
+          </button>
+          <button type="button" className={`tab-btn${detailTab === 'diagnostics' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('diagnostics')}>
+            Diagnostics
           </button>
         </div>
 
@@ -1419,6 +1449,72 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               })}
             </tbody>
           </table>
+        )}
+
+        {detailTab === 'diagnostics' && (
+          <div className="diagnostics-panel">
+            {!diagnostics && <p className="state-empty">Diagnostics not available.</p>}
+            {diagnostics && (
+              <>
+                <div className={`diagnostics-summary diagnostics-summary--${diagnostics.summary.stuck ? 'stuck' : diagnostics.summary.terminal ? 'terminal' : 'ok'}`}>
+                  <div className="diagnostics-summary__status">
+                    {diagnostics.summary.terminal && <span className="diag-badge diag-badge--terminal">Terminal</span>}
+                    {diagnostics.summary.stuck && <span className="diag-badge diag-badge--stuck">Stuck</span>}
+                    {!diagnostics.summary.terminal && !diagnostics.summary.stuck && <span className="diag-badge diag-badge--ok">On track</span>}
+                    {diagnostics.summary.last_audit_action && (
+                      <span className="diag-last-action">Last: <code>{diagnostics.summary.last_audit_action}</code>{diagnostics.summary.last_audit_at ? ` at ${fmtDate(diagnostics.summary.last_audit_at)}` : ''}</span>
+                    )}
+                  </div>
+                  {diagnostics.summary.blockers.length > 0 && (
+                    <div className="diagnostics-summary__section">
+                      <strong>Blockers</strong>
+                      <ul className="diag-list">
+                        {diagnostics.summary.blockers.map((b, i) => <li key={i}>{b}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {diagnostics.summary.recommended_actions.length > 0 && (
+                    <div className="diagnostics-summary__section">
+                      <strong>Recommended actions</strong>
+                      <ul className="diag-list">
+                        {diagnostics.summary.recommended_actions.map((a, i) => <li key={i}>{a}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {diagnostics.dimse_retry.available && (
+                  <div className="diagnostics-summary__section">
+                    <strong>DIMSE Retry</strong>
+                    <table className="detail-table">
+                      <tbody>
+                        <tr><td>Pending</td><td>{diagnostics.dimse_retry.pending_total}</td></tr>
+                        <tr><td>Dead-letter</td><td>{diagnostics.dimse_retry.dead_letter_total}</td></tr>
+                        {diagnostics.dimse_retry.error && <tr><td>Error</td><td className="diag-error">{diagnostics.dimse_retry.error}</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="diagnostics-summary__section">
+                  <strong>Recent audit ({diagnostics.recent_audit.length})</strong>
+                  <table className="detail-table">
+                    <thead><tr><th>Time</th><th>Action</th><th>Actor</th></tr></thead>
+                    <tbody>
+                      {diagnostics.recent_audit.length === 0 && <tr><td colSpan={3}>No entries.</td></tr>}
+                      {diagnostics.recent_audit.map(e => (
+                        <tr key={e.id}>
+                          <td className="td-date">{fmtDate(e.created_at)}</td>
+                          <td><code>{e.action}</code></td>
+                          <td>{e.actor}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>
