@@ -573,3 +573,34 @@ func GetStudyStatusCounts(ctx context.Context, db *sql.DB) (StudyStatusCounts, e
 	}
 	return c, rows.Err()
 }
+
+// BreakdownRow is one cell in the modality × body_part cross-tab.
+type BreakdownRow struct {
+	Modality  string `json:"modality"`
+	BodyPart  string `json:"body_part"`
+	Count     int    `json:"count"`
+}
+
+// GetStudyBreakdown returns study counts grouped by (modality, body_part).
+// Empty modality/body_part values are normalised to the empty string.
+func GetStudyBreakdown(ctx context.Context, db *sql.DB) ([]BreakdownRow, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT coalesce(modality, ''), coalesce(body_part, ''), count(*)
+		FROM studies
+		GROUP BY modality, body_part
+		ORDER BY count(*) DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []BreakdownRow
+	for rows.Next() {
+		var r BreakdownRow
+		if err := rows.Scan(&r.Modality, &r.BodyPart, &r.Count); err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
