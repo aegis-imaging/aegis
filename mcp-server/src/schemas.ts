@@ -56,6 +56,13 @@ export const listAuditArgsSchema = z.object({
   actor: z.string().min(1).max(256).optional()
 });
 
+export const listAllSharesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+  offset: z.number().int().min(0).optional(),
+  status: z.enum(["active", "expired", "revoked"]).optional()
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -66,7 +73,8 @@ export const readToolNames = [
   "get_system_health",
   "get_dimse_retry_status",
   "get_audit_log",
-  "get_study_by_uid"
+  "get_study_by_uid",
+  "list_all_shares"
 ] as const;
 
 export const writeToolNames = [
