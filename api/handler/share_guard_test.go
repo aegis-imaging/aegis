@@ -99,3 +99,31 @@ func TestShareGoneMessage_RevokedWinsOverExpiry(t *testing.T) {
 	}
 	assert.Equal(t, "share has been revoked", shareGoneMessage(share, now))
 }
+
+func TestShareDownloadLimitReached_NoLimit(t *testing.T) {
+	share := &model.ExportShare{DownloadCount: 99}
+	assert.False(t, shareDownloadLimitReached(share))
+}
+
+func TestShareDownloadLimitReached_UnderLimit(t *testing.T) {
+	limit := 5
+	share := &model.ExportShare{MaxDownloads: &limit, DownloadCount: 4}
+	assert.False(t, shareDownloadLimitReached(share))
+}
+
+func TestShareDownloadLimitReached_AtLimit(t *testing.T) {
+	limit := 3
+	share := &model.ExportShare{MaxDownloads: &limit, DownloadCount: 3}
+	assert.True(t, shareDownloadLimitReached(share))
+}
+
+func TestShareGoneMessage_DownloadLimitReached(t *testing.T) {
+	now := time.Date(2026, 2, 20, 12, 0, 0, 0, time.UTC)
+	limit := 2
+	share := &model.ExportShare{
+		ExpiresAt:     now.Add(24 * time.Hour),
+		MaxDownloads:  &limit,
+		DownloadCount: 2,
+	}
+	assert.Equal(t, "download limit reached", shareGoneMessage(share, now))
+}

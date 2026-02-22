@@ -81,9 +81,9 @@ func TestGetStats_ActiveShareCount(t *testing.T) {
 	future := time.Now().Add(24 * time.Hour)
 	past := time.Now().Add(-24 * time.Hour)
 
-	model.CreateExportShare(t.Context(), db, study.ID, "h1", "a@test.com", "", "admin", future) // active
-	model.CreateExportShare(t.Context(), db, study.ID, "h2", "b@test.com", "", "admin", past)   // expired
-	model.CreateExportShare(t.Context(), db, study.ID, "h3", "c@test.com", "", "admin", future) // active
+	model.CreateExportShare(t.Context(), db, study.ID, "h1", "a@test.com", "", "admin", future, nil) // active
+	model.CreateExportShare(t.Context(), db, study.ID, "h2", "b@test.com", "", "admin", past, nil)   // expired
+	model.CreateExportShare(t.Context(), db, study.ID, "h3", "c@test.com", "", "admin", future, nil) // active
 
 	req := httptest.NewRequest("GET", "/api/stats", nil)
 	rr := httptest.NewRecorder()
