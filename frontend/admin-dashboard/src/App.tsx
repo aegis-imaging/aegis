@@ -564,7 +564,7 @@ const ACTION_GROUPS: Record<string, string> = {
 const AUDIT_PAGE_SIZE = 100
 const AUDIT_CATEGORIES = ['study', 'admin_user', 'pipeline', 'phi_scan', 'qc_check', 'bids', 'classification', 'protocol_check', 'export', 'routing', 'institution', 'project', 'digest', 'destination']
 
-function AuditLog() {
+function AuditLog({ projectId = '' }: { projectId?: string }) {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -808,7 +808,7 @@ type DownloadAnalytics = {
   top_shares: { share_id: string; recipient_email: string; study_id: string; download_count: number }[]
 }
 
-function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
+function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId?: string }) {
   const [shares, setShares] = useState<ShareRecord[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -830,12 +830,16 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
       .catch(() => {})
   }, [])
 
+  // Reset page when projectId changes
+  useEffect(() => { setPage(0) }, [projectId])
+
   const fetchShares = useCallback(async (sf: string, pg: number) => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ limit: String(SHARES_PAGE_SIZE), offset: String(pg * SHARES_PAGE_SIZE) })
       if (sf) params.set('status', sf)
+      if (projectId) params.set('project_id', projectId)
       const res = await fetch(`/api/shares?${params}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
@@ -848,9 +852,9 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [projectId])
 
-  useEffect(() => { fetchShares(statusFilter, page) }, [fetchShares, statusFilter, page])
+  useEffect(() => { fetchShares(statusFilter, page) }, [fetchShares, statusFilter, page, projectId])
 
   const hasLiveCountdown = shares.some(s => s.status === 'active')
   useEffect(() => {
@@ -2144,7 +2148,7 @@ const EMPTY_RULE: Omit<RoutingRule, 'id' | 'created_at'> = {
   action: 'require_qa', destination_id: null,
 }
 
-function RoutingPanel({ isAdmin }: { isAdmin: boolean }) {
+function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId?: string }) {
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [rules, setRules]               = useState<RoutingRule[]>([])
   const [loading, setLoading]           = useState(true)
@@ -2473,7 +2477,7 @@ function RoutingPanel({ isAdmin }: { isAdmin: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {rules.map(r => {
+              {rules.filter(r => !projectId || !r.project_id || r.project_id === projectId).map(r => {
                 const destName = r.destination_id
                   ? (destinations.find(d => d.id === r.destination_id)?.name ?? r.destination_id)
                   : null
@@ -5109,15 +5113,18 @@ export function App() {
 
   // Poll stuck studies every 5 minutes for the warning badge.
   useEffect(() => {
-    const fetchStuck = () =>
-      fetch('/api/studies/stuck?minutes=60')
+    const fetchStuck = () => {
+      const params = new URLSearchParams({ minutes: '60' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      fetch(`/api/studies/stuck?${params}`)
         .then(r => r.ok ? r.json() : null)
         .then(d => d && setStuckCount(d.total ?? 0))
         .catch(() => {})
+    }
     fetchStuck()
     const id = setInterval(fetchStuck, 5 * 60 * 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [globalProjectId])
 
   const isAdmin = currentUser?.role === 'admin'
 
@@ -5743,13 +5750,13 @@ export function App() {
       )}
 
       {/* Audit log tab */}
-      {tab === 'audit' && <AuditLog />}
+      {tab === 'audit' && <AuditLog projectId={globalProjectId} />}
 
       {/* Global shares tab */}
-      {tab === 'shares' && <GlobalSharesPanel isAdmin={isAdmin} />}
+      {tab === 'shares' && <GlobalSharesPanel isAdmin={isAdmin} projectId={globalProjectId} />}
 
       {/* Routing tab */}
-      {tab === 'routing' && <RoutingPanel isAdmin={isAdmin} />}
+      {tab === 'routing' && <RoutingPanel isAdmin={isAdmin} projectId={globalProjectId} />}
 
       {/* DIMSE operations tab — admin only */}
       {tab === 'dimse_ops' && isAdmin && <DimseOpsPanel />}

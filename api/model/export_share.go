@@ -265,21 +265,46 @@ func shareStatusWhere(status ShareStatusFilter, n int) (string, []any) {
 	}
 }
 
-func CountAllExportShares(ctx context.Context, db *sql.DB, status ShareStatusFilter) (int, error) {
-	where, args := shareStatusWhere(status, 1)
-	var n int
-	err := db.QueryRowContext(ctx, `SELECT count(*) FROM export_shares es WHERE 1=1`+where, args...).Scan(&n)
-	return n, err
+func CountAllExportShares(ctx context.Context, db *sql.DB, status ShareStatusFilter, projectID ...string) (int, error) {
+	proj := ""
+	if len(projectID) > 0 {
+		proj = projectID[0]
+	}
+	n := 1
+	extraJoin := ""
+	var args []any
+	if proj != "" {
+		extraJoin = ` JOIN studies s ON s.id = es.study_id AND s.project_id = $1`
+		args = append(args, proj)
+		n++
+	}
+	where, wargs := shareStatusWhere(status, n)
+	args = append(args, wargs...)
+	var cnt int
+	err := db.QueryRowContext(ctx, `SELECT count(*) FROM export_shares es`+extraJoin+` WHERE 1=1`+where, args...).Scan(&cnt)
+	return cnt, err
 }
 
-func ListAllExportShares(ctx context.Context, db *sql.DB, status ShareStatusFilter, limit, offset int) ([]ExportShare, error) {
+func ListAllExportShares(ctx context.Context, db *sql.DB, status ShareStatusFilter, limit, offset int, projectID ...string) ([]ExportShare, error) {
+	proj := ""
+	if len(projectID) > 0 {
+		proj = projectID[0]
+	}
 	n := 1
-	where, args := shareStatusWhere(status, n)
-	if len(args) > 0 {
+	extraJoin := ""
+	var args []any
+	if proj != "" {
+		extraJoin = ` JOIN studies s ON s.id = es.study_id AND s.project_id = $1`
+		args = append(args, proj)
+		n++
+	}
+	where, wargs := shareStatusWhere(status, n)
+	args = append(args, wargs...)
+	if len(wargs) > 0 {
 		n++
 	}
 
-	query := `SELECT` + shareColumnsWithCount + ` FROM export_shares es WHERE 1=1` + where + ` ORDER BY es.created_at DESC`
+	query := `SELECT` + shareColumnsWithCount + ` FROM export_shares es` + extraJoin + ` WHERE 1=1` + where + ` ORDER BY es.created_at DESC`
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", n)
 		args = append(args, limit)
