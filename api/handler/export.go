@@ -275,6 +275,16 @@ func buildListShareResponses(shares []model.ExportShare, now time.Time) []listSh
 	return out
 }
 
+// GetExportAnalytics returns aggregate download analytics across all export shares.
+func (s *Server) GetExportAnalytics(w http.ResponseWriter, r *http.Request) {
+	analytics, err := model.GetExportDownloadAnalytics(r.Context(), s.db)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to load export analytics")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, analytics)
+}
+
 // GetShareDownloads returns the immutable download history for one export share.
 func (s *Server) GetShareDownloads(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareID")

@@ -122,6 +122,96 @@ func ListExportDownloadsByShare(ctx context.Context, db *sql.DB, shareID string)
 	return downloads, rows.Err()
 }
 
+// DownloadAnalytics holds aggregate download statistics across all export shares.
+type DownloadAnalytics struct {
+	TotalDownloads int              `json:"total_downloads"`
+	Last30Days     []DailyDownloads `json:"last_30_days"`
+	TopShares      []ShareDownloads `json:"top_shares"`
+}
+
+// DailyDownloads holds download count for a single UTC date.
+type DailyDownloads struct {
+	Date  string `json:"date"`  // YYYY-MM-DD
+	Count int    `json:"count"`
+}
+
+// ShareDownloads holds aggregate download count for one export share.
+type ShareDownloads struct {
+	ShareID        string `json:"share_id"`
+	RecipientEmail string `json:"recipient_email"`
+	StudyID        string `json:"study_id"`
+	DownloadCount  int    `json:"download_count"`
+}
+
+// GetExportDownloadAnalytics returns aggregate download analytics.
+func GetExportDownloadAnalytics(ctx context.Context, db *sql.DB) (*DownloadAnalytics, error) {
+	var total int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM export_downloads`).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	// Aggregate by UTC date for the last 30 days.
+	rows, err := db.QueryContext(ctx, `
+		SELECT to_char(accessed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, count(*)
+		FROM export_downloads
+		WHERE accessed_at >= now() - INTERVAL '30 days'
+		GROUP BY day
+		ORDER BY day`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var daily []DailyDownloads
+	for rows.Next() {
+		var d DailyDownloads
+		if err := rows.Scan(&d.Date, &d.Count); err != nil {
+			return nil, err
+		}
+		daily = append(daily, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if daily == nil {
+		daily = []DailyDownloads{}
+	}
+
+	// Top 10 shares by download count.
+	topRows, err := db.QueryContext(ctx, `
+		SELECT es.id, es.recipient_email, es.study_id, count(ed.id) AS cnt
+		FROM export_shares es
+		JOIN export_downloads ed ON ed.share_id = es.id
+		GROUP BY es.id, es.recipient_email, es.study_id
+		ORDER BY cnt DESC
+		LIMIT 10`)
+	if err != nil {
+		return nil, err
+	}
+	defer topRows.Close()
+
+	var top []ShareDownloads
+	for topRows.Next() {
+		var s ShareDownloads
+		if err := topRows.Scan(&s.ShareID, &s.RecipientEmail, &s.StudyID, &s.DownloadCount); err != nil {
+			return nil, err
+		}
+		top = append(top, s)
+	}
+	if err := topRows.Err(); err != nil {
+		return nil, err
+	}
+	if top == nil {
+		top = []ShareDownloads{}
+	}
+
+	return &DownloadAnalytics{
+		TotalDownloads: total,
+		Last30Days:     daily,
+		TopShares:      top,
+	}, nil
+}
+
 // ShareStatusFilter constrains ListAllExportShares to a computed status bucket.
 // "active" = not revoked AND expires_at > now()
 // "expired" = not revoked AND expires_at <= now()
