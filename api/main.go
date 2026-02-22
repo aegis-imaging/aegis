@@ -191,6 +191,7 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{id}/reset-pipeline-step", adminOnly(srv.ResetPipelineStep))
 	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
 	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
+	mux.HandleFunc("POST /api/studies/{id}/reactivate", adminOnly(srv.ReactivateStudy))
 	mux.HandleFunc("POST /api/studies/{id}/share", adminOnly(srv.CreateShare))
 	mux.HandleFunc("GET /api/studies/{id}/shares", auth(srv.ListShares))
 

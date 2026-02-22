@@ -82,6 +82,28 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
 }
 
+// ReactivateStudy restores an expired study back to 'approved' status.
+// POST /api/studies/{id}/reactivate
+func (s *Server) ReactivateStudy(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	study, err := model.GetStudyByID(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+	if study.Status != "expired" {
+		s.writeError(w, http.StatusBadRequest, "only expired studies can be reactivated")
+		return
+	}
+	if err := model.UpdateStudyStatus(r.Context(), s.db, study.ID, "approved"); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to update status")
+		return
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "study.reactivated", actorEmail(r),
+		"study", study.ID, clientIP(r), nil)
+	s.writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+}
+
 type createShareRequest struct {
 	RecipientEmail string `json:"recipient_email"`
 	Note           string `json:"note"`
