@@ -189,6 +189,62 @@
 .badge--export-exported  { background: #dcfce7; color: #15803d; }
 .badge--export-failed    { background: #fee2e2; color: #b91c1c; }
 
+/* ── Pipeline stats banner ───────────────────────────────────────────────── */
+.stats-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.stats-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.1s, box-shadow 0.1s;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.stats-pill:hover { opacity: 0.85; }
+
+.stats-pill--active {
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+.stats-pill__count {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* Per-status tints */
+.stats-pill--received  { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.stats-pill--defacing  { background: #fefce8; color: #854d0e; border-color: #fef08a; }
+.stats-pill--clean     { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.stats-pill--defaced   { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.stats-pill--approved  { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+.stats-pill--rejected  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+
+.stats-banner__sep {
+  width: 1px;
+  height: 20px;
+  background: #e5e7eb;
+  margin: 0 4px;
+}
+
+.stats-banner__shares {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
 /* ── Filter bar ──────────────────────────────────────────────────────────── */
 .filter-bar {
   display: flex;

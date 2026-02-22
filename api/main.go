@@ -140,6 +140,9 @@ func main() {
 	// Auth identity endpoint.
 	mux.HandleFunc("GET /api/auth/me", auth(srv.AuthMe))
 
+	// Dashboard stats — lightweight study pipeline overview.
+	mux.HandleFunc("GET /api/stats", auth(srv.GetStats))
+
 	// Projects — create/update require admin; list is public (upload portal).
 	mux.HandleFunc("POST /api/projects", adminOnly(srv.CreateProject))
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
