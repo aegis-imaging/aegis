@@ -69,6 +69,11 @@ type Config struct {
 	// Pipeline
 	PipelineAuto bool // PIPELINE_AUTO — auto-dispatch processing after routing (default true)
 
+	// Per-IP rate limiting on public upload/ingest endpoints.
+	RateLimitEnabled bool    // RATE_LIMIT_ENABLED — default false
+	RateLimitRPS     float64 // RATE_LIMIT_RPS — requests per second per IP (default 20)
+	RateLimitBurst   int     // RATE_LIMIT_BURST — burst size per IP (default 50)
+
 	// Email (SMTP)
 	// EmailEnabled is derived: true when SMTPHost is non-empty.
 	SMTPHost     string // SMTP_HOST — e.g. localhost; leave empty to disable email
@@ -142,6 +147,10 @@ func Load() *Config {
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 
+		RateLimitEnabled: os.Getenv("RATE_LIMIT_ENABLED") == "true",
+		RateLimitRPS:     floatEnvOr("RATE_LIMIT_RPS", 20),
+		RateLimitBurst:   envInt("RATE_LIMIT_BURST", 50),
+
 		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004"), ","),
 
 		AuthEnabled:  os.Getenv("AUTH_ENABLED") == "true",
@@ -169,6 +178,15 @@ func Load() *Config {
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func floatEnvOr(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
 	}
 	return fallback
 }
