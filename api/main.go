@@ -247,6 +247,9 @@ func main() {
 	mux.HandleFunc("PUT /api/admin-users/{id}", adminOnly(srv.UpdateAdminUser))
 	mux.HandleFunc("DELETE /api/admin-users/{id}", adminOnly(srv.DeleteAdminUser))
 
+	// Project-level batch export — dispatch all eligible approved studies.
+	mux.HandleFunc("POST /api/projects/{id}/export-batch", adminOnly(srv.ExportBatch))
+
 	// Protocol templates — per-project MRI acquisition parameter expectations.
 	mux.HandleFunc("GET /api/projects/{projectID}/protocol-templates", auth(srv.ListProtocolTemplates))
 	mux.HandleFunc("POST /api/projects/{projectID}/protocol-templates", adminOnly(srv.CreateProtocolTemplate))
