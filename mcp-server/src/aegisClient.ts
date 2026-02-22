@@ -10,10 +10,10 @@ export class UpstreamHttpError extends Error {
 }
 
 export class DisallowedPathError extends Error {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "DELETE";
   path: string;
 
-  constructor(method: "GET" | "POST", path: string) {
+  constructor(method: "GET" | "POST" | "DELETE", path: string) {
     super(`Outbound ${method} path is not allowed: ${path}`);
     this.method = method;
     this.path = path;
@@ -44,15 +44,24 @@ const allowedPostPathPatterns = [
   /^\/api\/studies\/[0-9.]+\/phi-scan$/,
   /^\/api\/studies\/[0-9.]+\/trigger-deface$/,
   /^\/api\/dimse\/retry\/process\/[0-9.]+$/,
-  /^\/api\/dimse\/retry\/replay\/[0-9.]+$/
+  /^\/api\/dimse\/retry\/replay\/[0-9.]+$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/approve$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/reject$/
 ] as const;
 
-function assertAllowedPath(method: "GET" | "POST", path: string): void {
+const allowedDeletePathPatterns = [
+  /^\/api\/shares\/[0-9a-fA-F-]{36}$/
+] as const;
+
+function assertAllowedPath(method: "GET" | "POST" | "DELETE", path: string): void {
   if (!path.startsWith("/")) {
     throw new DisallowedPathError(method, path);
   }
 
-  const patterns = method === "GET" ? allowedGetPathPatterns : allowedPostPathPatterns;
+  const patterns =
+    method === "GET" ? allowedGetPathPatterns :
+    method === "DELETE" ? allowedDeletePathPatterns :
+    allowedPostPathPatterns;
   const allowed = patterns.some((pattern) => pattern.test(path));
   if (!allowed) {
     throw new DisallowedPathError(method, path);
@@ -106,6 +115,33 @@ export class AegisApiClient {
         ...(payload !== undefined ? { "Content-Type": "application/json" } : {})
       },
       ...(payload !== undefined ? { body: JSON.stringify(payload) } : {})
+    });
+
+    const body = await response.text();
+    if (!response.ok) {
+      throw new UpstreamHttpError(response.status, body);
+    }
+
+    if (!body) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(body);
+    } catch {
+      return { raw: body };
+    }
+  }
+
+  async delete(path: string): Promise<unknown> {
+    assertAllowedPath("DELETE", path);
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${this.token}`
+      }
     });
 
     const body = await response.text();
