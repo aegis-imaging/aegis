@@ -93,6 +93,8 @@ type Share = {
   revoked_at?: string
   status?: 'active' | 'expired' | 'revoked'
   created_at: string
+  max_downloads?: number
+  download_count?: number
 }
 
 type NewShareResult = Share & {
@@ -1503,6 +1505,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shareEmail, setShareEmail] = useState('')
   const [shareNote, setShareNote] = useState('')
   const [shareDays, setShareDays] = useState(7)
+  const [shareMaxDownloads, setShareMaxDownloads] = useState('')
   const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -1596,16 +1599,18 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
 
   const handleShare = async () => {
     const expiryHours = Math.max(1, shareDays * 24)
+    const maxDl = shareMaxDownloads.trim() === '' ? undefined : parseInt(shareMaxDownloads, 10)
     const resp = await fetch(`/api/studies/${study.id}/share`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expiry_hours: expiryHours }),
+      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expiry_hours: expiryHours, max_downloads: maxDl }),
     })
     if (resp.ok) {
       const result = await resp.json()
       setShareResult(result)
       setShareEmail('')
       setShareNote('')
+      setShareMaxDownloads('')
       loadData()
     }
   }
@@ -1759,6 +1764,16 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               <option value={30}>30 days</option>
               <option value={90}>90 days</option>
             </select>
+            <input
+              type="number"
+              min={1}
+              placeholder="Max downloads (∞)"
+              value={shareMaxDownloads}
+              onChange={e => setShareMaxDownloads(e.target.value)}
+              className="share-input"
+              style={{ width: 160 }}
+              title="Leave blank for unlimited downloads"
+            />
             <button type="button" className="btn btn--approve" disabled={!shareEmail} onClick={handleShare}>Send</button>
           </div>
           {shareResult && (
@@ -1870,10 +1885,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         {detailTab === 'shares' && (
           <table className="detail-table">
             <thead>
-              <tr><th>Recipient</th><th>Created</th><th>Expires</th><th>Status</th><th>Note</th></tr>
+              <tr><th>Recipient</th><th>Created</th><th>Expires</th><th>Status</th><th>Downloads</th><th>Note</th></tr>
             </thead>
             <tbody>
-              {shares.length === 0 && <tr><td colSpan={5}>No shares.</td></tr>}
+              {shares.length === 0 && <tr><td colSpan={6}>No shares.</td></tr>}
               {shares.map(s => {
                 const shareStatus = shareStatusLabel(s, nowMs)
                 const statusClass = `share-status--${shareStatus}`
@@ -1882,6 +1897,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                   shareStatus === 'active' && remainingSeconds !== null
                     ? fmtRemaining(remainingSeconds)
                     : ''
+                const dlCount = s.download_count ?? 0
+                const dlLabel = s.max_downloads != null
+                  ? `${dlCount} / ${s.max_downloads}`
+                  : String(dlCount)
                 return (
                   <tr key={s.id}>
                     <td>{s.recipient_email}</td>
@@ -1891,6 +1910,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                       {remainingLabel && <div className="td-subtle">({remainingLabel} remaining)</div>}
                     </td>
                     <td><span className={statusClass}>{shareStatus}</span></td>
+                    <td>{dlLabel}</td>
                     <td>{s.note || '—'}</td>
                   </tr>
                 )
