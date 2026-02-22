@@ -37,9 +37,12 @@ func CreateAuditEntry(ctx context.Context, db *sql.DB, action, actor, resourceTy
 
 // AuditFilters holds optional filter values for ListAuditEntries / CountAuditEntries.
 type AuditFilters struct {
-	Action       string // exact match on action
-	ResourceType string // exact match on resource_type
-	Actor        string // exact match on actor (user email)
+	Action       string    // prefix match on action (e.g. "study" matches all study.* events)
+	ResourceType string    // exact match on resource_type
+	Actor        string    // exact match on actor (user email)
+	Search       string    // free-text substring search across actor, action, resource_id
+	DateFrom     time.Time // inclusive lower bound on created_at (zero = no bound)
+	DateTo       time.Time // inclusive upper bound on created_at (zero = no bound)
 }
 
 func auditWhere(f AuditFilters) (string, []any) {
@@ -60,6 +63,24 @@ func auditWhere(f AuditFilters) (string, []any) {
 	if f.Actor != "" {
 		clauses = append(clauses, fmt.Sprintf("actor = $%d", n))
 		args = append(args, f.Actor)
+		n++
+	}
+	if f.Search != "" {
+		pat := "%" + f.Search + "%"
+		clauses = append(clauses, fmt.Sprintf(
+			"(actor ILIKE $%d OR action ILIKE $%d OR resource_id ILIKE $%d OR COALESCE(detail::text,'') ILIKE $%d)",
+			n, n, n, n))
+		args = append(args, pat)
+		n++
+	}
+	if !f.DateFrom.IsZero() {
+		clauses = append(clauses, fmt.Sprintf("created_at >= $%d", n))
+		args = append(args, f.DateFrom.UTC())
+		n++
+	}
+	if !f.DateTo.IsZero() {
+		clauses = append(clauses, fmt.Sprintf("created_at <= $%d", n))
+		args = append(args, f.DateTo.UTC())
 		n++
 	}
 	_ = n

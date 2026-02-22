@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
 )
@@ -26,10 +27,25 @@ func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request) {
 		limit = 500
 	}
 
+	var dateFrom, dateTo time.Time
+	if v := q.Get("date_from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			dateFrom = t.UTC()
+		}
+	}
+	if v := q.Get("date_to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			dateTo = t.UTC()
+		}
+	}
+
 	f := model.AuditFilters{
 		Action:       q.Get("action"),
 		ResourceType: q.Get("resource_type"),
 		Actor:        q.Get("actor"),
+		Search:       q.Get("search"),
+		DateFrom:     dateFrom,
+		DateTo:       dateTo,
 	}
 
 	total, err := model.CountAuditEntries(r.Context(), s.db, f)
