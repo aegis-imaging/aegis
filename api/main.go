@@ -178,6 +178,7 @@ func main() {
 
 	mux.HandleFunc("GET /api/shares", auth(srv.ListAllShares))
 	mux.HandleFunc("GET /api/shares/{shareID}/downloads", auth(srv.GetShareDownloads))
+	mux.HandleFunc("GET /api/export-analytics", auth(srv.GetExportAnalytics))
 	mux.HandleFunc("DELETE /api/shares/{shareID}", adminOnly(srv.RevokeShare))
 
 	// Internal enterprise ingestion path.
