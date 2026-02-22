@@ -107,6 +107,7 @@ class DefaceResponse(BaseModel):
     error: str | None = None
 
 
+@app.get("/health")
 @app.get("/healthz")
 def healthz() -> dict:
     try:

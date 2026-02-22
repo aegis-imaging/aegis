@@ -132,6 +132,7 @@ def _health_degraded_reasons(scp_running: bool, retry: dict[str, int]) -> list[s
     return reasons
 
 
+@app.get("/health")
 @app.get("/healthz")
 def healthz():
     """Health check endpoint."""
