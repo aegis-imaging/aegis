@@ -6,6 +6,14 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 type AppTab = 'studies' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'users'
 
+type StudyLabel = {
+  id: string
+  study_id: string
+  label: string
+  created_by: string
+  created_at: string
+}
+
 type AuditEntry = {
   id: string
   action: string
@@ -1255,8 +1263,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [routingLog, setRoutingLog] = useState<RoutingLogEntry[]>([])
   const [shares, setShares] = useState<Share[]>([])
   const [diagnostics, setDiagnostics] = useState<StudyDiagnosticsResponse | null>(null)
+  const [labels, setLabels] = useState<StudyLabel[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels'>('audit')
+  const [newLabel, setNewLabel] = useState('')
+  const [labelSaving, setLabelSaving] = useState(false)
 
   // Viewer / review state
   const [viewOpen, setViewOpen] = useState(false)
@@ -1282,7 +1293,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/routing-log`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/shares`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/diagnostics`).then(r => r.ok ? r.json() : null),
-    ]).then(([s, a, rl, sh, diag]) => {
+      fetch(`/api/studies/${studyId}/labels`).then(r => r.ok ? r.json() : []),
+    ]).then(([s, a, rl, sh, diag, lbls]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
@@ -1290,6 +1302,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       const shareRows = (sh ?? []) as Share[]
       setShares(shareRows.map(row => withShareExpiryAnchor(row, now)))
       setDiagnostics(diag ?? null)
+      setLabels(lbls ?? [])
       setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -1493,6 +1506,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           <button type="button" className={`tab-btn${detailTab === 'diagnostics' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('diagnostics')}>
             Diagnostics
           </button>
+          <button type="button" className={`tab-btn${detailTab === 'labels' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('labels')}>
+            Labels ({labels.length})
+          </button>
         </div>
 
         {detailTab === 'audit' && (
@@ -1563,6 +1579,62 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               })}
             </tbody>
           </table>
+        )}
+
+        {detailTab === 'labels' && (
+          <div className="labels-panel">
+            {/* Label chips */}
+            <div className="labels-panel__chips">
+              {labels.length === 0 && <span className="routing-desc">No labels yet.</span>}
+              {labels.map(lbl => (
+                <span key={lbl.id} className="label-chip" title={`Added by ${lbl.created_by}`}>
+                  {lbl.label}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      className="label-chip__remove"
+                      aria-label={`Remove label ${lbl.label}`}
+                      onClick={async () => {
+                        await fetch(`/api/studies/${studyId}/labels/${lbl.id}`, { method: 'DELETE' })
+                        loadData()
+                      }}
+                    >×</button>
+                  )}
+                </span>
+              ))}
+            </div>
+            {/* Add label form (admin only) */}
+            {isAdmin && (
+              <form
+                className="labels-panel__form"
+                onSubmit={async e => {
+                  e.preventDefault()
+                  if (!newLabel.trim()) return
+                  setLabelSaving(true)
+                  await fetch(`/api/studies/${studyId}/labels`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label: newLabel.trim() }),
+                  })
+                  setNewLabel('')
+                  setLabelSaving(false)
+                  loadData()
+                }}
+              >
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="Add label…"
+                  maxLength={80}
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value)}
+                />
+                <button type="submit" className="btn-primary" disabled={labelSaving || !newLabel.trim()}>
+                  {labelSaving ? 'Adding…' : 'Add'}
+                </button>
+              </form>
+            )}
+          </div>
         )}
 
         {detailTab === 'diagnostics' && (

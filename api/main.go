@@ -222,6 +222,11 @@ func main() {
 	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", adminOnly(srv.CreateDigestSubscription))
 	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", adminOnly(srv.DeleteDigestSubscription))
 
+	// Study labels — free-text tags applied by admin users for structured triage.
+	mux.HandleFunc("GET /api/studies/{id}/labels", auth(srv.ListStudyLabels))
+	mux.HandleFunc("POST /api/studies/{id}/labels", adminOnly(srv.AddStudyLabel))
+	mux.HandleFunc("DELETE /api/studies/{id}/labels/{labelID}", adminOnly(srv.DeleteStudyLabel))
+
 	// Webhook subscriptions — HTTP callbacks for study lifecycle events.
 	mux.HandleFunc("GET /api/webhook-subscriptions", auth(srv.ListWebhooks))
 	mux.HandleFunc("POST /api/webhook-subscriptions", adminOnly(srv.CreateWebhook))
