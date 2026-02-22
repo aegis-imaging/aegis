@@ -1290,6 +1290,180 @@ resource "google_monitoring_alert_policy" "cloudsql_cpu" {
   }
 }
 
+# --- Uptime check ---
+
+resource "google_monitoring_uptime_check_config" "api_healthz" {
+  count        = var.api_domain != "" && var.enable_monitoring_alerts ? 1 : 0
+  display_name = "AEGIS API /healthz (${var.environment})"
+  timeout      = "10s"
+  period       = "60s"
+
+  http_check {
+    path         = "/healthz"
+    port         = 443
+    use_ssl      = true
+    validate_ssl = true
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      project_id = var.project_id
+      host       = var.api_domain
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "api_uptime" {
+  count        = var.api_domain != "" && var.enable_monitoring_alerts ? 1 : 0
+  display_name = "AEGIS API uptime check failing (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Uptime check failure"
+    condition_threshold {
+      filter          = "metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type = \"uptime_url\" AND metric.label.check_id = \"${google_monitoring_uptime_check_config.api_healthz[0].uptime_check_id}\""
+      comparison      = "COMPARISON_LT"
+      threshold_value = 1
+      duration        = "120s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_NEXT_OLDER"
+        cross_series_reducer = "REDUCE_COUNT_FALSE"
+        group_by_fields      = ["resource.label.*"]
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "The API /healthz endpoint is not responding. Check Cloud Run service health, DB connectivity, and load balancer configuration."
+  }
+
+  user_labels = {
+    service  = "api"
+    severity = "critical"
+  }
+}
+
+resource "google_monitoring_alert_policy" "api_latency" {
+  display_name = "AEGIS API p99 latency high (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Cloud Run API request latency p99 > 5s"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND resource.label.service_name = \"${google_cloud_run_v2_service.api.name}\" AND metric.type = \"run.googleapis.com/request_latencies\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 5000
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_PERCENTILE_99"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "API p99 latency exceeded 5 seconds. Check for slow DB queries, sidecar timeouts, or cold start spikes. Consider increasing Cloud Run min-instances."
+  }
+
+  user_labels = {
+    service  = "api"
+    severity = "warning"
+  }
+}
+
+resource "google_monitoring_alert_policy" "cloudsql_disk" {
+  display_name = "AEGIS Cloud SQL disk usage high (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Cloud SQL disk utilisation > 85%"
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.label.database_id = \"${var.project_id}:${google_sql_database_instance.aegis.name}\" AND metric.type = \"cloudsql.googleapis.com/database/disk/utilization\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.85
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "Cloud SQL disk is above 85%. Enable storage auto-resize in the GCP Console or increase disk_size in Terraform. See docs/runbooks/alert-response.md."
+  }
+
+  user_labels = {
+    service  = "postgres"
+    severity = "critical"
+  }
+}
+
+resource "google_monitoring_alert_policy" "cloudsql_connections" {
+  display_name = "AEGIS Cloud SQL connections high (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Cloud SQL active connections > 80"
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.label.database_id = \"${var.project_id}:${google_sql_database_instance.aegis.name}\" AND metric.type = \"cloudsql.googleapis.com/database/postgresql/num_backends\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 80
+      duration        = "300s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_MAX"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "Active PostgreSQL connections are near the limit. Review Cloud Run max-instances, enable PgBouncer, or increase max_connections in Cloud SQL flags."
+  }
+
+  user_labels = {
+    service  = "postgres"
+    severity = "warning"
+  }
+}
+
+# --- Cloud Monitoring Dashboard ---
+
+resource "google_monitoring_dashboard" "aegis" {
+  count          = var.enable_monitoring_alerts ? 1 : 0
+  dashboard_json = templatefile("${path.module}/monitoring_dashboard.json", {
+    project_id   = var.project_id
+    api_service  = google_cloud_run_v2_service.api.name
+    environment  = var.environment
+  })
+}
+
 # --- Outputs ---
 
 output "network" {
