@@ -51,3 +51,15 @@ func (s *Server) GetBreakdownStats(w http.ResponseWriter, r *http.Request) {
 		"generated_at": time.Now().UTC(),
 	})
 }
+
+// GetStorageStats returns aggregate DICOM file counts derived from the studies table.
+// GET /api/storage/stats
+func (s *Server) GetStorageStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := model.GetStorageStats(r.Context(), s.db)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to query storage stats")
+		return
+	}
+	stats.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
+	s.writeJSON(w, http.StatusOK, stats)
+}

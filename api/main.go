@@ -160,6 +160,7 @@ func main() {
 	// Dashboard stats — lightweight study pipeline overview.
 	mux.HandleFunc("GET /api/stats", auth(srv.GetStats))
 	mux.HandleFunc("GET /api/stats/breakdown", auth(srv.GetBreakdownStats))
+	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
 	// Projects — create/update require admin; list is public (upload portal).
 	mux.HandleFunc("POST /api/projects", adminOnly(srv.CreateProject))
