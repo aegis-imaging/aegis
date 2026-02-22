@@ -1594,3 +1594,19 @@
 .deface-qa-score--good { background: #d1fae5; color: #065f46; }
 .deface-qa-score--warn { background: #fef3c7; color: #92400e; }
 .deface-qa-score--poor { background: #fee2e2; color: #991b1b; }
+
+/* ── DICOM Tag Inspection Panel ──────────────────────────────────────────── */
+.dicom-tags-panel {
+  margin: 12px 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: auto;
+  max-height: 400px;
+}
+.dicom-tags-table td.dicom-tag-value {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85em;
+}
