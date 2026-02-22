@@ -158,6 +158,7 @@ type Project = {
   description: string
   default_anon_profile_id?: string | null
   retention_days?: number | null
+  archived?: boolean
   created_at: string
 }
 
@@ -3697,6 +3698,9 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [retentionSaving, setRetentionSaving]         = useState(false)
   const [retentionError, setRetentionError]           = useState<string | null>(null)
 
+  // Archive/restore state
+  const [archiving, setArchiving] = useState<string | null>(null)
+
   async function openPhiConfig(projectId: string) {
     setPhiProjectId(projectId)
     setPhiError(null)
@@ -3755,6 +3759,21 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
       setRetentionError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setRetentionSaving(false)
+    }
+  }
+
+  const toggleArchive = async (p: Project) => {
+    const action = p.archived ? 'restore' : 'archive'
+    if (!confirm(`${p.archived ? 'Restore' : 'Archive'} project "${p.name}"?`)) return
+    setArchiving(p.id)
+    try {
+      const res = await fetch(`/api/projects/${p.id}/${action}`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      fetchProjects()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : `Failed to ${action} project`)
+    } finally {
+      setArchiving(null)
     }
   }
 
@@ -3926,7 +3945,10 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
               {projects.map(p => (
                 <tr key={p.id}>
                   <td>
-                    <div className="routing-name">{p.name}</div>
+                    <div className="routing-name">
+                      {p.name}
+                      {p.archived && <span className="badge badge--neutral" style={{marginLeft:'6px'}}>archived</span>}
+                    </div>
                     {p.description && <div className="routing-desc">{p.description}</div>}
                   </td>
                   <td><code className="inst-slug">{p.slug}</code></td>
@@ -3965,6 +3987,13 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           title="Set study retention period for this project"
                           onClick={() => openRetention(p)}>
                           Retention
+                        </button>
+                        <button type="button"
+                          className={p.archived ? 'btn btn--approve' : 'btn btn--action'}
+                          title={p.archived ? 'Restore project' : 'Archive project'}
+                          disabled={archiving === p.id}
+                          onClick={() => toggleArchive(p)}>
+                          {archiving === p.id ? '…' : p.archived ? 'Restore' : 'Archive'}
                         </button>
                       </div>
                     )}
