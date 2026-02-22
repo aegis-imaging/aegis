@@ -58,6 +58,10 @@ type Config struct {
 	// Optional operator key used by API when proxying DIMSE retry-control endpoints.
 	DimseOperatorAPIKey string
 
+	// Synthetic MRI generation service (Python Cloud Run sidecar).
+	// Empty string disables the endpoint (returns 503 until configured).
+	SynthServiceURL string
+
 	// CORS
 	AllowedOrigins []string
 
@@ -91,6 +95,10 @@ type Config struct {
 	SLAPipelineMinutes int    // SLA_PIPELINE_MINUTES — alert when study idle > N min (0 = disabled)
 	SLACooldownHours   int    // SLA_COOLDOWN_HOURS — re-alert cooldown per study (default 24)
 	SLAAlertEmail      string // SLA_ALERT_EMAIL — recipient for stuck-study alerts
+
+	// Pipeline failure alerting — sends email whenever a pipeline service step fails.
+	// Disabled when PipelineAlertEmail is empty or SMTP is not configured.
+	PipelineAlertEmail string // PIPELINE_ALERT_EMAIL — recipient for pipeline step failure alerts
 
 	// First-admin bootstrap — seeds the first admin user on startup when admin_users is empty.
 	// Idempotent: has no effect once any admin user exists.
@@ -144,6 +152,7 @@ func Load() *Config {
 		ProtocolServiceURL:       os.Getenv("PROTOCOL_SERVICE_URL"),       // e.g. http://localhost:8086
 		DimseReceiverURL:         os.Getenv("DIMSE_RECEIVER_URL"),         // e.g. http://localhost:8087
 		DimseOperatorAPIKey:      os.Getenv("DIMSE_OPERATOR_API_KEY"),
+		SynthServiceURL:          os.Getenv("SYNTH_SERVICE_URL"),          // e.g. http://localhost:8088
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 
@@ -169,6 +178,7 @@ func Load() *Config {
 		SLAPipelineMinutes: envInt("SLA_PIPELINE_MINUTES", 0),
 		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),
 		SLAAlertEmail:      os.Getenv("SLA_ALERT_EMAIL"),
+		PipelineAlertEmail: os.Getenv("PIPELINE_ALERT_EMAIL"),
 
 		FirstAdminEmail: os.Getenv("FIRST_ADMIN_EMAIL"),
 		FirstAdminName:  envOr("FIRST_ADMIN_NAME", os.Getenv("FIRST_ADMIN_EMAIL")),

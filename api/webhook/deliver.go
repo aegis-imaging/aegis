@@ -93,6 +93,16 @@ func deliverOne(db *sql.DB, sub model.WebhookSubscription, event string, body []
 	log.Printf("webhook: all 3 attempts failed for subscription %s → %s", sub.ID, sub.URL)
 }
 
+// PostTest sends a single synchronous test delivery and returns the HTTP status
+// code and any error. The caller is responsible for recording the delivery log entry.
+func PostTest(sub model.WebhookSubscription, payload Payload) (int, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return 0, fmt.Errorf("marshal payload: %w", err)
+	}
+	return post(sub, body)
+}
+
 func post(sub model.WebhookSubscription, body []byte) (int, error) {
 	req, err := http.NewRequest("POST", sub.URL, bytes.NewReader(body))
 	if err != nil {

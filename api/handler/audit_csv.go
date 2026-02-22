@@ -15,10 +15,25 @@ import (
 func (s *Server) ExportAuditCSV(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
+	var dateFrom, dateTo time.Time
+	if v := q.Get("date_from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			dateFrom = t.UTC()
+		}
+	}
+	if v := q.Get("date_to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			dateTo = t.UTC()
+		}
+	}
+
 	f := model.AuditFilters{
 		Action:       q.Get("action"),
 		ResourceType: q.Get("resource_type"),
 		Actor:        q.Get("actor"),
+		Search:       q.Get("search"),
+		DateFrom:     dateFrom,
+		DateTo:       dateTo,
 	}
 
 	entries, err := model.ListAuditEntries(r.Context(), s.db, f, 10000, 0)

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
@@ -15,14 +16,17 @@ type statsResponse struct {
 
 // GetStats returns a lightweight snapshot of study pipeline state and active
 // share count. Used by the admin dashboard overview banner.
+// Accepts optional ?project_id= to scope counts to a single project.
 func (s *Server) GetStats(w http.ResponseWriter, r *http.Request) {
-	counts, err := model.GetStudyStatusCounts(r.Context(), s.db)
+	projectID := r.URL.Query().Get("project_id")
+
+	counts, err := model.GetStudyStatusCounts(r.Context(), s.db, projectID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to query study counts")
 		return
 	}
 
-	activeShares, err := model.CountAllExportShares(r.Context(), s.db, model.ShareStatusActive)
+	activeShares, err := model.CountAllExportShares(r.Context(), s.db, model.ShareStatusActive, projectID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to query share counts")
 		return
@@ -36,9 +40,11 @@ func (s *Server) GetStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetBreakdownStats returns study counts grouped by modality and body part.
-// GET /api/stats/breakdown
+// GET /api/stats/breakdown  — accepts optional ?project_id=
 func (s *Server) GetBreakdownStats(w http.ResponseWriter, r *http.Request) {
-	rows, err := model.GetStudyBreakdown(r.Context(), s.db)
+	projectID := r.URL.Query().Get("project_id")
+
+	rows, err := model.GetStudyBreakdown(r.Context(), s.db, projectID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to query breakdown stats")
 		return
@@ -53,13 +59,33 @@ func (s *Server) GetBreakdownStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetStorageStats returns aggregate DICOM file counts derived from the studies table.
-// GET /api/storage/stats
+// GET /api/storage/stats  — accepts optional ?project_id=
 func (s *Server) GetStorageStats(w http.ResponseWriter, r *http.Request) {
-	stats, err := model.GetStorageStats(r.Context(), s.db)
+	projectID := r.URL.Query().Get("project_id")
+
+	stats, err := model.GetStorageStats(r.Context(), s.db, projectID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to query storage stats")
 		return
 	}
 	stats.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
 	s.writeJSON(w, http.StatusOK, stats)
+}
+
+// GetTimeline returns daily study ingestion counts.
+// GET /api/stats/timeline  — accepts ?days=30 (default) and ?project_id=
+func (s *Server) GetTimeline(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	days, _ := strconv.Atoi(q.Get("days"))
+	projectID := q.Get("project_id")
+
+	rows, err := model.GetStudyTimeline(r.Context(), s.db, days, projectID)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to query timeline")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"timeline":     rows,
+		"generated_at": time.Now().UTC(),
+	})
 }

@@ -113,6 +113,37 @@ Export shares created:   {{ .SharesCreated }}
 This is an automated message from AEGIS. To unsubscribe, contact your administrator.
 `))
 
+var pipelineFailureTmpl = template.Must(template.New("pipeline_failure").Parse(
+	`An automated pipeline step has failed for a study in AEGIS.
+
+Service:    {{ .Service }}
+Study UID:  {{ .StudyUID }}
+Failed at:  {{ .FailedAt }}
+
+Error:
+  {{ .ErrMsg }}
+
+Please review the study in the admin dashboard and re-trigger the step or
+investigate the sidecar service logs.
+
+--
+This is an automated alert from AEGIS. Do not reply to this email.
+`))
+
+// PipelineFailure renders an alert email for a pipeline service step failure.
+// No PHI is included — only the study UID, service name, and error message.
+func PipelineFailure(studyUID, service, errMsg string) (subject, body string) {
+	subject = "[AEGIS Alert] Pipeline step failed: " + service + " — " + studyUID
+	var buf bytes.Buffer
+	pipelineFailureTmpl.Execute(&buf, struct {
+		Service  string
+		StudyUID string
+		FailedAt string
+		ErrMsg   string
+	}{service, studyUID, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"), errMsg})
+	return subject, buf.String()
+}
+
 var contactFormTmpl = template.Must(template.New("contact_form").Parse(
 	`New contact form submission from the AEGIS website.
 

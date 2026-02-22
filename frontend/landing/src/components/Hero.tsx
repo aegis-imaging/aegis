@@ -25,11 +25,11 @@ export function Hero() {
         </p>
 
         <div className="hero__ctas">
-          <button className="btn btn--white btn--lg" onClick={() => scrollTo('contact')}>
-            Get Early Access
+          <button className="btn btn--white btn--lg" onClick={() => scrollTo('demo')}>
+            Try Live Demo
           </button>
-          <button className="btn btn--ghost btn--lg" onClick={() => scrollTo('architecture')}>
-            View Architecture
+          <button className="btn btn--ghost btn--lg" onClick={() => scrollTo('contact')}>
+            Schedule a Demo →
           </button>
         </div>
 
@@ -48,7 +48,7 @@ export function Hero() {
           </div>
           <div className="hero__trust-badge">
             <ServerIcon size={16} />
-            <span>6 Processing Services</span>
+            <span>7 Processing Services</span>
           </div>
         </div>
       </div>

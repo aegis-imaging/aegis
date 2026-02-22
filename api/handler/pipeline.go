@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -218,4 +219,16 @@ func (s *Server) dispatchBidsConversion(ctx context.Context, study *model.Study)
 		"study_uid": study.StudyInstanceUID,
 	})
 	go s.runBidsConversion(fresh)
+}
+
+// notifyPipelineFailure sends a plain-text alert email when a pipeline service step fails.
+// No-op when PipelineAlertEmail is empty or SMTP is not configured.
+func (s *Server) notifyPipelineFailure(ctx context.Context, studyUID, service, errMsg string) {
+	if s.cfg.PipelineAlertEmail == "" {
+		return
+	}
+	subj, body := email.PipelineFailure(studyUID, service, errMsg)
+	if err := s.mailer.Send(ctx, s.cfg.PipelineAlertEmail, subj, body); err != nil {
+		log.Printf("pipeline: send failure alert for %s/%s: %v", service, studyUID, err)
+	}
 }

@@ -564,7 +564,7 @@ const ACTION_GROUPS: Record<string, string> = {
 const AUDIT_PAGE_SIZE = 100
 const AUDIT_CATEGORIES = ['study', 'admin_user', 'pipeline', 'phi_scan', 'qc_check', 'bids', 'classification', 'protocol_check', 'export', 'routing', 'institution', 'project', 'digest', 'destination']
 
-function AuditLog() {
+function AuditLog({ projectId = '' }: { projectId?: string }) {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -572,6 +572,10 @@ function AuditLog() {
   const [actionFilter, setActionFilter] = useState('')
   const [actorFilter, setActorFilter] = useState('')
   const [actorInput, setActorInput] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [searchFilter, setSearchFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -584,13 +588,16 @@ function AuditLog() {
     if (res.ok) { const d = await res.json(); setActors(d.actors ?? []); setShowActors(true) }
   }
 
-  const fetchAudit = useCallback(async (actionF: string, actorF: string, pg: number) => {
+  const fetchAudit = useCallback(async (actionF: string, actorF: string, searchF: string, dateFromF: string, dateToF: string, pg: number) => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ limit: String(AUDIT_PAGE_SIZE), offset: String(pg * AUDIT_PAGE_SIZE) })
       if (actionF) params.set('action', actionF)
       if (actorF) params.set('actor', actorF)
+      if (searchF) params.set('search', searchF)
+      if (dateFromF) params.set('date_from', new Date(dateFromF).toISOString())
+      if (dateToF) params.set('date_to', new Date(dateToF + 'T23:59:59Z').toISOString())
       const res = await fetch(`/api/audit?${params}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
@@ -603,7 +610,7 @@ function AuditLog() {
     }
   }, [])
 
-  useEffect(() => { fetchAudit(actionFilter, actorFilter, page) }, [fetchAudit, actionFilter, actorFilter, page])
+  useEffect(() => { fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page) }, [fetchAudit, actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page])
 
   const setCategory = (cat: string) => {
     setActionFilter(cat)
@@ -623,12 +630,29 @@ function AuditLog() {
     setPage(0)
   }
 
+  const applySearch = () => {
+    setSearchFilter(searchInput.trim())
+    setPage(0)
+    setExpandedId(null)
+  }
+
+  const clearSearch = () => {
+    setSearchInput('')
+    setSearchFilter('')
+    setDateFrom('')
+    setDateTo('')
+    setPage(0)
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
 
   const auditCsvUrl = (() => {
     const params = new URLSearchParams()
     if (actionFilter) params.set('action', actionFilter)
     if (actorFilter)  params.set('actor',  actorFilter)
+    if (searchFilter) params.set('search', searchFilter)
+    if (dateFrom) params.set('date_from', new Date(dateFrom).toISOString())
+    if (dateTo)   params.set('date_to',   new Date(dateTo + 'T23:59:59Z').toISOString())
     const qs = params.toString()
     return `/api/audit.csv${qs ? '?' + qs : ''}`
   })()
@@ -668,7 +692,26 @@ function AuditLog() {
           <button type="button" className="btn-secondary" onClick={applyActorFilter}>Apply</button>
           {actorFilter && <button type="button" className="btn-secondary" onClick={clearActorFilter}>Clear</button>}
         </div>
-        <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, page)}>Refresh</button>
+        <div className="audit-actor-filter">
+          <input
+            type="text"
+            placeholder="Search across actor, action, resource…"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && applySearch()}
+            className="audit-actor-input"
+            style={{minWidth:'220px'}}
+          />
+          <button type="button" className="btn-secondary" onClick={applySearch}>Search</button>
+          {(searchFilter || dateFrom || dateTo) && <button type="button" className="btn-secondary" onClick={clearSearch}>Clear</button>}
+        </div>
+        <div className="audit-actor-filter" style={{gap:'6px'}}>
+          <label style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>From</label>
+          <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(0) }} className="audit-actor-input" style={{width:'130px'}} />
+          <label style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>To</label>
+          <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0) }} className="audit-actor-input" style={{width:'130px'}} />
+        </div>
+        <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page)}>Refresh</button>
         <a href={auditCsvUrl} download="audit.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
       </div>
 
@@ -808,7 +851,7 @@ type DownloadAnalytics = {
   top_shares: { share_id: string; recipient_email: string; study_id: string; download_count: number }[]
 }
 
-function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
+function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId?: string }) {
   const [shares, setShares] = useState<ShareRecord[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -830,12 +873,16 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
       .catch(() => {})
   }, [])
 
+  // Reset page when projectId changes
+  useEffect(() => { setPage(0) }, [projectId])
+
   const fetchShares = useCallback(async (sf: string, pg: number) => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ limit: String(SHARES_PAGE_SIZE), offset: String(pg * SHARES_PAGE_SIZE) })
       if (sf) params.set('status', sf)
+      if (projectId) params.set('project_id', projectId)
       const res = await fetch(`/api/shares?${params}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
@@ -848,9 +895,9 @@ function GlobalSharesPanel({ isAdmin }: { isAdmin: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [projectId])
 
-  useEffect(() => { fetchShares(statusFilter, page) }, [fetchShares, statusFilter, page])
+  useEffect(() => { fetchShares(statusFilter, page) }, [fetchShares, statusFilter, page, projectId])
 
   const hasLiveCountdown = shares.some(s => s.status === 'active')
   useEffect(() => {
@@ -2144,7 +2191,7 @@ const EMPTY_RULE: Omit<RoutingRule, 'id' | 'created_at'> = {
   action: 'require_qa', destination_id: null,
 }
 
-function RoutingPanel({ isAdmin }: { isAdmin: boolean }) {
+function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId?: string }) {
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [rules, setRules]               = useState<RoutingRule[]>([])
   const [loading, setLoading]           = useState(true)
@@ -2473,7 +2520,7 @@ function RoutingPanel({ isAdmin }: { isAdmin: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {rules.map(r => {
+              {rules.filter(r => !projectId || !r.project_id || r.project_id === projectId).map(r => {
                 const destName = r.destination_id
                   ? (destinations.find(d => d.id === r.destination_id)?.name ?? r.destination_id)
                   : null
@@ -3185,6 +3232,18 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
     }
   }
 
+  async function testWebhook(id: string, url: string) {
+    const res = await fetch(`/api/webhook-subscriptions/${id}/test`, { method: 'POST' })
+    const data = res.ok ? await res.json() : null
+    if (data?.success) {
+      alert(`Test delivery succeeded (HTTP ${data.status_code}) → ${url}`)
+    } else {
+      const errMsg = data?.error ?? `HTTP ${res.status}`
+      alert(`Test delivery failed → ${url}\n\n${errMsg}`)
+    }
+    fetchAll()
+  }
+
   async function deleteWebhook(id: string, url: string) {
     if (!confirm(`Remove webhook for ${url}?`)) return
     await fetch(`/api/webhook-subscriptions/${id}`, { method: 'DELETE' })
@@ -3365,6 +3424,9 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                         </button>
                         {isAdmin && (
                           <>
+                            <button type="button" className="btn btn--action"
+                              title="Send a test study.approved payload"
+                              onClick={() => testWebhook(wh.id, wh.url)}>Test</button>
                             <button type="button" className="btn btn--action"
                               onClick={() => openWebhookEdit(wh)}>Edit</button>
                             <button type="button" className="btn btn--revoke"
@@ -5079,6 +5141,7 @@ export function App() {
   const [agentPrefill, setAgentPrefill] = useState<{ studyId: string; studyUid: string } | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
+  const [bulkLabelInput, setBulkLabelInput] = useState('')
   const [stuckCount, setStuckCount] = useState(0)
 
   // Global project selector — persisted to localStorage.
@@ -5109,15 +5172,18 @@ export function App() {
 
   // Poll stuck studies every 5 minutes for the warning badge.
   useEffect(() => {
-    const fetchStuck = () =>
-      fetch('/api/studies/stuck?minutes=60')
+    const fetchStuck = () => {
+      const params = new URLSearchParams({ minutes: '60' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      fetch(`/api/studies/stuck?${params}`)
         .then(r => r.ok ? r.json() : null)
         .then(d => d && setStuckCount(d.total ?? 0))
         .catch(() => {})
+    }
     fetchStuck()
     const id = setInterval(fetchStuck, 5 * 60 * 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [globalProjectId])
 
   const isAdmin = currentUser?.role === 'admin'
 
@@ -5144,6 +5210,10 @@ export function App() {
     setFilterProject(globalProjectId)
     setPage(0)
     setBulkSelected(new Set())
+    setBreakdown(null)
+    setShowBreakdown(false)
+    setTimeline(null)
+    setShowTimeline(false)
   }, [globalProjectId])
 
   // Projects for filter dropdown
@@ -5159,28 +5229,48 @@ export function App() {
   }
   const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null)
   const fetchStats = useCallback(() => {
-    fetch('/api/stats').then(r => r.ok ? r.json() : null).then(data => {
+    const params = new URLSearchParams()
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const qs = params.toString()
+    fetch(`/api/stats${qs ? '?' + qs : ''}`).then(r => r.ok ? r.json() : null).then(data => {
       if (data) setPipelineStats(data as PipelineStats)
     }).catch(() => {})
-  }, [])
+  }, [globalProjectId])
   useEffect(() => { fetchStats() }, [fetchStats, refreshTick])
 
   type BreakdownRow = { modality: string; body_part: string; count: number }
   const [breakdown, setBreakdown] = useState<BreakdownRow[] | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
   const loadBreakdown = async () => {
-    if (breakdown) { setShowBreakdown(v => !v); return }
-    const res = await fetch('/api/stats/breakdown')
+    const params = new URLSearchParams()
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const qs = params.toString()
+    const res = await fetch(`/api/stats/breakdown${qs ? '?' + qs : ''}`)
     if (res.ok) { const d = await res.json(); setBreakdown(d.breakdown ?? []); setShowBreakdown(true) }
+    else setShowBreakdown(v => !v)
   }
 
   type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number }
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
-  const loadStorageStats = async () => {
-    const res = await fetch('/api/storage/stats')
+  const loadStorageStats = useCallback(async () => {
+    const params = new URLSearchParams()
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const qs = params.toString()
+    const res = await fetch(`/api/storage/stats${qs ? '?' + qs : ''}`)
     if (res.ok) setStorageStats(await res.json())
+  }, [globalProjectId])
+  useEffect(() => { loadStorageStats() }, [loadStorageStats])
+
+  type TimelineDay = { date: string; received: number; approved: number }
+  const [timeline, setTimeline] = useState<TimelineDay[] | null>(null)
+  const [showTimeline, setShowTimeline] = useState(false)
+  const loadTimeline = async () => {
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const res = await fetch(`/api/stats/timeline?${params}`)
+    if (res.ok) { const d = await res.json(); setTimeline(d.timeline ?? []); setShowTimeline(true) }
+    else setShowTimeline(v => !v)
   }
-  useEffect(() => { loadStorageStats() }, [])
 
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
@@ -5266,6 +5356,30 @@ export function App() {
       })
       setBulkSelected(new Set())
       setRefreshTick(t => t + 1)
+    } finally {
+      setBulkWorking(false)
+    }
+  }
+
+  async function doBulkLabel(action: 'add' | 'remove') {
+    const label = bulkLabelInput.trim()
+    if (!label) { alert('Enter a label first'); return }
+    const ids = Array.from(bulkSelected)
+    if (ids.length === 0) return
+    setBulkWorking(true)
+    try {
+      const res = await fetch('/api/studies/bulk-label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ study_ids: ids, label, action }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        const verb = action === 'add' ? 'Applied' : 'Removed'
+        const count = action === 'add' ? d.applied : d.removed
+        alert(`${verb} "${label}" on ${count} of ${ids.length} ${ids.length === 1 ? 'study' : 'studies'}`)
+        setBulkLabelInput('')
+      }
     } finally {
       setBulkWorking(false)
     }
@@ -5551,6 +5665,33 @@ export function App() {
             )}
           </div>
 
+          {/* Timeline (daily ingestion) toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
+              {showTimeline ? '▲ Hide timeline' : '▼ Daily ingestion (last 30 days)'}
+            </button>
+            {showTimeline && timeline && (
+              <div style={{marginTop:'6px',overflowX:'auto'}}>
+                {timeline.length === 0
+                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                  : (
+                    <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
+                      <thead><tr><th>Date</th><th>Received</th><th>Approved</th></tr></thead>
+                      <tbody>
+                        {timeline.map(d => (
+                          <tr key={d.date}>
+                            <td>{d.date}</td>
+                            <td>{d.received}</td>
+                            <td>{d.approved}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+              </div>
+            )}
+          </div>
+
           {/* Filter bar */}
           <div className="filter-bar">
             <input
@@ -5655,6 +5796,19 @@ export function App() {
               <span className="bulk-action-bar__count">{bulkSelected.size} selected</span>
               <button type="button" className="btn btn--approve" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
               <button type="button" className="btn btn--reject" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
+              <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
+              <input
+                type="text"
+                className="audit-actor-input"
+                placeholder="Label name…"
+                value={bulkLabelInput}
+                onChange={e => setBulkLabelInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && doBulkLabel('add')}
+                style={{width:'130px'}}
+                disabled={bulkWorking}
+              />
+              <button type="button" className="btn btn--action" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
+              <button type="button" className="btn btn--secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
               <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
             </div>
           )}
@@ -5743,13 +5897,13 @@ export function App() {
       )}
 
       {/* Audit log tab */}
-      {tab === 'audit' && <AuditLog />}
+      {tab === 'audit' && <AuditLog projectId={globalProjectId} />}
 
       {/* Global shares tab */}
-      {tab === 'shares' && <GlobalSharesPanel isAdmin={isAdmin} />}
+      {tab === 'shares' && <GlobalSharesPanel isAdmin={isAdmin} projectId={globalProjectId} />}
 
       {/* Routing tab */}
-      {tab === 'routing' && <RoutingPanel isAdmin={isAdmin} />}
+      {tab === 'routing' && <RoutingPanel isAdmin={isAdmin} projectId={globalProjectId} />}
 
       {/* DIMSE operations tab — admin only */}
       {tab === 'dimse_ops' && isAdmin && <DimseOpsPanel />}

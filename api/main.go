@@ -160,6 +160,7 @@ func main() {
 	// Dashboard stats — lightweight study pipeline overview.
 	mux.HandleFunc("GET /api/stats", auth(srv.GetStats))
 	mux.HandleFunc("GET /api/stats/breakdown", auth(srv.GetBreakdownStats))
+	mux.HandleFunc("GET /api/stats/timeline", auth(srv.GetTimeline))
 	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
 	// Projects — create/update require admin; list is public (upload portal).
@@ -263,6 +264,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{id}/labels", auth(srv.ListStudyLabels))
 	mux.HandleFunc("POST /api/studies/{id}/labels", adminOnly(srv.AddStudyLabel))
 	mux.HandleFunc("DELETE /api/studies/{id}/labels/{labelID}", adminOnly(srv.DeleteStudyLabel))
+	mux.HandleFunc("POST /api/studies/bulk-label", adminOnly(srv.BulkLabelStudies))
 
 	// Webhook subscriptions — HTTP callbacks for study lifecycle events.
 	mux.HandleFunc("GET /api/webhook-subscriptions", auth(srv.ListWebhooks))
@@ -271,6 +273,7 @@ func main() {
 	mux.HandleFunc("PUT /api/webhook-subscriptions/{id}", adminOnly(srv.UpdateWebhook))
 	mux.HandleFunc("DELETE /api/webhook-subscriptions/{id}", adminOnly(srv.DeleteWebhook))
 	mux.HandleFunc("GET /api/webhook-subscriptions/{id}/deliveries", auth(srv.GetWebhookDeliveries))
+	mux.HandleFunc("POST /api/webhook-subscriptions/{id}/test", adminOnly(srv.TestWebhookDelivery))
 
 	// Subject-session linking — group studies by de-identified subject pseudonym.
 	mux.HandleFunc("GET /api/subjects", auth(srv.ListSubjects))
@@ -310,6 +313,9 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{studyUID}/protocol-check", adminOnly(srv.TriggerProtocolCheck))
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-download", auth(srv.ServeDicomDownload))
 	mux.HandleFunc("POST /api/studies/{studyUID}/trigger-export", adminOnly(srv.TriggerExport))
+
+	// Synthetic MRI generation — creates a new synthetic brain MRI study.
+	mux.HandleFunc("POST /api/studies/generate-synthetic", adminOnly(srv.GenerateSyntheticStudy))
 
 	var h http.Handler = mux
 	h = middleware.Recover(h)

@@ -1,0 +1,40 @@
+# Build context: repo root
+# docker build -f frontend/landing/Dockerfile -t <image> .
+#
+# The landing page imports @aegis/client (a local workspace package), so the
+# build context must be the monorepo root to give npm access to the root
+# package-lock.json and the client/ workspace package.
+
+# Stage 1: Build the React/Vite app
+FROM node:22-slim AS build
+
+WORKDIR /app
+
+# Copy root workspace manifest + lockfile so npm ci can resolve workspace deps
+COPY package.json package-lock.json ./
+
+# Copy only the workspace packages required for this build
+COPY client/ client/
+COPY frontend/landing/ frontend/landing/
+
+# Install dependencies for the landing workspace only.
+# npm ci resolves @aegis/client via the workspace symlink (client/ above).
+RUN npm ci --workspace=@aegis/landing --ignore-scripts
+
+# Build the Vite app
+WORKDIR /app/frontend/landing
+RUN npm run build
+
+# Stage 2: Serve with nginx
+FROM nginx:1.27-alpine
+
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
+
+COPY frontend/landing/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/frontend/landing/dist /usr/share/nginx/html
+
+# Cloud Run listens on 8080
+EXPOSE 8080
+
+CMD ["nginx", "-g", "daemon off;"]

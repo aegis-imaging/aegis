@@ -4,6 +4,7 @@ const NAV_LINKS = [
   { id: 'problem', label: 'Problem' },
   { id: 'solution', label: 'Solution' },
   { id: 'how-it-works', label: 'How It Works' },
+  { id: 'demo', label: 'Live Demo' },
   { id: 'trust', label: 'Compliance' },
   { id: 'architecture', label: 'Architecture' },
   { id: 'contact', label: 'Contact' },
@@ -61,12 +62,12 @@ export function Navbar() {
             </button>
           ))}
           <button className="btn btn--primary btn--sm navbar__cta-mobile" onClick={() => scrollTo('contact')}>
-            Get Early Access
+            Schedule Demo
           </button>
         </div>
 
         <button className="btn btn--primary btn--sm navbar__cta" onClick={() => scrollTo('contact')}>
-          Get Early Access
+          Schedule Demo
         </button>
 
         <button

@@ -53,7 +53,26 @@ export const listAuditArgsSchema = z.object({
   offset: z.number().int().min(0).optional(),
   action: z.string().min(1).max(128).regex(/^[a-z0-9_.]+$/).optional(),
   resource_type: z.string().min(1).max(64).regex(/^[a-z0-9_]+$/).optional(),
-  actor: z.string().min(1).max(256).optional()
+  actor: z.string().min(1).max(256).optional(),
+  search: z.string().min(1).max(256).optional(),
+  date_from: z.string().datetime().optional(),
+  date_to: z.string().datetime().optional()
+});
+
+export const getStuckStudiesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  minutes: z.number().int().min(1).max(10080).optional(),
+  project_id: z.string().uuid().optional()
+});
+
+export const projectScopedArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid().optional()
+});
+
+export const getAuditActorsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  limit: z.number().int().min(1).max(100).optional()
 });
 
 export const listAllSharesArgsSchema = z.object({
@@ -119,7 +138,11 @@ export const readToolNames = [
   "get_study_by_uid",
   "list_all_shares",
   "get_share_downloads",
-  "get_pipeline_stats"
+  "get_pipeline_stats",
+  "get_stuck_studies",
+  "get_breakdown_stats",
+  "get_storage_stats",
+  "get_audit_actors"
 ] as const;
 
 export const writeToolNames = [
