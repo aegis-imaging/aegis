@@ -1353,6 +1353,49 @@
   padding: 8px 10px;
 }
 
+/* ── Admin Study Notes ────────────────────────────────────────────────────── */
+.note-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note-textarea {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  color: #1f2937;
+}
+
+.note-textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+
+.note-inline__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.note-char-count {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-left: auto;
+  order: 1;
+}
+
+.note-saved {
+  font-size: 13px;
+  color: #15803d;
+  font-weight: 600;
+}
+
 /* ── Bulk Action Bar ──────────────────────────────────────────────────────── */
 .bulk-action-bar {
   display: flex;
