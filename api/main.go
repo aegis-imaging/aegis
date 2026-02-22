@@ -187,6 +187,7 @@ func main() {
 	mux.HandleFunc("POST /api/import/batch", adminOnly(srv.BatchImport))
 
 	mux.HandleFunc("GET /api/audit", auth(srv.ListAudit))
+	mux.HandleFunc("GET /api/audit.csv", auth(srv.ExportAuditCSV))
 
 	// Institutions — organisations that send or receive studies.
 	mux.HandleFunc("GET /api/institutions", auth(srv.ListInstitutions))
