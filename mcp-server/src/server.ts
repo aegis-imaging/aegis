@@ -3,8 +3,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { AegisApiClient, DisallowedPathError, UpstreamHttpError } from "./aegisClient.js";
 import { loadConfig } from "./config.js";
+import { InMemoryIdempotencyCache } from "./idempotencyCache.js";
+import { InMemoryRateLimiter } from "./rateLimiter.js";
 import { redactToolArgs } from "./redaction.js";
 import {
+  dimseRetryStatusArgsSchema,
   emptyArgsSchema,
   listStudiesArgsSchema,
   readToolNames,
@@ -213,6 +216,23 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_dimse_retry_status",
+    description:
+      "Get DIMSE ingest retry queue status: pending/dead-letter counts, queue utilization, age metrics, and optional per-study detail when study_instance_uid is provided.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        study_instance_uid: {
+          type: "string",
+          pattern: "^[0-9.]+$",
+          description: "Optional DICOM StudyInstanceUID — when provided, also fetches per-study retry details."
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "trigger_classification",
     description: "Trigger metadata classification for one study UID with precondition checks.",
     inputSchema: writeInputSchema
@@ -408,6 +428,17 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_dimse_retry_status") {
+      const parsed = dimseRetryStatusArgsSchema.parse(args);
+      const summary = await client.get("/api/dimse/retry/summary");
+      let details: unknown = undefined;
+      if (parsed.study_instance_uid) {
+        const uid = encodeURIComponent(parsed.study_instance_uid);
+        details = await client.get(`/api/dimse/retry/details?limit=10&study_instance_uid=${uid}`);
+      }
+      return formatSuccess(requestId, name, { summary, ...(details !== undefined ? { details } : {}) });
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -541,85 +572,8 @@ function emitInvocationLog(log: InvocationLog): void {
   console.error(JSON.stringify(log));
 }
 
-class InMemoryRateLimiter {
-  private readonly windowMs = 60_000;
-  private readonly counters = new Map<string, { windowStart: number; count: number }>();
-
-  consume(key: string, limit: number, now = Date.now()): { allowed: boolean; retryAfterSeconds: number } {
-    if (limit <= 0) {
-      return { allowed: false, retryAfterSeconds: Math.ceil(this.windowMs / 1000) };
-    }
-
-    const windowStart = now - (now % this.windowMs);
-    const current = this.counters.get(key);
-
-    if (!current || current.windowStart !== windowStart) {
-      this.counters.set(key, { windowStart, count: 1 });
-      this.prune(windowStart);
-      return { allowed: true, retryAfterSeconds: 0 };
-    }
-
-    if (current.count >= limit) {
-      const retryAfterSeconds = Math.max(1, Math.ceil((windowStart + this.windowMs - now) / 1000));
-      return { allowed: false, retryAfterSeconds };
-    }
-
-    current.count += 1;
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-
-  private prune(activeWindowStart: number): void {
-    if (this.counters.size <= 512) {
-      return;
-    }
-
-    for (const [key, value] of this.counters.entries()) {
-      if (value.windowStart !== activeWindowStart) {
-        this.counters.delete(key);
-      }
-    }
-  }
-}
-
-class InMemoryIdempotencyCache {
-  private readonly responses = new Map<string, { expiresAtMs: number; response: ToolResponse }>();
-
-  get(key: string, now = Date.now()): ToolResponse | null {
-    const entry = this.responses.get(key);
-    if (!entry) {
-      return null;
-    }
-    if (entry.expiresAtMs <= now) {
-      this.responses.delete(key);
-      return null;
-    }
-    return entry.response;
-  }
-
-  set(key: string, response: ToolResponse, ttlSeconds: number, now = Date.now()): void {
-    if (ttlSeconds <= 0) {
-      return;
-    }
-
-    this.responses.set(key, { response, expiresAtMs: now + ttlSeconds * 1000 });
-    this.prune(now);
-  }
-
-  private prune(now: number): void {
-    if (this.responses.size <= 2048) {
-      return;
-    }
-
-    for (const [key, entry] of this.responses.entries()) {
-      if (entry.expiresAtMs <= now) {
-        this.responses.delete(key);
-      }
-    }
-  }
-}
-
 const rateLimiter = new InMemoryRateLimiter();
-const writeIdempotencyCache = new InMemoryIdempotencyCache();
+const writeIdempotencyCache = new InMemoryIdempotencyCache<ToolResponse>();
 
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
@@ -874,7 +828,7 @@ async function handleTriggerDeface(
     );
   }
 
-  const data = await client.post(`/api/deface/${encodeURIComponent(parsed.study_uid)}`);
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/trigger-deface`);
   return formatSuccess(requestId, "trigger_deface", {
     accepted: true,
     study_uid: parsed.study_uid,

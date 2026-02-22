@@ -13,6 +13,14 @@ iap_access_members = [
   "user:you@example.com",
 ]
 
+# Seeds the first admin user in the DB on initial API startup (idempotent).
+# Use the same account as iap_access_members so the user can log in immediately.
+first_admin_email = "you@example.com"
+
+# Public base URL of the export portal UI.
+# When set, share email links point to the portal (?token=...) instead of the raw API endpoint.
+# export_portal_base_url = "https://export.aegisimaging.ai"
+
 # Container images (build + push these before terraform apply).
 api_image                    = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/api:latest"
 admin_dashboard_image        = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/admin-dashboard:latest"
@@ -36,6 +44,10 @@ db_password_secret_id       = "aegis-dev-db-password"
 smtp_relay_host = "smtp-relay.example.org"
 smtp_relay_port = 587
 smtp_from       = "noreply@aegisimaging.ai"
+
+# Recipient for contact form submissions from the landing page.
+# Defaults to contact@aegisimaging.ai — override here to route to a different inbox.
+contact_email = "contact@aegisimaging.ai"
 
 # Sidecar warmup: set sidecar_min_instances=1 to keep all processing services
 # always-warm (eliminates ~14s cold-start on first use, costs ~$38/month per sidecar).

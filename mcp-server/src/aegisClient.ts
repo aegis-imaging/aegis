@@ -28,7 +28,8 @@ const allowedGetPathPatterns = [
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/audit$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/routing-log$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/shares$/,
-  /^\/api\/dimse\/retry\/details(?:\?.*)?$/
+  /^\/api\/dimse\/retry\/details(?:\?.*)?$/,
+  /^\/api\/dimse\/retry\/summary(?:\?.*)?$/
 ] as const;
 
 const allowedPostPathPatterns = [
@@ -38,7 +39,7 @@ const allowedPostPathPatterns = [
   /^\/api\/studies\/[0-9.]+\/qc-check$/,
   /^\/api\/studies\/[0-9.]+\/protocol-check$/,
   /^\/api\/studies\/[0-9.]+\/phi-scan$/,
-  /^\/api\/deface\/[0-9.]+$/,
+  /^\/api\/studies\/[0-9.]+\/trigger-deface$/,
   /^\/api\/dimse\/retry\/process\/[0-9.]+$/,
   /^\/api\/dimse\/retry\/replay\/[0-9.]+$/
 ] as const;

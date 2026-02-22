@@ -50,6 +50,7 @@ services:
       ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002"
       SMTP_HOST: "mailpit"
       SMTP_PORT: "1025"
+      CONTACT_EMAIL: "${CONTACT_EMAIL:-contact@aegisimaging.ai}"
       DEFACING_SERVICE_URL: "http://defacing:8080"
       PHI_DETECTION_SERVICE_URL: "http://phi-detection:8080"
       QC_SERVICE_URL: "http://qc-service:8080"
@@ -207,6 +208,24 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ── MCP Server ──────────────────────────────────────────────────────
+
+  mcp-server:
+    build:
+      context: ./mcp-server
+    stdin_open: true
+    environment:
+      AEGIS_API_BASE_URL: "http://api:8080"
+      AEGIS_API_TOKEN: "${MCP_API_TOKEN:-dev-token}"
+      MCP_MODE: "${MCP_MODE:-readonly}"
+      MCP_ENABLE_WRITE_TOOLS: "${MCP_ENABLE_WRITE_TOOLS:-false}"
+      MCP_CALLER_ID: "docker-compose"
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - mcp
 
 volumes:
   pgdata:

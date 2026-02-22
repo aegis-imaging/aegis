@@ -1,0 +1,17 @@
+# Source files — compiled by Vite into dist/ at build time
+src/
+public/
+
+# TypeScript project references (tsconfig.tsbuildinfo written during tsc -b)
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Config files not needed at runtime
+vite.config.ts
+tsconfig.json
+
+# Dev / test artifacts
+node_modules/
+.env
+.env.local
+.env.*.local

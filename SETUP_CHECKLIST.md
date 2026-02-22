@@ -64,6 +64,15 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 
 - [ ] Deploy Go API to Cloud Run (see Terraform sections below)
 - [ ] Enable IAP on the Cloud Run load balancer
+- [ ] **Provision the IAP service agent (one-time per project — run in Cloud Shell as project owner):**
+  ```bash
+  gcloud beta services identity create \
+    --service=iap.googleapis.com \
+    --project=YOUR_PROJECT_ID
+  ```
+  This creates `service-{PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com`. Terraform grants it
+  `roles/run.invoker` on the admin Cloud Run service automatically — but the identity must exist first.
+  Safe to run multiple times (idempotent). Run this **before** `terraform apply` in section 4.
 - [ ] Add beta testers' Google accounts to IAP access list:
   ```bash
   gcloud iap web add-iam-policy-binding \
@@ -141,7 +150,34 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   gcloud monitoring policies list --format='value(displayName)'
   ```
 
-## 4a. Secrets Bootstrap and Rotation
+## 4a. First Admin Bootstrap
+
+On the first deployment, the `admin_users` table is empty, so no one can log in to create admin users (chicken-and-egg). The API solves this with the `FIRST_ADMIN_EMAIL` env var — set it in `terraform/infra/terraform.tfvars` before `terraform apply`:
+
+```hcl
+first_admin_email = "ops@aegisimaging.ai"  # same as iap_access_members
+```
+
+Terraform sets `FIRST_ADMIN_EMAIL` on the API Cloud Run service. On startup, if `admin_users` is empty, the API seeds this email as the first admin (role: `admin`, enabled: `true`). Subsequent restarts are no-ops once any admin exists.
+
+- [ ] Set `first_admin_email` in `terraform/infra/terraform.tfvars` before the first `terraform apply`
+- [ ] Use the **same email address** as your first entry in `iap_access_members` so the user can log in immediately
+- [ ] After apply, verify the admin was seeded by checking the API startup logs:
+  ```bash
+  gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"first-admin bootstrap: created admin user"' \
+    --project=YOUR_PROJECT_ID --limit=5 --format='value(textPayload)'
+  ```
+- [ ] Open the admin dashboard — the IAP-authenticated user should see the dashboard without a "403 user not registered" error
+
+**To add more admins** after the first login: use the **Users** tab in the admin dashboard, or call the API directly:
+```bash
+curl -X POST https://<api_domain>/api/admin-users \
+  -H "Authorization: Bearer <IAP_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"colleague@example.com","name":"Alice","role":"admin","enabled":true}'
+```
+
+## 4b. Secrets Bootstrap and Rotation
 
 ### GCP (Cloud SQL + Cloud Run API)
 
@@ -178,7 +214,7 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
     --rotate-master-user-password --apply-immediately
   ```
 
-## 4b. Automated Cloud Smoke Suite
+## 4c. Automated Cloud Smoke Suite
 
 - [ ] Run the cloud smoke suite against deployed API:
   ```bash
@@ -201,7 +237,7 @@ Manual trigger via GitHub Actions:
 - Workflow: **Cloud Smoke** (`.github/workflows/cloud-smoke.yml`)
 - Set input `base_url` and (optional) repository secret `CLOUD_SMOKE_ADMIN_HEADER`
 
-## 4c. Terraform — AWS HTTPS + Cognito Edge/Auth
+## 4d. Terraform — AWS HTTPS + Cognito Edge/Auth
 
 - [ ] Copy `terraform/aws/terraform.tfvars.example` to `terraform/aws/terraform.tfvars`
 - [ ] Fill required values:
@@ -892,6 +928,107 @@ docker compose down -v           # stop + destroy volumes (fresh start)
 
 Runbook:
 - `docs/planning/dimse-pacs-e2e-validation-runbook.md`
+
+## 8ab. DICOM File Retention & Cleanup Policy
+
+### File lifecycle
+
+DICOM files are written to shared storage at:
+```
+dicom/raw/{studyInstanceUID}/{index}.dcm      ← original tag-de-identified files
+dicom/clean/{studyInstanceUID}/{index}.dcm    ← defaced output (when defacing is required)
+```
+
+The **DIMSE receiver** writes to `dicom/raw/` when it receives a C-STORE. The **upload portal** and
+**batch import CLI** also write to `dicom/raw/`. These files are the canonical storage copy — no
+automatic cleanup runs. Files accumulate until explicitly managed.
+
+### When is it safe to delete?
+
+Studies in a terminal state are safe to archive or delete:
+
+| Status | Safe to delete raw files? | Notes |
+|--------|--------------------------|-------|
+| `approved` | Yes | Defaced copy in `dicom/clean/` if defacing was required |
+| `rejected` | Yes | No further processing will occur |
+| `defaced` | Raw only | Keep `dicom/clean/` until approved or rejected |
+| `received` / `defacing` / `clean` | No | Still in active pipeline |
+
+Do **not** delete files for studies still in the processing pipeline — the sidecars read from shared
+storage and will fail with missing-file errors.
+
+### Production cleanup (GCS)
+
+Set a GCS object lifecycle rule on the DICOM bucket so raw files transition automatically:
+
+```bash
+# Create lifecycle config (adjust age to your retention policy)
+cat > /tmp/lifecycle.json << 'EOF'
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "COLDLINE" },
+        "condition": { "age": 90, "matchesPrefix": ["dicom/raw/"] }
+      },
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "COLDLINE" },
+        "condition": { "age": 365, "matchesPrefix": ["dicom/clean/"] }
+      }
+    ]
+  }
+}
+EOF
+gsutil lifecycle set /tmp/lifecycle.json gs://YOUR_GCS_BUCKET
+```
+
+For hard deletion instead of Coldline transition, change `"type": "Delete"` and remove `"storageClass"`.
+
+**Note:** GCS lifecycle rules apply only to object age, not study status. Coordinate retention
+periods with your data governance policy and any IRB or DUA requirements.
+
+### Production cleanup (S3)
+
+```bash
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket YOUR_S3_BUCKET \
+  --lifecycle-configuration '{
+    "Rules": [
+      {
+        "ID": "dicom-raw-coldline",
+        "Filter": { "Prefix": "dicom/raw/" },
+        "Status": "Enabled",
+        "Transitions": [{ "Days": 90, "StorageClass": "GLACIER_IR" }]
+      }
+    ]
+  }'
+```
+
+### Local dev cleanup
+
+```bash
+# Remove all DICOM files for one study (safe once approved/rejected)
+rm -rf ./data/dicom/raw/{studyUID}
+rm -rf ./data/dicom/clean/{studyUID}
+
+# Full reset (destroys all data including PostgreSQL)
+docker compose down -v
+
+# BIDS output cleanup
+rm -rf ./data/bids/{studyUID}
+```
+
+### DIMSE retry state file
+
+The durable retry state file (`dimse-ingest-retry-state.json`, default path
+`/app/data/dimse-ingest-retry-state.json`) is small and safe to leave in place. It is overwritten on
+each retry worker pass. Delete it only to reset the queue to empty (pending/dead-letter entries are
+lost):
+
+```bash
+rm /app/data/dimse-ingest-retry-state.json
+# Then restart dimse-receiver — it starts with empty queues
+```
 
 ## 8b. Email (Local Dev with Mailpit)
 

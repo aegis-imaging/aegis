@@ -61,6 +61,12 @@ variable "admin_domain" {
   type        = string
 }
 
+variable "export_portal_base_url" {
+  description = "Public base URL of the export portal UI (example: https://export.aegisimaging.ai). When set, share email links point to the portal instead of the raw API endpoint. Leave empty to fall back to the API URL."
+  type        = string
+  default     = ""
+}
+
 variable "iap_oauth_client_id" {
   description = "OAuth2 client ID used by IAP on the admin backend service"
   type        = string
@@ -77,6 +83,12 @@ variable "iap_access_members" {
   description = "IAM members granted IAP access (roles/iap.httpsResourceAccessor) to the admin dashboard"
   type        = list(string)
   default     = []
+}
+
+variable "first_admin_email" {
+  description = "Email address to seed as the first admin user on initial API startup (FIRST_ADMIN_EMAIL). Idempotent — ignored once any admin user exists."
+  type        = string
+  default     = ""
 }
 
 variable "enable_admin_iap" {
@@ -303,6 +315,12 @@ variable "smtp_from" {
   default     = "noreply@aegis.local"
 }
 
+variable "contact_email" {
+  description = "Recipient address for contact form submissions (CONTACT_EMAIL). Defaults to contact@aegisimaging.ai."
+  type        = string
+  default     = "contact@aegisimaging.ai"
+}
+
 variable "allowed_origins" {
   description = "Optional CORS origins override. If empty, defaults to API + admin domains."
   type        = list(string)
@@ -312,6 +330,11 @@ variable "allowed_origins" {
 provider "google" {
   project = var.project_id
   region  = var.region
+}
+
+# Resolve project metadata (number required for IAP service agent email).
+data "google_project" "this" {
+  project_id = var.project_id
 }
 
 locals {
@@ -772,6 +795,10 @@ resource "google_cloud_run_v2_service" "api" {
         value = "https://${var.api_domain}"
       }
       env {
+        name  = "EXPORT_PORTAL_BASE_URL"
+        value = var.export_portal_base_url
+      }
+      env {
         name  = "APP_TIMEZONE"
         value = "UTC"
       }
@@ -788,6 +815,10 @@ resource "google_cloud_run_v2_service" "api" {
         value = "iap"
       }
       env {
+        name  = "FIRST_ADMIN_EMAIL"
+        value = var.first_admin_email
+      }
+      env {
         name  = "SMTP_HOST"
         value = var.smtp_relay_host
       }
@@ -798,6 +829,10 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "SMTP_FROM"
         value = var.smtp_from
+      }
+      env {
+        name  = "CONTACT_EMAIL"
+        value = var.contact_email
       }
       env {
         name  = "DEFACING_SERVICE_URL"
@@ -896,11 +931,29 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
   }
 }
 
+# When IAP is enabled the IAP service agent (iap_invoker_admin) is the
+# only identity that needs run.invoker on the admin Cloud Run service.
+# Removing allUsers provides defense-in-depth: even if the LB IAP config
+# is misconfigured, the Cloud Run service itself requires the IAP SA.
+# When IAP is disabled, allUsers is still required so the LB can forward.
 resource "google_cloud_run_service_iam_member" "admin_invoker" {
+  count    = var.enable_admin_iap ? 0 : 1
   location = var.region
   service  = google_cloud_run_v2_service.admin_dashboard.name
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# Grant the IAP service agent permission to invoke the admin Cloud Run service.
+# The IAP service agent must be provisioned before this binding takes effect:
+#   gcloud beta services identity create --service=iap.googleapis.com --project=PROJECT_ID
+# This is a one-time bootstrap step per project (safe to run multiple times).
+resource "google_cloud_run_service_iam_member" "iap_invoker_admin" {
+  count    = var.enable_admin_iap ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.admin_dashboard.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
 }
 
 # --- Cloud Armor ---
