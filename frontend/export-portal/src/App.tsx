@@ -14,6 +14,7 @@ type ExportData = {
   body_part: string
   study_description: string
   instance_count: number
+  series_count?: number
   expires_at: string
   expires_in_seconds?: number
   note: string
@@ -326,18 +327,25 @@ export function App() {
 
         <div className="study-info">
           <h2>Study Details</h2>
+          {(data.modality || data.body_part) && (
+            <div className="study-badge-row">
+              {data.modality && <span className="study-badge study-badge--modality">{data.modality}</span>}
+              {data.body_part && <span className="study-badge study-badge--body">{data.body_part}</span>}
+            </div>
+          )}
+          {data.study_description && (
+            <p className="study-description">{data.study_description}</p>
+          )}
           <table className="info-table">
             <tbody>
-              {data.modality && (
-                <tr><td className="label">Modality</td><td>{data.modality}</td></tr>
+              <tr>
+                <td className="label">Study UID</td>
+                <td className="study-uid-cell" title={data.study_uid}>{data.study_uid}</td>
+              </tr>
+              {data.instance_count > 0 && (
+                <tr><td className="label">Instances</td><td>{data.instance_count.toLocaleString()} DICOM image{data.instance_count !== 1 ? 's' : ''}</td></tr>
               )}
-              {data.body_part && (
-                <tr><td className="label">Body Part</td><td>{data.body_part}</td></tr>
-              )}
-              {data.study_description && (
-                <tr><td className="label">Description</td><td>{data.study_description}</td></tr>
-              )}
-              <tr><td className="label">Files</td><td>{data.files.length} DICOM file{data.files.length !== 1 ? 's' : ''}</td></tr>
+              <tr><td className="label">Files in ZIP</td><td>{data.files.length} file{data.files.length !== 1 ? 's' : ''}</td></tr>
               <tr>
                 <td className="label">Expires</td>
                 <td className={isExpiringSoon ? 'expiring-soon' : ''}>
@@ -362,7 +370,8 @@ export function App() {
         <div className="download-section">
           {!isExpired ? (
             <a href={data.download_url} className="btn-download" download>
-              Download All ({data.files.length} file{data.files.length !== 1 ? 's' : ''}) as ZIP
+              Download All as ZIP
+              <span className="btn-download__sub">{data.files.length} file{data.files.length !== 1 ? 's' : ''}{data.instance_count > 0 ? ` · ${data.instance_count.toLocaleString()} image${data.instance_count !== 1 ? 's' : ''}` : ''}</span>
             </a>
           ) : (
             <p className="download-disabled">This share has expired. Please request a new link.</p>
