@@ -650,3 +650,52 @@ func GetStorageStats(ctx context.Context, db *sql.DB, projectID ...string) (*Sto
 	}
 	return &s, nil
 }
+
+// TimelineDay holds ingestion counts for a single UTC date.
+type TimelineDay struct {
+	Date     string `json:"date"`      // YYYY-MM-DD
+	Received int    `json:"received"`  // studies created that day
+	Approved int    `json:"approved"`  // studies approved that day
+}
+
+// GetStudyTimeline returns daily ingestion counts for the last `days` calendar days.
+// An optional projectID filters to a single project.
+func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...string) ([]TimelineDay, error) {
+	if days <= 0 || days > 365 {
+		days = 30
+	}
+	where := ""
+	var args []any
+	args = append(args, days)
+	if len(projectID) > 0 && projectID[0] != "" {
+		where = " AND project_id = $2"
+		args = append(args, projectID[0])
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+		  to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+		  count(*) FILTER (WHERE status <> 'approved')  +
+		    count(*) FILTER (WHERE status = 'approved')  AS received,
+		  count(*) FILTER (WHERE status = 'approved')   AS approved
+		FROM studies
+		WHERE created_at >= now() - ($1 || ' days')::INTERVAL`+where+`
+		GROUP BY day
+		ORDER BY day`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []TimelineDay
+	for rows.Next() {
+		var d TimelineDay
+		if err := rows.Scan(&d.Date, &d.Received, &d.Approved); err != nil {
+			return nil, err
+		}
+		result = append(result, d)
+	}
+	if result == nil {
+		result = []TimelineDay{}
+	}
+	return result, rows.Err()
+}
