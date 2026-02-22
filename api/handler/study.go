@@ -75,6 +75,22 @@ func (s *Server) GetStudy(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, study)
 }
 
+// GetStudyByUID returns a single study by DICOM StudyInstanceUID.
+// Useful for integrations that only have the DICOM UID and not the DB UUID.
+func (s *Server) GetStudyByUID(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("studyUID")
+	study, err := model.GetStudyByUID(r.Context(), s.db, uid)
+	if errors.Is(err, sql.ErrNoRows) {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, study)
+}
+
 // ListStudyAudit returns all audit entries for a specific study.
 func (s *Server) ListStudyAudit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
