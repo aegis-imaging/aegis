@@ -1,3 +1,4 @@
+-- +goose Up
 -- Study series metadata: tracks per-series DICOM metadata for each study.
 -- Populated at ingest time (batch import, DIMSE receiver) when DICOM headers are parsed.
 -- Upload portal studies start with no series rows; the classification service

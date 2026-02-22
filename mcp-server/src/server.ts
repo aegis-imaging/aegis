@@ -667,7 +667,7 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "get_study_by_uid") {
       const parsed = studyUidArgsSchema.parse(args);
       const uid = encodeURIComponent(parsed.study_instance_uid);
-      const data = await client.get(`/api/studies/by-uid/${uid}`);
+      const data = await client.get(`/api/study-uid/${uid}`);
       return formatSuccess(requestId, name, data);
     }
 

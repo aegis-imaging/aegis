@@ -31,7 +31,7 @@ const allowedGetPathPatterns = [
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/shares$/,
   /^\/api\/dimse\/retry\/details(?:\?.*)?$/,
   /^\/api\/dimse\/retry\/summary(?:\?.*)?$/,
-  /^\/api\/studies\/by-uid\/[0-9.]+$/,
+  /^\/api\/study-uid\/[0-9.]+$/,
   /^\/api\/audit(?:\?.*)?$/,
   /^\/api\/shares(?:\?.*)?$/,
   /^\/api\/shares\/[0-9a-fA-F-]{36}\/downloads$/,
