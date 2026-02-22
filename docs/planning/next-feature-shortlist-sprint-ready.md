@@ -5,7 +5,7 @@ Source backlog: `docs/planning/next-feature-prioritization.md`
 
 ## Status: Pilot-Ready — Moving to Production Hardening
 
-All previous P0/P1/P2 backlog items are complete. GCP is live (`aegis-prod-488119`).
+All previous P0/P1/P2 backlog items are complete. GCP is live (`aegis-prod-488120`).
 This shortlist covers the next sprint for post-pilot production hardening.
 
 ## Completion Status (previous sprint)

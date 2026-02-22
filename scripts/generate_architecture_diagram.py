@@ -8,7 +8,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 
 # Canvas
-W, H = 2500, 2300
+W, H = 2500, 2450
 img = Image.new("RGB", (W, H), "#FFFFFF")
 draw = ImageDraw.Draw(img)
 
@@ -166,16 +166,16 @@ arrow_down(W // 2, 390, 460, "HTTPS (TLS 1.2+) · DICOM C-STORE (11112)")
 # ══════════════════════════════════════════════════════
 # GCP PROJECT
 # ══════════════════════════════════════════════════════
-gcp_xy = (60, 460, 2430, 1690)
+gcp_xy = (60, 460, 2430, 1840)
 rounded_rect(gcp_xy, fill=BG_GCP, outline=BORDER_GCP, width=3)
-draw.text((80, 470), "GCP PROJECT  aegis-prod-488119 · us-central1  (Live, February 2026)", fill=BORDER_GCP, font=HEADING)
+draw.text((80, 470), "GCP PROJECT  aegis-prod-488120 · us-central1  (Live, February 2026)", fill=BORDER_GCP, font=HEADING)
 
 # Cloud Armor + LB
 rounded_rect((90, 510, 2400, 570), fill="#E3F2FD", outline=ACCENT_GCP_SVC, width=2)
 draw.text((110, 525), "Cloud Armor (DDoS / WAF)", fill=ACCENT_GCP_SVC, font=BOLD)
 draw.text((510, 528), "+   Global HTTPS Load Balancer", fill=TEXT_MED, font=BODY)
 draw.text((890, 528), "+   Identity-Aware Proxy (admin dashboard routes)", fill=TEXT_MED, font=BODY)
-draw.text((1400, 528), "+   Cloud Run (all services)", fill=TEXT_MED, font=BODY)
+draw.text((1400, 528), "+   Cloud Run (API · Admin Dashboard · Landing Page · Sidecars)", fill=TEXT_MED, font=BODY)
 
 # Arrow into services
 arrow_down(W // 2, 570, 620)
@@ -362,8 +362,8 @@ service_box(
 arrow_down(405, 930, sidecar_y, "HTTP trigger")
 
 # ── Security box ──
-rounded_rect((90, 1210, 510, 1480), fill="#FCE4EC", outline=ACCENT_SECURITY, width=2)
-draw.text((110, 1220), "Security Layers", fill=ACCENT_SECURITY, font=BOLD)
+rounded_rect((90, 1215, 460, 1500), fill="#FCE4EC", outline=ACCENT_SECURITY, width=2)
+draw.text((110, 1225), "Security Layers", fill=ACCENT_SECURITY, font=BOLD)
 items_sec = [
     "VPC (private subnets + Cloud NAT)",
     "Cloud Armor DDoS/WAF",
@@ -379,40 +379,55 @@ items_sec = [
     "HIPAA-compliant pipeline",
 ]
 for i, item in enumerate(items_sec):
-    draw.text((110, 1252 + i * 20), f"• {item}", fill=TEXT_MED, font=SMALL)
+    draw.text((110, 1257 + i * 20), f"• {item}", fill=TEXT_MED, font=SMALL)
 
 # ── Export / Recipients box ──
-rounded_rect((560, 1210, 1380, 1480), fill="#E8F5E9", outline=BORDER_GCP, width=2)
-draw.text((580, 1220), "Export & Sharing", fill=BORDER_GCP, font=BOLD)
-draw.text((580, 1252), "Export Portal (React / Vercel)", fill=BORDER_GCP, font=BODY)
-draw.text((580, 1275), "• Token-authenticated share links", fill=TEXT_MED, font=SMALL)
-draw.text((580, 1295), "• Modality/body-part badges, study info", fill=TEXT_MED, font=SMALL)
-draw.text((580, 1315), "• Expiry countdown (server-anchored clock)", fill=TEXT_MED, font=SMALL)
-draw.text((580, 1335), "• ZIP download of approved DICOM files", fill=TEXT_MED, font=SMALL)
-draw.text((580, 1365), "Automated DICOM Forwarding", fill=BORDER_GCP, font=BODY)
-draw.text((580, 1388), "• route_to routing action", fill=TEXT_MED, font=SMALL)
-draw.text((580, 1408), "• DICOMweb (STOW-RS) destinations", fill=TEXT_MED, font=SMALL)
-draw.text((580, 1428), "• DIMSE C-STORE to remote AE Title", fill=TEXT_MED, font=SMALL)
-draw.text((580, 1448), "• Auto-forwards on approval", fill=TEXT_MED, font=SMALL)
+rounded_rect((490, 1215, 1100, 1500), fill="#E8F5E9", outline=BORDER_GCP, width=2)
+draw.text((510, 1225), "Export & Sharing", fill=BORDER_GCP, font=BOLD)
+draw.text((510, 1257), "Export Portal (React / public SPA)", fill=BORDER_GCP, font=BODY)
+draw.text((510, 1280), "• Token-authenticated share links", fill=TEXT_MED, font=SMALL)
+draw.text((510, 1300), "• Modality/body-part badges, study info", fill=TEXT_MED, font=SMALL)
+draw.text((510, 1320), "• Expiry countdown (server-anchored clock)", fill=TEXT_MED, font=SMALL)
+draw.text((510, 1340), "• ZIP download of approved DICOM files", fill=TEXT_MED, font=SMALL)
+draw.text((510, 1370), "Automated DICOM Forwarding", fill=BORDER_GCP, font=BODY)
+draw.text((510, 1393), "• route_to routing action", fill=TEXT_MED, font=SMALL)
+draw.text((510, 1413), "• DICOMweb (STOW-RS) destinations", fill=TEXT_MED, font=SMALL)
+draw.text((510, 1433), "• DIMSE C-STORE to remote AE Title", fill=TEXT_MED, font=SMALL)
+draw.text((510, 1453), "• Auto-forwards on approval", fill=TEXT_MED, font=SMALL)
 
 # ── MCP Server box ──
-rounded_rect((1420, 1210, 2400, 1480), fill="#EDE7F6", outline="#7B1FA2", width=2)
-draw.text((1440, 1220), "MCP Server + Operator Tooling", fill="#7B1FA2", font=BOLD)
-draw.text((1440, 1252), "Model Context Protocol (Claude integration)", fill="#7B1FA2", font=BODY)
-draw.text((1440, 1275), "• Read tools: list_studies, get_study, list_audit, get_diagnostics", fill=TEXT_MED, font=SMALL)
-draw.text((1440, 1295), "• Write tools (MCP_ENABLE_WRITE_TOOLS=true): approve/reject", fill=TEXT_MED, font=SMALL)
-draw.text((1440, 1315), "• Readonly mode by default — safe for AI-assisted triage", fill=TEXT_MED, font=SMALL)
-draw.text((1440, 1335), "• DIMSE retry proxy: process, replay, clear dead-letter", fill=TEXT_MED, font=SMALL)
-draw.text((1440, 1365), "Batch Import CLI (aegis-import)", fill="#7B1FA2", font=BODY)
-draw.text((1440, 1388), "• Bulk historical DICOM migration from local dir", fill=TEXT_MED, font=SMALL)
-draw.text((1440, 1408), "• POST /api/import/batch — institution-linked provenance", fill=TEXT_MED, font=SMALL)
-draw.text((1440, 1428), "• Dry-run mode, duplicate rejection, routing evaluation", fill=TEXT_MED, font=SMALL)
-draw.text((1440, 1448), "• Internal ingest: /api/ingest with IP-based institution auto-match", fill=TEXT_MED, font=SMALL)
+rounded_rect((1130, 1215, 2020, 1500), fill="#EDE7F6", outline="#7B1FA2", width=2)
+draw.text((1150, 1225), "MCP Server + Operator Tooling", fill="#7B1FA2", font=BOLD)
+draw.text((1150, 1257), "Model Context Protocol (Claude integration)", fill="#7B1FA2", font=BODY)
+draw.text((1150, 1280), "• Read tools: list_studies, get_study, list_audit, get_diagnostics", fill=TEXT_MED, font=SMALL)
+draw.text((1150, 1300), "• Write tools (confirm:true + reason): approve/reject, share, export", fill=TEXT_MED, font=SMALL)
+draw.text((1150, 1320), "• Readonly mode by default — safe for AI-assisted triage", fill=TEXT_MED, font=SMALL)
+draw.text((1150, 1340), "• DIMSE retry proxy: process, replay, clear dead-letter", fill=TEXT_MED, font=SMALL)
+draw.text((1150, 1370), "Batch Import CLI (aegis-import)", fill="#7B1FA2", font=BODY)
+draw.text((1150, 1393), "• Bulk historical DICOM migration from local dir", fill=TEXT_MED, font=SMALL)
+draw.text((1150, 1413), "• POST /api/import/batch — institution-linked provenance", fill=TEXT_MED, font=SMALL)
+draw.text((1150, 1433), "• Dry-run mode, duplicate rejection, routing evaluation", fill=TEXT_MED, font=SMALL)
+draw.text((1150, 1453), "• Internal ingest: /api/ingest with IP-based institution auto-match", fill=TEXT_MED, font=SMALL)
+
+# ── Landing Page box (NEW) ──
+service_box(
+    (2050, 1215, 2400, 1500),
+    "Landing Page (nginx / Cloud Run)",
+    [
+        "aegisimaging.ai — public marketing",
+        "React + Vite + nginx (static SPA)",
+        "Client-side DICOM demo widget",
+        "Schedule Demo / Contact form",
+        "Market opportunity section",
+        "LB default backend (no IAP)",
+    ],
+    ACCENT_REACT,
+)
 
 # ══════════════════════════════════════════════════════
 # Bottom: Pipeline Flow + Tech Stack
 # ══════════════════════════════════════════════════════
-pipeline_y = 1720
+pipeline_y = 1860
 
 # Pipeline visualization
 rounded_rect((60, pipeline_y, 2430, pipeline_y + 130), fill="#E3F2FD", outline=ACCENT_GCP_SVC, width=2)
@@ -445,20 +460,21 @@ for i, (name, color, desc) in enumerate(stages):
         draw.polygon([(ax, ay - 8), (ax, ay + 8), (ax + 15, ay)], fill=ACCENT_GCP_SVC)
     stage_x += stage_w + 18
 
-# Phases
+# Phases — 5 phases (4 complete + 1 in progress)
 phases_y = pipeline_y + 155
 
 rounded_rect((60, phases_y, 2430, phases_y + 170), fill="#F3E5F5", outline="#7B1FA2", width=2)
-draw.text((80, phases_y + 10), "Implementation Phases (all complete as of February 2026)", fill="#7B1FA2", font=BOLD)
+draw.text((80, phases_y + 10), "Implementation Phases", fill="#7B1FA2", font=BOLD)
 
 phase_data = [
     ("Phase 1: Foundation  ✓", "Terraform + Go API + Upload Portal + Admin Dashboard + PostgreSQL + CI", "#4CAF50"),
     ("Phase 2: Processing  ✓", "Defacing + PHI Detection + QC + BIDS + Classification + Protocol + DIMSE", "#2196F3"),
     ("Phase 3: Operations  ✓", "Routing rules + Institutions + Audit + Export portal + Shares + Email digest", "#FF9800"),
-    ("Phase 4: Production  ✓", "GCP Cloud Run deploy + Terraform infra + MCP server + Batch import + GCP live", "#9C27B0"),
+    ("Phase 4: Production  ✓", "GCP live (aegis-prod-488120) + Landing Page + MCP server + Batch import + Observability", "#9C27B0"),
+    ("Phase 5: AI Agent  🚧", "AEGIS Agent (in progress) + Observability dashboard + Multi-tenant Federation + Repo split", "#E65100"),
 ]
 
-phase_w = 560
+phase_w = 440
 for i, (title, desc, color) in enumerate(phase_data):
     x = 80 + i * (phase_w + 20)
     y = phases_y + 45
@@ -479,7 +495,7 @@ for i, (title, desc, color) in enumerate(phase_data):
         draw.text((x + 15, ly), line, fill=TEXT_MED, font=SMALL)
 
 # Tech stack + repos
-stack_y = phases_y + 180
+stack_y = phases_y + 185
 
 rounded_rect((60, stack_y, 1240, stack_y + 200), fill="#F5F5F5", outline="#9E9E9E", width=2)
 draw.text((80, stack_y + 10), "Key Open-Source Dependencies", fill=TEXT_DARK, font=BOLD)
@@ -504,7 +520,7 @@ multicloud = [
     ("Local Dev:", "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem", "#546E7A"),
     ("Auth:", "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth", "#E65100"),
     ("Storage:", "STORAGE_MODE=gcs|s3|local — same Go API code, no changes", ACCENT_GO),
-    ("CI:", "GitHub Actions — Go tests (120+), Python tests (206+), TS, Docker", "#2E7D32"),
+    ("CI:", "GitHub Actions — Go tests (270+), Python tests (206+), TS, Docker", "#2E7D32"),
 ]
 for i, (cat, desc, color) in enumerate(multicloud):
     y = stack_y + 45 + i * 28
