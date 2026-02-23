@@ -1166,7 +1166,7 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
 
 // ── Defacing Review Panel ─────────────────────────────────────────────────────
 
-const OHIF_BASE = import.meta.env.VITE_OHIF_BASE_URL ?? 'http://localhost:3002'
+const OHIF_BASE = import.meta.env.VITE_OHIF_BASE_URL || 'http://localhost:3002'
 
 function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const beforeUrl = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${study.study_instance_uid}&dataSource=dicomweb-raw`
