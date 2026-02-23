@@ -267,7 +267,7 @@ func (s *Server) writeApproveHTML(w http.ResponseWriter, name, toEmail, code, er
 			}
 			return ""
 		}(),
-		s.cfg.APIBaseURL,
+		s.cfg.AdminDashboardURL,
 	)
 }
 
