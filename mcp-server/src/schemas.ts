@@ -247,6 +247,22 @@ export const apiKeyIdArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const bulkStudyActionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_ids: z.array(z.string().uuid()).min(1).max(200),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const bulkLabelStudiesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_ids: z.array(z.string().uuid()).min(1).max(200),
+  label: z.string().min(1).max(80),
+  action: z.enum(["add", "remove"]),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -309,6 +325,9 @@ export const writeToolNames = [
   "export_project_batch",
   "reactivate_study",
   "test_webhook",
+  "bulk_approve_studies",
+  "bulk_reject_studies",
+  "bulk_label_studies",
   "create_api_key",
   "rotate_api_key",
   "enable_api_key",
