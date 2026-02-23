@@ -50,7 +50,10 @@ const allowedGetPathPatterns = [
   /^\/api\/subjects(?:\?.*)?$/,
   /^\/api\/export-analytics$/,
   /^\/api\/webhook-subscriptions(?:\?.*)?$/,
-  /^\/api\/webhook-subscriptions\/[0-9a-fA-F-]{36}\/deliveries(?:\?.*)?$/
+  /^\/api\/webhook-subscriptions\/[0-9a-fA-F-]{36}\/deliveries(?:\?.*)?$/,
+  /^\/api\/institutions\/[0-9a-fA-F-]{36}\/stats$/,
+  /^\/api\/projects\/[0-9a-fA-F-]{36}\/protocol-templates(?:\?.*)?$/,
+  /^\/api\/federation-peers(?:\?.*)?$/
 ] as const;
 
 const allowedPostPathPatterns = [
@@ -70,7 +73,8 @@ const allowedPostPathPatterns = [
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/notes$/,
   /^\/api\/projects\/[0-9a-fA-F-]{36}\/export-batch$/,
-  /^\/api\/routing-rules\/evaluate\/[0-9a-fA-F-]{36}$/
+  /^\/api\/routing-rules\/evaluate\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/reactivate$/
 ] as const;
 
 const allowedDeletePathPatterns = [

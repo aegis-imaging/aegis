@@ -18,14 +18,17 @@ import {
   extendShareArgsSchema,
   getAuditActorsArgsSchema,
   getIngestionTimelineArgsSchema,
+  getInstitutionStatsArgsSchema,
   getShareDownloadsArgsSchema,
   getStuckStudiesArgsSchema,
   getStudyDicomTagsArgsSchema,
   getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
   listAuditArgsSchema,
+  listProtocolTemplatesArgsSchema,
   listStudiesArgsSchema,
   projectScopedArgsSchema,
+  reactivateStudyArgsSchema,
   readToolNames,
   reassignStudyArgsSchema,
   reEvaluateRoutingArgsSchema,
@@ -789,6 +792,58 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "reactivate_study",
+    description: "Reactivate an expired study by resetting its status back to 'approved'. Only works on studies in 'expired' status. Use when a study's retention window has passed but it still needs to be accessible. Emits a study.reactivated audit entry. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_institution_stats",
+    description: "Get aggregate statistics for an institution: total study count, studies broken down by status and modality, and the timestamp of the most recent study. Useful for understanding an institution's contribution and activity patterns.",
+    inputSchema: {
+      type: "object",
+      required: ["institution_id"],
+      properties: {
+        request_id: { type: "string" },
+        institution_id: { type: "string", format: "uuid", description: "Institution UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_protocol_templates",
+    description: "List all MRI protocol compliance templates for a project. Each template defines expected acquisition parameters (TR, TE, flip angle, slice thickness, etc.) for a specific scanner/sequence combination. Use before running a protocol check to understand what rules will be applied.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_federation_peers",
+    description: "List all federation peer registrations. Federation peers are trusted remote AEGIS instances configured for future cross-tenant study sharing. Returns peer name, slug, API URL, and enabled status. No data flows to peers yet — this is a registry for future activation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -1118,6 +1173,24 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_institution_stats") {
+      const parsed = getInstitutionStatsArgsSchema.parse(args);
+      const data = await client.get(`/api/institutions/${parsed.institution_id}/stats`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_protocol_templates") {
+      const parsed = listProtocolTemplatesArgsSchema.parse(args);
+      const data = await client.get(`/api/projects/${parsed.project_id}/protocol-templates`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_federation_peers") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/federation-peers");
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -1187,6 +1260,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "export_project_batch") {
         const parsedBatch = exportProjectBatchArgsSchema.parse(args);
         return handleExportProjectBatch(parsedBatch.request_id ?? buildRequestId(), parsedBatch);
+      }
+
+      if (name === "reactivate_study") {
+        const parsedReactivate = reactivateStudyArgsSchema.parse(args);
+        return handleReactivateStudy(parsedReactivate.request_id ?? buildRequestId(), parsedReactivate);
       }
 
       const parsed = writeArgsSchema.parse(args);
@@ -1298,7 +1376,8 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
     name === "add_study_label" ||
     name === "remove_study_label" ||
     name === "set_study_subject" ||
-    name === "add_study_note"
+    name === "add_study_note" ||
+    name === "reactivate_study"
   ) {
     return typeof args.study_id === "string" ? args.study_id : null;
   }
@@ -2199,6 +2278,31 @@ async function handleExportProjectBatch(
   return formatSuccess(requestId, "export_project_batch", {
     accepted: true,
     project_id: parsed.project_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleReactivateStudy(
+  requestId: string,
+  parsed: { study_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reactivate_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow reactivate_study", false, "reactivate_study");
+  }
+
+  const study = await client.get(`/api/studies/${encodeURIComponent(parsed.study_id)}`) as Record<string, unknown>;
+  if (study?.status !== "expired") {
+    return formatError(requestId, "CONFLICT", `Only expired studies can be reactivated; current status: ${study?.status ?? "unknown"}`, false, "reactivate_study");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reactivate`);
+  return formatSuccess(requestId, "reactivate_study", {
+    accepted: true,
+    study_id: parsed.study_id,
     reason: parsed.reason,
     result: data
   });
