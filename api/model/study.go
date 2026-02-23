@@ -719,7 +719,7 @@ func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...st
 		    count(*) FILTER (WHERE status = 'approved')  AS received,
 		  count(*) FILTER (WHERE status = 'approved')   AS approved
 		FROM studies
-		WHERE created_at >= now() - ($1 || ' days')::INTERVAL`+where+`
+		WHERE created_at >= now() - ($1 * INTERVAL '1 day')`+where+`
 		GROUP BY day
 		ORDER BY day`, args...)
 	if err != nil {
