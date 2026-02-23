@@ -10,6 +10,8 @@ export const listStudiesArgsSchema = z.object({
   body_part: z.string().min(1).max(64).regex(/^[A-Za-z0-9_]+$/).optional(),
   source: z.enum(["external", "internal"]).optional(),
   search: z.string().min(1).max(256).optional(),
+  label: z.string().min(1).max(80).optional(),
+  subject_id: z.string().min(1).max(256).optional(),
   date_from: z.string().datetime().optional(),
   date_to: z.string().datetime().optional()
 });

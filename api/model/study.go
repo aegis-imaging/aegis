@@ -127,6 +127,7 @@ type StudyFilters struct {
 	Source    string    // external|internal
 	Search    string    // substring match on study_instance_uid or study_description
 	SubjectID string    // exact match on subject_id
+	Label     string    // substring match on any study_labels.label value (case-insensitive)
 	DateFrom  time.Time // created_at >= DateFrom (zero = no lower bound)
 	DateTo    time.Time // created_at <= DateTo   (zero = no upper bound)
 }
@@ -170,6 +171,12 @@ func studyWhere(f StudyFilters) (string, []any) {
 	if f.SubjectID != "" {
 		clauses = append(clauses, fmt.Sprintf(`subject_id = $%d`, n))
 		args = append(args, f.SubjectID)
+		n++
+	}
+	if f.Label != "" {
+		clauses = append(clauses, fmt.Sprintf(
+			`EXISTS (SELECT 1 FROM study_labels sl WHERE sl.study_id = studies.id AND sl.label ILIKE $%d)`, n))
+		args = append(args, "%"+f.Label+"%")
 		n++
 	}
 	if !f.DateFrom.IsZero() {

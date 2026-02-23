@@ -5345,6 +5345,7 @@ export function App() {
   const [filterProject,  setFilterProject]  = useState('')
   const [filterSearch,   setFilterSearch]   = useState('')
   const [filterSubject,  setFilterSubject]  = useState('')
+  const [filterLabel,    setFilterLabel]    = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo,   setFilterDateTo]   = useState('')
   const [page, setPage] = useState(0)
@@ -5523,6 +5524,7 @@ export function App() {
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
     if (filterSubject)  params.set('subject_id', filterSubject)
+    if (filterLabel)    params.set('label',      filterLabel)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
 
@@ -5540,7 +5542,7 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterDateFrom, filterDateTo, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterDateFrom, filterDateTo, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
@@ -5550,15 +5552,16 @@ export function App() {
   function setProjectF(v: string)  { setFilterProject(v);  setPage(0); setBulkSelected(new Set()) }
   function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
   function setSubjectF(v: string)   { setFilterSubject(v);   setPage(0); setBulkSelected(new Set()) }
+  function setLabelF(v: string)     { setFilterLabel(v);     setPage(0); setBulkSelected(new Set()) }
   function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
   function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterDateFrom || filterDateTo)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterDateFrom || filterDateTo)
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
     setFilterSource(''); setFilterProject(''); setFilterSearch('')
-    setFilterSubject(''); setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
+    setFilterSubject(''); setFilterLabel(''); setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
     setBulkSelected(new Set())
   }
 
@@ -5635,6 +5638,7 @@ export function App() {
     if (filterSource)   params.set('source',     filterSource)
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
+    if (filterLabel)    params.set('label',      filterLabel)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
     const qs = params.toString()
@@ -6062,6 +6066,13 @@ export function App() {
               placeholder="Subject ID…"
               value={filterSubject}
               onChange={e => setSubjectF(e.target.value)}
+            />
+            <input
+              className="filter-input filter-input--label"
+              type="search"
+              placeholder="Label…"
+              value={filterLabel}
+              onChange={e => setLabelF(e.target.value)}
             />
             <input
               type="date"
