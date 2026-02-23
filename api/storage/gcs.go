@@ -118,7 +118,7 @@ func (g *GCS) List(ctx context.Context, prefix string) ([]string, error) {
 			}
 			return nil, err
 		}
-		if attrs != nil && attrs.Name != "" {
+		if attrs != nil && attrs.Name != "" && !strings.HasSuffix(attrs.Name, "/") {
 			keys = append(keys, attrs.Name)
 		}
 	}
