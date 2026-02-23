@@ -212,6 +212,22 @@ steps:
         docker push ${_REPO}/synth-service:${SHORT_SHA}
         docker push ${_REPO}/synth-service:latest
 
+  # --- mcp-server ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-mcp-server
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/mcp-server:${SHORT_SHA} \
+          -t ${_REPO}/mcp-server:latest \
+          mcp-server
+        docker push ${_REPO}/mcp-server:${SHORT_SHA}
+        docker push ${_REPO}/mcp-server:latest
+
   # --- dimse-receiver (build + push only; no Cloud Run deploy — see plan notes) ---
   - name: gcr.io/cloud-builders/docker
     id: build-push-dimse-receiver
@@ -386,6 +402,20 @@ steps:
       - deploy
       - synth-service
       - --image=${_REPO}/synth-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy mcp-server ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-mcp-server
+    waitFor: [build-push-mcp-server]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - aegis-mcp-server
+      - --image=${_REPO}/mcp-server:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --quiet

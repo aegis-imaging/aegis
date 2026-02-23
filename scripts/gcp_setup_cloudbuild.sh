@@ -33,6 +33,9 @@ CONNECTION_NAME="${CONNECTION_NAME:-aegis}"
 REPO_NAME="${REPO_NAME:-aegis}"
 REPO_URI="${REPO_URI:-https://github.com/aegis-imaging/aegis.git}"
 TRIGGER_NAME="${TRIGGER_NAME:-deploy-on-develop}"
+TF_TRIGGER_NAME="${TF_TRIGGER_NAME:-terraform-apply-on-develop}"
+TF_STATE_BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
+TF_VARS_SECRET="${TF_VARS_SECRET:-aegis-prod-terraform-tfvars}"
 # Service account that Cloud Build runs as (must have run.admin + artifactregistry.writer)
 CB_BYOSA="${CB_BYOSA:-aegis-cloud-build@${PROJECT_ID}.iam.gserviceaccount.com}"
 
@@ -44,6 +47,9 @@ for arg in "$@"; do
     --repo-name=*) REPO_NAME="${arg#*=}" ;;
     --repo-uri=*) REPO_URI="${arg#*=}" ;;
     --trigger-name=*) TRIGGER_NAME="${arg#*=}" ;;
+    --tf-trigger-name=*) TF_TRIGGER_NAME="${arg#*=}" ;;
+    --tf-state-bucket=*) TF_STATE_BUCKET="${arg#*=}" ;;
+    --tf-vars-secret=*) TF_VARS_SECRET="${arg#*=}" ;;
     --service-account=*) CB_BYOSA="${arg#*=}" ;;
     -h|--help)
       cat <<'USAGE'
@@ -55,10 +61,14 @@ Options:
   --connection-name=<name>  Cloud Build connection name (default: aegis)
   --repo-name=<name>        Repository resource name within connection (default: aegis)
   --repo-uri=<uri>          GitHub remote URI (default: https://github.com/aegis-imaging/aegis.git)
-  --trigger-name=<name>     Trigger name (default: deploy-on-develop)
+  --trigger-name=<name>     App deploy trigger name (default: deploy-on-develop)
+  --tf-trigger-name=<name>  Terraform trigger name (default: terraform-apply-on-develop)
+  --tf-state-bucket=<name>  GCS bucket for Terraform state (default: PROJECT_ID-tfstate)
+  --tf-vars-secret=<id>     Secret Manager secret ID with terraform.tfvars (default: aegis-prod-terraform-tfvars)
   --service-account=<email> SA email for trigger runs (default: aegis-cloud-build@PROJECT.iam.gserviceaccount.com)
 
-Environment variables: PROJECT_ID, REGION, CONNECTION_NAME, REPO_NAME, REPO_URI, TRIGGER_NAME, CB_BYOSA
+Environment variables: PROJECT_ID, REGION, CONNECTION_NAME, REPO_NAME, REPO_URI, TRIGGER_NAME,
+                       TF_TRIGGER_NAME, TF_STATE_BUCKET, TF_VARS_SECRET, CB_BYOSA
 USAGE
       exit 0
       ;;
@@ -107,6 +117,9 @@ ROLES=(
   "roles/artifactregistry.writer"   # push images to Artifact Registry
   "roles/run.admin"                 # deploy / update Cloud Run services
   "roles/iam.serviceAccountUser"    # impersonate Cloud Run SA during deploy
+  "roles/editor"                    # terraform apply (create/update GCP resources)
+  "roles/secretmanager.secretAccessor"  # read terraform.tfvars secret
+  "roles/storage.admin"             # manage Terraform state GCS bucket
 )
 
 for sa in "$CB_SA" "$CB_BYOSA"; do
@@ -169,7 +182,46 @@ fi
   --region="$REGION"
 
 echo ""
-echo "==> Done. Cloud Build trigger '$TRIGGER_NAME' is active."
+
+# --- Terraform apply trigger ---
+echo "==> Creating Terraform trigger '$TF_TRIGGER_NAME'..."
+
+if "$GCLOUD" builds triggers describe "$TF_TRIGGER_NAME" \
+    --project="$PROJECT_ID" \
+    --region="$REGION" \
+    &>/dev/null 2>&1; then
+  echo "    Terraform trigger already exists — deleting and recreating..."
+  "$GCLOUD" builds triggers delete "$TF_TRIGGER_NAME" \
+    --project="$PROJECT_ID" \
+    --region="$REGION" \
+    --quiet
+fi
+
+"$GCLOUD" builds triggers create github \
+  --project="$PROJECT_ID" \
+  --name="$TF_TRIGGER_NAME" \
+  --description="Auto terraform apply when terraform/infra/** changes on develop" \
+  --repository="$REPO_RESOURCE" \
+  --branch-pattern="^develop$" \
+  --build-config="cloudbuild.terraform.yaml" \
+  --included-files="terraform/infra/**" \
+  --substitutions="_TF_STATE_BUCKET=${TF_STATE_BUCKET},_TF_VARS_SECRET=${TF_VARS_SECRET}" \
+  --service-account="$SA_RESOURCE" \
+  --region="$REGION"
+
+echo ""
+echo "==> Done. Cloud Build triggers are active:"
+echo "    - '$TRIGGER_NAME'    : deploys all services on push to develop"
+echo "    - '$TF_TRIGGER_NAME' : runs terraform apply when terraform/infra/** changes"
+echo ""
+echo "    Terraform prerequisites (one-time):"
+echo "      1. Create state bucket:"
+echo "         gsutil mb -p $PROJECT_ID gs://${TF_STATE_BUCKET}"
+echo "      2. Add backend config to terraform/infra/main.tf:"
+echo "         terraform { backend \"gcs\" { bucket = \"${TF_STATE_BUCKET}\" prefix = \"aegis-infra\" } }"
+echo "      3. Store terraform.tfvars in Secret Manager:"
+echo "         gcloud secrets create ${TF_VARS_SECRET} --data-file=terraform/infra/terraform.tfvars"
+echo "         (update with: gcloud secrets versions add ${TF_VARS_SECRET} --data-file=terraform/infra/terraform.tfvars)"
 echo ""
 echo "    Next steps:"
 echo "      1. Push a commit to the 'develop' branch to trigger a build."

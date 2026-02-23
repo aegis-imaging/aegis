@@ -177,6 +177,19 @@ variable "synth_service_image" {
   default     = ""
 }
 
+variable "mcp_server_image" {
+  description = "Container image URI for the MCP agent server (empty = not deployed)"
+  type        = string
+  default     = ""
+}
+
+variable "mcp_server_aegis_api_token" {
+  description = "AEGIS API bearer token for the MCP server to call the Go API (stored in Secret Manager)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "synth_service_url" {
   description = "Direct HTTPS URL for the synthetic MRI service when managed outside Terraform (e.g. a manually-deployed Cloud Run service). Takes precedence over the synth_service_image-derived URL."
   type        = string
@@ -1242,6 +1255,137 @@ resource "google_cloud_run_service_iam_member" "iap_invoker_admin" {
 }
 
 
+# --- MCP Agent Server ---
+
+resource "google_service_account" "mcp_server" {
+  count        = var.mcp_server_image != "" ? 1 : 0
+  account_id   = "${replace(local.name_prefix, "-", "")}mcp"
+  display_name = "AEGIS MCP agent server service account"
+}
+
+# Grant Vertex AI user role so the MCP server can call Gemini via Workload Identity.
+resource "google_project_iam_member" "mcp_server_vertex_ai" {
+  count   = var.mcp_server_image != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.mcp_server[0].email}"
+}
+
+resource "google_secret_manager_secret" "mcp_aegis_api_token" {
+  count     = var.mcp_server_image != "" ? 1 : 0
+  secret_id = "${local.name_prefix}-mcp-aegis-api-token"
+
+  replication {
+    auto {}
+  }
+}
+
+# Populate the secret only when a token value is provided.
+resource "google_secret_manager_secret_version" "mcp_aegis_api_token" {
+  count       = var.mcp_server_image != "" && var.mcp_server_aegis_api_token != "" ? 1 : 0
+  secret      = google_secret_manager_secret.mcp_aegis_api_token[0].id
+  secret_data = var.mcp_server_aegis_api_token
+}
+
+resource "google_secret_manager_secret_iam_member" "mcp_server_token_access" {
+  count     = var.mcp_server_image != "" ? 1 : 0
+  secret_id = google_secret_manager_secret.mcp_aegis_api_token[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mcp_server[0].email}"
+}
+
+resource "google_cloud_run_v2_service" "mcp_server" {
+  count    = var.mcp_server_image != "" ? 1 : 0
+  name     = "aegis-mcp-server"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  deletion_protection = false
+
+  template {
+    service_account = google_service_account.mcp_server[0].email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 3
+    }
+
+    containers {
+      image = var.mcp_server_image
+
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = "512Mi"
+        }
+      }
+
+      env {
+        name  = "AEGIS_API_BASE_URL"
+        value = "https://${var.api_domain}"
+      }
+      env {
+        name = "AEGIS_API_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.mcp_aegis_api_token[0].secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "MCP_AGENT_HTTP_PORT"
+        value = "8080"
+      }
+      env {
+        name  = "MCP_AGENT_LLM_USE_GCP_AUTH"
+        value = "true"
+      }
+      env {
+        name  = "MCP_AGENT_LLM_GCP_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "MCP_AGENT_LLM_MODEL"
+        value = "google/gemini-2.0-flash-001"
+      }
+      env {
+        name  = "MCP_AGENT_ALLOWED_ORIGIN"
+        value = "https://${var.admin_domain}"
+      }
+      env {
+        name  = "MCP_AGENT_REQUIRE_AUTH"
+        value = "false"
+      }
+
+      liveness_probe {
+        failure_threshold     = 3
+        initial_delay_seconds = 10
+        timeout_seconds       = 5
+        period_seconds        = 30
+
+        http_get {
+          path = "/healthz"
+        }
+      }
+    }
+    # No VPC connector — MCP server only calls external HTTPS endpoints
+    # (Vertex AI and the AEGIS API load balancer). No private network needed.
+  }
+
+  depends_on = [google_secret_manager_secret_version.mcp_aegis_api_token]
+}
+
+# MCP server is proxied through the admin dashboard nginx — allUsers invoker
+# allows nginx to call it without credentials.
+resource "google_cloud_run_service_iam_member" "mcp_server_invoker" {
+  count    = var.mcp_server_image != "" ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.mcp_server[0].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 # --- Cloud Armor ---
 
 resource "google_compute_security_policy" "api" {
@@ -1985,4 +2129,8 @@ output "smtp_egress_ip" {
 
 output "iap_backend_service_name" {
   value = google_compute_backend_service.admin.name
+}
+
+output "mcp_server_uri" {
+  value = var.mcp_server_image != "" ? google_cloud_run_v2_service.mcp_server[0].uri : ""
 }
