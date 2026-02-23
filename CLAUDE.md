@@ -1530,9 +1530,49 @@ git checkout develop && git pull
 # then branch again for the next feature
 ```
 
+## CI/CD — Auto-Deploy on Push to `develop`
+
+**Never manually deploy after merging a PR to `develop` — Cloud Build handles everything automatically.**
+
+### Cloud Build triggers (GCP)
+
+Two triggers are active in Cloud Build (configured by `scripts/gcp_setup_cloudbuild.sh`, run once per environment):
+
+#### Trigger 1: Application deploy — `deploy-on-develop`
+- **Config**: `cloudbuild.yaml`
+- **Fires on**: any push to `develop`
+- **Phase 1** (all parallel): build + push Docker images to Artifact Registry (`{service}:{SHORT_SHA}` + `{service}:latest`)
+- **Phase 2** (each parallel, waits for its own build): `gcloud run deploy` each service with the new image
+
+| Cloud Run service | Source directory |
+|---|---|
+| `aegis-api` | `api/` |
+| `aegis-admin-dashboard` | `frontend/admin-dashboard/` (build arg: `VITE_OHIF_BASE_URL`) |
+| `aegis-prod-landing` | `frontend/landing/` (build arg: `VITE_API_BASE_URL`) |
+| `ohif` | `ohif/` |
+| `defacing` | `defacing/` |
+| `phi-detection` | `phi-detection/` |
+| `qc-service` | `qc-service/` |
+| `bids-service` | `bids-service/` |
+| `classification-service` | `classification-service/` |
+| `protocol-service` | `protocol-service/` |
+| `synth-service` | `synth-service/` |
+| `aegis-mcp-server` | `mcp-server/` |
+| ~~`dimse-receiver`~~ | built + pushed only — **no deploy step** (manual rollout) |
+
+Only the container image is updated on each deploy; all env vars, secrets, CPU/memory, and service accounts are preserved from the running config.
+
+#### Trigger 2: Terraform apply — `terraform-apply-on-develop`
+- **Config**: `cloudbuild.terraform.yaml`
+- **Fires on**: push to `develop` **where `terraform/infra/**` files changed**
+- **Steps**: fetch `terraform.tfvars` from Secret Manager (`aegis-prod-terraform-tfvars`) → `terraform init` (GCS backend: `aegis-prod-488120-tfstate`) → `terraform validate` → `terraform apply -auto-approve`
+- **Scope**: only `terraform/infra/` — `terraform/project/` and `terraform/aws/` are **manual only**
+
+Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
+
 ## CI (GitHub Actions)
 
-`.github/workflows/ci.yml` runs on PRs to `develop` and `main`:
+`.github/workflows/ci.yml` runs on PRs to `develop` and `main` — **validation only, no deploy**:
 
 | Job | What it checks |
 |-----|---------------|
