@@ -171,6 +171,18 @@ variable "ohif_image" {
   default     = ""
 }
 
+variable "synth_service_image" {
+  description = "Container image URI for the synthetic MRI sidecar (empty = service not deployed)"
+  type        = string
+  default     = ""
+}
+
+variable "ohif_domain" {
+  description = "FQDN for the public OHIF viewer used by the landing page demo (e.g. ohif.aegisimaging.ai). Leave empty to skip."
+  type        = string
+  default     = ""
+}
+
 variable "api_cpu" {
   description = "CPU limit for Cloud Run API container"
   type        = string
@@ -364,20 +376,27 @@ locals {
   resolved_db_password_secret_id = var.db_password_secret_id != "" ? var.db_password_secret_id : "${local.name_prefix}-db-password"
   resolved_db_password           = var.db_password != "" ? var.db_password : try(random_password.db_password[0].result, "")
 
-  sidecar_services = {
-    defacing               = var.defacing_image
-    phi-detection          = var.phi_detection_image
-    qc-service             = var.qc_service_image
-    bids-service           = var.bids_service_image
-    classification-service = var.classification_service_image
-    protocol-service       = var.protocol_service_image
-  }
+  sidecar_services = merge(
+    {
+      defacing               = var.defacing_image
+      phi-detection          = var.phi_detection_image
+      qc-service             = var.qc_service_image
+      bids-service           = var.bids_service_image
+      classification-service = var.classification_service_image
+      protocol-service       = var.protocol_service_image
+    },
+    # synth-service: optional sidecar for synthetic brain MRI generation.
+    # Omit from the map when the image is not provided so the for_each loop
+    # does not attempt to create a Cloud Run service with an empty image URI.
+    var.synth_service_image != "" ? { synth-service = var.synth_service_image } : {}
+  )
 
   lb_domains = distinct(compact([
     var.api_domain,
     var.admin_domain,
     var.landing_domain,
     var.landing_domain != "" ? "www.${var.landing_domain}" : "",
+    var.ohif_domain,
   ]))
 
   resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : [
@@ -792,6 +811,34 @@ resource "google_cloud_run_service_iam_member" "ohif_invoker" {
   member   = "allUsers"
 }
 
+# Public OHIF domain (ohif.aegisimaging.ai) — LB routes to the existing OHIF Cloud Run
+# service without IAP, enabling the landing page demo to embed OHIF in iframes.
+resource "google_compute_region_network_endpoint_group" "ohif_public_neg" {
+  count                 = var.ohif_image != "" && var.ohif_domain != "" ? 1 : 0
+  name                  = "${local.name_prefix}-ohif-public-neg"
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+  cloud_run {
+    service = google_cloud_run_v2_service.ohif[0].name
+  }
+}
+
+resource "google_compute_backend_service" "ohif_public" {
+  count                 = var.ohif_image != "" && var.ohif_domain != "" ? 1 : 0
+  name                  = "${local.name_prefix}-ohif-public-backend"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  protocol              = "HTTP"
+
+  log_config {
+    enable      = true
+    sample_rate = 0.1
+  }
+
+  backend {
+    group = google_compute_region_network_endpoint_group.ohif_public_neg[0].id
+  }
+}
+
 # --- Cloud Run API ---
 
 resource "google_cloud_run_v2_service" "api" {
@@ -950,6 +997,13 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "PROTOCOL_SERVICE_URL"
         value = google_cloud_run_v2_service.sidecars["protocol-service"].uri
+      }
+      dynamic "env" {
+        for_each = var.synth_service_image != "" ? [1] : []
+        content {
+          name  = "SYNTH_SERVICE_URL"
+          value = google_cloud_run_v2_service.sidecars["synth-service"].uri
+        }
       }
 
       liveness_probe {
@@ -1254,6 +1308,14 @@ resource "google_compute_url_map" "https" {
     path_matcher = "admin"
   }
 
+  dynamic "host_rule" {
+    for_each = var.ohif_image != "" && var.ohif_domain != "" ? [1] : []
+    content {
+      hosts        = [var.ohif_domain]
+      path_matcher = "ohif-public"
+    }
+  }
+
   dynamic "path_matcher" {
     for_each = var.landing_image != "" ? [1] : []
     content {
@@ -1271,6 +1333,14 @@ resource "google_compute_url_map" "https" {
     name            = "admin"
     default_service = google_compute_backend_service.admin.id
     # No path rules needed — nginx proxies /api/* to the API backend internally.
+  }
+
+  dynamic "path_matcher" {
+    for_each = var.ohif_image != "" && var.ohif_domain != "" ? [1] : []
+    content {
+      name            = "ohif-public"
+      default_service = google_compute_backend_service.ohif_public[0].id
+    }
   }
 }
 
@@ -1784,6 +1854,10 @@ output "sidecar_service_uris" {
 
 output "ohif_service_uri" {
   value = var.ohif_image != "" ? google_cloud_run_v2_service.ohif[0].uri : ""
+}
+
+output "ohif_public_url" {
+  value = var.ohif_domain != "" ? "https://${var.ohif_domain}" : ""
 }
 
 output "landing_service_uri" {
