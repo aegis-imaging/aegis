@@ -362,6 +362,22 @@ test("AegisApiClient allows study reactivate POST path", async () => {
   assert.deepEqual(result, {});
 });
 
+test("AegisApiClient allows phi-config, anon-profiles GET and webhook test POST", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+  const projectId = "550e8400-e29b-41d4-a716-446655440000";
+  const subId = "660e8400-e29b-41d4-a716-446655440001";
+
+  const phiConfig = await client.get(`/api/projects/${projectId}/phi-config`);
+  const anonProfiles = await client.get(`/api/projects/${projectId}/anon-profiles`);
+  const testResult = await client.post(`/api/webhook-subscriptions/${subId}/test`);
+
+  assert.deepEqual(phiConfig, {});
+  assert.deepEqual(anonProfiles, {});
+  assert.deepEqual(testResult, {});
+});
+
 test.after(() => {
   globalThis.fetch = originalFetch;
 });
