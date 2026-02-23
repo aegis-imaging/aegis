@@ -1558,15 +1558,25 @@ Two triggers are active in Cloud Build (configured by `scripts/gcp_setup_cloudbu
 | `protocol-service` | `protocol-service/` |
 | `synth-service` | `synth-service/` |
 | `aegis-mcp-server` | `mcp-server/` |
-| ~~`dimse-receiver`~~ | built + pushed only — **no deploy step** (manual rollout) |
+| ~~`dimse-receiver`~~ | image built + pushed only — **no Cloud Run deploy** (see note below) |
 
 Only the container image is updated on each deploy; all env vars, secrets, CPU/memory, and service accounts are preserved from the running config.
+
+> **dimse-receiver deploy note**: Cloud Run only speaks HTTP/HTTP2. DICOM C-STORE SCP requires raw TCP on port 11112, which Cloud Run cannot expose. A `gcloud run deploy` step would start the container but the DICOM port would be unreachable. The correct production deployment target for dimse-receiver is **GKE or Compute Engine** (planned). For now the image is kept up to date in Artifact Registry and must be deployed manually to whatever TCP-capable host receives DICOM from PACS systems. This is a Cloud Run architectural limitation, not an oversight.
 
 #### Trigger 2: Terraform apply — `terraform-apply-on-develop`
 - **Config**: `cloudbuild.terraform.yaml`
 - **Fires on**: push to `develop` **where `terraform/infra/**` files changed**
 - **Steps**: fetch `terraform.tfvars` from Secret Manager (`aegis-prod-terraform-tfvars`) → `terraform init` (GCS backend: `aegis-prod-488120-tfstate`) → `terraform validate` → `terraform apply -auto-approve`
-- **Scope**: only `terraform/infra/` — `terraform/project/` and `terraform/aws/` are **manual only**
+- **Scope**: only `terraform/infra/`
+
+**`terraform/project/` is intentionally manual** — it manages project-bootstrap resources that are dangerous to auto-apply:
+- KMS key ring + crypto key (`prevent_destroy = true`) — accidental re-creation locks encrypted data
+- Service accounts — deletion breaks all workload identity bindings
+- Project-level IAM and API enables — VPC Service Controls perimeter, audit log config
+- Run manually: `cd terraform/project && terraform apply` after careful `terraform plan` review
+
+**`terraform/aws/` is intentionally manual** — AWS is a future multi-cloud deployment path, not the current production environment. GCP (`aegis-prod-488120`) is the live prod. AWS will be used for the first AWS beta deployment once GCP beta is stable. At that point a separate Cloud Build trigger (or GitHub Actions workflow) should be added.
 
 Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
 
