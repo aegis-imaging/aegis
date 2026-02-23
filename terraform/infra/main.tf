@@ -22,6 +22,11 @@
 terraform {
   required_version = ">= 1.5"
 
+  backend "gcs" {
+    bucket = "aegis-prod-488120-tfstate"
+    prefix = "aegis-infra"
+  }
+
   required_providers {
     google = {
       source  = "hashicorp/google"
