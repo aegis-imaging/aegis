@@ -324,6 +324,14 @@ func main() {
 	mux.Handle("POST /api/demo/generate", rateLimit(srv.DemoGenerate))
 	mux.Handle("GET /api/demo/study/{studyID}", rateLimit(srv.DemoStudyStatus))
 
+	// Landing page invite codes — server-side access control for the private beta gate.
+	// Validate is public/rate-limited; management endpoints are admin-only.
+	mux.Handle("POST /api/invite/validate", rateLimit(srv.ValidateInviteCode))
+	mux.HandleFunc("GET /api/invite-codes", adminOnly(srv.ListInviteCodes))
+	mux.HandleFunc("POST /api/invite-codes", adminOnly(srv.CreateInviteCode))
+	mux.HandleFunc("POST /api/invite-codes/{id}/revoke", adminOnly(srv.RevokeInviteCode))
+	mux.HandleFunc("DELETE /api/invite-codes/{id}", adminOnly(srv.DeleteInviteCode))
+
 	var h http.Handler = mux
 	h = middleware.Recover(h)
 	h = middleware.Logging(h)
