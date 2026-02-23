@@ -90,6 +90,14 @@ type Config struct {
 	// Contact form recipient
 	ContactEmail string // CONTACT_EMAIL — where contact form submissions go (default: contact@aegisimaging.ai)
 
+	// Invite request flow — "Request access" on the gate page.
+	// InviteRequestSecret signs one-time approval tokens sent to the admin.
+	// InviteRequestAdminEmail is who receives the notification (defaults to ContactEmail).
+	// LandingBaseURL is used to build /?invite=CODE links in the code-issued email.
+	InviteRequestSecret     string // INVITE_REQUEST_SECRET — HMAC key for approval tokens; feature disabled when empty
+	InviteRequestAdminEmail string // INVITE_REQUEST_ADMIN_EMAIL — who gets notified (default: ContactEmail)
+	LandingBaseURL          string // LANDING_BASE_URL — base URL for invite links (default: https://aegisimaging.ai)
+
 	// SLA stuck-study alerting — sends email when studies idle too long in pipeline.
 	// Disabled when SLAPipelineMinutes == 0 or SLAAlertEmail is empty.
 	SLAPipelineMinutes int    // SLA_PIPELINE_MINUTES — alert when study idle > N min (0 = disabled)
@@ -174,6 +182,10 @@ func Load() *Config {
 		EmailEnabled: smtpHost != "",
 
 		ContactEmail: envOr("CONTACT_EMAIL", "contact@aegisimaging.ai"),
+
+		InviteRequestSecret:     os.Getenv("INVITE_REQUEST_SECRET"),
+		InviteRequestAdminEmail: os.Getenv("INVITE_REQUEST_ADMIN_EMAIL"),
+		LandingBaseURL:          envOr("LANDING_BASE_URL", "https://aegisimaging.ai"),
 
 		SLAPipelineMinutes: envInt("SLA_PIPELINE_MINUTES", 0),
 		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),
