@@ -14,10 +14,11 @@ import { Architecture } from './components/Architecture'
 import { Contact } from './components/Contact'
 import { FinalCTA } from './components/FinalCTA'
 import { Footer } from './components/Footer'
+import { InviteGate } from './components/InviteGate'
 
 export function App() {
   return (
-    <>
+    <InviteGate>
       <Navbar />
       <Hero />
       <Stats />
@@ -33,6 +34,6 @@ export function App() {
       <Contact />
       <FinalCTA />
       <Footer />
-    </>
+    </InviteGate>
   )
 }
