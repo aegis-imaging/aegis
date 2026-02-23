@@ -1647,7 +1647,7 @@ resource "google_monitoring_alert_policy" "study_stuck_alert" {
   conditions {
     display_name = "Stuck study SLA alert log events"
     condition_threshold {
-      filter          = "metric.type = \"logging.googleapis.com/user/${var.project_id}/${google_logging_metric.study_stuck.name}\" AND resource.type = \"cloud_run_revision\""
+      filter          = "metric.type = \"logging.googleapis.com/user/${google_logging_metric.study_stuck.name}\" AND resource.type = \"cloud_run_revision\""
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "0s"
@@ -1682,7 +1682,7 @@ resource "google_monitoring_alert_policy" "pipeline_failure_alert" {
   conditions {
     display_name = "Pipeline failure log events > 3 in 5m"
     condition_threshold {
-      filter          = "metric.type = \"logging.googleapis.com/user/${var.project_id}/${google_logging_metric.pipeline_failures.name}\" AND resource.type = \"cloud_run_revision\""
+      filter          = "metric.type = \"logging.googleapis.com/user/${google_logging_metric.pipeline_failures.name}\" AND resource.type = \"cloud_run_revision\""
       comparison      = "COMPARISON_GT"
       threshold_value = 3
       duration        = "0s"
