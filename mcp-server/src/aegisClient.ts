@@ -55,10 +55,13 @@ const allowedGetPathPatterns = [
   /^\/api\/projects\/[0-9a-fA-F-]{36}\/protocol-templates(?:\?.*)?$/,
   /^\/api\/federation-peers(?:\?.*)?$/,
   /^\/api\/projects\/[0-9a-fA-F-]{36}\/phi-config$/,
-  /^\/api\/projects\/[0-9a-fA-F-]{36}\/anon-profiles$/
+  /^\/api\/projects\/[0-9a-fA-F-]{36}\/anon-profiles$/,
+  /^\/api\/api-keys$/
 ] as const;
 
 const allowedPostPathPatterns = [
+  /^\/api\/api-keys$/,
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/rotate$/,
   /^\/api\/studies\/[0-9.]+\/classify$/,
   /^\/api\/studies\/[0-9.]+\/bids-convert$/,
   /^\/api\/studies\/[0-9.]+\/trigger-export$/,
@@ -82,7 +85,8 @@ const allowedPostPathPatterns = [
 
 const allowedDeletePathPatterns = [
   /^\/api\/shares\/[0-9a-fA-F-]{36}$/,
-  /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels\/[0-9a-fA-F-]{36}$/
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}$/
 ] as const;
 
 const allowedPutPathPatterns = [
@@ -91,7 +95,9 @@ const allowedPutPathPatterns = [
 ] as const;
 
 const allowedPatchPathPatterns = [
-  /^\/api\/shares\/[0-9a-fA-F-]{36}\/extend$/
+  /^\/api\/shares\/[0-9a-fA-F-]{36}\/extend$/,
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/enable$/,
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/disable$/
 ] as const;
 
 function assertAllowedPath(method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH", path: string): void {

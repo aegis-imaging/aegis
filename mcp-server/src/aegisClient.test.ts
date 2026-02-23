@@ -378,6 +378,38 @@ test("AegisApiClient allows phi-config, anon-profiles GET and webhook test POST"
   assert.deepEqual(testResult, {});
 });
 
+test("AegisApiClient allows API key list GET, create POST, rotate POST, enable/disable PATCH, and delete DELETE", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+  const keyId = "550e8400-e29b-41d4-a716-446655440000";
+
+  const list = await client.get("/api/api-keys");
+  const created = await client.post("/api/api-keys", { name: "ci-key" });
+  const rotated = await client.post(`/api/api-keys/${keyId}/rotate`);
+  const enabled = await client.patch(`/api/api-keys/${keyId}/enable`, null);
+  const disabled = await client.patch(`/api/api-keys/${keyId}/disable`, null);
+  const deleted = await client.delete(`/api/api-keys/${keyId}`);
+
+  assert.deepEqual(list, {});
+  assert.deepEqual(created, {});
+  assert.deepEqual(rotated, {});
+  assert.deepEqual(enabled, {});
+  assert.deepEqual(disabled, {});
+  assert.deepEqual(deleted, {});
+});
+
+test("AegisApiClient blocks disallowed API key paths", async () => {
+  const client = new AegisApiClient("http://example.internal", "token");
+  const keyId = "550e8400-e29b-41d4-a716-446655440000";
+
+  // Arbitrary admin path that is not in the allowlist should throw
+  await assert.rejects(
+    () => client.get(`/api/api-keys/${keyId}`),
+    DisallowedPathError
+  );
+});
+
 test.after(() => {
   globalThis.fetch = originalFetch;
 });
