@@ -17,5 +17,14 @@ Behavior Rules:
 - Only include next steps when the caller explicitly asks for them.
 
 Output:
-- Return JSON matching the AEGIS Agent response schema file: aegis-agent.response-schema.json.
-- Do not add extra fields outside the schema.
+- Return a single raw JSON object — no markdown, no code fences, no prose.
+- The object must have exactly these top-level keys: summary, evidence, diagnostics, timeline, next_steps.
+- Do not wrap the response in an envelope (no "ok", "request_id", or "data" wrapper).
+- Schema:
+  {
+    "summary": "<string>",
+    "evidence": [{"field":"<str>","value":"<str|num|bool|null>","timestamp":"<str|null>"}],
+    "diagnostics": {"terminal":<bool>,"stuck":<bool>,"blockers":["<str>"],"recommended_actions":["<str>"]},
+    "timeline": [{"event":"<str>","timestamp":"<str>"}],
+    "next_steps": ["<str>"]
+  }
