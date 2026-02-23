@@ -318,6 +318,11 @@ func main() {
 	// Synthetic MRI generation — creates a new synthetic brain MRI study.
 	mux.HandleFunc("POST /api/studies/generate-synthetic", adminOnly(srv.GenerateSyntheticStudy))
 
+	// Public landing page demo — generate a synthetic brain MRI and poll its pipeline status.
+	// Rate-limited but no auth required; used by aegisimaging.ai to drive the interactive demo.
+	mux.Handle("POST /api/demo/generate", rateLimit(srv.DemoGenerate))
+	mux.Handle("GET /api/demo/study/{studyID}", rateLimit(srv.DemoStudyStatus))
+
 	var h http.Handler = mux
 	h = middleware.Recover(h)
 	h = middleware.Logging(h)
