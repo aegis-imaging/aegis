@@ -10,7 +10,9 @@ import { redactToolArgs } from "./redaction.js";
 import {
   addStudyLabelArgsSchema,
   addStudyNoteArgsSchema,
+  apiKeyIdArgsSchema,
   approveStudyArgsSchema,
+  createApiKeyArgsSchema,
   createShareArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
@@ -886,6 +888,93 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "list_api_keys",
+    description: "List all machine-to-machine API keys. Returns each key's ID, name, prefix (first 14 chars of the key for identification), created_by, enabled status, last_used_at, expires_at, and timestamps. The raw key value is never returned after creation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_api_key",
+    description: "Create a new machine-to-machine API key. Returns the API key record plus the raw key value (shown exactly once — must be copied immediately). The key is used as a Bearer token in the Authorization header. Optionally set an expiry date (RFC3339). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        name: { type: "string", minLength: 1, maxLength: 128, description: "Human-readable key name" },
+        expires_at: { type: "string", format: "date-time", description: "Optional RFC3339 expiry; must be in the future" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "rotate_api_key",
+    description: "Rotate an API key: generates a new cryptographically random key, updates the stored hash and prefix, and returns the new raw key exactly once. The old key immediately stops working. Use this instead of delete+create to avoid an authentication gap in dependent services. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["key_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        key_id: { type: "string", format: "uuid", description: "API key UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "enable_api_key",
+    description: "Enable a disabled API key so it can authenticate requests again. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["key_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        key_id: { type: "string", format: "uuid", description: "API key UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "disable_api_key",
+    description: "Disable an active API key so it can no longer authenticate requests. The key record is preserved and can be re-enabled. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["key_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        key_id: { type: "string", format: "uuid", description: "API key UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_api_key",
+    description: "Permanently delete an API key. This cannot be undone. The key will immediately stop authenticating requests. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["key_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        key_id: { type: "string", format: "uuid", description: "API key UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -1245,6 +1334,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_api_keys") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/api-keys");
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -1324,6 +1419,31 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "test_webhook") {
         const parsedTestWebhook = testWebhookArgsSchema.parse(args);
         return handleTestWebhook(parsedTestWebhook.request_id ?? buildRequestId(), parsedTestWebhook);
+      }
+
+      if (name === "create_api_key") {
+        const parsedCreate = createApiKeyArgsSchema.parse(args);
+        return handleCreateApiKey(parsedCreate.request_id ?? buildRequestId(), parsedCreate);
+      }
+
+      if (name === "rotate_api_key") {
+        const parsedRotate = apiKeyIdArgsSchema.parse(args);
+        return handleRotateApiKey(parsedRotate.request_id ?? buildRequestId(), parsedRotate);
+      }
+
+      if (name === "enable_api_key") {
+        const parsedEnable = apiKeyIdArgsSchema.parse(args);
+        return handleSetApiKeyEnabled(parsedEnable.request_id ?? buildRequestId(), parsedEnable, true);
+      }
+
+      if (name === "disable_api_key") {
+        const parsedDisable = apiKeyIdArgsSchema.parse(args);
+        return handleSetApiKeyEnabled(parsedDisable.request_id ?? buildRequestId(), parsedDisable, false);
+      }
+
+      if (name === "delete_api_key") {
+        const parsedDelete = apiKeyIdArgsSchema.parse(args);
+        return handleDeleteApiKey(parsedDelete.request_id ?? buildRequestId(), parsedDelete);
       }
 
       const parsed = writeArgsSchema.parse(args);
@@ -1448,6 +1568,17 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "test_webhook") {
     return typeof args.subscription_id === "string" ? args.subscription_id : null;
+  }
+  if (
+    name === "rotate_api_key" ||
+    name === "enable_api_key" ||
+    name === "disable_api_key" ||
+    name === "delete_api_key"
+  ) {
+    return typeof args.key_id === "string" ? args.key_id : null;
+  }
+  if (name === "create_api_key") {
+    return typeof args.name === "string" ? args.name : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -2385,6 +2516,92 @@ async function handleTestWebhook(
   return formatSuccess(requestId, "test_webhook", {
     accepted: true,
     subscription_id: parsed.subscription_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleCreateApiKey(
+  requestId: string,
+  parsed: { name: string; expires_at?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_api_key");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_api_key", false, "create_api_key");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name };
+  if (parsed.expires_at) body.expires_at = parsed.expires_at;
+  const data = await client.post("/api/api-keys", body);
+  return formatSuccess(requestId, "create_api_key", {
+    accepted: true,
+    name: parsed.name,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleRotateApiKey(
+  requestId: string,
+  parsed: { key_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "rotate_api_key");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow rotate_api_key", false, "rotate_api_key");
+  }
+
+  const data = await client.post(`/api/api-keys/${encodeURIComponent(parsed.key_id)}/rotate`);
+  return formatSuccess(requestId, "rotate_api_key", {
+    accepted: true,
+    key_id: parsed.key_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleSetApiKeyEnabled(
+  requestId: string,
+  parsed: { key_id: string; reason: string; confirm: true },
+  enabled: boolean
+) {
+  const toolName = enabled ? "enable_api_key" : "disable_api_key";
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, toolName);
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", `Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow ${toolName}`, false, toolName);
+  }
+
+  const action = enabled ? "enable" : "disable";
+  const data = await client.patch(`/api/api-keys/${encodeURIComponent(parsed.key_id)}/${action}`, null);
+  return formatSuccess(requestId, toolName, {
+    accepted: true,
+    key_id: parsed.key_id,
+    enabled,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleDeleteApiKey(
+  requestId: string,
+  parsed: { key_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_api_key");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_api_key", false, "delete_api_key");
+  }
+
+  const data = await client.delete(`/api/api-keys/${encodeURIComponent(parsed.key_id)}`);
+  return formatSuccess(requestId, "delete_api_key", {
+    accepted: true,
+    key_id: parsed.key_id,
     reason: parsed.reason,
     result: data
   });
