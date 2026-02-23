@@ -108,12 +108,12 @@ echo "==> Creating trigger '$TRIGGER_NAME'..."
 # Check if the trigger already exists
 if "$GCLOUD" builds triggers describe "$TRIGGER_NAME" \
     --project="$PROJECT_ID" \
-    --region=global \
+    --region="$REGION" \
     &>/dev/null 2>&1; then
   echo "    Trigger already exists — deleting and recreating to apply latest config..."
   "$GCLOUD" builds triggers delete "$TRIGGER_NAME" \
     --project="$PROJECT_ID" \
-    --region=global \
+    --region="$REGION" \
     --quiet
 fi
 
@@ -125,7 +125,7 @@ fi
   --repo-owner="$REPO_OWNER" \
   --branch-pattern="^develop$" \
   --build-config="cloudbuild.yaml" \
-  --region=global
+  --region="$REGION"
 
 echo ""
 echo "==> Done. Cloud Build trigger '$TRIGGER_NAME' is active."
