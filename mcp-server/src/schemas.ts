@@ -232,6 +232,21 @@ export const testWebhookArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const createApiKeyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  name: z.string().min(1).max(128),
+  expires_at: z.string().datetime().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const apiKeyIdArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  key_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -266,7 +281,8 @@ export const readToolNames = [
   "list_protocol_templates",
   "list_federation_peers",
   "get_phi_config",
-  "list_anon_profiles"
+  "list_anon_profiles",
+  "list_api_keys"
 ] as const;
 
 export const writeToolNames = [
@@ -292,7 +308,12 @@ export const writeToolNames = [
   "extend_share",
   "export_project_batch",
   "reactivate_study",
-  "test_webhook"
+  "test_webhook",
+  "create_api_key",
+  "rotate_api_key",
+  "enable_api_key",
+  "disable_api_key",
+  "delete_api_key"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
