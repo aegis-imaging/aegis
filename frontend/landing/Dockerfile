@@ -25,13 +25,15 @@ RUN npm ci --workspace=@aegis/landing --ignore-scripts
 # Defaults point to production; override with --build-arg when building for other environments.
 ARG VITE_API_BASE_URL=https://api.aegisimaging.ai
 ARG VITE_OHIF_BASE_URL=https://ohif.aegisimaging.ai
-# VITE_INVITE_TOKEN: when set, gates the landing page behind an invite code.
-# Leave empty (default) for a fully public site. Set to a secret token for pilot access control.
-# Example: --build-arg VITE_INVITE_TOKEN=AEGIS-PILOT-2026
-ARG VITE_INVITE_TOKEN=
+# VITE_INVITE_GATE_ENABLED: set to 'true' to enable the server-side invite code gate.
+# Leave 'false' (default) for a fully public site.
+# Codes are managed via POST /api/invite-codes and validated server-side — no secret
+# is baked into the bundle.
+# Example: --build-arg VITE_INVITE_GATE_ENABLED=true
+ARG VITE_INVITE_GATE_ENABLED=false
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_OHIF_BASE_URL=$VITE_OHIF_BASE_URL
-ENV VITE_INVITE_TOKEN=$VITE_INVITE_TOKEN
+ENV VITE_INVITE_GATE_ENABLED=$VITE_INVITE_GATE_ENABLED
 
 # Build the Vite app
 WORKDIR /app/frontend/landing

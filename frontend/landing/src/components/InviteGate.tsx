@@ -8,23 +8,47 @@ interface InviteGateProps {
 
 /**
  * InviteGate — wraps the full landing page content and shows a private-beta
- * access gate when VITE_INVITE_TOKEN is configured and the visitor has not
- * provided a valid invite code.
+ * access gate when VITE_INVITE_GATE_ENABLED=true is set at build time and the
+ * visitor has not provided a valid invite code.
  *
- * If VITE_INVITE_TOKEN is not set the gate is transparent (dev / open mode).
+ * Codes are validated server-side via POST /api/invite/validate — no secret
+ * token is baked into the client bundle.
+ *
+ * If VITE_INVITE_GATE_ENABLED is not 'true' the gate is transparent (dev / open mode).
  */
 export function InviteGate({ children }: InviteGateProps) {
-  const { admitted, gatingEnabled, submitCode } = useInviteCode()
+  const { admitted, gatingEnabled, autoSubmitting, submitCode } = useInviteCode()
   const [code, setCode] = useState('')
   const [error, setError] = useState(false)
   const [shaking, setShaking] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   // Transparent when gating is disabled or visitor is already admitted.
   if (!gatingEnabled || admitted) return <>{children}</>
 
-  function handleSubmit(e: React.FormEvent) {
+  // Show a brief spinner while auto-submitting a ?invite= URL param.
+  if (autoSubmitting) return (
+    <div style={{
+      minHeight: '100vh', background: 'var(--gradient-hero)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        width: '40px', height: '40px', borderRadius: '50%',
+        border: '3px solid rgba(59,130,246,0.2)',
+        borderTop: '3px solid #3b82f6',
+        animation: 'spin 1s linear infinite',
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (submitCode(code)) {
+    if (!code.trim() || submitting) return
+    setSubmitting(true)
+    const valid = await submitCode(code)
+    setSubmitting(false)
+    if (valid) {
       setError(false)
     } else {
       setError(true)
@@ -157,7 +181,7 @@ export function InviteGate({ children }: InviteGateProps) {
                 type="text"
                 value={code}
                 onChange={(e) => { setCode(e.target.value); setError(false) }}
-                placeholder="e.g. AEGIS-PILOT-2026"
+                placeholder="Enter invite code"
                 autoFocus
                 autoComplete="off"
                 spellCheck={false}
@@ -192,23 +216,23 @@ export function InviteGate({ children }: InviteGateProps) {
 
             <button
               type="submit"
-              disabled={!code.trim()}
+              disabled={!code.trim() || submitting}
               style={{
                 width: '100%',
                 padding: '12px 24px',
-                background: code.trim() ? 'var(--gradient-cta)' : 'rgba(37, 99, 235, 0.3)',
+                background: code.trim() && !submitting ? 'var(--gradient-cta)' : 'rgba(37, 99, 235, 0.3)',
                 border: 'none',
                 borderRadius: 'var(--radius-md)',
                 color: 'var(--color-white)',
                 fontSize: 'var(--text-sm)',
                 fontWeight: 'var(--font-semibold)',
                 fontFamily: 'var(--font-sans)',
-                cursor: code.trim() ? 'pointer' : 'not-allowed',
+                cursor: code.trim() && !submitting ? 'pointer' : 'not-allowed',
                 transition: 'all var(--transition-fast)',
                 letterSpacing: '0.02em',
               }}
             >
-              Access Site
+              {submitting ? 'Checking…' : 'Access Site'}
             </button>
           </form>
         </div>

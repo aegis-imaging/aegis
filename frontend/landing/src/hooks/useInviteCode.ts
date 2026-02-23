@@ -1,67 +1,79 @@
 import { useState, useEffect } from 'react'
 
-const STORAGE_KEY = 'aegis_invite_token'
-const REQUIRED_TOKEN = import.meta.env.VITE_INVITE_TOKEN as string | undefined
+const STORAGE_KEY = 'aegis_invited'
+
+// Gate is enabled when VITE_INVITE_GATE_ENABLED=true is baked in at build time.
+// When disabled (default for dev), the gate is transparent.
+const GATE_ENABLED = import.meta.env.VITE_INVITE_GATE_ENABLED === 'true'
+
+// API base URL — used to call POST /api/invite/validate.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
 
 /**
- * Returns whether the current visitor has a valid invite code.
+ * Controls landing page access via server-side invite codes.
  *
  * Access control logic:
- * 1. If VITE_INVITE_TOKEN is not set (empty/undefined), everyone is admitted (dev/open mode).
- * 2. If set, check URL ?invite=<token> first → save to localStorage on match.
- * 3. Fall back to checking localStorage.aegis_invite_token.
+ * 1. If VITE_INVITE_GATE_ENABLED != 'true', everyone is admitted (dev / open mode).
+ * 2. On page load, check localStorage for a prior admission token.
+ * 3. On code submit, call POST /api/invite/validate — the server checks the code
+ *    against the invite_codes table (no secret token baked into the bundle).
+ * 4. On success, save 'admitted' to localStorage so the user isn't re-prompted.
+ *
+ * URL param ?invite=<code> auto-submits on page load for direct share links.
  */
 export function useInviteCode() {
-  // If no token is configured, everyone is admitted.
-  const gatingEnabled = Boolean(REQUIRED_TOKEN)
+  const gatingEnabled = GATE_ENABLED
 
-  function checkAccess(): boolean {
-    if (!gatingEnabled) return true
-
-    // Check URL param first.
-    const params = new URLSearchParams(window.location.search)
-    const urlToken = params.get('invite')
-    if (urlToken && urlToken === REQUIRED_TOKEN) {
-      try {
-        localStorage.setItem(STORAGE_KEY, urlToken)
-      } catch { /* localStorage may be unavailable */ }
-      return true
-    }
-
-    // Check stored token.
+  function isStoredAdmitted(): boolean {
     try {
-      return localStorage.getItem(STORAGE_KEY) === REQUIRED_TOKEN
+      return localStorage.getItem(STORAGE_KEY) === 'admitted'
     } catch {
       return false
     }
   }
 
-  const [admitted, setAdmitted] = useState(checkAccess)
+  const [admitted, setAdmitted] = useState<boolean>(
+    gatingEnabled ? isStoredAdmitted() : true
+  )
+  const [autoSubmitting, setAutoSubmitting] = useState(false)
 
-  // Re-check if URL params change (e.g., SPA navigation).
+  // On mount: auto-submit ?invite=<code> from URL if present and not already admitted.
   useEffect(() => {
-    setAdmitted(checkAccess())
+    if (!gatingEnabled || admitted) return
+    const params = new URLSearchParams(window.location.search)
+    const urlCode = params.get('invite')
+    if (!urlCode) return
+
+    setAutoSubmitting(true)
+    submitCode(urlCode).finally(() => setAutoSubmitting(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function submitCode(code: string): boolean {
+  async function submitCode(code: string): Promise<boolean> {
     if (!gatingEnabled) return true
-    if (code.trim() === REQUIRED_TOKEN) {
-      try {
-        localStorage.setItem(STORAGE_KEY, code.trim())
-      } catch { /* ignore */ }
-      setAdmitted(true)
-      return true
+    try {
+      const res = await fetch(`${API_BASE}/api/invite/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim() }),
+      })
+      if (!res.ok) return false
+      const data = (await res.json()) as { valid: boolean }
+      if (data.valid) {
+        try { localStorage.setItem(STORAGE_KEY, 'admitted') } catch { /* ignore */ }
+        setAdmitted(true)
+        return true
+      }
+    } catch {
+      /* network error — treat as invalid */
     }
     return false
   }
 
   function revoke() {
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-    } catch { /* ignore */ }
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
     setAdmitted(false)
   }
 
-  return { admitted, gatingEnabled, submitCode, revoke }
+  return { admitted, gatingEnabled, autoSubmitting, submitCode, revoke }
 }
