@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
+import { TCIAPanel } from './components/TCIAPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'users' | 'api_keys' | 'invite_codes'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes'
 
 type APIKey = {
   id: string
@@ -5727,6 +5728,7 @@ export function App() {
     { kind: 'nav', label: 'Notifications',         tab: 'notifications',      icon: '🔔' },
     { kind: 'nav', label: 'Projects',              tab: 'projects',           icon: '📁' },
     { kind: 'nav', label: 'Federation Peers',      tab: 'federation',         icon: '🌐' },
+    { kind: 'nav', label: 'TCIA Import',           tab: 'tcia_import',        icon: '🔬' },
     ...(isAdmin ? [
       { kind: 'nav' as const, label: 'Users',        tab: 'users' as AppTab,         icon: '👤' },
       { kind: 'nav' as const, label: 'API Keys',     tab: 'api_keys' as AppTab,      icon: '🔑' },
@@ -6168,6 +6170,13 @@ export function App() {
         >
           Federation
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'tcia_import' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('tcia_import')}
+        >
+          TCIA Import
+        </button>
         {isAdmin && (
           <button
             type="button"
@@ -6570,6 +6579,9 @@ export function App() {
 
       {/* Federation tab */}
       {tab === 'federation' && <FederationPanel isAdmin={isAdmin} />}
+
+      {/* TCIA Import tab */}
+      {tab === 'tcia_import' && <TCIAPanel isAdmin={isAdmin} />}
 
       {/* Users tab — admin only */}
       {tab === 'users' && isAdmin && <UsersPanel />}
