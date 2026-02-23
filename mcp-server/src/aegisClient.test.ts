@@ -289,6 +289,53 @@ test("AegisApiClient rejects disallowed PUT paths", async () => {
   assert.equal(fetchCalls, 0);
 });
 
+test("AegisApiClient allows DICOM tags GET path", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+
+  const result = await client.get("/api/studies/1.2.840.10008.5.1/dicom-tags");
+  assert.deepEqual(result, {});
+});
+
+test("AegisApiClient allows PATCH share extend path", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+  const uuid = "550e8400-e29b-41d4-a716-446655440000";
+
+  const result = await client.patch(`/api/shares/${uuid}/extend`, { extend_hours: 48 });
+  assert.deepEqual(result, {});
+});
+
+test("AegisApiClient rejects disallowed PATCH paths", async () => {
+  let fetchCalls = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+
+  await assert.rejects(client.patch("/api/studies/1.2.3/notes", {}), DisallowedPathError); // notes is POST, not PATCH
+  await assert.rejects(client.patch("/api/admin/settings", {}), DisallowedPathError);
+  assert.equal(fetchCalls, 0);
+});
+
+test("AegisApiClient allows study notes POST and project export-batch POST paths", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+  const studyId = "550e8400-e29b-41d4-a716-446655440000";
+  const projectId = "660e8400-e29b-41d4-a716-446655440001";
+
+  const note = await client.post(`/api/studies/${studyId}/notes`, { note: "Triage note for this study" });
+  const batch = await client.post(`/api/projects/${projectId}/export-batch`);
+
+  assert.deepEqual(note, {});
+  assert.deepEqual(batch, {});
+});
+
 test.after(() => {
   globalThis.fetch = originalFetch;
 });

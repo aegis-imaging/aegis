@@ -178,6 +178,34 @@ export const setStudySubjectArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const addStudyNoteArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  note: z.string().min(1).max(2000),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const extendShareArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  share_id: z.string().uuid(),
+  extend_hours: z.number().int().min(1).max(8760),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const exportProjectBatchArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const getStudyDicomTagsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_instance_uid: z.string().min(4).max(256).regex(/^[0-9.]+$/)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -206,7 +234,8 @@ export const readToolNames = [
   "get_export_analytics",
   "list_webhook_subscriptions",
   "get_webhook_deliveries",
-  "get_ingestion_timeline"
+  "get_ingestion_timeline",
+  "get_study_dicom_tags"
 ] as const;
 
 export const writeToolNames = [
@@ -227,7 +256,10 @@ export const writeToolNames = [
   "reassign_study",
   "add_study_label",
   "remove_study_label",
-  "set_study_subject"
+  "set_study_subject",
+  "add_study_note",
+  "extend_share",
+  "export_project_batch"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
