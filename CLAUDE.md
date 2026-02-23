@@ -188,7 +188,56 @@ cd frontend/admin-dashboard && npm install && npm run dev  # runs on :3001, prox
 cd frontend/landing && npm install && npm run dev    # runs on :3003
 ```
 
-Static marketing site for aegisimaging.ai. Deployed to Vercel, separate from the GCP/AWS backend.
+Static marketing site for aegisimaging.ai. Deployed on GCP Cloud Run (`aegis-prod-landing`).
+
+**Invite Code Gate** — server-side access control for the private beta. When `VITE_INVITE_GATE_ENABLED=true` is baked in at build time, all visitors see a code entry form before the site content. Codes are validated via `POST /api/invite/validate` — no secret is stored in the client bundle.
+
+| Component | Description |
+|-----------|-------------|
+| `frontend/landing/src/hooks/useInviteCode.ts` | State hook — calls API for validation, persists admission in localStorage |
+| `frontend/landing/src/components/InviteGate.tsx` | Full-screen gate UI shown to unadmitted visitors |
+| `api/handler/invite_code.go` | Go handler for validate (public) + CRUD (admin-only) |
+| `api/model/invite_code.go` | Model — random code generation (`XXXX-XXXX-XXXX` format), validate+record usage |
+| Migration 036 | `invite_codes` table (`id`, `code`, `label`, `enabled`, `created_at`, `used_at`, `used_by_ip`) |
+
+**API endpoints:**
+- `POST /api/invite/validate` — public, rate-limited; `{"code":"..."}` → `{"valid":true/false}`
+- `GET /api/invite-codes` — admin; list all codes with usage stats
+- `POST /api/invite-codes` — admin; `{"label":"Dr. Smith"}` → generates new `XXXX-XXXX-XXXX` code
+- `POST /api/invite-codes/{id}/revoke` — admin; disables a code (keeps record)
+- `DELETE /api/invite-codes/{id}` — admin; permanently removes a code
+
+**Dockerfile build arg:**
+
+| Arg | Default | Notes |
+|-----|---------|-------|
+| `VITE_INVITE_GATE_ENABLED` | `false` | Set to `true` to enable the gate; `false` = open access (dev default) |
+| `VITE_API_BASE_URL` | `https://api.aegisimaging.ai` | API base for invite validation calls |
+
+**Deploy the gated landing page:**
+```bash
+docker build --platform linux/amd64 \
+  --build-arg VITE_INVITE_GATE_ENABLED=true \
+  --build-arg VITE_API_BASE_URL=https://api.aegisimaging.ai \
+  -f frontend/landing/Dockerfile \
+  -t us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/landing:gated .
+docker push us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/landing:gated
+gcloud run services update aegis-prod-landing --image .../landing:gated --region us-central1
+```
+
+**Generate invite codes (after deployment):**
+```bash
+# Create a code for a specific person
+curl -X POST https://api.aegisimaging.ai/api/invite-codes \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"label": "Dr. Smith – Stanford"}'
+# Returns: {"id":"...","code":"ABCD-EFGH-IJKL","label":"...","enabled":true,...}
+
+# Send the invite URL: https://aegisimaging.ai/?invite=ABCD-EFGH-IJKL
+```
+
+**CORS:** `aegisimaging.ai` and `www.aegisimaging.ai` are included in the default `ALLOWED_ORIGINS` so the invite validation call works cross-origin.
 
 **Contact form** has two delivery paths (both use the same `/api/contact` endpoint):
 
