@@ -2189,6 +2189,12 @@ function StudyRow({
     onAction()
   }
 
+  const handleDelete = async () => {
+    if (!confirm(`Permanently delete study ${uidShort(study.study_instance_uid)}?\n\nThis removes all DICOM files and cannot be undone.`)) return
+    await fetch(`/api/studies/${study.id}`, { method: 'DELETE' })
+    onAction()
+  }
+
   const canApprove    = !['approved', 'rejected', 'expired'].includes(study.status)
   const canReject     = !['rejected', 'expired'].includes(study.status)
   const canReactivate = study.status === 'expired'
@@ -2300,6 +2306,11 @@ function StudyRow({
             <button type="button" className="btn btn--agent" onClick={onAskAgent}>
               Ask agent
             </button>
+            {isAdmin && (
+              <button type="button" className="btn btn--revoke" onClick={handleDelete} title="Permanently delete study and all DICOM files">
+                Delete
+              </button>
+            )}
           </div>
         </td>
       </tr>
