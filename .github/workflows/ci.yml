@@ -82,7 +82,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Syntax check (harness scripts)
-        run: python -m py_compile scripts/cloud_smoke_test.py scripts/dimse_pacs_e2e_harness.py
+        run: python -m py_compile scripts/cloud_smoke_test.py scripts/dimse_pacs_e2e_harness.py scripts/tcia_download.py
 
   shell-scripts:
     name: "Shell script syntax (${{ matrix.script }})"
