@@ -56,7 +56,7 @@ jobs:
             --pipeline-timeout "${{ inputs.pipeline_timeout_seconds }}"
           )
 
-          if [ -n "${ADMIN_HEADER}" ]; then
+          if [ -n "${ADMIN_HEADER:-}" ]; then
             CMD+=(--admin-header "${ADMIN_HEADER}")
           fi
 
@@ -64,7 +64,7 @@ jobs:
             CMD+=(--iap-email "${{ inputs.iap_email }}")
           fi
 
-          if [ "${{ inputs.require_auth_context }}" = "true" ] && [ -z "${ADMIN_HEADER}" ] && [ -z "${{ inputs.iap_email }}" ]; then
+          if [ "${{ inputs.require_auth_context }}" = "true" ] && [ -z "${ADMIN_HEADER:-}" ] && [ -z "${{ inputs.iap_email }}" ]; then
             echo "error: provide CLOUD_SMOKE_ADMIN_HEADER secret or iap_email input for authenticated endpoints." >&2
             exit 1
           fi
