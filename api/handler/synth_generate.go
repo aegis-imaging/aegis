@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aegis-imaging/aegis/api/importer"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -111,14 +110,11 @@ func (s *Server) GenerateSyntheticStudy(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Import the generated DICOM files as a study using the existing batch import path.
-	result, err := importer.Run(r.Context(), s.db, s.store, importer.Options{
-		Dir:         svcResp.OutputDir,
-		ProjectSlug: req.ProjectSlug,
-		Source:      "internal",
-	})
+	// Import the generated DICOM files via the storage client (not GCS FUSE)
+	// to avoid stale stat-cache issues with freshly-written objects.
+	result, err := importSynthStudy(r.Context(), s.db, s.store, svcResp.StudyUID, req.ProjectSlug)
 	if err != nil {
-		log.Printf("synth_generate: import failed (dir=%s): %v", svcResp.OutputDir, err)
+		log.Printf("synth_generate: import failed (uid=%s): %v", svcResp.StudyUID, err)
 		s.writeError(w, http.StatusInternalServerError, "failed to import generated study")
 		return
 	}

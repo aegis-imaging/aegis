@@ -3,7 +3,7 @@ WORKDIR /app
 COPY go.mod go.sum* ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /aegis-api .
+RUN CGO_ENABLED=0 GOOS=linux go build -p 2 -o /aegis-api .
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /aegis-api /aegis-api

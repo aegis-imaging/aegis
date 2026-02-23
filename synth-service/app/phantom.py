@@ -166,6 +166,10 @@ def _build_dicom_slice(
     file_meta.MediaStorageSOPClassUID = "1.2.840.10008.5.1.4.1.1.4"
     file_meta.MediaStorageSOPInstanceUID = sop_uid
     file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    # FileMetaInformationVersion is required for a complete File Meta Information
+    # group; pydicom 3.x omits MetaElementGroupLength (0002,0000) unless the
+    # file meta is complete and enforce_file_format=True is passed on save.
+    file_meta.FileMetaInformationVersion = b"\x00\x01"
 
     ds = FileDataset(output_path, {}, file_meta=file_meta, preamble=b"\x00" * 128)
     ds.is_implicit_VR = False
@@ -291,7 +295,13 @@ def write_dicom_series(
             size=size,
             output_path=str(fname),
         )
-        ds.save_as(str(fname))
+        # enforce_file_format=True (pydicom ≥ 3.0) ensures MetaElementGroupLength
+        # (0002,0000) is written, making the file valid for strict DICOM parsers.
+        try:
+            ds.save_as(str(fname), enforce_file_format=True)
+        except TypeError:
+            # pydicom < 3.0 — save_as writes MetaElementGroupLength automatically.
+            ds.save_as(str(fname))
         paths.append(str(fname))
 
     return paths
