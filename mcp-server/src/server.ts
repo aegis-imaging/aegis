@@ -9,14 +9,18 @@ import { InMemoryRateLimiter } from "./rateLimiter.js";
 import { redactToolArgs } from "./redaction.js";
 import {
   addStudyLabelArgsSchema,
+  addStudyNoteArgsSchema,
   approveStudyArgsSchema,
   createShareArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
+  exportProjectBatchArgsSchema,
+  extendShareArgsSchema,
   getAuditActorsArgsSchema,
   getIngestionTimelineArgsSchema,
   getShareDownloadsArgsSchema,
   getStuckStudiesArgsSchema,
+  getStudyDicomTagsArgsSchema,
   getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
   listAuditArgsSchema,
@@ -719,6 +723,70 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "get_study_dicom_tags",
+    description: "Get all non-pixel DICOM tags from the first file of a study. Returns {tags: [{tag, keyword, vr, value}], file, store}. Use for debugging de-identification issues, verifying protocol parameters, or inspecting tag values after defacing. Reads from the study's current dicom_store (raw before defacing, clean after).",
+    inputSchema: {
+      type: "object",
+      required: ["study_instance_uid"],
+      properties: {
+        request_id: { type: "string" },
+        study_instance_uid: {
+          type: "string",
+          pattern: "^[0-9.]+$",
+          description: "DICOM StudyInstanceUID (dot-separated numeric string)"
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "add_study_note",
+    description: "Add a free-text operator note to a study (max 2000 characters). Notes are stored in the audit trail as 'study.note' entries — visible in the study audit tab. Use for triage observations, incident notes, or workflow decisions. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "note", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        note: { type: "string", minLength: 1, maxLength: 2000, description: "Operator note text (max 2000 chars)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "extend_share",
+    description: "Extend the expiry of an export share by N hours. Works on both active and already-expired (but not revoked) shares — the extension is computed from max(current_expires_at, now). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["share_id", "extend_hours", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        share_id: { type: "string", format: "uuid" },
+        extend_hours: { type: "integer", minimum: 1, maximum: 8760, description: "Hours to extend from the later of expires_at or now" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "export_project_batch",
+    description: "Trigger batch export forwarding for all eligible studies in a project: approved studies with export_required=true and export_status in (pending, failed). Returns {dispatched, study_ids, message}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID to batch-export" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -1041,6 +1109,13 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_study_dicom_tags") {
+      const parsed = getStudyDicomTagsArgsSchema.parse(args);
+      const uid = encodeURIComponent(parsed.study_instance_uid);
+      const data = await client.get(`/api/studies/${uid}/dicom-tags`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -1095,6 +1170,21 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "set_study_subject") {
         const parsedSubject = setStudySubjectArgsSchema.parse(args);
         return handleSetStudySubject(parsedSubject.request_id ?? buildRequestId(), parsedSubject);
+      }
+
+      if (name === "add_study_note") {
+        const parsedNote = addStudyNoteArgsSchema.parse(args);
+        return handleAddStudyNote(parsedNote.request_id ?? buildRequestId(), parsedNote);
+      }
+
+      if (name === "extend_share") {
+        const parsedExtend = extendShareArgsSchema.parse(args);
+        return handleExtendShare(parsedExtend.request_id ?? buildRequestId(), parsedExtend);
+      }
+
+      if (name === "export_project_batch") {
+        const parsedBatch = exportProjectBatchArgsSchema.parse(args);
+        return handleExportProjectBatch(parsedBatch.request_id ?? buildRequestId(), parsedBatch);
       }
 
       const parsed = writeArgsSchema.parse(args);
@@ -1205,12 +1295,16 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
     name === "reassign_study" ||
     name === "add_study_label" ||
     name === "remove_study_label" ||
-    name === "set_study_subject"
+    name === "set_study_subject" ||
+    name === "add_study_note"
   ) {
     return typeof args.study_id === "string" ? args.study_id : null;
   }
-  if (name === "revoke_share") {
+  if (name === "revoke_share" || name === "extend_share") {
     return typeof args.share_id === "string" ? args.share_id : null;
+  }
+  if (name === "export_project_batch") {
+    return typeof args.project_id === "string" ? args.project_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -2038,6 +2132,67 @@ async function handleSetStudySubject(
     accepted: true,
     study_id: parsed.study_id,
     subject_id: parsed.subject_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleAddStudyNote(
+  requestId: string,
+  parsed: { study_id: string; note: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "add_study_note");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow add_study_note", false, "add_study_note");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/notes`, { note: parsed.note });
+  return formatSuccess(requestId, "add_study_note", {
+    accepted: true,
+    study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleExtendShare(
+  requestId: string,
+  parsed: { share_id: string; extend_hours: number; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "extend_share");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow extend_share", false, "extend_share");
+  }
+
+  const data = await client.patch(`/api/shares/${encodeURIComponent(parsed.share_id)}/extend`, { extend_hours: parsed.extend_hours });
+  return formatSuccess(requestId, "extend_share", {
+    accepted: true,
+    share_id: parsed.share_id,
+    extend_hours: parsed.extend_hours,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleExportProjectBatch(
+  requestId: string,
+  parsed: { project_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "export_project_batch");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow export_project_batch", false, "export_project_batch");
+  }
+
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/export-batch`);
+  return formatSuccess(requestId, "export_project_batch", {
+    accepted: true,
+    project_id: parsed.project_id,
     reason: parsed.reason,
     result: data
   });
