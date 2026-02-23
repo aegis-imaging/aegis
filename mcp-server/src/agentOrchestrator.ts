@@ -1,18 +1,27 @@
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 import { AegisApiClient } from "./aegisClient.js";
 
-type AgentData = {
-  summary: string;
-  evidence: Array<{ field: string; value: string | number | boolean | null; timestamp?: string | null }>;
-  diagnostics: {
-    terminal: boolean;
-    stuck: boolean;
-    blockers: string[];
-    recommended_actions: string[];
-  };
-  timeline: Array<{ event: string; timestamp: string }>;
-  next_steps: string[];
-};
+const agentDataSchema = z.object({
+  summary: z.string(),
+  evidence: z.array(
+    z.object({
+      field: z.string(),
+      value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+      timestamp: z.string().nullable().optional()
+    })
+  ),
+  diagnostics: z.object({
+    terminal: z.boolean(),
+    stuck: z.boolean(),
+    blockers: z.array(z.string()),
+    recommended_actions: z.array(z.string())
+  }),
+  timeline: z.array(z.object({ event: z.string(), timestamp: z.string() })),
+  next_steps: z.array(z.string())
+});
+
+type AgentData = z.infer<typeof agentDataSchema>;
 
 type AgentRequest = {
   request_id?: string;
@@ -77,32 +86,30 @@ function stripCodeFence(input: string): string {
 
 function parseAgentData(content: string): AgentData {
   const cleaned = stripCodeFence(content);
-  const parsed = JSON.parse(cleaned) as Partial<AgentData>;
 
-  if (!parsed || typeof parsed.summary !== "string") {
-    throw new Error("Invalid agent response: missing summary");
-  }
-  if (!Array.isArray(parsed.evidence) || !parsed.diagnostics || !Array.isArray(parsed.timeline) || !Array.isArray(parsed.next_steps)) {
-    throw new Error("Invalid agent response: missing sections");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(cleaned);
+  } catch {
+    throw new Error(`Agent returned non-JSON content: ${cleaned.slice(0, 120)}`);
   }
 
-  return {
-    summary: parsed.summary,
-    evidence: parsed.evidence,
-    diagnostics: {
-      terminal: Boolean(parsed.diagnostics.terminal),
-      stuck: Boolean(parsed.diagnostics.stuck),
-      blockers: Array.isArray(parsed.diagnostics.blockers) ? parsed.diagnostics.blockers.map(String) : [],
-      recommended_actions: Array.isArray(parsed.diagnostics.recommended_actions)
-        ? parsed.diagnostics.recommended_actions.map(String)
-        : []
-    },
-    timeline: parsed.timeline.map((item) => ({
-      event: String((item as { event?: string }).event ?? ""),
-      timestamp: String((item as { timestamp?: string }).timestamp ?? "")
-    })),
-    next_steps: parsed.next_steps.map(String)
-  };
+  // Unwrap full-envelope responses: {"ok":true,"data":{summary,...}} → {summary,...}
+  const candidate =
+    raw &&
+    typeof raw === "object" &&
+    "data" in (raw as object) &&
+    typeof (raw as Record<string, unknown>).data === "object" &&
+    !("summary" in (raw as object))
+      ? (raw as Record<string, unknown>).data
+      : raw;
+
+  const result = agentDataSchema.safeParse(candidate);
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Invalid agent response: ${issues}`);
+  }
+  return result.data;
 }
 
 function buildToolHandlers(client: AegisApiClient): Record<string, ToolHandler> {
