@@ -1868,3 +1868,143 @@
   white-space: nowrap;
   font-size: 0.85em;
 }
+
+/* ── TCIA Import Panel ──────────────────────────────────────────────────────── */
+
+.tcia-panel {
+  padding: 24px;
+  max-width: 1100px;
+}
+
+.tcia-header h2 {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.tcia-subtitle {
+  margin: 0 0 20px;
+  color: #6b7280;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.tcia-subtitle a {
+  color: #0d9488;
+  text-decoration: none;
+}
+
+.tcia-subtitle a:hover {
+  text-decoration: underline;
+}
+
+.tcia-search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.tcia-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.tcia-field--narrow {
+  min-width: 90px;
+  max-width: 110px;
+}
+
+.tcia-field--action {
+  min-width: auto;
+  justify-content: flex-end;
+}
+
+.tcia-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.tcia-search-error {
+  margin-bottom: 12px;
+}
+
+.tcia-results {
+  margin-top: 8px;
+}
+
+.tcia-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.tcia-count {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.tcia-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.tcia-table {
+  width: 100%;
+  min-width: 600px;
+}
+
+.tcia-table td,
+.tcia-table th {
+  padding: 8px 12px;
+  font-size: 0.875rem;
+}
+
+.tcia-desc {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tcia-uid {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.tcia-row--selected {
+  background: #f0fdf9;
+}
+
+.tcia-progress {
+  margin-top: 24px;
+}
+
+.tcia-progress h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+
+.tcia-error-text {
+  color: #9a3412;
+  font-size: 0.875rem;
+}
+
+.tcia-attribution {
+  margin-top: 32px;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.tcia-attribution a {
+  color: #9ca3af;
+  text-decoration: underline;
+}
