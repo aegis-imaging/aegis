@@ -1742,7 +1742,9 @@ async function main(): Promise<void> {
       llmApiKey: config.agentLlmApiKey,
       llmModel: config.agentLlmModel,
       llmTemperature: config.agentLlmTemperature,
-      llmMaxTokens: config.agentLlmMaxTokens
+      llmMaxTokens: config.agentLlmMaxTokens,
+      llmUseGcpAuth: config.agentLlmUseGcpAuth,
+      llmGcpProject: config.agentLlmGcpProject
     });
   }
   const transport = new StdioServerTransport();

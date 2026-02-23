@@ -28,6 +28,8 @@ type LlmConfig = {
   model: string;
   temperature: number;
   maxTokens: number;
+  useGcpAuth: boolean;
+  gcpProject?: string;
 };
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
@@ -244,17 +246,28 @@ type LlmMessage = {
   tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
 };
 
+async function fetchGcpAccessToken(): Promise<string> {
+  const url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
+  const response = await fetch(url, { headers: { "Metadata-Flavor": "Google" } });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch GCP access token: ${response.status}`);
+  }
+  const data = (await response.json()) as { access_token: string };
+  return data.access_token;
+}
+
 async function callLlm(
   config: LlmConfig,
   messages: LlmMessage[],
   tools: unknown
 ): Promise<{ content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> }> {
   const url = `${config.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const authToken = config.useGcpAuth ? await fetchGcpAccessToken() : config.apiKey;
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`
+      Authorization: `Bearer ${authToken}`
     },
     body: JSON.stringify({
       model: config.model,
@@ -353,7 +366,25 @@ export function buildLlmConfig(env: {
   model: string | undefined;
   temperature: number;
   maxTokens: number;
+  useGcpAuth: boolean;
+  gcpProject?: string;
 }): LlmConfig | null {
+  if (env.useGcpAuth) {
+    if (!env.gcpProject) {
+      return null;
+    }
+    const vertexBaseUrl = `https://us-central1-aiplatform.googleapis.com/v1beta1/projects/${env.gcpProject}/locations/us-central1/endpoints/openapi`;
+    return {
+      baseUrl: env.baseUrl || vertexBaseUrl,
+      apiKey: "",
+      model: env.model || "google/gemini-2.0-flash-001",
+      temperature: env.temperature,
+      maxTokens: env.maxTokens,
+      useGcpAuth: true,
+      gcpProject: env.gcpProject
+    };
+  }
+
   if (!env.baseUrl || !env.apiKey) {
     return null;
   }
@@ -363,6 +394,7 @@ export function buildLlmConfig(env: {
     apiKey: env.apiKey,
     model: env.model || "gpt-4.1-mini",
     temperature: env.temperature,
-    maxTokens: env.maxTokens
+    maxTokens: env.maxTokens,
+    useGcpAuth: false
   };
 }

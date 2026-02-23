@@ -15,6 +15,8 @@ export type AgentHttpConfig = {
   llmModel: string;
   llmTemperature: number;
   llmMaxTokens: number;
+  llmUseGcpAuth: boolean;
+  llmGcpProject?: string;
 };
 
 type AgentRequest = {
@@ -121,7 +123,9 @@ export function startAgentHttpServer(client: AegisApiClient, config: AgentHttpCo
     llmApiKey,
     llmModel,
     llmTemperature,
-    llmMaxTokens
+    llmMaxTokens,
+    llmUseGcpAuth,
+    llmGcpProject
   } = config;
 
   if (requireAuth && !apiKey && !bearerToken) {
@@ -133,7 +137,9 @@ export function startAgentHttpServer(client: AegisApiClient, config: AgentHttpCo
     apiKey: llmApiKey,
     model: llmModel,
     temperature: llmTemperature,
-    maxTokens: llmMaxTokens
+    maxTokens: llmMaxTokens,
+    useGcpAuth: llmUseGcpAuth,
+    gcpProject: llmGcpProject
   });
 
   const server = http.createServer(async (req, res) => {

@@ -1,0 +1,80 @@
+################################################################################
+# AEGIS — Cloud Build Terraform CI/CD pipeline
+#
+# Triggered automatically on push to `develop` when files under
+# terraform/infra/** change.
+# Runs `terraform init`, `terraform validate`, and `terraform apply -auto-approve`.
+#
+# Prerequisites:
+#   - Cloud Build SA must have roles/editor (or a custom Terraform role) on the project
+#   - A GCS bucket must exist for Terraform state (set _TF_STATE_BUCKET)
+#   - terraform.tfvars must be stored as a Secret Manager secret (set _TF_VARS_SECRET)
+#     Format: create the secret with the full contents of your terraform.tfvars file.
+#     gcloud secrets create aegis-prod-terraform-tfvars --data-file=terraform/infra/terraform.tfvars
+#
+# Substitutions (configure in trigger settings):
+#   _REGION           GCP region           (default: us-central1)
+#   _PROJECT_ID       GCP project ID       (default: aegis-prod-488120)
+#   _TF_STATE_BUCKET  GCS bucket for TF state (must exist; create once manually)
+#   _TF_VARS_SECRET   Secret Manager secret ID holding terraform.tfvars content
+################################################################################
+
+substitutions:
+  _REGION: us-central1
+  _PROJECT_ID: aegis-prod-488120
+  _TF_STATE_BUCKET: aegis-prod-488120-tfstate
+  _TF_VARS_SECRET: aegis-prod-terraform-tfvars
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1800s
+
+steps:
+  # Fetch the terraform.tfvars from Secret Manager into the workspace
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: fetch-tfvars
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        gcloud secrets versions access latest \
+          --secret=${_TF_VARS_SECRET} \
+          --project=${_PROJECT_ID} \
+          > terraform/infra/terraform.tfvars
+        echo "==> terraform.tfvars written from Secret Manager"
+
+  # terraform init — configure GCS backend
+  - name: hashicorp/terraform:1.9
+    id: tf-init
+    waitFor: [fetch-tfvars]
+    dir: terraform/infra
+    entrypoint: terraform
+    args:
+      - init
+      - -backend-config=bucket=${_TF_STATE_BUCKET}
+      - -backend-config=prefix=aegis-infra
+      - -input=false
+      - -reconfigure
+
+  # terraform validate
+  - name: hashicorp/terraform:1.9
+    id: tf-validate
+    waitFor: [tf-init]
+    dir: terraform/infra
+    entrypoint: terraform
+    args:
+      - validate
+
+  # terraform apply
+  - name: hashicorp/terraform:1.9
+    id: tf-apply
+    waitFor: [tf-validate]
+    dir: terraform/infra
+    entrypoint: terraform
+    args:
+      - apply
+      - -auto-approve
+      - -input=false
