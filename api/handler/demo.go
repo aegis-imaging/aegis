@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aegis-imaging/aegis/api/importer"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -69,12 +68,10 @@ func (s *Server) DemoGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Import the generated DICOM files into the default project via the standard path.
-	result, err := importer.Run(r.Context(), s.db, s.store, importer.Options{
-		Dir:         svcResp.OutputDir,
-		ProjectSlug: "default",
-		Source:      "internal",
-	})
+	// Import the generated DICOM files into the default project.
+	// Files are downloaded via the storage client (not GCS FUSE) to avoid
+	// stale stat-cache issues with freshly-written objects.
+	result, err := importSynthStudy(r.Context(), s.db, s.store, svcResp.StudyUID, "default")
 	if err != nil {
 		log.Printf("demo_generate: import failed (dir=%s): %v", svcResp.OutputDir, err)
 		s.writeError(w, http.StatusInternalServerError, "failed to import demo study")
