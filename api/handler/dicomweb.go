@@ -193,17 +193,28 @@ func (s *Server) dicomwebRetrieve(w http.ResponseWriter, r *http.Request, storeO
 	}
 	defer rc.Close()
 
-	mw := multipart.NewWriter(w)
-	w.Header().Set("Content-Type",
-		fmt.Sprintf(`multipart/related; type="application/dicom"; boundary=%s`, mw.Boundary()))
+	// If the client explicitly requests multipart/related (OHIF does), wrap in a
+	// multipart envelope.  Otherwise (plain fetch, Accept: */*) return raw bytes
+	// so browser-side DICOM parsers (dicom-parser, cornerstoneWADOImageLoader) can
+	// consume the response directly without stripping the multipart wrapper.
+	if strings.Contains(r.Header.Get("Accept"), "multipart/related") {
+		mw := multipart.NewWriter(w)
+		w.Header().Set("Content-Type",
+			fmt.Sprintf(`multipart/related; type="application/dicom"; boundary=%s`, mw.Boundary()))
 
-	hdr := make(textproto.MIMEHeader)
-	hdr.Set("Content-Type", "application/dicom")
-	pw, err := mw.CreatePart(hdr)
-	if err != nil {
-		log.Printf("dicomweb multipart create part: %v", err)
+		hdr := make(textproto.MIMEHeader)
+		hdr.Set("Content-Type", "application/dicom")
+		pw, err := mw.CreatePart(hdr)
+		if err != nil {
+			log.Printf("dicomweb multipart create part: %v", err)
+			return
+		}
+		io.Copy(pw, rc)
+		mw.Close()
 		return
 	}
-	io.Copy(pw, rc)
-	mw.Close()
+
+	// Raw DICOM bytes — consumed directly by browser-side parsers.
+	w.Header().Set("Content-Type", "application/dicom")
+	io.Copy(w, rc)
 }

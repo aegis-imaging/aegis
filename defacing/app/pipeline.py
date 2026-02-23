@@ -82,7 +82,11 @@ def run_pipeline(
     all_output_paths: list[str] = []
 
     for series_uid, paths in series_groups.items():
-        series_out = str(Path(output_dir) / series_uid)
+        # Write all series output directly into output_dir (no per-series subdir).
+        # The API importer names files sequentially (0.dcm, 1.dcm, ...) across all
+        # series, so there are no filename collisions at the study level, and the
+        # DICOMweb WADO-RS handler expects files at dicom/{store}/{studyUID}/{n}.dcm.
+        series_out = output_dir
         Path(series_out).mkdir(parents=True, exist_ok=True)
 
         if should_deface_series(paths):

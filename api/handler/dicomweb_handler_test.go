@@ -271,17 +271,29 @@ func TestDicomwebRetrieve_Success(t *testing.T) {
 	require.NoError(t, store.Store(context.Background(), fileKey, strings.NewReader("DICM\x00fake")))
 
 	sopUID := study.StudyInstanceUID + ".1.0"
-	req := httptest.NewRequest(http.MethodGet, "/dicomweb/studies/"+study.StudyInstanceUID+"/series/s/instances/"+sopUID, nil)
-	req.SetPathValue("studyUID", study.StudyInstanceUID)
-	req.SetPathValue("sopUID", sopUID)
-	rr := httptest.NewRecorder()
 
-	srv.DicomwebRetrieveInstance(rr, req)
+	t.Run("multipart when Accept requests it", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/dicomweb/studies/"+study.StudyInstanceUID+"/series/s/instances/"+sopUID, nil)
+		req.Header.Set("Accept", `multipart/related; type="application/dicom"`)
+		req.SetPathValue("studyUID", study.StudyInstanceUID)
+		req.SetPathValue("sopUID", sopUID)
+		rr := httptest.NewRecorder()
+		srv.DicomwebRetrieveInstance(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Contains(t, rr.Header().Get("Content-Type"), "multipart/related")
+		assert.Contains(t, rr.Body.String(), "DICM")
+	})
 
-	assert.Equal(t, http.StatusOK, rr.Code)
-	// Response is multipart/related
-	assert.Contains(t, rr.Header().Get("Content-Type"), "multipart/related")
-	assert.Contains(t, rr.Body.String(), "DICM")
+	t.Run("raw bytes when no multipart Accept", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/dicomweb/studies/"+study.StudyInstanceUID+"/series/s/instances/"+sopUID, nil)
+		req.SetPathValue("studyUID", study.StudyInstanceUID)
+		req.SetPathValue("sopUID", sopUID)
+		rr := httptest.NewRecorder()
+		srv.DicomwebRetrieveInstance(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "application/dicom", rr.Header().Get("Content-Type"))
+		assert.Contains(t, rr.Body.String(), "DICM")
+	})
 }
 
 func TestDicomwebRawRetrieve_AlwaysReadsRawStore(t *testing.T) {
