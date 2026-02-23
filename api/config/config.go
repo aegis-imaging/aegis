@@ -97,6 +97,7 @@ type Config struct {
 	InviteRequestSecret     string // INVITE_REQUEST_SECRET — HMAC key for approval tokens; feature disabled when empty
 	InviteRequestAdminEmail string // INVITE_REQUEST_ADMIN_EMAIL — who gets notified (default: ContactEmail)
 	LandingBaseURL          string // LANDING_BASE_URL — base URL for invite links (default: https://aegisimaging.ai)
+	AdminDashboardURL       string // ADMIN_DASHBOARD_URL — used in approval email back-links (default: https://admin.aegisimaging.ai)
 
 	// SLA stuck-study alerting — sends email when studies idle too long in pipeline.
 	// Disabled when SLAPipelineMinutes == 0 or SLAAlertEmail is empty.
@@ -186,6 +187,7 @@ func Load() *Config {
 		InviteRequestSecret:     os.Getenv("INVITE_REQUEST_SECRET"),
 		InviteRequestAdminEmail: os.Getenv("INVITE_REQUEST_ADMIN_EMAIL"),
 		LandingBaseURL:          envOr("LANDING_BASE_URL", "https://aegisimaging.ai"),
+		AdminDashboardURL:       envOr("ADMIN_DASHBOARD_URL", "https://admin.aegisimaging.ai"),
 
 		SLAPipelineMinutes: envInt("SLA_PIPELINE_MINUTES", 0),
 		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),
