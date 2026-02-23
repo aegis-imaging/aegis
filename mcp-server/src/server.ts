@@ -12,6 +12,8 @@ import {
   addStudyNoteArgsSchema,
   apiKeyIdArgsSchema,
   approveStudyArgsSchema,
+  bulkLabelStudiesArgsSchema,
+  bulkStudyActionArgsSchema,
   createApiKeyArgsSchema,
   createShareArgsSchema,
   dimseRetryStatusArgsSchema,
@@ -975,6 +977,71 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "bulk_approve_studies",
+    description: "Approve up to 200 studies in a single call. Already-terminal studies (already approved/rejected) are skipped with an error entry. On approval, export forwarding and uploader notification emails fire automatically (same as single approve). Returns {processed, errors[]}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_ids", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_ids: {
+          type: "array",
+          items: { type: "string", format: "uuid" },
+          minItems: 1,
+          maxItems: 200,
+          description: "List of study UUIDs to approve (max 200)"
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "bulk_reject_studies",
+    description: "Reject up to 200 studies in a single call. Already-terminal studies are skipped with an error entry. Returns {processed, errors[]}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_ids", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_ids: {
+          type: "array",
+          items: { type: "string", format: "uuid" },
+          minItems: 1,
+          maxItems: 200,
+          description: "List of study UUIDs to reject (max 200)"
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "bulk_label_studies",
+    description: "Add or remove a label across up to 200 studies in a single call. action='add' inserts the label (duplicates silently ignored). action='remove' deletes it (case-insensitive). Returns {applied/removed, total}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_ids", "label", "action", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_ids: {
+          type: "array",
+          items: { type: "string", format: "uuid" },
+          minItems: 1,
+          maxItems: 200,
+          description: "List of study UUIDs to label (max 200)"
+        },
+        label: { type: "string", minLength: 1, maxLength: 80, description: "Label text" },
+        action: { type: "string", enum: ["add", "remove"], description: "'add' inserts the label; 'remove' deletes it" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -1446,6 +1513,21 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleDeleteApiKey(parsedDelete.request_id ?? buildRequestId(), parsedDelete);
       }
 
+      if (name === "bulk_approve_studies") {
+        const parsedBulkApprove = bulkStudyActionArgsSchema.parse(args);
+        return handleBulkStudyAction(parsedBulkApprove.request_id ?? buildRequestId(), parsedBulkApprove, "approve");
+      }
+
+      if (name === "bulk_reject_studies") {
+        const parsedBulkReject = bulkStudyActionArgsSchema.parse(args);
+        return handleBulkStudyAction(parsedBulkReject.request_id ?? buildRequestId(), parsedBulkReject, "reject");
+      }
+
+      if (name === "bulk_label_studies") {
+        const parsedBulkLabel = bulkLabelStudiesArgsSchema.parse(args);
+        return handleBulkLabelStudies(parsedBulkLabel.request_id ?? buildRequestId(), parsedBulkLabel);
+      }
+
       const parsed = writeArgsSchema.parse(args);
 
       if (name === "trigger_classification") {
@@ -1579,6 +1661,13 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "create_api_key") {
     return typeof args.name === "string" ? args.name : null;
+  }
+  if (name === "bulk_approve_studies" || name === "bulk_reject_studies" || name === "bulk_label_studies") {
+    const ids = args.study_ids;
+    if (Array.isArray(ids) && ids.length > 0) {
+      return `${ids.length} studies`;
+    }
+    return null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -2602,6 +2691,55 @@ async function handleDeleteApiKey(
   return formatSuccess(requestId, "delete_api_key", {
     accepted: true,
     key_id: parsed.key_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleBulkStudyAction(
+  requestId: string,
+  parsed: { study_ids: string[]; reason: string; confirm: true },
+  action: "approve" | "reject"
+) {
+  const toolName = action === "approve" ? "bulk_approve_studies" : "bulk_reject_studies";
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, toolName);
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", `Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow ${toolName}`, false, toolName);
+  }
+
+  const data = await client.post("/api/studies/bulk", { action, study_ids: parsed.study_ids });
+  return formatSuccess(requestId, toolName, {
+    accepted: true,
+    action,
+    count: parsed.study_ids.length,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleBulkLabelStudies(
+  requestId: string,
+  parsed: { study_ids: string[]; label: string; action: "add" | "remove"; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "bulk_label_studies");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow bulk_label_studies", false, "bulk_label_studies");
+  }
+
+  const data = await client.post("/api/studies/bulk-label", {
+    study_ids: parsed.study_ids,
+    label: parsed.label,
+    action: parsed.action
+  });
+  return formatSuccess(requestId, "bulk_label_studies", {
+    accepted: true,
+    action: parsed.action,
+    label: parsed.label,
+    count: parsed.study_ids.length,
     reason: parsed.reason,
     result: data
   });
