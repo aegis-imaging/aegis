@@ -220,15 +220,19 @@ def _build_dicom_slice(
     ds.Rows = size
     ds.Columns = size
     ds.BitsAllocated = 16
-    ds.BitsStored = 12
-    ds.HighBit = 11
+    ds.BitsStored = 16
+    ds.HighBit = 15
     ds.PixelRepresentation = 0
     ds.SamplesPerPixel = 1
     ds.PhotometricInterpretation = "MONOCHROME2"
-    ds.WindowWidth = 4096
-    ds.WindowCenter = 2048
+    # Window covers the meaningful tissue range (roughly 0–1000 out of 0–4095).
+    # WC=500/WW=1000 matches the working demo files and renders brain tissue
+    # at 50–100% brightness in OHIF instead of the near-black 20% produced
+    # by the old WC=2048/WW=4096 setting.
+    ds.WindowWidth = 1000
+    ds.WindowCenter = 500
 
-    # Pixel data — scale float [0, 1] → uint12
+    # Pixel data — scale float [0, 1] → uint16 (12-bit range: 0–4095)
     arr_u16 = (np.clip(pixel_array, 0, 1) * 4095).astype(np.uint16)
     ds.PixelData = arr_u16.tobytes()
 
