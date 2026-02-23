@@ -327,6 +327,8 @@ func main() {
 	// Landing page invite codes — server-side access control for the private beta gate.
 	// Validate is public/rate-limited; management endpoints are admin-only.
 	mux.Handle("POST /api/invite/validate", rateLimit(srv.ValidateInviteCode))
+	mux.Handle("POST /api/invite/request", rateLimit(srv.RequestInvite))
+	mux.HandleFunc("GET /api/invite/request/approve", srv.ApproveInviteRequest)
 	mux.HandleFunc("GET /api/invite-codes", adminOnly(srv.ListInviteCodes))
 	mux.HandleFunc("POST /api/invite-codes", adminOnly(srv.CreateInviteCode))
 	mux.HandleFunc("POST /api/invite-codes/{id}/revoke", adminOnly(srv.RevokeInviteCode))

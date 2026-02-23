@@ -46,6 +46,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/gate/validate", handleValidate)
 	mux.HandleFunc("POST /api/gate/revoke", handleRevoke)
+	mux.HandleFunc("POST /api/gate/request-access", handleRequestAccess)
 	mux.HandleFunc("/", handleRoot)
 
 	log.Printf("gate-server listening on :%s (gate_enabled=%v, static=%s)", port, gateEnabled, staticDir)
@@ -113,6 +114,43 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 		setSessionCookie(w, r)
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"valid": valid})
+}
+
+// handleRequestAccess — POST /api/gate/request-access {"name":"...","email":"...","org":"...","message":"..."}
+// Proxies the access request to the Go API's POST /api/invite/request endpoint.
+func handleRequestAccess(w http.ResponseWriter, r *http.Request) {
+	// Read and forward the body as-is to the Go API.
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r.Body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), "POST", apiBase+"/api/invite/request", &buf)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if ip := clientIP(r); ip != "" {
+		req.Header.Set("X-Forwarded-For", ip)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("request-access: api call failed: %v", err)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"}) // fail silently
+		return
+	}
+	defer resp.Body.Close()
+
+	// Forward the API response status and body.
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	buf.Reset()
+	buf.ReadFrom(resp.Body) //nolint:errcheck
+	w.Write(buf.Bytes())    //nolint:errcheck
 }
 
 // handleRevoke — POST /api/gate/revoke. Clears the session cookie.
