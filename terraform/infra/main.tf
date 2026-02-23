@@ -398,6 +398,45 @@ variable "allowed_origins" {
   default     = []
 }
 
+# ── DIMSE receiver (Compute Engine) ──────────────────────────────────────────
+# Leave dimse_receiver_image empty (the default) to skip all DIMSE resources.
+
+variable "dimse_receiver_image" {
+  description = "Full Artifact Registry image URI for the dimse-receiver container. Empty string disables all DIMSE Compute Engine resources."
+  type        = string
+  default     = ""
+}
+
+variable "dimse_receiver_machine_type" {
+  description = "GCE machine type for the DIMSE receiver VM."
+  type        = string
+  default     = "e2-small"
+}
+
+variable "dimse_receiver_zone" {
+  description = "Zone for the DIMSE receiver VM. Defaults to <region>-a when empty."
+  type        = string
+  default     = ""
+}
+
+variable "dimse_api_url" {
+  description = "Base URL of the AEGIS API that the DIMSE receiver calls for ingest (e.g. https://api.aegisimaging.ai)."
+  type        = string
+  default     = ""
+}
+
+variable "dimse_project_slug" {
+  description = "Project slug passed to POST /api/ingest for studies received via DIMSE."
+  type        = string
+  default     = "default"
+}
+
+variable "dimse_source_ranges" {
+  description = "CIDR ranges allowed to reach TCP 11112 (DICOM C-STORE). Defaults to open (0.0.0.0/0) — restrict to PACS IP ranges in production."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region

@@ -1558,11 +1558,11 @@ Two triggers are active in Cloud Build (configured by `scripts/gcp_setup_cloudbu
 | `protocol-service` | `protocol-service/` |
 | `synth-service` | `synth-service/` |
 | `aegis-mcp-server` | `mcp-server/` |
-| ~~`dimse-receiver`~~ | image built + pushed only — **no Cloud Run deploy** (see note below) |
+| `aegis-prod-dimse-receiver` (GCE VM) | `dimse-receiver/` — see note below |
 
 Only the container image is updated on each deploy; all env vars, secrets, CPU/memory, and service accounts are preserved from the running config.
 
-> **dimse-receiver deploy note**: Cloud Run only speaks HTTP/HTTP2. DICOM C-STORE SCP requires raw TCP on port 11112, which Cloud Run cannot expose. A `gcloud run deploy` step would start the container but the DICOM port would be unreachable. The correct production deployment target for dimse-receiver is **GKE or Compute Engine** (planned). For now the image is kept up to date in Artifact Registry and must be deployed manually to whatever TCP-capable host receives DICOM from PACS systems. This is a Cloud Run architectural limitation, not an oversight.
+> **dimse-receiver deploy note**: Cloud Run cannot expose raw TCP port 11112 required by DICOM C-STORE SCP. The dimse-receiver runs on a **Compute Engine VM** (Debian 12) provisioned by `terraform/infra/dimse.tf`. Cloud Build deploys it by updating the `dimse-image` metadata key on the VM and issuing `gcloud compute instances reset`. The startup script reads this key on every boot and pulls + starts the new image. The VM is only created when `dimse_receiver_image` is set in `terraform.tfvars` (empty = skip all DIMSE resources). `lifecycle { ignore_changes = [metadata["dimse-image"]] }` prevents `terraform apply` from reverting Cloud Build's metadata updates.
 
 #### Trigger 2: Terraform apply — `terraform-apply-on-develop`
 - **Config**: `cloudbuild.terraform.yaml`
