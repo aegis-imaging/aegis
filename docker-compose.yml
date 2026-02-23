@@ -77,7 +77,9 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
+      # The distroless image has no shell or curl; the binary supports --healthcheck
+      # which performs a GET /healthz and exits 0/1.
+      test: ["CMD", "/aegis-api", "--healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 3
