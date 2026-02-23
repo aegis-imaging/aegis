@@ -34,6 +34,7 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 		BodyPart:  q.Get("body_part"),
 		Source:    q.Get("source"),
 		Search:    q.Get("search"),
+		Label:     q.Get("label"),
 		DateFrom:  dateFrom,
 		DateTo:    dateTo,
 	}

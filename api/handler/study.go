@@ -49,6 +49,7 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		Source:    q.Get("source"),
 		Search:    q.Get("search"),
 		SubjectID: q.Get("subject_id"),
+		Label:     q.Get("label"),
 		DateFrom:  dateFrom,
 		DateTo:    dateTo,
 	}
