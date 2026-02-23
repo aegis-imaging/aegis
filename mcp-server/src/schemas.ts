@@ -225,6 +225,13 @@ export const listProtocolTemplatesArgsSchema = z.object({
   project_id: z.string().uuid()
 });
 
+export const testWebhookArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subscription_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -257,7 +264,9 @@ export const readToolNames = [
   "get_study_dicom_tags",
   "get_institution_stats",
   "list_protocol_templates",
-  "list_federation_peers"
+  "list_federation_peers",
+  "get_phi_config",
+  "list_anon_profiles"
 ] as const;
 
 export const writeToolNames = [
@@ -282,7 +291,8 @@ export const writeToolNames = [
   "add_study_note",
   "extend_share",
   "export_project_batch",
-  "reactivate_study"
+  "reactivate_study",
+  "test_webhook"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

@@ -29,6 +29,7 @@ import {
   listStudiesArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
+  testWebhookArgsSchema,
   readToolNames,
   reassignStudyArgsSchema,
   reEvaluateRoutingArgsSchema,
@@ -844,6 +845,47 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "get_phi_config",
+    description: "Get per-project PHI detection configuration: confidence_threshold (0.0–1.0, minimum OCR confidence to flag text) and min_text_length (minimum text length to report). If no project-specific config exists, returns global defaults from PHI_CONFIDENCE_THRESHOLD and PHI_MIN_TEXT_LENGTH env vars.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_anon_profiles",
+    description: "List all anonymization profiles for a project. Each profile defines which DICOM tags are retained instead of being stripped/zeroed during PS3.15 Basic Profile de-identification. The default profile (if set) is applied automatically by the upload portal.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "test_webhook",
+    description: "Send a synthetic test delivery to a webhook subscription's URL. Sends a 'study.approved' test payload immediately, records the attempt in webhook_deliveries, and returns {success, status_code, url, error?}. Use to verify connectivity before real study events fire. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["subscription_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid", description: "Webhook subscription UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -1191,6 +1233,18 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_phi_config") {
+      const parsed = listProtocolTemplatesArgsSchema.parse(args); // same shape: {project_id}
+      const data = await client.get(`/api/projects/${parsed.project_id}/phi-config`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_anon_profiles") {
+      const parsed = listProtocolTemplatesArgsSchema.parse(args); // same shape: {project_id}
+      const data = await client.get(`/api/projects/${parsed.project_id}/anon-profiles`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -1265,6 +1319,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "reactivate_study") {
         const parsedReactivate = reactivateStudyArgsSchema.parse(args);
         return handleReactivateStudy(parsedReactivate.request_id ?? buildRequestId(), parsedReactivate);
+      }
+
+      if (name === "test_webhook") {
+        const parsedTestWebhook = testWebhookArgsSchema.parse(args);
+        return handleTestWebhook(parsedTestWebhook.request_id ?? buildRequestId(), parsedTestWebhook);
       }
 
       const parsed = writeArgsSchema.parse(args);
@@ -1386,6 +1445,9 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "export_project_batch") {
     return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "test_webhook") {
+    return typeof args.subscription_id === "string" ? args.subscription_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -2303,6 +2365,26 @@ async function handleReactivateStudy(
   return formatSuccess(requestId, "reactivate_study", {
     accepted: true,
     study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTestWebhook(
+  requestId: string,
+  parsed: { subscription_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "test_webhook");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow test_webhook", false, "test_webhook");
+  }
+
+  const data = await client.post(`/api/webhook-subscriptions/${encodeURIComponent(parsed.subscription_id)}/test`);
+  return formatSuccess(requestId, "test_webhook", {
+    accepted: true,
+    subscription_id: parsed.subscription_id,
     reason: parsed.reason,
     result: data
   });
