@@ -66,7 +66,7 @@ steps:
         docker push ${_REPO}/admin-dashboard:${SHORT_SHA}
         docker push ${_REPO}/admin-dashboard:latest
 
-  # --- landing (repo-root build context; invite gate enabled in prod) ---
+  # --- landing (repo-root build context; gate is server-side via GATE_ENABLED env var) ---
   - name: gcr.io/cloud-builders/docker
     id: build-push-landing
     waitFor: ["-"]
@@ -77,7 +77,6 @@ steps:
         set -euo pipefail
         docker build \
           -f frontend/landing/Dockerfile \
-          --build-arg VITE_INVITE_GATE_ENABLED=true \
           --build-arg VITE_API_BASE_URL=${_API_URL} \
           -t ${_REPO}/landing:${SHORT_SHA} \
           -t ${_REPO}/landing:latest \
@@ -196,6 +195,22 @@ steps:
           protocol-service
         docker push ${_REPO}/protocol-service:${SHORT_SHA}
         docker push ${_REPO}/protocol-service:latest
+
+  # --- synth-service ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-synth-service
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/synth-service:${SHORT_SHA} \
+          -t ${_REPO}/synth-service:latest \
+          synth-service
+        docker push ${_REPO}/synth-service:${SHORT_SHA}
+        docker push ${_REPO}/synth-service:latest
 
   # --- dimse-receiver (build + push only; no Cloud Run deploy — see plan notes) ---
   - name: gcr.io/cloud-builders/docker
@@ -357,6 +372,20 @@ steps:
       - deploy
       - protocol-service
       - --image=${_REPO}/protocol-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy synth-service ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-synth-service
+    waitFor: [build-push-synth-service]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - synth-service
+      - --image=${_REPO}/synth-service:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --quiet
