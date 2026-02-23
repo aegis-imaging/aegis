@@ -67,13 +67,17 @@ services:
       DIMSE_RECEIVER_URL: "http://dimse-receiver:8080"
       DIMSE_OPERATOR_API_KEY: "${DIMSE_OPERATOR_API_KEY:-}"
       SYNTH_SERVICE_URL: "http://synth-service:8080"
+    # Run as root in local dev so the API can create directories inside the
+    # named volume (production uses GCS storage and distroless:nonroot from the
+    # Dockerfile; the user override here is docker-compose-only).
+    user: "0"
     volumes:
       - aegis-data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["/aegis-api", "--healthcheck"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
       interval: 10s
       timeout: 5s
       retries: 3
