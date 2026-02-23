@@ -6,10 +6,12 @@
 package importer
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -140,6 +142,9 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	}
 	log.Printf("aegis-import: found %d DICOM files across %d studies (%d skipped)",
 		result.FilesScanned, len(groups), result.FilesSkipped)
+	for _, e := range result.Errors {
+		log.Printf("aegis-import: parse error: %s", e)
+	}
 
 	if opts.DryRun {
 		for _, g := range sortedGroups(groups) {
@@ -334,12 +339,22 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 	}
 	defer f.Close()
 
-	info, err := f.Stat()
+	// Read the full file content before parsing. GCS FUSE can return size=0
+	// from both Stat() and Seek(SEEK_END) for freshly-written files due to
+	// stale metadata cache, which causes dicom.Parse to read 0 bytes and fail.
+	// io.ReadAll always returns actual bytes regardless of metadata.
+	data, err := io.ReadAll(f)
 	if err != nil {
-		return "", "", "", "", "", "", fmt.Errorf("stat: %w", err)
+		return "", "", "", "", "", "", fmt.Errorf("read: %w", err)
 	}
 
-	dataset, err := dicom.Parse(f, info.Size(), nil, dicom.SkipPixelData())
+	dataset, err := dicom.Parse(bytes.NewReader(data), int64(len(data)), nil,
+		dicom.SkipPixelData(),
+		// Allow files that omit the MetaElementGroupLength (0002,0000) tag —
+		// some generators (e.g. pydicom 3.x without enforce_file_format=True)
+		// produce valid-content DICOM files that lack this header element.
+		dicom.AllowMissingMetaElementGroupLength(),
+	)
 	if err != nil {
 		return "", "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
 	}
