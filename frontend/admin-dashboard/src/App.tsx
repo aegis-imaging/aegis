@@ -5116,6 +5116,8 @@ function APIKeysPanel() {
   const [saving, setSaving]       = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
+  const [newKeyLabel, setNewKeyLabel] = useState<'created' | 'rotated'>('created')
+  const [rotatingId, setRotatingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -5148,6 +5150,7 @@ function APIKeysPanel() {
       })
       if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Create failed') }
       const data = await res.json()
+      setNewKeyLabel('created')
       setNewKeyValue(data.key)
       setFormName('')
       setFormExpiry('')
@@ -5164,6 +5167,23 @@ function APIKeysPanel() {
     const action = key.enabled ? 'disable' : 'enable'
     await fetch(`/api/api-keys/${key.id}/${action}`, { method: 'PATCH' })
     load()
+  }
+
+  async function rotate(key: APIKey) {
+    if (!confirm(`Rotate API key "${key.name}"? The current key value will stop working immediately.`)) return
+    setRotatingId(key.id)
+    try {
+      const res = await fetch(`/api/api-keys/${key.id}/rotate`, { method: 'POST' })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Rotate failed') }
+      const data = await res.json()
+      setNewKeyLabel('rotated')
+      setNewKeyValue(data.key)
+      load()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Rotate failed')
+    } finally {
+      setRotatingId(null)
+    }
   }
 
   async function del(key: APIKey) {
@@ -5190,7 +5210,7 @@ function APIKeysPanel() {
 
         {newKeyValue && (
           <div className="routing-form" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-            <strong style={{ color: '#166534' }}>API key created — copy it now, it will not be shown again:</strong>
+            <strong style={{ color: '#166534' }}>API key {newKeyLabel} — copy it now, it will not be shown again:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
               <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
                 {newKeyValue}
@@ -5257,6 +5277,10 @@ function APIKeysPanel() {
                     <div className="actions-cell">
                       <button type="button" className="btn btn--action" onClick={() => toggle(k)}>
                         {k.enabled ? 'Disable' : 'Enable'}
+                      </button>
+                      <button type="button" className="btn btn--action" onClick={() => rotate(k)}
+                        disabled={rotatingId === k.id}>
+                        {rotatingId === k.id ? 'Rotating…' : 'Rotate'}
                       </button>
                       <button type="button" className="btn btn--revoke" onClick={() => del(k)}>Delete</button>
                     </div>
