@@ -99,6 +99,7 @@ jobs:
           - scripts/aws_build_push_images.sh
           - scripts/aws_apply_infra.sh
           - scripts/aws_install_poc.sh
+          - scripts/gcp_setup_cloudbuild.sh
     steps:
       - uses: actions/checkout@v4
       - name: Syntax check
