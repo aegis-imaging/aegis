@@ -119,6 +119,53 @@ func TestEnableDisableAPIKey_OK(t *testing.T) {
 	assert.True(t, enableResp.Enabled)
 }
 
+func TestRotateAPIKey_OK(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	// Create a key first
+	createReq := httptest.NewRequest("POST", "/api/api-keys", bytes.NewBufferString(`{"name":"Key to rotate"}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRR := httptest.NewRecorder()
+	srv.CreateAPIKey(createRR, createReq)
+	require.Equal(t, http.StatusCreated, createRR.Code)
+
+	var created struct {
+		ID  string `json:"id"`
+		Key string `json:"key"`
+	}
+	require.NoError(t, json.NewDecoder(createRR.Body).Decode(&created))
+	originalKey := created.Key
+
+	// Rotate
+	rotateReq := httptest.NewRequest("POST", "/api/api-keys/"+created.ID+"/rotate", nil)
+	rotateReq.SetPathValue("id", created.ID)
+	rotateRR := httptest.NewRecorder()
+	srv.RotateAPIKey(rotateRR, rotateReq)
+	require.Equal(t, http.StatusOK, rotateRR.Code)
+
+	var rotated struct {
+		ID  string `json:"id"`
+		Key string `json:"key"`
+	}
+	require.NoError(t, json.NewDecoder(rotateRR.Body).Decode(&rotated))
+	assert.Equal(t, created.ID, rotated.ID)
+	assert.True(t, strings.HasPrefix(rotated.Key, "aegis_"), "rotated key should start with aegis_")
+	assert.NotEqual(t, originalKey, rotated.Key, "rotated key must differ from original")
+}
+
+func TestRotateAPIKey_NotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	req := httptest.NewRequest("POST", "/api/api-keys/nonexistent-id/rotate", nil)
+	req.SetPathValue("id", "nonexistent-id")
+	rr := httptest.NewRecorder()
+	srv.RotateAPIKey(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
 func TestDeleteAPIKey_OK(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
