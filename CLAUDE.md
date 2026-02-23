@@ -294,6 +294,8 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 | `body_part` | Case-insensitive exact match (e.g. `HEAD`, `CHEST`) |
 | `source` | `external\|internal` |
 | `search` | Substring match on `study_instance_uid` or `study_description` |
+| `label` | Case-insensitive substring match on any `study_labels.label` for the study |
+| `subject_id` | Exact match on `subject_id` field |
 
 ### Study Detail (`GET /api/studies/{id}`)
 

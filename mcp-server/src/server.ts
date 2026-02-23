@@ -143,7 +143,7 @@ const client = new AegisApiClient(config.aegisApiBaseUrl, config.aegisApiToken);
 const tools: Tool[] = [
   {
     name: "list_studies",
-    description: "List studies with filters for operations triage.",
+    description: "List studies with filters for operations triage. Supports filtering by label text and subject ID in addition to the standard filters.",
     inputSchema: {
       type: "object",
       properties: {
@@ -155,7 +155,9 @@ const tools: Tool[] = [
         modality: { type: "string" },
         body_part: { type: "string" },
         source: { type: "string", enum: ["external", "internal"] },
-        search: { type: "string" },
+        search: { type: "string", description: "Substring match on study UID or description" },
+        label: { type: "string", maxLength: 80, description: "Substring match on any study label (case-insensitive)" },
+        subject_id: { type: "string", maxLength: 256, description: "Exact match on subject_id" },
         date_from: { type: "string", format: "date-time", description: "ISO 8601 lower bound on created_at (inclusive)" },
         date_to: { type: "string", format: "date-time", description: "ISO 8601 upper bound on created_at (inclusive)" }
       },
@@ -823,6 +825,8 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.body_part) query.set("body_part", parsed.body_part);
       if (parsed.source) query.set("source", parsed.source);
       if (parsed.search) query.set("search", parsed.search);
+      if (parsed.label) query.set("label", parsed.label);
+      if (parsed.subject_id) query.set("subject_id", parsed.subject_id);
       if (parsed.date_from) query.set("date_from", parsed.date_from);
       if (parsed.date_to) query.set("date_to", parsed.date_to);
 
