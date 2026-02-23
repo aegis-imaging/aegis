@@ -71,11 +71,16 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (agentApiKey.trim()) headers.Authorization = `Bearer ${agentApiKey.trim()}`
 
-      const response = await fetch(`${baseUrl}/agent/ask`, {
+      const response = await fetch(`${baseUrl}/ask`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
       })
+
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Agent service unavailable (HTTP ${response.status}) — is the MCP server running?`)
+      }
 
       const data = await response.json()
       setResult(data as AgentResult)
