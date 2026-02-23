@@ -62,14 +62,33 @@ func seriesQIDO(s model.Study) map[string]any {
 	}
 }
 
+// modalitySOPClass maps DICOM modality codes to their primary SOP Class UID.
+// OHIF requires SOPClassUID in the instance QIDO response to select the right
+// image loader. Defaults to MR Image Storage when modality is unknown.
+func modalitySOPClass(modality string) string {
+	switch modality {
+	case "CT":
+		return "1.2.840.10008.5.1.4.1.1.2"   // CT Image Storage
+	case "PT", "PET":
+		return "1.2.840.10008.5.1.4.1.1.128"  // Positron Emission Tomography Image Storage
+	case "US":
+		return "1.2.840.10008.5.1.4.1.1.6.1"  // Ultrasound Image Storage
+	case "CR", "DX":
+		return "1.2.840.10008.5.1.4.1.1.1"    // Computed Radiography Image Storage
+	default:
+		return "1.2.840.10008.5.1.4.1.1.4"    // MR Image Storage
+	}
+}
+
 // instanceQIDO returns instance-level metadata for a given 0-based file index.
 // SOPInstanceUID = {studyUID}.1.{index}
-func instanceQIDO(studyUID string, index int) map[string]any {
+func instanceQIDO(studyUID, modality string, index int) map[string]any {
 	return map[string]any{
-		"0020000D": dicomTag("UI", studyUID),                           // StudyInstanceUID
-		"0020000E": dicomTag("UI", studyUID+".1"),                      // SeriesInstanceUID
+		"0020000D": dicomTag("UI", studyUID),                                // StudyInstanceUID
+		"0020000E": dicomTag("UI", studyUID+".1"),                           // SeriesInstanceUID
+		"00080016": dicomTag("UI", modalitySOPClass(modality)),              // SOPClassUID — required by OHIF
 		"00080018": dicomTag("UI", fmt.Sprintf("%s.1.%d", studyUID, index)), // SOPInstanceUID
-		"00200013": dicomTagInt("IS", index+1),                        // InstanceNumber
+		"00200013": dicomTagInt("IS", index+1),                              // InstanceNumber
 	}
 }
 
@@ -136,7 +155,7 @@ func (s *Server) DicomwebInstances(w http.ResponseWriter, r *http.Request) {
 	}
 	result := make([]map[string]any, st.InstanceCount)
 	for i := 0; i < st.InstanceCount; i++ {
-		result[i] = instanceQIDO(studyUID, i)
+		result[i] = instanceQIDO(studyUID, st.Modality, i)
 	}
 	w.Header().Set("Content-Type", "application/dicom+json")
 	json.NewEncoder(w).Encode(result)
