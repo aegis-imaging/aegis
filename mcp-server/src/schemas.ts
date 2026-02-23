@@ -125,6 +125,57 @@ export const getShareDownloadsArgsSchema = z.object({
   share_id: z.string().uuid()
 });
 
+export const getWebhookDeliveriesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subscription_id: z.string().uuid()
+});
+
+export const getIngestionTimelineArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  days: z.number().int().min(1).max(365).optional(),
+  project_id: z.string().uuid().optional()
+});
+
+export const resetPipelineStepArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  step: z.enum(["deface", "phi_scan", "qc", "bids", "classify", "protocol", "export"]),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const reassignStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const addStudyLabelArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  label: z.string().min(1).max(80),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const removeStudyLabelArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  label_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const setStudySubjectArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  subject_id: z.string().max(256), // empty string clears the subject
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -146,7 +197,14 @@ export const readToolNames = [
   "list_projects",
   "list_institutions",
   "list_routing_rules",
-  "list_destinations"
+  "list_destinations",
+  "get_study_series",
+  "get_study_labels",
+  "list_subjects",
+  "get_export_analytics",
+  "list_webhook_subscriptions",
+  "get_webhook_deliveries",
+  "get_ingestion_timeline"
 ] as const;
 
 export const writeToolNames = [
@@ -162,7 +220,12 @@ export const writeToolNames = [
   "reject_study",
   "revoke_share",
   "create_share",
-  "re_evaluate_routing"
+  "re_evaluate_routing",
+  "reset_pipeline_step",
+  "reassign_study",
+  "add_study_label",
+  "remove_study_label",
+  "set_study_subject"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

@@ -8,22 +8,29 @@ import { InMemoryIdempotencyCache } from "./idempotencyCache.js";
 import { InMemoryRateLimiter } from "./rateLimiter.js";
 import { redactToolArgs } from "./redaction.js";
 import {
+  addStudyLabelArgsSchema,
   approveStudyArgsSchema,
   createShareArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
   getAuditActorsArgsSchema,
+  getIngestionTimelineArgsSchema,
   getShareDownloadsArgsSchema,
   getStuckStudiesArgsSchema,
+  getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
   listAuditArgsSchema,
   listStudiesArgsSchema,
   projectScopedArgsSchema,
   readToolNames,
+  reassignStudyArgsSchema,
   reEvaluateRoutingArgsSchema,
   rejectStudyArgsSchema,
+  removeStudyLabelArgsSchema,
+  resetPipelineStepArgsSchema,
   retryDimseArgsSchema,
   revokeShareArgsSchema,
+  setStudySubjectArgsSchema,
   studyIdArgsSchema,
   studyUidArgsSchema,
   ToolName,
@@ -544,6 +551,172 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "get_study_series",
+    description: "Get per-series DICOM metadata for a study. Returns {study_id, series: [{id, series_instance_uid, series_description, modality, body_part, instance_count, created_at}], total}. Use to inspect multi-series studies or verify series-level modality and body part metadata.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_study_labels",
+    description: "Get all labels attached to a study. Returns array of {id, study_id, label, created_by, created_at}. Labels are free-text tags added by operators for cohort tagging, triage, or workflow notes.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_subjects",
+    description: "List unique research subject IDs with study counts for a project. Returns array of {subject_id, study_count}. Use to audit longitudinal subject coverage or find subjects with missing sessions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project (recommended)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_export_analytics",
+    description: "Get aggregate export share analytics: total shares created, total downloads, unique recipients, average downloads per share, and breakdown by status (active/expired/revoked). Use for compliance reporting and share activity monitoring.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_webhook_subscriptions",
+    description: "List all webhook subscriptions. Returns array of {id, url, events, project_id, enabled, created_at}. Webhooks push study event notifications (approved, rejected, phi_flagged, export_complete, stuck) to external HTTP endpoints.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_webhook_deliveries",
+    description: "Get the delivery history for a webhook subscription. Returns array of {id, subscription_id, event, url, attempt, status_code, success, error_message, delivered_at}. Use for debugging webhook delivery failures.",
+    inputSchema: {
+      type: "object",
+      required: ["subscription_id"],
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_ingestion_timeline",
+    description: "Get daily ingestion counts (received and approved studies per day) for the last N days. Returns {days: [{day, received, approved}]}. Use to identify ingestion spikes, slowdowns, or gaps in pipeline throughput. Optionally scope to a single project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        days: { type: "integer", minimum: 1, maximum: 365, description: "Number of days to include (default 30)" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "reset_pipeline_step",
+    description: "Reset a single pipeline step back to 'pending' so it can be re-processed. Use for production error recovery: re-deface, re-scan PHI, re-run QC, re-convert BIDS, re-classify, re-check protocol, or re-export. Returns 409 if the step is currently in-flight. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "step", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        step: { type: "string", enum: ["deface", "phi_scan", "qc", "bids", "classify", "protocol", "export"], description: "Pipeline step to reset" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "reassign_study",
+    description: "Move a study from one project to another. The study retains all its pipeline state and audit history. Use to correct mis-routed studies. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid", description: "Study to move" },
+        project_id: { type: "string", format: "uuid", description: "Target project UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "add_study_label",
+    description: "Attach a free-text label to a study (max 80 characters). Labels are used for cohort tagging, triage prioritisation, or workflow notes. Duplicate labels on the same study are silently ignored. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "label", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        label: { type: "string", minLength: 1, maxLength: 80, description: "Label text (max 80 chars)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "remove_study_label",
+    description: "Remove a label from a study by its label UUID. Use get_study_labels first to find the label_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "label_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        label_id: { type: "string", format: "uuid", description: "Label UUID from get_study_labels" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "set_study_subject",
+    description: "Set or clear the research subject ID on a study. Subject IDs link longitudinal imaging sessions from the same de-identified participant. Use empty string to clear the subject link. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "subject_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        subject_id: { type: "string", maxLength: 256, description: "Subject identifier string (empty string clears the link)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -815,6 +988,55 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_study_series") {
+      const parsed = studyIdArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/series`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_study_labels") {
+      const parsed = studyIdArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/labels`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_subjects") {
+      const parsed = projectScopedArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/subjects${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_export_analytics") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/export-analytics");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_webhook_subscriptions") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/webhook-subscriptions");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_webhook_deliveries") {
+      const parsed = getWebhookDeliveriesArgsSchema.parse(args);
+      const data = await client.get(`/api/webhook-subscriptions/${parsed.subscription_id}/deliveries`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_ingestion_timeline") {
+      const parsed = getIngestionTimelineArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/timeline${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -844,6 +1066,31 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "re_evaluate_routing") {
         const parsedReEval = reEvaluateRoutingArgsSchema.parse(args);
         return handleReEvaluateRouting(parsedReEval.request_id ?? buildRequestId(), parsedReEval);
+      }
+
+      if (name === "reset_pipeline_step") {
+        const parsedReset = resetPipelineStepArgsSchema.parse(args);
+        return handleResetPipelineStep(parsedReset.request_id ?? buildRequestId(), parsedReset);
+      }
+
+      if (name === "reassign_study") {
+        const parsedReassign = reassignStudyArgsSchema.parse(args);
+        return handleReassignStudy(parsedReassign.request_id ?? buildRequestId(), parsedReassign);
+      }
+
+      if (name === "add_study_label") {
+        const parsedLabel = addStudyLabelArgsSchema.parse(args);
+        return handleAddStudyLabel(parsedLabel.request_id ?? buildRequestId(), parsedLabel);
+      }
+
+      if (name === "remove_study_label") {
+        const parsedRemLabel = removeStudyLabelArgsSchema.parse(args);
+        return handleRemoveStudyLabel(parsedRemLabel.request_id ?? buildRequestId(), parsedRemLabel);
+      }
+
+      if (name === "set_study_subject") {
+        const parsedSubject = setStudySubjectArgsSchema.parse(args);
+        return handleSetStudySubject(parsedSubject.request_id ?? buildRequestId(), parsedSubject);
       }
 
       const parsed = writeArgsSchema.parse(args);
@@ -945,7 +1192,17 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   if (name === "retry_dimse_study") {
     return typeof args.study_instance_uid === "string" ? args.study_instance_uid : null;
   }
-  if (name === "approve_study" || name === "reject_study" || name === "create_share" || name === "re_evaluate_routing") {
+  if (
+    name === "approve_study" ||
+    name === "reject_study" ||
+    name === "create_share" ||
+    name === "re_evaluate_routing" ||
+    name === "reset_pipeline_step" ||
+    name === "reassign_study" ||
+    name === "add_study_label" ||
+    name === "remove_study_label" ||
+    name === "set_study_subject"
+  ) {
     return typeof args.study_id === "string" ? args.study_id : null;
   }
   if (name === "revoke_share") {
@@ -1672,6 +1929,111 @@ async function handleRevokeShare(
   return formatSuccess(requestId, "revoke_share", {
     accepted: true,
     share_id: parsed.share_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleResetPipelineStep(
+  requestId: string,
+  parsed: { study_id: string; step: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reset_pipeline_step");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow reset_pipeline_step", false, "reset_pipeline_step");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reset-pipeline-step`, { step: parsed.step });
+  return formatSuccess(requestId, "reset_pipeline_step", {
+    accepted: true,
+    study_id: parsed.study_id,
+    step: parsed.step,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleReassignStudy(
+  requestId: string,
+  parsed: { study_id: string; project_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reassign_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow reassign_study", false, "reassign_study");
+  }
+
+  const data = await client.put(`/api/studies/${encodeURIComponent(parsed.study_id)}/project`, { project_id: parsed.project_id });
+  return formatSuccess(requestId, "reassign_study", {
+    accepted: true,
+    study_id: parsed.study_id,
+    project_id: parsed.project_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleAddStudyLabel(
+  requestId: string,
+  parsed: { study_id: string; label: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "add_study_label");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow add_study_label", false, "add_study_label");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/labels`, { label: parsed.label });
+  return formatSuccess(requestId, "add_study_label", {
+    accepted: true,
+    study_id: parsed.study_id,
+    label: parsed.label,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleRemoveStudyLabel(
+  requestId: string,
+  parsed: { study_id: string; label_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "remove_study_label");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow remove_study_label", false, "remove_study_label");
+  }
+
+  const data = await client.delete(`/api/studies/${encodeURIComponent(parsed.study_id)}/labels/${encodeURIComponent(parsed.label_id)}`);
+  return formatSuccess(requestId, "remove_study_label", {
+    accepted: true,
+    study_id: parsed.study_id,
+    label_id: parsed.label_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleSetStudySubject(
+  requestId: string,
+  parsed: { study_id: string; subject_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "set_study_subject");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow set_study_subject", false, "set_study_subject");
+  }
+
+  const data = await client.put(`/api/studies/${encodeURIComponent(parsed.study_id)}/subject`, { subject_id: parsed.subject_id });
+  return formatSuccess(requestId, "set_study_subject", {
+    accepted: true,
+    study_id: parsed.study_id,
+    subject_id: parsed.subject_id,
     reason: parsed.reason,
     result: data
   });
