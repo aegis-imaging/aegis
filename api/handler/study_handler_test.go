@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -285,4 +286,34 @@ func TestEvaluateRoutingRules_AppliesMatchingRule(t *testing.T) {
 	updated, err := model.GetStudyByID(context.Background(), db, study.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "approved", updated.Status)
+}
+
+func TestDeleteStudy_Handler(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	req := httptest.NewRequest("DELETE", "/api/studies/"+study.ID, nil)
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.DeleteStudy(rr, req)
+
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+
+	// Study should no longer exist.
+	_, err := model.GetStudyByID(context.Background(), db, study.ID)
+	assert.ErrorIs(t, err, sql.ErrNoRows)
+}
+
+func TestDeleteStudy_NotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	req := httptest.NewRequest("DELETE", "/api/studies/00000000-0000-0000-0000-000000000000", nil)
+	req.SetPathValue("id", "00000000-0000-0000-0000-000000000000")
+	rr := httptest.NewRecorder()
+	srv.DeleteStudy(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
