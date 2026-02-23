@@ -788,8 +788,8 @@ resource "google_cloud_run_v2_service" "sidecars" {
     volumes {
       name = "gcs-dicom"
       gcs {
-        bucket        = google_storage_bucket.staging.name
-        read_only     = false
+        bucket    = google_storage_bucket.staging.name
+        read_only = false
       }
     }
   }
@@ -1090,8 +1090,8 @@ resource "google_cloud_run_v2_service" "api" {
     volumes {
       name = "gcs-dicom"
       gcs {
-        bucket        = google_storage_bucket.staging.name
-        read_only     = false
+        bucket    = google_storage_bucket.staging.name
+        read_only = false
       }
     }
   }
