@@ -177,6 +177,12 @@ variable "synth_service_image" {
   default     = ""
 }
 
+variable "synth_service_url" {
+  description = "Direct HTTPS URL for the synthetic MRI service when managed outside Terraform (e.g. a manually-deployed Cloud Run service). Takes precedence over the synth_service_image-derived URL."
+  type        = string
+  default     = ""
+}
+
 variable "ohif_domain" {
   description = "FQDN for the public OHIF viewer used by the landing page demo (e.g. ohif.aegisimaging.ai). Leave empty to skip."
   type        = string
@@ -353,6 +359,19 @@ variable "contact_email" {
   description = "Recipient address for contact form submissions (CONTACT_EMAIL). Defaults to contact@aegisimaging.ai."
   type        = string
   default     = "contact@aegisimaging.ai"
+}
+
+variable "gate_enabled" {
+  description = "Enable server-side invite gate on landing page (GATE_ENABLED env var)"
+  type        = bool
+  default     = false
+}
+
+variable "gate_secret" {
+  description = "HMAC secret for landing page invite gate tokens (GATE_SECRET env var)"
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "allowed_origins" {
@@ -680,6 +699,14 @@ resource "google_storage_bucket_iam_member" "api_staging_rw" {
   member = "serviceAccount:${google_service_account.api.email}"
 }
 
+# Sidecars need read/write access to the staging bucket for GCS FUSE mounts
+# (defacing reads raw files and writes clean output, QC/BIDS/phi-detection read raw files).
+resource "google_storage_bucket_iam_member" "sidecars_staging_rw" {
+  bucket = google_storage_bucket.staging.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.sidecars.email}"
+}
+
 resource "google_storage_bucket_iam_member" "api_archive_rw" {
   bucket = google_storage_bucket.archive.name
   role   = "roles/storage.objectAdmin"
@@ -713,6 +740,11 @@ resource "google_cloud_run_v2_service" "sidecars" {
   template {
     service_account = google_service_account.sidecars.email
 
+    annotations = {
+      # gen2 execution environment is required for GCS FUSE CSI volume mounts.
+      "run.googleapis.com/execution-environment" = "gen2"
+    }
+
     scaling {
       min_instance_count = var.sidecar_min_instances
       max_instance_count = var.sidecar_max_instances
@@ -726,6 +758,14 @@ resource "google_cloud_run_v2_service" "sidecars" {
           cpu    = var.sidecar_cpu
           memory = var.sidecar_memory
         }
+      }
+
+      # Mount the shared DICOM GCS bucket so sidecars (defacing, QC, BIDS, etc.)
+      # can read raw files and write processed output via the same filesystem path
+      # as the Go API.
+      volume_mounts {
+        name       = "gcs-dicom"
+        mount_path = "/app/data"
       }
 
       liveness_probe {
@@ -743,6 +783,14 @@ resource "google_cloud_run_v2_service" "sidecars" {
     vpc_access {
       connector = google_vpc_access_connector.cloud_run.id
       egress    = "ALL_TRAFFIC"
+    }
+
+    volumes {
+      name = "gcs-dicom"
+      gcs {
+        bucket        = google_storage_bucket.staging.name
+        read_only     = false
+      }
     }
   }
 }
@@ -857,6 +905,11 @@ resource "google_cloud_run_v2_service" "api" {
   template {
     service_account = google_service_account.api.email
 
+    annotations = {
+      # gen2 execution environment is required for GCS FUSE CSI volume mounts.
+      "run.googleapis.com/execution-environment" = "gen2"
+    }
+
     scaling {
       min_instance_count = var.api_min_instances
       max_instance_count = var.api_max_instances
@@ -904,7 +957,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
       env {
         name  = "LOCAL_STORAGE_DIR"
-        value = "/tmp/aegis-data"
+        value = "/app/data"
       }
       env {
         name  = "GCP_PROJECT"
@@ -999,10 +1052,14 @@ resource "google_cloud_run_v2_service" "api" {
         value = google_cloud_run_v2_service.sidecars["protocol-service"].uri
       }
       dynamic "env" {
-        for_each = var.synth_service_image != "" ? [1] : []
+        # Prefer an explicit URL override; fall back to the Terraform-managed
+        # synth-service Cloud Run URI when synth_service_image is set.
+        for_each = var.synth_service_url != "" ? [var.synth_service_url] : (
+          var.synth_service_image != "" ? [google_cloud_run_v2_service.sidecars["synth-service"].uri] : []
+        )
         content {
           name  = "SYNTH_SERVICE_URL"
-          value = google_cloud_run_v2_service.sidecars["synth-service"].uri
+          value = env.value
         }
       }
 
@@ -1016,11 +1073,26 @@ resource "google_cloud_run_v2_service" "api" {
           path = "/healthz"
         }
       }
+
+      # Mount the shared DICOM GCS bucket so the API can resolve filesystem paths
+      # for defacing, QC, BIDS, and DICOMweb serving (LOCAL_STORAGE_DIR=/app/data).
+      volume_mounts {
+        name       = "gcs-dicom"
+        mount_path = "/app/data"
+      }
     }
 
     vpc_access {
       connector = google_vpc_access_connector.cloud_run.id
       egress    = "ALL_TRAFFIC"
+    }
+
+    volumes {
+      name = "gcs-dicom"
+      gcs {
+        bucket        = google_storage_bucket.staging.name
+        read_only     = false
+      }
     }
   }
 }
@@ -1104,6 +1176,21 @@ resource "google_cloud_run_v2_service" "landing" {
           memory = "256Mi"
         }
         cpu_idle = true
+      }
+
+      env {
+        name  = "API_BASE_URL"
+        value = "https://${var.api_domain}"
+      }
+
+      env {
+        name  = "GATE_ENABLED"
+        value = var.gate_enabled ? "true" : "false"
+      }
+
+      env {
+        name  = "GATE_SECRET"
+        value = var.gate_secret
       }
 
       liveness_probe {
