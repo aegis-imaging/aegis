@@ -263,6 +263,18 @@ export const bulkLabelStudiesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const generateSyntheticStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_slug: z.string().min(1).max(64).optional(),
+  slices: z.number().int().min(1).max(100).optional(),
+  size: z.number().int().min(64).max(512).optional(),
+  seed: z.number().int().min(0).optional(),
+  with_face: z.boolean().optional(),
+  use_gpu: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -328,6 +340,7 @@ export const writeToolNames = [
   "bulk_approve_studies",
   "bulk_reject_studies",
   "bulk_label_studies",
+  "generate_synthetic_study",
   "create_api_key",
   "rotate_api_key",
   "enable_api_key",
