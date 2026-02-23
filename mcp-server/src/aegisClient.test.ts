@@ -399,6 +399,18 @@ test("AegisApiClient allows API key list GET, create POST, rotate POST, enable/d
   assert.deepEqual(deleted, {});
 });
 
+test("AegisApiClient allows bulk study action and bulk label POST paths", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+
+  const bulkResult = await client.post("/api/studies/bulk", { action: "approve", study_ids: [] });
+  const labelResult = await client.post("/api/studies/bulk-label", { study_ids: [], label: "test", action: "add" });
+
+  assert.deepEqual(bulkResult, {});
+  assert.deepEqual(labelResult, {});
+});
+
 test("AegisApiClient blocks disallowed API key paths", async () => {
   const client = new AegisApiClient("http://example.internal", "token");
   const keyId = "550e8400-e29b-41d4-a716-446655440000";

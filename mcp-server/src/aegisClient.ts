@@ -62,6 +62,8 @@ const allowedGetPathPatterns = [
 const allowedPostPathPatterns = [
   /^\/api\/api-keys$/,
   /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/rotate$/,
+  /^\/api\/studies\/bulk$/,
+  /^\/api\/studies\/bulk-label$/,
   /^\/api\/studies\/[0-9.]+\/classify$/,
   /^\/api\/studies\/[0-9.]+\/bids-convert$/,
   /^\/api\/studies\/[0-9.]+\/trigger-export$/,
