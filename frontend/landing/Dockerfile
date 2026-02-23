@@ -25,30 +25,35 @@ RUN npm ci --workspace=@aegis/landing --ignore-scripts
 # Defaults point to production; override with --build-arg when building for other environments.
 ARG VITE_API_BASE_URL=https://api.aegisimaging.ai
 ARG VITE_OHIF_BASE_URL=https://ohif.aegisimaging.ai
-# VITE_INVITE_GATE_ENABLED: set to 'true' to enable the server-side invite code gate.
-# Leave 'false' (default) for a fully public site.
-# Codes are managed via POST /api/invite-codes and validated server-side — no secret
-# is baked into the bundle.
-# Example: --build-arg VITE_INVITE_GATE_ENABLED=true
-ARG VITE_INVITE_GATE_ENABLED=false
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_OHIF_BASE_URL=$VITE_OHIF_BASE_URL
-ENV VITE_INVITE_GATE_ENABLED=$VITE_INVITE_GATE_ENABLED
+# Gate is now server-side — VITE_INVITE_GATE_ENABLED is no longer needed.
+# The React-side hook stays in the code but is a no-op (GATE_ENABLED env
+# var on the server controls access; the client always sees the full app).
 
 # Build the Vite app
 WORKDIR /app/frontend/landing
 RUN npm run build
 
-# Stage 2: Serve with nginx
-FROM nginx:1.27-alpine
+# Stage 2: Build the Go gate server
+FROM golang:1.24 AS server
 
-# Remove default nginx config
-RUN rm /etc/nginx/conf.d/default.conf
+WORKDIR /srv
+COPY frontend/landing/server/go.mod ./
+RUN go mod download
+COPY frontend/landing/server/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -o /gate-server .
 
-COPY frontend/landing/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/frontend/landing/dist /usr/share/nginx/html
+# Stage 3: Final image (distroless — no shell, minimal attack surface)
+FROM gcr.io/distroless/static-debian12:nonroot
 
-# Cloud Run listens on 8080
+COPY --from=server /gate-server /gate-server
+COPY --from=build /app/frontend/landing/dist /app/dist
+
+# Runtime env vars (set in Cloud Run):
+#   GATE_ENABLED=true
+#   GATE_SECRET=<random 32+ char secret>
+#   API_BASE_URL=https://api.aegisimaging.ai  (default)
+
 EXPOSE 8080
-
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/gate-server"]
