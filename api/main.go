@@ -258,6 +258,7 @@ func main() {
 	mux.HandleFunc("POST /api/api-keys", adminOnly(srv.CreateAPIKey))
 	mux.HandleFunc("PATCH /api/api-keys/{id}/enable", adminOnly(srv.EnableAPIKey))
 	mux.HandleFunc("PATCH /api/api-keys/{id}/disable", adminOnly(srv.DisableAPIKey))
+	mux.HandleFunc("POST /api/api-keys/{id}/rotate", adminOnly(srv.RotateAPIKey))
 	mux.HandleFunc("DELETE /api/api-keys/{id}", adminOnly(srv.DeleteAPIKey))
 
 	// Study labels — free-text tags applied by admin users for structured triage.
