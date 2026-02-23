@@ -15,6 +15,7 @@ import {
   bulkLabelStudiesArgsSchema,
   bulkStudyActionArgsSchema,
   createApiKeyArgsSchema,
+  generateSyntheticStudyArgsSchema,
   createShareArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
@@ -1042,6 +1043,26 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "generate_synthetic_study",
+    description: "Generate a synthetic brain MRI DICOM study via the synth-service and import it into AEGIS. Useful for populating test data, validating the pipeline, or producing demo studies. The generated phantom is a Shepp-Logan brain with optional facial anatomy (with_face=true) so the defacing pipeline can be exercised. Returns {study_id, study_uid, file_count, tool_used, duration_seconds}. Requires SYNTH_SERVICE_URL to be configured on the API. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_slug: { type: "string", minLength: 1, maxLength: 64, description: "Target project slug (default: 'default')" },
+        slices: { type: "integer", minimum: 1, maximum: 100, description: "Number of axial slices to generate (default: 20)" },
+        size: { type: "integer", minimum: 64, maximum: 512, description: "Image matrix size in pixels (default: 256)" },
+        seed: { type: "integer", minimum: 0, description: "Random seed for reproducible phantoms (default: random)" },
+        with_face: { type: "boolean", description: "Include facial anatomy to exercise the defacing pipeline (default: false)" },
+        use_gpu: { type: "boolean", description: "Use GPU-accelerated MONAI BraTS LDM if available (default: false)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -1528,6 +1549,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleBulkLabelStudies(parsedBulkLabel.request_id ?? buildRequestId(), parsedBulkLabel);
       }
 
+      if (name === "generate_synthetic_study") {
+        const parsedSynth = generateSyntheticStudyArgsSchema.parse(args);
+        return handleGenerateSyntheticStudy(parsedSynth.request_id ?? buildRequestId(), parsedSynth);
+      }
+
       const parsed = writeArgsSchema.parse(args);
 
       if (name === "trigger_classification") {
@@ -1668,6 +1694,9 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
       return `${ids.length} studies`;
     }
     return null;
+  }
+  if (name === "generate_synthetic_study") {
+    return typeof args.project_slug === "string" ? args.project_slug : "default";
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -2740,6 +2769,43 @@ async function handleBulkLabelStudies(
     action: parsed.action,
     label: parsed.label,
     count: parsed.study_ids.length,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleGenerateSyntheticStudy(
+  requestId: string,
+  parsed: {
+    project_slug?: string;
+    slices?: number;
+    size?: number;
+    seed?: number;
+    with_face?: boolean;
+    use_gpu?: boolean;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "generate_synthetic_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow generate_synthetic_study", false, "generate_synthetic_study");
+  }
+
+  const body: Record<string, unknown> = {};
+  if (parsed.project_slug) body.project_slug = parsed.project_slug;
+  if (parsed.slices !== undefined) body.slices = parsed.slices;
+  if (parsed.size !== undefined) body.size = parsed.size;
+  if (parsed.seed !== undefined) body.seed = parsed.seed;
+  if (parsed.with_face !== undefined) body.with_face = parsed.with_face;
+  if (parsed.use_gpu !== undefined) body.use_gpu = parsed.use_gpu;
+
+  const data = await client.post("/api/studies/generate-synthetic", body);
+  return formatSuccess(requestId, "generate_synthetic_study", {
+    accepted: true,
+    project_slug: parsed.project_slug ?? "default",
     reason: parsed.reason,
     result: data
   });
