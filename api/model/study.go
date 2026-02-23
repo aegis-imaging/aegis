@@ -740,3 +740,23 @@ func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...st
 	}
 	return result, rows.Err()
 }
+
+// DeleteStudy permanently removes a study and all its dependent rows.
+// export_shares lacks ON DELETE CASCADE, so it is cleared explicitly first.
+// All other child tables (study_labels, study_sla_alerts, study_series,
+// routing_rule_log, etc.) cascade automatically.
+func DeleteStudy(ctx context.Context, db *sql.DB, id string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM export_shares WHERE study_id = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM studies WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

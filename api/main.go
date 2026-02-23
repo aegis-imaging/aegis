@@ -186,6 +186,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies.csv", auth(srv.ExportStudiesCSV))
 	mux.HandleFunc("GET /api/studies/stuck", auth(srv.GetStuckStudies))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
+	mux.HandleFunc("DELETE /api/studies/{id}", adminOnly(srv.DeleteStudy))
 	mux.HandleFunc("GET /api/study-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/{id}/audit", auth(srv.ListStudyAudit))
 	mux.HandleFunc("GET /api/studies/{id}/series", auth(srv.ListStudySeries))
