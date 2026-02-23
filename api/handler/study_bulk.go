@@ -31,8 +31,8 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Action != "approve" && req.Action != "reject" {
-		s.writeError(w, http.StatusBadRequest, "action must be 'approve' or 'reject'")
+	if req.Action != "approve" && req.Action != "reject" && req.Action != "delete" {
+		s.writeError(w, http.StatusBadRequest, "action must be 'approve', 'reject', or 'delete'")
 		return
 	}
 	if len(req.StudyIDs) == 0 {
@@ -56,6 +56,24 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 		}
 
 		switch req.Action {
+		case "delete":
+			for _, prefix := range []string{
+				"dicom/raw/" + study.StudyInstanceUID + "/",
+				"dicom/clean/" + study.StudyInstanceUID + "/",
+				"bids/" + study.StudyInstanceUID + "/",
+			} {
+				if keys, lerr := s.store.List(r.Context(), prefix); lerr == nil {
+					for _, k := range keys {
+						_ = s.store.Delete(r.Context(), k)
+					}
+				}
+			}
+			if err := model.DeleteStudy(r.Context(), s.db, id); err != nil {
+				resp.Errors = append(resp.Errors, bulkStudyError{StudyID: id, Error: "failed to delete"})
+				continue
+			}
+			model.CreateAuditEntry(r.Context(), s.db, "study.deleted", actor, "study", id, ip, nil)
+
 		case "approve":
 			if study.Status == "approved" || study.Status == "rejected" {
 				resp.Errors = append(resp.Errors, bulkStudyError{StudyID: id, Error: "already " + study.Status})
