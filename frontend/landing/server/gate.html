@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AEGIS — Early Access</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 400px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 40px 36px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .brand-name {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-tagline {
+      font-size: 0.72rem;
+      color: #64748b;
+      letter-spacing: 0.02em;
+    }
+
+    .divider {
+      height: 1px;
+      background: #334155;
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 6px;
+    }
+
+    .desc {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .error-box {
+      background: #431407;
+      border: 1px solid #7c2d12;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fb923c;
+      font-size: 0.82rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .error-box.visible {
+      display: block;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 11px 14px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #f1f5f9;
+      font-size: 0.95rem;
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
+      letter-spacing: 0.1em;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      margin-bottom: 12px;
+    }
+
+    input[type="text"]:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    input[type="text"]::placeholder {
+      color: #475569;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      letter-spacing: normal;
+      font-size: 0.9rem;
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: 11px 20px;
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    button[type="submit"]:hover:not(:disabled) {
+      background: #2563eb;
+    }
+
+    button[type="submit"]:disabled {
+      background: #1e3a5f;
+      color: #475569;
+      cursor: not-allowed;
+    }
+
+    .footer {
+      margin-top: 24px;
+      font-size: 0.78rem;
+      color: #475569;
+      text-align: center;
+    }
+
+    .footer a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="brand-icon">🛡️</div>
+      <div>
+        <div class="brand-name">AEGIS</div>
+        <div class="brand-tagline">HIPAA-COMPLIANT MEDICAL IMAGING</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <h1>Early Access</h1>
+    <p class="desc">AEGIS is currently in private beta. Enter your invite code to continue.</p>
+
+    <div class="error-box" id="err">{{ERROR}}</div>
+
+    <form id="gate-form">
+      <input
+        type="text"
+        id="code"
+        placeholder="Enter invite code"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        autofocus
+      />
+      <button type="submit" id="btn">Continue →</button>
+    </form>
+
+    <div class="footer">
+      Don't have a code? <a href="mailto:hello@aegisimaging.ai">Request access</a>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var errEl = document.getElementById('err');
+      var msg = errEl.textContent.trim();
+      if (msg) errEl.classList.add('visible');
+
+      document.getElementById('gate-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var code = document.getElementById('code').value.trim();
+        if (!code) return;
+
+        var btn = document.getElementById('btn');
+        btn.disabled = true;
+        btn.textContent = 'Checking…';
+        errEl.classList.remove('visible');
+
+        fetch('/api/gate/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.valid) {
+              window.location.reload();
+            } else {
+              errEl.textContent = 'Invalid invite code. Please check and try again.';
+              errEl.classList.add('visible');
+              btn.disabled = false;
+              btn.textContent = 'Continue →';
+            }
+          })
+          .catch(function () {
+            errEl.textContent = 'Network error — please try again.';
+            errEl.classList.add('visible');
+            btn.disabled = false;
+            btn.textContent = 'Continue →';
+          });
+      });
+    })();
+  </script>
+</body>
+</html>
