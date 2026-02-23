@@ -73,6 +73,17 @@ func UpdateAPIKeyEnabled(ctx context.Context, db *sql.DB, id string, enabled boo
 	return err
 }
 
+// RotateAPIKey replaces the key_hash and key_prefix for an existing API key and
+// returns the updated record. The caller is responsible for generating the new
+// values and returning the raw key to the user exactly once.
+func RotateAPIKey(ctx context.Context, db *sql.DB, id, newHash, newPrefix string) (*APIKey, error) {
+	return scanAPIKey(db.QueryRowContext(ctx,
+		`UPDATE api_keys SET key_hash = $1, key_prefix = $2, updated_at = now()
+		 WHERE id = $3
+		 RETURNING `+apiKeyCols,
+		newHash, newPrefix, id))
+}
+
 // DeleteAPIKey permanently removes an API key.
 func DeleteAPIKey(ctx context.Context, db *sql.DB, id string) error {
 	_, err := db.ExecContext(ctx, `DELETE FROM api_keys WHERE id = $1`, id)
