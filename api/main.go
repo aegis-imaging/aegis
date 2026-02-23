@@ -213,6 +213,10 @@ func main() {
 	// Batch import — import DICOM files from a server-local directory.
 	mux.HandleFunc("POST /api/import/batch", adminOnly(srv.BatchImport))
 
+	// TCIA (Cancer Imaging Archive) — browse public brain MRI collections and import series.
+	mux.HandleFunc("GET /api/tcia/series", auth(srv.GetTCIASeries))
+	mux.HandleFunc("POST /api/tcia/import", adminOnly(srv.ImportTCIASeries))
+
 	mux.HandleFunc("GET /api/audit", auth(srv.ListAudit))
 	mux.HandleFunc("GET /api/audit.csv", auth(srv.ExportAuditCSV))
 	mux.HandleFunc("GET /api/audit/actors", auth(srv.GetAuditActors))
