@@ -5,15 +5,22 @@ import type { DicomTag } from '@aegis/client'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
 // ---------------------------------------------------------------------------
+// Env vars (baked in at build time by Vite)
+// ---------------------------------------------------------------------------
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
+const OHIF_BASE = (import.meta.env.VITE_OHIF_BASE_URL as string | undefined) ?? ''
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type Stage = 'idle' | 'generating' | 'ready' | 'running' | 'done'
+type Stage = 'idle' | 'generating' | 'polling' | 'loading' | 'done'
 
 interface RenderedSlice {
   filename: string
-  originalDataURL: string   // canvas toDataURL before defacing
-  defacedDataURL: string    // canvas toDataURL after anterior mask
+  originalDataURL: string   // canvas toDataURL — raw store (before defacing)
+  defacedDataURL: string    // canvas toDataURL — clean store (after defacing)
   rows: number
   cols: number
 }
@@ -151,14 +158,6 @@ function SliceGrid({ slices, label, maskBadge }: {
               alt={`Slice ${i + 1}`}
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
-            {maskBadge && (
-              <div style={{
-                position: 'absolute', top: 0, left: 0, right: 0,
-                height: '28%',
-                background: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.0) 0px, rgba(0,0,0,0.0) 4px, rgba(52,211,153,0.06) 4px, rgba(52,211,153,0.06) 8px)',
-                borderBottom: '1px dashed rgba(52,211,153,0.3)',
-              }}/>
-            )}
             <div style={{
               position: 'absolute', bottom: '3px', right: '4px',
               fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)',
@@ -277,74 +276,171 @@ function TagDiffTable({ tags }: { tags: DicomTag[] }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-// Slice indices to load from /demo/ (1-indexed, e.g. slice_007.dcm)
-const DEMO_SLICES = ['007', '010', '013', '016'] as const
+// Slice indices (0-based) to fetch from DICOMweb for the canvas preview.
+const CANVAS_SLICE_INDICES = [3, 7, 11, 15]
+const POLL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function PipelineDemo() {
   const { ref, isVisible } = useScrollAnimation()
   const [stage, setStage] = useState<Stage>('idle')
+  const [studyID, setStudyID] = useState('')
+  const [studyUID, setStudyUID] = useState('')
   const [slices, setSlices] = useState<RenderedSlice[]>([])
   const [tagChanges, setTagChanges] = useState<DicomTag[]>([])
   const [errorMsg, setErrorMsg] = useState('')
+  const [pollSeconds, setPollSeconds] = useState(0)
   const abortRef = useRef(false)
 
   useEffect(() => { return () => { abortRef.current = true } }, [])
 
-  const handleGenerate = useCallback(async () => {
-    setStage('generating')
-    setErrorMsg('')
-    abortRef.current = false
+  // ---------------------------------------------------------------------------
+  // Fetch DICOM slices from DICOMweb for canvas + tag diff, then set done state
+  // ---------------------------------------------------------------------------
 
+  const loadDicomData = useCallback(async (uid: string) => {
+    setStage('loading')
     try {
+      const seriesUID = `${uid}.1`
       const loaded: RenderedSlice[] = []
 
-      for (const idx of DEMO_SLICES) {
+      for (const idx of CANVAS_SLICE_INDICES) {
         if (abortRef.current) return
-        const path = `/demo/slice_${idx}.dcm`
-        const resp = await fetch(path)
-        if (!resp.ok) throw new Error(`Failed to load ${path}`)
-        const buf = await resp.arrayBuffer()
+        const sopUID = `${uid}.1.${idx}`
 
-        // Render original
-        const bytes = new Uint8Array(buf)
-        const { dataURL: origDataURL, rows, cols } = renderDicomToCanvas(bytes, false)
-        // Render defaced (with anterior mask)
-        const { dataURL: defacedDataURL } = renderDicomToCanvas(bytes, true)
+        // Fetch the same slice from both stores in parallel
+        const [rawRes, cleanRes] = await Promise.all([
+          fetch(`${API_BASE}/dicomweb-raw/studies/${uid}/series/${seriesUID}/instances/${sopUID}`),
+          fetch(`${API_BASE}/dicomweb/studies/${uid}/series/${seriesUID}/instances/${sopUID}`),
+        ])
+        if (!rawRes.ok || !cleanRes.ok) continue
+        const [rawBuf, cleanBuf] = await Promise.all([rawRes.arrayBuffer(), cleanRes.arrayBuffer()])
 
-        loaded.push({
-          filename: `slice_${idx}.dcm`,
-          originalDataURL: origDataURL,
-          defacedDataURL: defacedDataURL,
-          rows, cols,
-        })
+        const { dataURL: origDataURL, rows, cols } = renderDicomToCanvas(new Uint8Array(rawBuf), false)
+        const { dataURL: defacedDataURL } = renderDicomToCanvas(new Uint8Array(cleanBuf), false)
+
+        loaded.push({ filename: `slice_${idx}.dcm`, originalDataURL: origDataURL, defacedDataURL, rows, cols })
       }
 
-      // Extract DICOM tags from first slice for tag diff demo
-      const firstBuf = await (await fetch(`/demo/slice_007.dcm`)).arrayBuffer()
-      const { dataset } = parseDicomFile(firstBuf, 'slice_007.dcm')
-      const { tagChanges: tc } = await deidentify(dataset, {})
+      // Client-side tag diff from first raw slice (shows which HIPAA tags would be removed)
+      if (!abortRef.current) {
+        const sopUID0 = `${uid}.1.0`
+        const firstRes = await fetch(`${API_BASE}/dicomweb-raw/studies/${uid}/series/${uid}.1/instances/${sopUID0}`)
+        if (firstRes.ok) {
+          const firstBuf = await firstRes.arrayBuffer()
+          const { dataset } = parseDicomFile(firstBuf, 'slice_0.dcm')
+          const { tagChanges: tc } = await deidentify(dataset, {})
+          setTagChanges(tc)
+        }
+      }
 
       setSlices(loaded)
-      setTagChanges(tc)
-      setStage('ready')
+      setStage('done')
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Failed to load demo data')
+      setErrorMsg(e instanceof Error ? e.message : 'Failed to load DICOM data')
       setStage('idle')
     }
   }, [])
 
-  const handleRunPipeline = useCallback(() => {
-    setStage('running')
-    // Brief animation delay for perceived progress
-    setTimeout(() => setStage('done'), 900)
+  // ---------------------------------------------------------------------------
+  // Start the demo — call the real API
+  // ---------------------------------------------------------------------------
+
+  const handleGenerate = useCallback(async () => {
+    setStage('generating')
+    setErrorMsg('')
+    setPollSeconds(0)
+    abortRef.current = false
+
+    try {
+      const res = await fetch(`${API_BASE}/api/demo/generate`, { method: 'POST' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `Server error ${res.status}`)
+      }
+      const data = await res.json()
+      setStudyID(data.study_id)
+      setStudyUID(data.study_uid)
+      setStage('polling')
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Failed to start demo')
+      setStage('idle')
+    }
   }, [])
 
+  // ---------------------------------------------------------------------------
+  // Poll study status until defacing is complete
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (stage !== 'polling' || !studyID) return
+    const startTime = Date.now()
+
+    const timer = setInterval(async () => {
+      if (abortRef.current) { clearInterval(timer); return }
+
+      const elapsed = Date.now() - startTime
+      setPollSeconds(Math.floor(elapsed / 1000))
+
+      if (elapsed > POLL_TIMEOUT_MS) {
+        clearInterval(timer)
+        setErrorMsg('Demo timed out — defacing took too long. Please try again.')
+        setStage('idle')
+        return
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/demo/study/${studyID}`)
+        if (!res.ok) return
+        const data = await res.json()
+
+        // Defacing complete when status is 'defaced' or dicom_store switched to 'clean'
+        if (data.status === 'defaced' || data.dicom_store === 'clean') {
+          clearInterval(timer)
+          await loadDicomData(data.study_uid || studyUID)
+        } else if (data.status === 'rejected') {
+          clearInterval(timer)
+          setErrorMsg('Pipeline step failed — please try again.')
+          setStage('idle')
+        }
+      } catch { /* ignore transient network errors during polling */ }
+    }, 3000)
+
+    return () => clearInterval(timer)
+  }, [stage, studyID, studyUID, loadDicomData])
+
   const handleReset = useCallback(() => {
+    abortRef.current = true
+    setTimeout(() => { abortRef.current = false }, 0)
     setStage('idle')
+    setStudyID('')
+    setStudyUID('')
     setSlices([])
     setTagChanges([])
     setErrorMsg('')
+    setPollSeconds(0)
   }, [])
+
+  // ---------------------------------------------------------------------------
+  // Step indicator config
+  // ---------------------------------------------------------------------------
+
+  const steps = [
+    {
+      n: '1', label: 'Generate', desc: 'Synthetic brain MRI via synth-service',
+      done: stage !== 'idle' && stage !== 'generating',
+      active: stage === 'idle' || stage === 'generating',
+    },
+    {
+      n: '2', label: 'Deface', desc: 'Server-side facial feature removal',
+      done: stage === 'loading' || stage === 'done',
+      active: stage === 'polling',
+    },
+    {
+      n: '3', label: 'Verify', desc: 'DICOM tags + OHIF before/after',
+      done: stage === 'done',
+      active: stage === 'loading' || stage === 'done',
+    },
+  ]
 
   return (
     <section
@@ -369,7 +465,7 @@ export default function PipelineDemo() {
             fontSize: '0.77rem', fontWeight: 700, letterSpacing: '0.1em',
             textTransform: 'uppercase', marginBottom: '16px',
           }}>
-            Full Pipeline Demo
+            Live Pipeline Demo
           </span>
           <h2 style={{
             fontSize: 'clamp(1.75rem, 4vw, 2.5rem)', fontWeight: 800,
@@ -378,8 +474,9 @@ export default function PipelineDemo() {
             Generate a brain MRI — watch the full pipeline run
           </h2>
           <p style={{ fontSize: '1.05rem', color: '#94a3b8', maxWidth: '640px', margin: '0 auto' }}>
-            Synthetic brain MRI slices (Shepp–Logan phantom) rendered live in your browser.
-            Then anonymize every tag and simulate defacing — all client-side, zero data transmitted.
+            Click to generate a real synthetic brain MRI on the AEGIS server.
+            The platform anonymizes every DICOM tag and runs server-side defacing.
+            Compare before and after in the embedded OHIF viewer.
           </p>
         </div>
 
@@ -393,15 +490,10 @@ export default function PipelineDemo() {
             borderRadius: '12px', overflow: 'hidden',
           }}
         >
-          {[
-            { n: '1', label: 'Generate', desc: 'Load synthetic brain MRI', done: stage !== 'idle', active: stage === 'idle' || stage === 'generating' },
-            { n: '2', label: 'Anonymize', desc: 'Strip 18 HIPAA identifiers', done: stage === 'done', active: stage === 'ready' || stage === 'running' },
-            { n: '3', label: 'Deface', desc: 'Remove anterior facial region', done: stage === 'done', active: stage === 'running' },
-            { n: '4', label: 'Verify', desc: 'Before/after comparison', done: stage === 'done', active: stage === 'done' },
-          ].map((step, i) => (
+          {steps.map((step, i) => (
             <div key={step.n} style={{
               flex: 1, padding: '16px 18px',
-              borderRight: i < 3 ? '1px solid #1e293b' : undefined,
+              borderRight: i < steps.length - 1 ? '1px solid #1e293b' : undefined,
               background: step.active
                 ? 'rgba(59,130,246,0.07)'
                 : step.done ? 'rgba(52,211,153,0.05)' : 'transparent',
@@ -459,11 +551,11 @@ export default function PipelineDemo() {
             }}>
               <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🧠</div>
               <p style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '1.1rem', marginBottom: '8px' }}>
-                Ready to generate a synthetic brain MRI study
+                Ready to generate a real synthetic brain MRI
               </p>
               <p style={{ color: '#64748b', fontSize: '0.87rem', marginBottom: '32px', maxWidth: '460px', margin: '0 auto 28px' }}>
-                Pre-generated Shepp–Logan phantom slices will be loaded and rendered
-                live in your browser via the DICOM pixel pipeline.
+                Clicks the AEGIS synth-service to produce a fresh Shepp–Logan phantom with
+                facial anatomy, then runs the full server-side anonymization and defacing pipeline.
               </p>
               <button
                 onClick={handleGenerate}
@@ -481,96 +573,86 @@ export default function PipelineDemo() {
                 onMouseOut={e => { e.currentTarget.style.transform = '' }}
               >
                 {stage === 'generating'
-                  ? '⚙️  Rendering DICOM slices…'
+                  ? '⚙️  Generating synthetic MRI…'
                   : '🧠  Generate Synthetic Brain MRI'}
               </button>
               {stage === 'generating' && (
                 <p style={{ color: '#475569', fontSize: '0.78rem', marginTop: '12px' }}>
-                  Loading demo DICOM files · Rendering 16-bit pixels to canvas
+                  Calling synth-service · Importing study · Triggering pipeline
                 </p>
               )}
             </div>
           </div>
         )}
 
-        {/* ── Step 2: ready ── */}
-        {stage === 'ready' && (
-          <div>
+        {/* ── Step 2: polling — waiting for defacing ── */}
+        {stage === 'polling' && (
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
             <div style={{
-              display: 'flex', gap: '24px', alignItems: 'flex-start',
-              marginBottom: '24px', flexWrap: 'wrap',
+              display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+              background: 'rgba(15,23,42,0.8)', border: '1px solid #1e293b',
+              borderRadius: '16px', padding: '40px 52px', gap: '16px',
             }}>
-              <SliceGrid slices={slices} label="Original synthetic brain MRI" />
-            </div>
+              {/* Spinner */}
+              <div style={{
+                width: '48px', height: '48px', borderRadius: '50%',
+                border: '3px solid rgba(59,130,246,0.2)',
+                borderTop: '3px solid #3b82f6',
+                animation: 'spin 1s linear infinite',
+              }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-            {/* Stats row */}
-            <div style={{
-              display: 'flex', gap: '10px', flexWrap: 'wrap',
-              marginBottom: '24px',
-            }}>
-              {[
-                { val: `${slices.length}`, label: 'Slices loaded', color: '#3b82f6' },
-                { val: `${slices[0]?.rows ?? 0}×${slices[0]?.cols ?? 0}`, label: 'Image size', color: '#8b5cf6' },
-                { val: '16-bit', label: 'Pixel depth', color: '#06b6d4' },
-                { val: `${tagChanges.filter(t => t.action !== 'K').length}`, label: 'Tags to anonymize', color: '#dc2626' },
-              ].map(({ val, label, color }) => (
-                <div key={label} style={{
-                  background: 'rgba(15,23,42,0.8)', border: `1px solid ${color}30`,
-                  borderRadius: '10px', padding: '10px 16px', textAlign: 'center', flex: 1, minWidth: '100px',
-                }}>
-                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color, lineHeight: 1 }}>{val}</div>
-                  <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '3px' }}>{label}</div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ textAlign: 'center' }}>
-              <button
-                onClick={handleRunPipeline}
-                style={{
-                  padding: '14px 40px', borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                  color: '#fff', border: 'none',
-                  fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
-                  transition: 'transform 0.15s',
-                }}
-                onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-1px)' }}
-                onMouseOut={e => { e.currentTarget.style.transform = '' }}
-              >
-                ▶  Run Anonymization + Defacing
-              </button>
-              <p style={{ color: '#475569', fontSize: '0.78rem', marginTop: '8px' }}>
-                Client-side · DICOM PS3.15 de-identification + anterior facial region removal simulation
+              <p style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '1rem', margin: 0 }}>
+                Defacing in progress…
+              </p>
+              <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
+                Server-side mri_deface removing facial anatomy · {pollSeconds}s elapsed
+              </p>
+              <div style={{
+                display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center',
+                marginTop: '4px',
+              }}>
+                {['DICOM imported', 'Routing evaluated', 'Defacing queued'].map(label => (
+                  <span key={label} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                    padding: '3px 10px', borderRadius: '12px',
+                    background: 'rgba(52,211,153,0.10)', color: '#34d399',
+                    fontSize: '0.72rem', fontWeight: 600,
+                  }}>
+                    ✓ {label}
+                  </span>
+                ))}
+              </div>
+              <p style={{ color: '#334155', fontSize: '0.74rem', margin: 0 }}>
+                Typically completes in 30–90 seconds · Study UID: {studyUID.slice(0, 24)}…
               </p>
             </div>
           </div>
         )}
 
-        {/* ── Step 3: running ── */}
-        {stage === 'running' && (
+        {/* ── Step 2.5: loading DICOM data ── */}
+        {stage === 'loading' && (
           <div style={{ textAlign: 'center', padding: '48px 0' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '16px' }}>⚙️</div>
-            <p style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '6px' }}>
-              Running de-identification pipeline…
-            </p>
+            <div style={{ fontSize: '2rem', marginBottom: '16px' }}>📂</div>
+            <p style={{ color: '#e2e8f0', fontWeight: 600 }}>Loading DICOM slices…</p>
             <p style={{ color: '#64748b', fontSize: '0.85rem' }}>
-              Applying PS3.15 Basic Profile · Masking anterior facial region
+              Fetching before/after images from DICOMweb
             </p>
           </div>
         )}
 
-        {/* ── Step 4: done ── */}
+        {/* ── Step 3: done — results ── */}
         {stage === 'done' && (
           <div>
-            {/* Before / After comparison */}
+            {/* ── Before / After canvas comparison ── */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '24px', flexWrap: 'wrap' }}>
-              <SliceGrid slices={slices} label="Before" />
+              <SliceGrid slices={slices} label="Before — original with facial anatomy" />
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '1.4rem', color: '#475569', flexShrink: 0,
                 padding: '0 4px',
               }}>→</div>
-              <SliceGrid slices={slices} label="After" maskBadge />
+              <SliceGrid slices={slices} label="After — server-side defaced" maskBadge />
             </div>
 
             {/* Summary badges */}
@@ -581,7 +663,7 @@ export default function PipelineDemo() {
                 background: 'rgba(5,150,105,0.12)', color: '#34d399',
                 fontSize: '0.76rem', fontWeight: 600,
               }}>
-                ✓ {tagChanges.filter(t => t.action !== 'K').length} identifiers removed
+                ✓ {tagChanges.filter(t => t.action !== 'K').length} identifiers de-identified
               </span>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
@@ -589,7 +671,7 @@ export default function PipelineDemo() {
                 background: 'rgba(52,211,153,0.10)', color: '#34d399',
                 fontSize: '0.76rem', fontWeight: 600,
               }}>
-                ✓ Anterior facial region removed
+                ✓ Server-side defacing complete
               </span>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
@@ -597,14 +679,95 @@ export default function PipelineDemo() {
                 background: 'rgba(59,130,246,0.10)', color: '#60a5fa',
                 fontSize: '0.76rem', fontWeight: 600,
               }}>
-                🔒 Zero data transmitted
+                🩺 DICOMweb-accessible
               </span>
             </div>
 
-            {/* Tag diff table */}
-            <TagDiffTable tags={tagChanges} />
+            {/* DICOM tag diff */}
+            {tagChanges.length > 0 && <TagDiffTable tags={tagChanges} />}
 
-            {/* OHIF callout */}
+            {/* ── OHIF side-by-side ── */}
+            {OHIF_BASE && studyUID && (
+              <div style={{
+                marginTop: '28px',
+                background: 'rgba(15,23,42,0.6)',
+                border: '1px solid rgba(59,130,246,0.2)',
+                borderRadius: '14px',
+                padding: '18px',
+              }}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  marginBottom: '14px', flexWrap: 'wrap', gap: '8px',
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '0.92rem', marginBottom: '3px' }}>
+                      🩻 Live OHIF Viewer — before & after
+                    </div>
+                    <div style={{ color: '#64748b', fontSize: '0.78rem' }}>
+                      Interactive DICOM viewer — scroll through slices, adjust windowing
+                    </div>
+                  </div>
+                  <span style={{
+                    padding: '4px 12px', borderRadius: '10px',
+                    background: 'rgba(52,211,153,0.12)', color: '#34d399',
+                    fontSize: '0.7rem', fontWeight: 700,
+                  }}>
+                    Live data
+                  </span>
+                </div>
+
+                {/* Labels */}
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.07em',
+                      textTransform: 'uppercase', color: '#94a3b8',
+                    }}>
+                      Before — raw store
+                    </span>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.07em',
+                      textTransform: 'uppercase', color: '#34d399',
+                    }}>
+                      After — clean store (defaced)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Iframes */}
+                <div style={{ display: 'flex', gap: '12px', height: '480px' }}>
+                  <iframe
+                    title="Before defacing — OHIF viewer"
+                    src={`${OHIF_BASE}/viewer?StudyInstanceUIDs=${studyUID}&dataSource=dicomweb-raw`}
+                    style={{
+                      flex: 1, border: '1px solid #1e293b', borderRadius: '8px',
+                      background: '#000',
+                    }}
+                    allowFullScreen
+                  />
+                  <iframe
+                    title="After defacing — OHIF viewer"
+                    src={`${OHIF_BASE}/viewer?StudyInstanceUIDs=${studyUID}&dataSource=dicomweb`}
+                    style={{
+                      flex: 1, border: '1px solid rgba(52,211,153,0.3)', borderRadius: '8px',
+                      background: '#000',
+                    }}
+                    allowFullScreen
+                  />
+                </div>
+
+                <p style={{
+                  textAlign: 'center', color: '#334155', fontSize: '0.72rem', marginTop: '10px',
+                }}>
+                  Powered by OHIF v3 · DICOM served via AEGIS DICOMweb proxy ·{' '}
+                  Study UID: <span style={{ fontFamily: 'monospace' }}>{studyUID}</span>
+                </p>
+              </div>
+            )}
+
+            {/* CTA */}
             <div style={{
               marginTop: '24px', padding: '20px 24px',
               background: 'rgba(59,130,246,0.06)',
@@ -615,11 +778,11 @@ export default function PipelineDemo() {
             }}>
               <div>
                 <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: '4px', fontSize: '0.92rem' }}>
-                  🩻 Full OHIF viewer integration in the live platform
+                  This is the real AEGIS platform — not a simulation
                 </div>
                 <div style={{ color: '#64748b', fontSize: '0.82rem' }}>
-                  In the full AEGIS platform, both pre- and post-processing studies open side-by-side
-                  in the embedded OHIF viewer for radiologist review.
+                  Your institution's studies would flow through the same pipeline, with per-project
+                  routing rules, PHI detection, protocol compliance, and BIDS export.
                 </div>
               </div>
               <a
@@ -649,7 +812,7 @@ export default function PipelineDemo() {
                   color: '#64748b', fontSize: '0.8rem', cursor: 'pointer',
                 }}
               >
-                Reset demo
+                Generate another study
               </button>
             </div>
           </div>
