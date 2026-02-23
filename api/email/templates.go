@@ -157,6 +157,74 @@ func PipelineFailure(studyUID, service, errMsg string) (subject, body string) {
 	return subject, buf.String()
 }
 
+var inviteRequestTmpl = template.Must(template.New("invite_request").Parse(
+	`Someone has requested early access to AEGIS.
+
+Name:         {{ .Name }}
+Email:        {{ .Email }}
+{{ if .Organization }}Organization: {{ .Organization }}
+{{ end }}{{ if .Message }}Message:
+{{ .Message }}
+
+{{ end }}Requested at: {{ .RequestedAt }} UTC
+
+Click the link below to instantly generate an invite code and email it to them:
+
+  {{ .ApprovalURL }}
+
+This link is valid for 7 days. You can also create codes manually in the admin dashboard.
+
+--
+This is an automated notification from AEGIS.
+`))
+
+var inviteCodeIssuedTmpl = template.Must(template.New("invite_code_issued").Parse(
+	`Hi {{ .Name }},
+
+You've been granted early access to AEGIS — the HIPAA-compliant medical imaging platform.
+
+Your invite code is:
+
+  {{ .Code }}
+
+Use the link below to access AEGIS with your code pre-filled:
+
+  {{ .InviteURL }}
+
+Or enter the code manually at {{ .LandingURL }}.
+
+--
+This is an automated message from AEGIS. Do not reply to this email.
+`))
+
+// InviteRequest renders the admin notification email sent when someone requests access.
+func InviteRequest(name, requestEmail, organization, message, approvalURL string) (subject, body string) {
+	subject = "[AEGIS] Access request from " + name
+	var buf bytes.Buffer
+	inviteRequestTmpl.Execute(&buf, struct {
+		Name        string
+		Email       string
+		Organization string
+		Message     string
+		ApprovalURL string
+		RequestedAt string
+	}{name, requestEmail, organization, message, approvalURL, time.Now().UTC().Format("2006-01-02 15:04:05")})
+	return subject, buf.String()
+}
+
+// InviteCodeIssued renders the email sent to the requester with their invite code.
+func InviteCodeIssued(name, code, inviteURL, landingURL string) (subject, body string) {
+	subject = "Your AEGIS invite code"
+	var buf bytes.Buffer
+	inviteCodeIssuedTmpl.Execute(&buf, struct {
+		Name       string
+		Code       string
+		InviteURL  string
+		LandingURL string
+	}{name, code, inviteURL, landingURL})
+	return subject, buf.String()
+}
+
 var contactFormTmpl = template.Must(template.New("contact_form").Parse(
 	`New contact form submission from the AEGIS website.
 
