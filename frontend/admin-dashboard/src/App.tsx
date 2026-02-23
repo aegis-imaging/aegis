@@ -4375,7 +4375,8 @@ function InviteCodesPanel() {
     try {
       const res = await fetch('/api/invite-codes')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setCodes((await res.json()) ?? [])
+      const data = await res.json()
+      setCodes(data.codes ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally { setLoading(false) }
