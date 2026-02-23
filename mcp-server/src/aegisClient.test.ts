@@ -336,6 +336,32 @@ test("AegisApiClient allows study notes POST and project export-batch POST paths
   assert.deepEqual(batch, {});
 });
 
+test("AegisApiClient allows institution stats, protocol templates, and federation peers GET paths", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+  const institutionId = "550e8400-e29b-41d4-a716-446655440000";
+  const projectId = "660e8400-e29b-41d4-a716-446655440001";
+
+  const stats = await client.get(`/api/institutions/${institutionId}/stats`);
+  const templates = await client.get(`/api/projects/${projectId}/protocol-templates`);
+  const peers = await client.get("/api/federation-peers");
+
+  assert.deepEqual(stats, {});
+  assert.deepEqual(templates, {});
+  assert.deepEqual(peers, {});
+});
+
+test("AegisApiClient allows study reactivate POST path", async () => {
+  globalThis.fetch = (async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  const client = new AegisApiClient("http://example.internal", "token");
+  const studyId = "550e8400-e29b-41d4-a716-446655440000";
+
+  const result = await client.post(`/api/studies/${studyId}/reactivate`);
+  assert.deepEqual(result, {});
+});
+
 test.after(() => {
   globalThis.fetch = originalFetch;
 });
