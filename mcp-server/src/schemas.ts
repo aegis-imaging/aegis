@@ -94,6 +94,7 @@ export const approveStudyArgsSchema = z.object({
 export const rejectStudyArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   study_id: z.string().uuid(),
+  rejection_reason: z.string().max(500).optional(), // shown to uploader in notification email
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
 });
@@ -111,6 +112,7 @@ export const createShareArgsSchema = z.object({
   recipient_email: z.string().email().max(256),
   note: z.string().max(512).optional(),
   expiry_hours: z.number().int().min(1).max(8760).optional(), // max 1 year
+  max_downloads: z.number().int().min(1).max(1000).optional(), // nil = unlimited
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
 });

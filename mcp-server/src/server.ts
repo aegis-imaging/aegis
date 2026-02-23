@@ -399,6 +399,7 @@ const tools: Tool[] = [
         recipient_email: { type: "string", format: "email" },
         note: { type: "string", maxLength: 512 },
         expiry_hours: { type: "integer", minimum: 1, maximum: 8760, description: "Share expiry in hours (default 168 = 7 days, max 8760 = 1 year)" },
+        max_downloads: { type: "integer", minimum: 1, maximum: 1000, description: "Maximum number of times the share can be downloaded before it is automatically revoked (omit for unlimited)" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -437,13 +438,14 @@ const tools: Tool[] = [
   },
   {
     name: "reject_study",
-    description: "Reject a study (transitions status to 'rejected'). Study must not already be rejected. Requires confirm=true and a reason.",
+    description: "Reject a study (transitions status to 'rejected'). Study must not already be rejected. Optional rejection_reason is stored on the study and included in the uploader notification email. Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["study_id", "reason", "confirm"],
       properties: {
         request_id: { type: "string" },
         study_id: { type: "string", format: "uuid" },
+        rejection_reason: { type: "string", maxLength: 500, description: "Optional human-readable reason shown to uploader in the rejection notification email (max 500 chars)" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -1912,7 +1914,7 @@ function formatError(
 
 async function handleCreateShare(
   requestId: string,
-  parsed: { study_id: string; recipient_email: string; note?: string; expiry_hours?: number; reason: string; confirm: true }
+  parsed: { study_id: string; recipient_email: string; note?: string; expiry_hours?: number; max_downloads?: number; reason: string; confirm: true }
 ) {
   if (config.mcpMode !== "operator") {
     return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_share");
@@ -1929,6 +1931,7 @@ async function handleCreateShare(
   const payload: Record<string, unknown> = { recipient_email: parsed.recipient_email };
   if (parsed.note !== undefined) payload.note = parsed.note;
   if (parsed.expiry_hours !== undefined) payload.expiry_hours = parsed.expiry_hours;
+  if (parsed.max_downloads !== undefined) payload.max_downloads = parsed.max_downloads;
 
   const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/share`, payload);
   return formatSuccess(requestId, "create_share", {
@@ -1988,7 +1991,7 @@ async function handleApproveStudy(
 
 async function handleRejectStudy(
   requestId: string,
-  parsed: { study_id: string; reason: string; confirm: true }
+  parsed: { study_id: string; rejection_reason?: string; reason: string; confirm: true }
 ) {
   if (config.mcpMode !== "operator") {
     return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reject_study");
@@ -2003,10 +2006,13 @@ async function handleRejectStudy(
     return formatError(requestId, "CONFLICT", "Study is already rejected", false, "reject_study");
   }
 
-  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reject`);
+  // Pass optional rejection_reason to the API (stored on study + included in uploader email).
+  const rejectPayload = parsed.rejection_reason ? { reason: parsed.rejection_reason } : undefined;
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reject`, rejectPayload);
   return formatSuccess(requestId, "reject_study", {
     accepted: true,
     study_id: parsed.study_id,
+    rejection_reason: parsed.rejection_reason,
     reason: parsed.reason,
     result: data
   });
