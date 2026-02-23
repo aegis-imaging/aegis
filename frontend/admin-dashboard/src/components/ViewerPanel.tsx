@@ -1,4 +1,4 @@
-const OHIF_BASE = import.meta.env.VITE_OHIF_BASE_URL ?? 'http://localhost:3002'
+const OHIF_BASE = import.meta.env.VITE_OHIF_BASE_URL || 'http://localhost:3002'
 
 export function ViewerPanel({ studyUID, onClose }: { studyUID: string; onClose: () => void }) {
   const viewerUrl = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${studyUID}`
