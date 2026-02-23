@@ -5,7 +5,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'users' | 'api_keys'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'users' | 'api_keys' | 'invite_codes'
 
 type APIKey = {
   id: string
@@ -4347,6 +4347,229 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
 
 // ── Federation Panel ──────────────────────────────────────────────────────────
 
+// ── Invite Codes Panel ────────────────────────────────────────────────────────
+
+type InviteCode = {
+  id: string
+  code: string
+  label: string
+  enabled: boolean
+  created_at: string
+  used_at?: string
+  used_by_ip?: string
+}
+
+function InviteCodesPanel() {
+  const [codes, setCodes]         = useState<InviteCode[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [formLabel, setFormLabel] = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [newCode, setNewCode]     = useState<string | null>(null)
+  const [copied, setCopied]       = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/invite-codes')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setCodes((await res.json()) ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function create() {
+    if (!formLabel.trim()) { setFormError('Label is required'); return }
+    setSaving(true); setFormError(null); setNewCode(null)
+    try {
+      const res = await fetch('/api/invite-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: formLabel.trim() }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Create failed') }
+      const data: InviteCode = await res.json()
+      setNewCode(data.code)
+      setFormLabel(''); setShowForm(false)
+      load()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Create failed')
+    } finally { setSaving(false) }
+  }
+
+  async function revoke(ic: InviteCode) {
+    if (!confirm(`Revoke invite code "${ic.code}" (${ic.label})? The recipient will no longer be able to use it.`)) return
+    await fetch(`/api/invite-codes/${ic.id}/revoke`, { method: 'POST' })
+    load()
+  }
+
+  async function del(ic: InviteCode) {
+    if (!confirm(`Permanently delete invite code "${ic.code}" (${ic.label})?`)) return
+    await fetch(`/api/invite-codes/${ic.id}`, { method: 'DELETE' })
+    setNewCode(null)
+    load()
+  }
+
+  function copy(text: string, key: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key)
+      setTimeout(() => setCopied(null), 2000)
+    })
+  }
+
+  const SITE = 'https://aegisimaging.ai'
+
+  if (loading) return <div className="state-loading">Loading…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Invite Codes</div>
+            <div className="routing-section-sub">
+              Per-person codes for landing page access. Each code is unique and can be individually revoked.
+              Share the direct link (<code style={{ fontSize: '0.8rem' }}>{SITE}/?invite=CODE</code>) for one-click admission.
+            </div>
+          </div>
+          <div className="actions-cell">
+            <button type="button" className="btn-refresh" onClick={load}>Refresh</button>
+            <button type="button" className="btn-primary" onClick={() => { setShowForm(true); setNewCode(null) }}>
+              + New code
+            </button>
+          </div>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>New invite code</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input
+                className="form-input"
+                placeholder="Label (e.g. Dr. Jane Smith) *"
+                value={formLabel}
+                onChange={e => setFormLabel(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && create()}
+                autoFocus
+              />
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={create} disabled={saving}>
+                {saving ? 'Creating…' : 'Generate code'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {newCode && (
+          <div className="routing-form" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+            <strong style={{ color: '#166534' }}>New invite code — share with your recipient:</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.95rem', letterSpacing: '0.1em', flex: 1 }}>
+                {newCode}
+              </code>
+              <button type="button" className="btn-secondary" onClick={() => copy(newCode, 'code')}>
+                {copied === 'code' ? 'Copied!' : 'Copy code'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => copy(`${SITE}/?invite=${newCode}`, 'link')}>
+                {copied === 'link' ? 'Copied!' : 'Copy link'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {codes.length === 0 && !showForm ? (
+          <div className="state-empty">No invite codes yet. Create one to grant landing page access.</div>
+        ) : codes.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Label</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Used</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {codes.map(ic => (
+                <tr key={ic.id}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <code style={{ fontSize: '0.85rem', letterSpacing: '0.08em' }}>{ic.code}</code>
+                      <button
+                        type="button"
+                        className="btn-sm"
+                        title="Copy code"
+                        onClick={() => copy(ic.code, ic.id + '-code')}
+                        style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                      >
+                        {copied === ic.id + '-code' ? '✓' : 'Copy'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-sm"
+                        title="Copy invite link"
+                        onClick={() => copy(`${SITE}/?invite=${ic.code}`, ic.id + '-link')}
+                        style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                      >
+                        {copied === ic.id + '-link' ? '✓' : 'Link'}
+                      </button>
+                    </div>
+                  </td>
+                  <td>{ic.label || <span style={{ color: '#64748b' }}>—</span>}</td>
+                  <td>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      background: ic.enabled ? '#dcfce7' : '#fee2e2',
+                      color: ic.enabled ? '#166534' : '#991b1b',
+                    }}>
+                      {ic.enabled ? 'Active' : 'Revoked'}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                    {new Date(ic.created_at).toLocaleDateString()}
+                  </td>
+                  <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                    {ic.used_at
+                      ? <span title={ic.used_by_ip ?? ''}>{new Date(ic.used_at).toLocaleDateString()}{ic.used_by_ip ? ` (${ic.used_by_ip})` : ''}</span>
+                      : <span style={{ color: '#64748b' }}>Unused</span>}
+                  </td>
+                  <td>
+                    <div className="actions-cell">
+                      {ic.enabled && (
+                        <button type="button" className="btn-sm btn-warning" onClick={() => revoke(ic)}>
+                          Revoke
+                        </button>
+                      )}
+                      <button type="button" className="btn-sm btn-danger" onClick={() => del(ic)}>
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
 type FederationPeer = {
   id: string
   name: string
@@ -5465,8 +5688,9 @@ export function App() {
     { kind: 'nav', label: 'Projects',              tab: 'projects',           icon: '📁' },
     { kind: 'nav', label: 'Federation Peers',      tab: 'federation',         icon: '🌐' },
     ...(isAdmin ? [
-      { kind: 'nav' as const, label: 'Users',     tab: 'users' as AppTab,    icon: '👤' },
-      { kind: 'nav' as const, label: 'API Keys',  tab: 'api_keys' as AppTab, icon: '🔑' },
+      { kind: 'nav' as const, label: 'Users',        tab: 'users' as AppTab,         icon: '👤' },
+      { kind: 'nav' as const, label: 'API Keys',     tab: 'api_keys' as AppTab,      icon: '🔑' },
+      { kind: 'nav' as const, label: 'Invite Codes', tab: 'invite_codes' as AppTab,  icon: '🎟️' },
     ] : []),
   ]
 
@@ -5922,6 +6146,15 @@ export function App() {
             API Keys
           </button>
         )}
+        {isAdmin && (
+          <button
+            type="button"
+            className={`tab-btn${tab === 'invite_codes' ? ' tab-btn--active' : ''}`}
+            onClick={() => setTab('invite_codes')}
+          >
+            Invite Codes
+          </button>
+        )}
       </nav>
 
       {/* Studies tab */}
@@ -6280,6 +6513,9 @@ export function App() {
 
       {/* API Keys tab — admin only */}
       {tab === 'api_keys' && isAdmin && <APIKeysPanel />}
+
+      {/* Invite Codes tab — admin only */}
+      {tab === 'invite_codes' && isAdmin && <InviteCodesPanel />}
     </div>
   )
 }
