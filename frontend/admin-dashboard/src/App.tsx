@@ -5620,6 +5620,34 @@ export function App() {
     fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
   }, [])
 
+  // Synthetic study generation
+  const [synthGenerating, setSynthGenerating] = useState(false)
+  const [synthMsg, setSynthMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  async function handleGenerateSample() {
+    setSynthGenerating(true)
+    setSynthMsg(null)
+    const selectedProject = projects.find(p => p.id === globalProjectId)
+    const projectSlug = selectedProject?.slug ?? 'default'
+    try {
+      const res = await fetch('/api/studies/generate-synthetic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_slug: projectSlug, slices: 20, size: 256 }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSynthMsg({ type: 'err', text: data.error ?? 'Generation failed' })
+      } else {
+        setSynthMsg({ type: 'ok', text: `Sample MRI generated (${data.file_count} files, ${data.tool_used})` })
+        setRefreshTick(t => t + 1)
+      }
+    } catch {
+      setSynthMsg({ type: 'err', text: 'Network error — please try again' })
+    } finally {
+      setSynthGenerating(false)
+    }
+  }
+
   // Dashboard pipeline stats
   type PipelineStats = {
     study_counts: { received: number; defacing: number; clean: number; defaced: number; approved: number; rejected: number; expired: number; total: number }
@@ -6266,6 +6294,29 @@ export function App() {
               </div>
             )}
           </div>
+
+          {/* Synthetic MRI generator */}
+          {isAdmin && (
+            <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ fontSize: '0.8rem' }}
+                onClick={handleGenerateSample}
+                disabled={synthGenerating}
+              >
+                {synthGenerating ? 'Generating…' : '+ Generate sample brain MRI'}
+              </button>
+              {synthMsg && (
+                <span style={{
+                  fontSize: '0.8rem',
+                  color: synthMsg.type === 'ok' ? '#0f766e' : '#9a3412',
+                }}>
+                  {synthMsg.text}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Filter bar */}
           <div className="filter-bar">
