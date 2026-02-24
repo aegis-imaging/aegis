@@ -158,6 +158,30 @@ variable "dimse_receiver_image" {
   default     = ""
 }
 
+variable "weasis_domain" {
+  description = "Custom FQDN for Weasis viewer (e.g. aws.weasis.aegisimaging.ai). Empty = use raw ALB DNS."
+  type        = string
+  default     = ""
+}
+
+variable "weasis_image_tag" {
+  description = "Container image tag for Weasis ECS task"
+  type        = string
+  default     = "latest"
+}
+
+variable "weasis_cpu" {
+  description = "CPU units for Weasis ECS task definition"
+  type        = number
+  default     = 256
+}
+
+variable "weasis_memory" {
+  description = "Memory (MiB) for Weasis ECS task definition"
+  type        = number
+  default     = 512
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -384,14 +408,16 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver", "weasis"]
 
-  api_image   = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
-  admin_image = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
+  api_image    = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
+  admin_image  = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
+  weasis_image = "${aws_ecr_repository.services["weasis"].repository_url}:${var.weasis_image_tag}"
 
   # Friendly FQDNs — use custom domains when set, fall back to raw ALB DNS.
-  api_fqdn   = var.api_domain   != "" ? var.api_domain   : aws_lb.main.dns_name
-  admin_fqdn = var.admin_domain != "" ? var.admin_domain : aws_lb.main.dns_name
+  api_fqdn    = var.api_domain    != "" ? var.api_domain    : aws_lb.main.dns_name
+  admin_fqdn  = var.admin_domain  != "" ? var.admin_domain  : aws_lb.main.dns_name
+  weasis_fqdn = var.weasis_domain != "" ? var.weasis_domain : aws_lb.main.dns_name
 
   cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
     "https://${local.admin_fqdn}/oauth2/idpresponse"
@@ -402,7 +428,8 @@ locals {
   ]
 
   resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : [
-    "https://${local.admin_fqdn}"
+    "https://${local.admin_fqdn}",
+    "https://${local.weasis_fqdn}",
   ]
 
   public_path_rules = {
@@ -573,6 +600,25 @@ resource "aws_lb_target_group" "admin" {
   }
 
   tags = { Name = "${var.project_name}-admin-tg" }
+}
+
+resource "aws_lb_target_group" "weasis" {
+  name        = "${var.project_name}-weasis"
+  port        = 3005
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.main.id
+
+  health_check {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher             = "200-399"
+  }
+
+  tags = { Name = "${var.project_name}-weasis-tg" }
 }
 
 # HTTP listener — redirects to HTTPS
@@ -764,6 +810,25 @@ resource "aws_lb_listener_rule" "admin_subdomain" {
   condition {
     host_header {
       values = [var.admin_domain]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "weasis_subdomain" {
+  count        = var.weasis_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 3
+
+  # Weasis is served as a public iframe target — no Cognito gate on the container itself.
+  # Security is provided by the Go API's DICOMweb auth (X-Amzn-Oidc-Data on /api/* calls).
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.weasis.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.weasis_domain]
     }
   }
 }
@@ -963,6 +1028,10 @@ resource "aws_ecs_task_definition" "admin" {
           protocol      = "tcp"
         }
       ]
+      environment = [
+        # nginx uses this at startup (envsubst) to proxy /api/* to the correct cloud API.
+        { name = "API_URL", value = "https://${local.api_fqdn}" },
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -998,6 +1067,68 @@ resource "aws_ecs_service" "admin" {
     target_group_arn = aws_lb_target_group.admin.arn
     container_name   = "admin-dashboard"
     container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.https]
+}
+
+# --- Weasis DWV viewer ---
+
+resource "aws_ecs_task_definition" "weasis" {
+  family                   = "${var.project_name}-weasis"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.weasis_cpu)
+  memory                   = tostring(var.weasis_memory)
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "weasis"
+      image     = local.weasis_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 3005
+          hostPort      = 3005
+          protocol      = "tcp"
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.main.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "weasis"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_service" "weasis" {
+  name            = "${var.project_name}-weasis"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.weasis.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.weasis.arn
+    container_name   = "weasis"
+    container_port   = 3005
   }
 
   depends_on = [aws_lb_listener.https]
@@ -1121,6 +1252,10 @@ output "cognito_user_pool_client_id" {
 
 output "cognito_user_pool_domain" {
   value = aws_cognito_user_pool_domain.admin.domain
+}
+
+output "weasis_base_url" {
+  value = "https://${local.weasis_fqdn}/"
 }
 
 output "ecr_repositories" {
