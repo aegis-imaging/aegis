@@ -10,6 +10,7 @@ import { redactToolArgs } from "./redaction.js";
 import {
   addStudyLabelArgsSchema,
   addStudyNoteArgsSchema,
+  toggleStudyFlagArgsSchema,
   apiKeyIdArgsSchema,
   approveStudyArgsSchema,
   bulkLabelStudiesArgsSchema,
@@ -769,6 +770,22 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "toggle_study_flag",
+    description: "Set or clear the priority flag on a study. Flagged studies are marked with ★ in the dashboard and can be filtered with ?flagged=true. Use to mark studies that require urgent review or special handling. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "flagged", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        flagged: { type: "boolean", description: "true to set priority flag, false to clear it" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "extend_share",
     description: "Extend the expiry of an export share by N hours. Works on both active and already-expired (but not revoked) shares — the extension is computed from max(current_expires_at, now). Requires confirm=true and a reason.",
     inputSchema: {
@@ -1489,6 +1506,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleAddStudyNote(parsedNote.request_id ?? buildRequestId(), parsedNote);
       }
 
+      if (name === "toggle_study_flag") {
+        const parsedFlag = toggleStudyFlagArgsSchema.parse(args);
+        return handleToggleStudyFlag(parsedFlag.request_id ?? buildRequestId(), parsedFlag);
+      }
+
       if (name === "extend_share") {
         const parsedExtend = extendShareArgsSchema.parse(args);
         return handleExtendShare(parsedExtend.request_id ?? buildRequestId(), parsedExtend);
@@ -1664,7 +1686,8 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
     name === "remove_study_label" ||
     name === "set_study_subject" ||
     name === "add_study_note" ||
-    name === "reactivate_study"
+    name === "reactivate_study" ||
+    name === "toggle_study_flag"
   ) {
     return typeof args.study_id === "string" ? args.study_id : null;
   }
@@ -2550,6 +2573,27 @@ async function handleAddStudyNote(
   return formatSuccess(requestId, "add_study_note", {
     accepted: true,
     study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleToggleStudyFlag(
+  requestId: string,
+  parsed: { study_id: string; flagged: boolean; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "toggle_study_flag");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow toggle_study_flag", false, "toggle_study_flag");
+  }
+
+  const data = await client.patch(`/api/studies/${encodeURIComponent(parsed.study_id)}/flag`, { flagged: parsed.flagged });
+  return formatSuccess(requestId, "toggle_study_flag", {
+    accepted: true,
+    study_id: parsed.study_id,
+    flagged: parsed.flagged,
     reason: parsed.reason,
     result: data
   });
