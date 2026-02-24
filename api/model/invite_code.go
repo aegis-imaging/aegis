@@ -126,6 +126,20 @@ func RevokeInviteCode(ctx context.Context, db *sql.DB, id string) error {
 	return nil
 }
 
+// GetInviteCode fetches a single invite code by ID.
+func GetInviteCode(ctx context.Context, db *sql.DB, id string) (*InviteCode, error) {
+	var ic InviteCode
+	err := db.QueryRowContext(ctx,
+		`SELECT id, code, label, enabled, created_at, used_at, used_by_ip
+		   FROM invite_codes WHERE id = $1`, id).
+		Scan(&ic.ID, &ic.Code, &ic.Label, &ic.Enabled,
+			&ic.CreatedAt, &ic.UsedAt, &ic.UsedByIP)
+	if err != nil {
+		return nil, err
+	}
+	return &ic, nil
+}
+
 // DeleteInviteCode permanently removes an invite code by ID.
 func DeleteInviteCode(ctx context.Context, db *sql.DB, id string) error {
 	res, err := db.ExecContext(ctx,
