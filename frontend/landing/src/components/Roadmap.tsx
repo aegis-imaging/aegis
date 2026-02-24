@@ -140,8 +140,7 @@ export function Roadmap() {
           {MILESTONES.map((m, i) => (
             <div
               key={m.title}
-              className={`roadmap__milestone roadmap__milestone--${m.status} animate animate--fade-up animate--delay-${i + 1 as 1|2|3|4|5}`}
-              style={{ animationDelay: `${i * 80}ms` }}
+              className={`roadmap__milestone roadmap__milestone--${m.status} animate animate--fade-up animate--delay-${i + 1 as 1|2|3|4|5}${timelineVisible ? ' animate--visible' : ''}`}
             >
               <div className="roadmap__milestone-node" aria-hidden="true">
                 {m.status === 'done' ? '✓' : m.status === 'active' ? '●' : '○'}
