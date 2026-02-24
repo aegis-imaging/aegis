@@ -26,7 +26,7 @@ type tciaSeriesRecord struct {
 	Modality          string `json:"Modality"`
 	BodyPartExamined  string `json:"BodyPartExamined"`
 	SeriesDescription string `json:"SeriesDescription"`
-	ImageCount        string `json:"ImageCount"` // TCIA returns this as a string
+	ImageCount        int    `json:"ImageCount"` // TCIA returns this as an integer
 	Collection        string `json:"Collection"`
 }
 
@@ -85,16 +85,26 @@ func (s *Server) GetTCIASeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		s.writeError(w, http.StatusBadGateway, "read TCIA response: "+err.Error())
+		return
+	}
+	if len(body) == 0 {
+		// TCIA returns an empty body for restricted or unavailable collections.
+		s.writeError(w, http.StatusBadGateway, "TCIA returned no data for collection "+collection+" — the collection may be restricted or temporarily unavailable")
+		return
+	}
+
 	var raw []tciaSeriesRecord
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.Unmarshal(body, &raw); err != nil {
 		s.writeError(w, http.StatusBadGateway, "decode TCIA response: "+err.Error())
 		return
 	}
 
 	items := make([]TCIASeriesItem, 0, len(raw))
 	for _, rec := range raw {
-		n, _ := strconv.Atoi(rec.ImageCount)
-		if n < minSlices {
+		if rec.ImageCount < minSlices {
 			continue
 		}
 		items = append(items, TCIASeriesItem{
@@ -102,7 +112,7 @@ func (s *Server) GetTCIASeries(w http.ResponseWriter, r *http.Request) {
 			Modality:    rec.Modality,
 			BodyPart:    rec.BodyPartExamined,
 			Description: rec.SeriesDescription,
-			SliceCount:  n,
+			SliceCount:  rec.ImageCount,
 			Collection:  rec.Collection,
 		})
 	}
