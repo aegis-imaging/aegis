@@ -1,0 +1,70 @@
+server {
+    listen 8080;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    include /etc/nginx/mime.types;
+
+    # Cloud Run DNS resolver — ensures nginx re-resolves the upstream hostname
+    # at request time (required when using set $variable for proxy_pass).
+    resolver 8.8.8.8 valid=300s ipv6=off;
+
+    gzip on;
+    gzip_min_length 1000;
+    gzip_proxied expired no-cache no-store private auth;
+    gzip_types text/plain text/css application/json application/javascript
+               application/x-javascript text/xml application/xml
+               application/xml+rss text/javascript;
+
+    # ── DICOMweb proxy ────────────────────────────────────────────────────────
+    # DWV JS makes same-origin requests to /dicomweb/ (QIDO-RS + WADO-RS).
+    # nginx forwards them server-side to the real API backend (${API_URL}).
+
+    location /dicomweb/ {
+        set $api_upstream ${API_URL};
+        # Use variable-only proxy_pass so nginx passes the full URI unchanged.
+        # proxy_pass $var/path/ does NOT strip the location prefix when a variable
+        # is present — the path would be doubled (/dicomweb//dicomweb/...).
+        proxy_pass        $api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header  Host              $proxy_host;
+        proxy_set_header  X-Real-IP         $remote_addr;
+        proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header  X-Forwarded-Proto $scheme;
+        proxy_ssl_server_name on;
+        proxy_read_timeout    120s;
+        proxy_send_timeout    120s;
+    }
+
+    # ── Raw DICOMweb proxy (pre-defacing store) ───────────────────────────────
+    # Used by the Weasis viewer when ?store=raw — routes QIDO-RS + WADO-RS
+    # fetches to the /dicomweb-raw/ API endpoints (reads from raw DICOM store).
+    location /dicomweb-raw/ {
+        set $api_upstream ${API_URL};
+        proxy_pass        $api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header  Host              $proxy_host;
+        proxy_set_header  X-Real-IP         $remote_addr;
+        proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header  X-Forwarded-Proto $scheme;
+        proxy_ssl_server_name on;
+        proxy_read_timeout    120s;
+        proxy_send_timeout    120s;
+    }
+
+    # ── Health check ──────────────────────────────────────────────────────────
+    location = /health {
+        default_type application/json;
+        return 200 '{"status":"healthy"}';
+    }
+
+    # ── CSP: allow iframe embedding from the admin dashboard ─────────────────
+    add_header Content-Security-Policy "frame-ancestors https://admin.aegisimaging.ai https://aws.admin.aegisimaging.ai https://aegisimaging.ai https://*-uk5cvzf5nq-uc.a.run.app http://localhost:3001 http://localhost:3000 'self'" always;
+
+    # ── SPA fallback ──────────────────────────────────────────────────────────
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

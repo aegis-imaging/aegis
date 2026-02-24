@@ -22,6 +22,11 @@
 terraform {
   required_version = ">= 1.5"
 
+  backend "gcs" {
+    bucket = "aegis-prod-488120-tfstate"
+    prefix = "aegis-infra"
+  }
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -30,6 +35,10 @@ terraform {
     random = {
       source  = "hashicorp/random"
       version = "~> 3.0"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
     }
   }
 }
@@ -161,8 +170,33 @@ variable "landing_image" {
   default     = ""
 }
 
-variable "ohif_image" {
-  description = "Container image URI for the OHIF viewer (empty = disabled)"
+variable "synth_service_image" {
+  description = "Container image URI for the synthetic MRI sidecar (empty = service not deployed)"
+  type        = string
+  default     = ""
+}
+
+variable "mcp_server_image" {
+  description = "Container image URI for the MCP agent server (empty = not deployed)"
+  type        = string
+  default     = ""
+}
+
+variable "mcp_server_aegis_api_token" {
+  description = "AEGIS API bearer token for the MCP server to call the Go API (stored in Secret Manager)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "synth_service_url" {
+  description = "Direct HTTPS URL for the synthetic MRI service when managed outside Terraform (e.g. a manually-deployed Cloud Run service). Takes precedence over the synth_service_image-derived URL."
+  type        = string
+  default     = ""
+}
+
+variable "weasis_image" {
+  description = "Container image URI for the DWV/WEASIS viewer (empty = disabled)"
   type        = string
   default     = ""
 }
@@ -330,7 +364,7 @@ variable "smtp_relay_port" {
 variable "smtp_from" {
   description = "SMTP FROM address used by AEGIS"
   type        = string
-  default     = "noreply@aegis.local"
+  default     = "noreply@aegisimaging.ai"
 }
 
 variable "contact_email" {
@@ -339,10 +373,62 @@ variable "contact_email" {
   default     = "contact@aegisimaging.ai"
 }
 
+variable "gate_enabled" {
+  description = "Enable server-side invite gate on landing page (GATE_ENABLED env var)"
+  type        = bool
+  default     = false
+}
+
+variable "gate_secret" {
+  description = "HMAC secret for landing page invite gate tokens (GATE_SECRET env var)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "allowed_origins" {
   description = "Optional CORS origins override. If empty, defaults to API + admin domains."
   type        = list(string)
   default     = []
+}
+
+# ── DIMSE receiver (Compute Engine) ──────────────────────────────────────────
+# Leave dimse_receiver_image empty (the default) to skip all DIMSE resources.
+
+variable "dimse_receiver_image" {
+  description = "Full Artifact Registry image URI for the dimse-receiver container. Empty string disables all DIMSE Compute Engine resources."
+  type        = string
+  default     = ""
+}
+
+variable "dimse_receiver_machine_type" {
+  description = "GCE machine type for the DIMSE receiver VM."
+  type        = string
+  default     = "e2-small"
+}
+
+variable "dimse_receiver_zone" {
+  description = "Zone for the DIMSE receiver VM. Defaults to <region>-a when empty."
+  type        = string
+  default     = ""
+}
+
+variable "dimse_api_url" {
+  description = "Base URL of the AEGIS API that the DIMSE receiver calls for ingest (e.g. https://api.aegisimaging.ai)."
+  type        = string
+  default     = ""
+}
+
+variable "dimse_project_slug" {
+  description = "Project slug passed to POST /api/ingest for studies received via DIMSE."
+  type        = string
+  default     = "default"
+}
+
+variable "dimse_source_ranges" {
+  description = "CIDR ranges allowed to reach TCP 11112 (DICOM C-STORE). Defaults to open (0.0.0.0/0) — restrict to PACS IP ranges in production."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
 }
 
 provider "google" {
@@ -360,14 +446,20 @@ locals {
   resolved_db_password_secret_id = var.db_password_secret_id != "" ? var.db_password_secret_id : "${local.name_prefix}-db-password"
   resolved_db_password           = var.db_password != "" ? var.db_password : try(random_password.db_password[0].result, "")
 
-  sidecar_services = {
-    defacing               = var.defacing_image
-    phi-detection          = var.phi_detection_image
-    qc-service             = var.qc_service_image
-    bids-service           = var.bids_service_image
-    classification-service = var.classification_service_image
-    protocol-service       = var.protocol_service_image
-  }
+  sidecar_services = merge(
+    {
+      defacing               = var.defacing_image
+      phi-detection          = var.phi_detection_image
+      qc-service             = var.qc_service_image
+      bids-service           = var.bids_service_image
+      classification-service = var.classification_service_image
+      protocol-service       = var.protocol_service_image
+    },
+    # synth-service: optional sidecar for synthetic brain MRI generation.
+    # Omit from the map when the image is not provided so the for_each loop
+    # does not attempt to create a Cloud Run service with an empty image URI.
+    var.synth_service_image != "" ? { synth-service = var.synth_service_image } : {}
+  )
 
   lb_domains = distinct(compact([
     var.api_domain,
@@ -657,6 +749,14 @@ resource "google_storage_bucket_iam_member" "api_staging_rw" {
   member = "serviceAccount:${google_service_account.api.email}"
 }
 
+# Sidecars need read/write access to the staging bucket for GCS FUSE mounts
+# (defacing reads raw files and writes clean output, QC/BIDS/phi-detection read raw files).
+resource "google_storage_bucket_iam_member" "sidecars_staging_rw" {
+  bucket = google_storage_bucket.staging.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.sidecars.email}"
+}
+
 resource "google_storage_bucket_iam_member" "api_archive_rw" {
   bucket = google_storage_bucket.archive.name
   role   = "roles/storage.objectAdmin"
@@ -690,6 +790,11 @@ resource "google_cloud_run_v2_service" "sidecars" {
   template {
     service_account = google_service_account.sidecars.email
 
+    annotations = {
+      # gen2 execution environment is required for GCS FUSE CSI volume mounts.
+      "run.googleapis.com/execution-environment" = "gen2"
+    }
+
     scaling {
       min_instance_count = var.sidecar_min_instances
       max_instance_count = var.sidecar_max_instances
@@ -703,6 +808,14 @@ resource "google_cloud_run_v2_service" "sidecars" {
           cpu    = var.sidecar_cpu
           memory = var.sidecar_memory
         }
+      }
+
+      # Mount the shared DICOM GCS bucket so sidecars (defacing, QC, BIDS, etc.)
+      # can read raw files and write processed output via the same filesystem path
+      # as the Go API.
+      volume_mounts {
+        name       = "gcs-dicom"
+        mount_path = "/app/data"
       }
 
       liveness_probe {
@@ -721,6 +834,14 @@ resource "google_cloud_run_v2_service" "sidecars" {
       connector = google_vpc_access_connector.cloud_run.id
       egress    = "ALL_TRAFFIC"
     }
+
+    volumes {
+      name = "gcs-dicom"
+      gcs {
+        bucket    = google_storage_bucket.staging.name
+        read_only = false
+      }
+    }
   }
 }
 
@@ -733,11 +854,11 @@ resource "google_cloud_run_service_iam_member" "sidecar_invoker" {
   member   = "allUsers"
 }
 
-# --- Cloud Run OHIF Viewer ---
+# --- Cloud Run DWV (WEASIS) Viewer ---
 
-resource "google_cloud_run_v2_service" "ohif" {
-  count    = var.ohif_image != "" ? 1 : 0
-  name     = "ohif"
+resource "google_cloud_run_v2_service" "weasis" {
+  count    = var.weasis_image != "" ? 1 : 0
+  name     = "weasis"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -752,7 +873,7 @@ resource "google_cloud_run_v2_service" "ohif" {
     }
 
     containers {
-      image = var.ohif_image
+      image = var.weasis_image
 
       env {
         name  = "API_URL"
@@ -780,10 +901,10 @@ resource "google_cloud_run_v2_service" "ohif" {
   }
 }
 
-resource "google_cloud_run_service_iam_member" "ohif_invoker" {
-  count    = var.ohif_image != "" ? 1 : 0
+resource "google_cloud_run_service_iam_member" "weasis_invoker" {
+  count    = var.weasis_image != "" ? 1 : 0
   location = var.region
-  service  = google_cloud_run_v2_service.ohif[0].name
+  service  = google_cloud_run_v2_service.weasis[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -805,6 +926,11 @@ resource "google_cloud_run_v2_service" "api" {
 
   template {
     service_account = google_service_account.api.email
+
+    annotations = {
+      # gen2 execution environment is required for GCS FUSE CSI volume mounts.
+      "run.googleapis.com/execution-environment" = "gen2"
+    }
 
     scaling {
       min_instance_count = var.api_min_instances
@@ -853,7 +979,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
       env {
         name  = "LOCAL_STORAGE_DIR"
-        value = "/tmp/aegis-data"
+        value = "/app/data"
       }
       env {
         name  = "GCP_PROJECT"
@@ -947,6 +1073,17 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "PROTOCOL_SERVICE_URL"
         value = google_cloud_run_v2_service.sidecars["protocol-service"].uri
       }
+      dynamic "env" {
+        # Prefer an explicit URL override; fall back to the Terraform-managed
+        # synth-service Cloud Run URI when synth_service_image is set.
+        for_each = var.synth_service_url != "" ? [var.synth_service_url] : (
+          var.synth_service_image != "" ? [google_cloud_run_v2_service.sidecars["synth-service"].uri] : []
+        )
+        content {
+          name  = "SYNTH_SERVICE_URL"
+          value = env.value
+        }
+      }
 
       liveness_probe {
         failure_threshold     = 5
@@ -958,11 +1095,26 @@ resource "google_cloud_run_v2_service" "api" {
           path = "/healthz"
         }
       }
+
+      # Mount the shared DICOM GCS bucket so the API can resolve filesystem paths
+      # for defacing, QC, BIDS, and DICOMweb serving (LOCAL_STORAGE_DIR=/app/data).
+      volume_mounts {
+        name       = "gcs-dicom"
+        mount_path = "/app/data"
+      }
     }
 
     vpc_access {
       connector = google_vpc_access_connector.cloud_run.id
       egress    = "ALL_TRAFFIC"
+    }
+
+    volumes {
+      name = "gcs-dicom"
+      gcs {
+        bucket    = google_storage_bucket.staging.name
+        read_only = false
+      }
     }
   }
 }
@@ -1048,6 +1200,21 @@ resource "google_cloud_run_v2_service" "landing" {
         cpu_idle = true
       }
 
+      env {
+        name  = "API_BASE_URL"
+        value = "https://${var.api_domain}"
+      }
+
+      env {
+        name  = "GATE_ENABLED"
+        value = var.gate_enabled ? "true" : "false"
+      }
+
+      env {
+        name  = "GATE_SECRET"
+        value = var.gate_secret
+      }
+
       liveness_probe {
         failure_threshold     = 3
         initial_delay_seconds = 5
@@ -1096,6 +1263,137 @@ resource "google_cloud_run_service_iam_member" "iap_invoker_admin" {
   member   = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-iap.iam.gserviceaccount.com"
 }
 
+
+# --- MCP Agent Server ---
+
+resource "google_service_account" "mcp_server" {
+  count        = var.mcp_server_image != "" ? 1 : 0
+  account_id   = "${replace(local.name_prefix, "-", "")}mcp"
+  display_name = "AEGIS MCP agent server service account"
+}
+
+# Grant Vertex AI user role so the MCP server can call Gemini via Workload Identity.
+resource "google_project_iam_member" "mcp_server_vertex_ai" {
+  count   = var.mcp_server_image != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.mcp_server[0].email}"
+}
+
+resource "google_secret_manager_secret" "mcp_aegis_api_token" {
+  count     = var.mcp_server_image != "" ? 1 : 0
+  secret_id = "${local.name_prefix}-mcp-aegis-api-token"
+
+  replication {
+    auto {}
+  }
+}
+
+# Populate the secret only when a token value is provided.
+resource "google_secret_manager_secret_version" "mcp_aegis_api_token" {
+  count       = var.mcp_server_image != "" && var.mcp_server_aegis_api_token != "" ? 1 : 0
+  secret      = google_secret_manager_secret.mcp_aegis_api_token[0].id
+  secret_data = var.mcp_server_aegis_api_token
+}
+
+resource "google_secret_manager_secret_iam_member" "mcp_server_token_access" {
+  count     = var.mcp_server_image != "" ? 1 : 0
+  secret_id = google_secret_manager_secret.mcp_aegis_api_token[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mcp_server[0].email}"
+}
+
+resource "google_cloud_run_v2_service" "mcp_server" {
+  count    = var.mcp_server_image != "" ? 1 : 0
+  name     = "aegis-mcp-server"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  deletion_protection = false
+
+  template {
+    service_account = google_service_account.mcp_server[0].email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 3
+    }
+
+    containers {
+      image = var.mcp_server_image
+
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = "512Mi"
+        }
+      }
+
+      env {
+        name  = "AEGIS_API_BASE_URL"
+        value = "https://${var.api_domain}"
+      }
+      env {
+        name = "AEGIS_API_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.mcp_aegis_api_token[0].secret_id
+            version = "latest"
+          }
+        }
+      }
+      env {
+        name  = "MCP_AGENT_HTTP_PORT"
+        value = "8080"
+      }
+      env {
+        name  = "MCP_AGENT_LLM_USE_GCP_AUTH"
+        value = "true"
+      }
+      env {
+        name  = "MCP_AGENT_LLM_GCP_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "MCP_AGENT_LLM_MODEL"
+        value = "google/gemini-2.0-flash-001"
+      }
+      env {
+        name  = "MCP_AGENT_ALLOWED_ORIGIN"
+        value = "https://${var.admin_domain}"
+      }
+      env {
+        name  = "MCP_AGENT_REQUIRE_AUTH"
+        value = "false"
+      }
+
+      liveness_probe {
+        failure_threshold     = 3
+        initial_delay_seconds = 10
+        timeout_seconds       = 5
+        period_seconds        = 30
+
+        http_get {
+          path = "/healthz"
+        }
+      }
+    }
+    # No VPC connector — MCP server only calls external HTTPS endpoints
+    # (Vertex AI and the AEGIS API load balancer). No private network needed.
+  }
+
+  depends_on = [google_secret_manager_secret_version.mcp_aegis_api_token]
+}
+
+# MCP server is proxied through the admin dashboard nginx — allUsers invoker
+# allows nginx to call it without credentials.
+resource "google_cloud_run_service_iam_member" "mcp_server_invoker" {
+  count    = var.mcp_server_image != "" ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.mcp_server[0].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
 
 # --- Cloud Armor ---
 
@@ -1268,6 +1566,7 @@ resource "google_compute_url_map" "https" {
     default_service = google_compute_backend_service.admin.id
     # No path rules needed — nginx proxies /api/* to the API backend internally.
   }
+
 }
 
 resource "google_compute_target_https_proxy" "https" {
@@ -1564,6 +1863,160 @@ resource "google_monitoring_alert_policy" "cloudsql_connections" {
   }
 }
 
+# --- Log-based metrics for AEGIS pipeline observability ---
+
+resource "google_logging_metric" "pipeline_failures" {
+  name   = "aegis-${var.environment}-pipeline-failures"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"pipeline: send failure alert\""
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "AEGIS pipeline step failures"
+  }
+}
+
+resource "google_logging_metric" "study_stuck" {
+  name   = "aegis-${var.environment}-study-stuck"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"sla: sent alert\""
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "AEGIS stuck study SLA alerts"
+  }
+}
+
+# Counts every "pipeline: dispatching ..." log line from the Go API.
+# Each dispatch fires once per pipeline service dispatched per study, so this
+# metric tracks pipeline throughput / study processing activity over time.
+resource "google_logging_metric" "pipeline_dispatches" {
+  name   = "aegis-${var.environment}-pipeline-dispatches"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"pipeline: dispatching\""
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "AEGIS pipeline dispatch activity"
+  }
+}
+
+# GCP log-based metrics take up to 10 minutes to propagate before alert
+# policies can reference them. This sleep guards against a race on first apply.
+resource "time_sleep" "wait_for_log_metrics" {
+  depends_on = [
+    google_logging_metric.pipeline_failures,
+    google_logging_metric.study_stuck,
+  ]
+  create_duration = "600s"
+}
+
+# --- Additional alert policies ---
+
+resource "google_monitoring_alert_policy" "cloud_run_memory" {
+  display_name = "AEGIS Cloud Run memory high (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+
+  conditions {
+    display_name = "Cloud Run container memory utilisation > 90% for 10m"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND resource.label.service_name = \"${google_cloud_run_v2_service.api.name}\" AND metric.type = \"run.googleapis.com/container/memory/utilizations\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.9
+      duration        = "600s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_PERCENTILE_99"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "API container memory is above 90%. Review for memory leaks, large DICOM upload processing, or undersized Cloud Run memory limits."
+  }
+
+  user_labels = {
+    service  = "api"
+    severity = "warning"
+  }
+}
+
+resource "google_monitoring_alert_policy" "study_stuck_alert" {
+  display_name = "AEGIS study stuck in pipeline > 30 min (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+  depends_on   = [time_sleep.wait_for_log_metrics]
+
+  conditions {
+    display_name = "Stuck study SLA alert log events"
+    condition_threshold {
+      filter          = "metric.type = \"logging.googleapis.com/user/${google_logging_metric.study_stuck.name}\" AND resource.type = \"cloud_run_revision\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "One or more studies have been stuck in a pipeline stage for longer than the SLA threshold. Check GET /api/studies/stuck for details and review the pipeline dashboard for failed sidecar services."
+  }
+
+  user_labels = {
+    service  = "pipeline"
+    severity = "warning"
+  }
+}
+
+resource "google_monitoring_alert_policy" "pipeline_failure_alert" {
+  display_name = "AEGIS pipeline step failure (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+  depends_on   = [time_sleep.wait_for_log_metrics]
+
+  conditions {
+    display_name = "Pipeline failure log events > 3 in 5m"
+    condition_threshold {
+      filter          = "metric.type = \"logging.googleapis.com/user/${google_logging_metric.pipeline_failures.name}\" AND resource.type = \"cloud_run_revision\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 3
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "Pipeline step failures are elevated. Check Cloud Run logs for the API service with filter textPayload:\"pipeline: send failure alert\". Review sidecar service health endpoints and study audit trails."
+  }
+
+  user_labels = {
+    service  = "pipeline"
+    severity = "critical"
+  }
+}
+
 # --- Cloud Monitoring Dashboard ---
 
 resource "google_monitoring_dashboard" "aegis" {
@@ -1638,8 +2091,8 @@ output "sidecar_service_uris" {
   value = { for name, svc in google_cloud_run_v2_service.sidecars : name => svc.uri }
 }
 
-output "ohif_service_uri" {
-  value = var.ohif_image != "" ? google_cloud_run_v2_service.ohif[0].uri : ""
+output "weasis_service_uri" {
+  value = var.weasis_image != "" ? google_cloud_run_v2_service.weasis[0].uri : ""
 }
 
 output "landing_service_uri" {
@@ -1680,4 +2133,8 @@ output "smtp_egress_ip" {
 
 output "iap_backend_service_name" {
   value = google_compute_backend_service.admin.name
+}
+
+output "mcp_server_uri" {
+  value = var.mcp_server_image != "" ? google_cloud_run_v2_service.mcp_server[0].uri : ""
 }

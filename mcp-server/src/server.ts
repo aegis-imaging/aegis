@@ -8,22 +8,45 @@ import { InMemoryIdempotencyCache } from "./idempotencyCache.js";
 import { InMemoryRateLimiter } from "./rateLimiter.js";
 import { redactToolArgs } from "./redaction.js";
 import {
+  addStudyLabelArgsSchema,
+  addStudyNoteArgsSchema,
+  toggleStudyFlagArgsSchema,
+  apiKeyIdArgsSchema,
   approveStudyArgsSchema,
+  bulkLabelStudiesArgsSchema,
+  bulkStudyActionArgsSchema,
+  createApiKeyArgsSchema,
+  generateSyntheticStudyArgsSchema,
   createShareArgsSchema,
   dimseRetryStatusArgsSchema,
   emptyArgsSchema,
+  exportProjectBatchArgsSchema,
+  extendShareArgsSchema,
   getAuditActorsArgsSchema,
+  getIngestionTimelineArgsSchema,
+  getInstitutionStatsArgsSchema,
   getShareDownloadsArgsSchema,
   getStuckStudiesArgsSchema,
+  getStudyDicomTagsArgsSchema,
+  getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
   listAuditArgsSchema,
+  listProtocolTemplatesArgsSchema,
   listStudiesArgsSchema,
   projectScopedArgsSchema,
+  reactivateStudyArgsSchema,
+  cloneProjectArgsSchema,
+  testDestinationArgsSchema,
+  testWebhookArgsSchema,
   readToolNames,
+  reassignStudyArgsSchema,
   reEvaluateRoutingArgsSchema,
   rejectStudyArgsSchema,
+  removeStudyLabelArgsSchema,
+  resetPipelineStepArgsSchema,
   retryDimseArgsSchema,
   revokeShareArgsSchema,
+  setStudySubjectArgsSchema,
   studyIdArgsSchema,
   studyUidArgsSchema,
   ToolName,
@@ -136,7 +159,7 @@ const client = new AegisApiClient(config.aegisApiBaseUrl, config.aegisApiToken);
 const tools: Tool[] = [
   {
     name: "list_studies",
-    description: "List studies with filters for operations triage.",
+    description: "List studies with filters for operations triage. Supports filtering by label text and subject ID in addition to the standard filters.",
     inputSchema: {
       type: "object",
       properties: {
@@ -148,7 +171,9 @@ const tools: Tool[] = [
         modality: { type: "string" },
         body_part: { type: "string" },
         source: { type: "string", enum: ["external", "internal"] },
-        search: { type: "string" },
+        search: { type: "string", description: "Substring match on study UID or description" },
+        label: { type: "string", maxLength: 80, description: "Substring match on any study label (case-insensitive)" },
+        subject_id: { type: "string", maxLength: 256, description: "Exact match on subject_id" },
         date_from: { type: "string", format: "date-time", description: "ISO 8601 lower bound on created_at (inclusive)" },
         date_to: { type: "string", format: "date-time", description: "ISO 8601 upper bound on created_at (inclusive)" }
       },
@@ -386,6 +411,7 @@ const tools: Tool[] = [
         recipient_email: { type: "string", format: "email" },
         note: { type: "string", maxLength: 512 },
         expiry_hours: { type: "integer", minimum: 1, maximum: 8760, description: "Share expiry in hours (default 168 = 7 days, max 8760 = 1 year)" },
+        max_downloads: { type: "integer", minimum: 1, maximum: 1000, description: "Maximum number of times the share can be downloaded before it is automatically revoked (omit for unlimited)" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -424,13 +450,14 @@ const tools: Tool[] = [
   },
   {
     name: "reject_study",
-    description: "Reject a study (transitions status to 'rejected'). Study must not already be rejected. Requires confirm=true and a reason.",
+    description: "Reject a study (transitions status to 'rejected'). Study must not already be rejected. Optional rejection_reason is stored on the study and included in the uploader notification email. Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["study_id", "reason", "confirm"],
       properties: {
         request_id: { type: "string" },
         study_id: { type: "string", format: "uuid" },
+        rejection_reason: { type: "string", maxLength: 500, description: "Optional human-readable reason shown to uploader in the rejection notification email (max 500 chars)" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -439,13 +466,14 @@ const tools: Tool[] = [
   },
   {
     name: "revoke_share",
-    description: "Immediately revoke an export share link by share UUID. Recipients lose access immediately. Requires confirm=true and a reason.",
+    description: "Immediately revoke an export share link by share UUID. Recipients lose access immediately. Optionally supply a revocation_reason (stored in DB and audit). Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["share_id", "reason", "confirm"],
       properties: {
         request_id: { type: "string" },
         share_id: { type: "string", format: "uuid" },
+        revocation_reason: { type: "string", maxLength: 500, description: "Optional reason stored in the database and audit trail" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -497,6 +525,591 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         limit: { type: "integer", minimum: 1, maximum: 100, description: "Max actors to return (default 20)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_projects",
+    description: "List all AEGIS projects. Returns array of {id, name, slug, description, archived, retention_days, stuck_threshold_minutes, created_at}. stuck_threshold_minutes is the per-project SLA threshold for get_stuck_studies (null = global default of 60 min). Use project IDs to scope other tools (list_studies, get_pipeline_stats, get_stuck_studies, etc.) to a specific project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_institutions",
+    description: "List all registered institutions (senders, receivers, or both). Returns array of {id, name, slug, institution_type, ae_title, ip_ranges, enabled, created_at}. Use institution IDs to look up study provenance or to configure routing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_routing_rules",
+    description: "List all routing rules ordered by priority. Returns array of {id, name, priority, project_id, modality, body_part, source, action, destination_id, enabled}. Use this to understand how studies are classified, processed, and forwarded automatically at ingest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_destinations",
+    description: "List all DICOM forwarding destinations. Returns array of {id, name, type, dicomweb_url, ae_title, host, port, enabled, created_at}. Destinations are referenced by routing rules with action=route_to to forward approved studies via DICOMweb STOW-RS or DIMSE C-STORE.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "test_destination",
+    description: "Test connectivity to a DICOM forwarding destination. DICOMweb: sends GET /studies?limit=1 with auth headers. DIMSE: sends C-ECHO via the dimse-receiver. Returns {destination_id, type, success, latency_ms, status_code?, error?}. Useful before adding routing rules to verify the destination is reachable.",
+    inputSchema: {
+      type: "object",
+      required: ["destination_id"],
+      properties: {
+        request_id: { type: "string" },
+        destination_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_study_series",
+    description: "Get per-series DICOM metadata for a study. Returns {study_id, series: [{id, series_instance_uid, series_description, modality, body_part, instance_count, created_at}], total}. Use to inspect multi-series studies or verify series-level modality and body part metadata.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_study_labels",
+    description: "Get all labels attached to a study. Returns array of {id, study_id, label, created_by, created_at}. Labels are free-text tags added by operators for cohort tagging, triage, or workflow notes.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_subjects",
+    description: "List unique research subject IDs with study counts for a project. Returns array of {subject_id, study_count}. Use to audit longitudinal subject coverage or find subjects with missing sessions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project (recommended)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_export_analytics",
+    description: "Get aggregate export share analytics: total shares created, total downloads, unique recipients, average downloads per share, and breakdown by status (active/expired/revoked). Use for compliance reporting and share activity monitoring.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_webhook_subscriptions",
+    description: "List all webhook subscriptions. Returns array of {id, url, events, project_id, enabled, created_at}. Webhooks push study event notifications (approved, rejected, phi_flagged, export_complete, stuck) to external HTTP endpoints.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_webhook_deliveries",
+    description: "Get the delivery history for a webhook subscription. Returns array of {id, subscription_id, event, url, attempt, status_code, success, error_message, delivered_at}. Use for debugging webhook delivery failures.",
+    inputSchema: {
+      type: "object",
+      required: ["subscription_id"],
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_ingestion_timeline",
+    description: "Get daily ingestion counts (received and approved studies per day) for the last N days. Returns {days: [{day, received, approved}]}. Use to identify ingestion spikes, slowdowns, or gaps in pipeline throughput. Optionally scope to a single project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        days: { type: "integer", minimum: 1, maximum: 365, description: "Number of days to include (default 30)" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "reset_pipeline_step",
+    description: "Reset a single pipeline step back to 'pending' so it can be re-processed. Use for production error recovery: re-deface, re-scan PHI, re-run QC, re-convert BIDS, re-classify, re-check protocol, or re-export. Returns 409 if the step is currently in-flight. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "step", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        step: { type: "string", enum: ["deface", "phi_scan", "qc", "bids", "classify", "protocol", "export"], description: "Pipeline step to reset" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "reassign_study",
+    description: "Move a study from one project to another. The study retains all its pipeline state and audit history. Use to correct mis-routed studies. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid", description: "Study to move" },
+        project_id: { type: "string", format: "uuid", description: "Target project UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "add_study_label",
+    description: "Attach a free-text label to a study (max 80 characters). Labels are used for cohort tagging, triage prioritisation, or workflow notes. Duplicate labels on the same study are silently ignored. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "label", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        label: { type: "string", minLength: 1, maxLength: 80, description: "Label text (max 80 chars)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "remove_study_label",
+    description: "Remove a label from a study by its label UUID. Use get_study_labels first to find the label_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "label_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        label_id: { type: "string", format: "uuid", description: "Label UUID from get_study_labels" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "set_study_subject",
+    description: "Set or clear the research subject ID on a study. Subject IDs link longitudinal imaging sessions from the same de-identified participant. Use empty string to clear the subject link. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "subject_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        subject_id: { type: "string", maxLength: 256, description: "Subject identifier string (empty string clears the link)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_study_dicom_tags",
+    description: "Get all non-pixel DICOM tags from the first file of a study. Returns {tags: [{tag, keyword, vr, value}], file, store}. Use for debugging de-identification issues, verifying protocol parameters, or inspecting tag values after defacing. Reads from the study's current dicom_store (raw before defacing, clean after).",
+    inputSchema: {
+      type: "object",
+      required: ["study_instance_uid"],
+      properties: {
+        request_id: { type: "string" },
+        study_instance_uid: {
+          type: "string",
+          pattern: "^[0-9.]+$",
+          description: "DICOM StudyInstanceUID (dot-separated numeric string)"
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "add_study_note",
+    description: "Add a free-text operator note to a study (max 2000 characters). Notes are stored in the audit trail as 'study.note' entries — visible in the study audit tab. Use for triage observations, incident notes, or workflow decisions. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "note", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        note: { type: "string", minLength: 1, maxLength: 2000, description: "Operator note text (max 2000 chars)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "toggle_study_flag",
+    description: "Set or clear the priority flag on a study. Flagged studies are marked with ★ in the dashboard and can be filtered with ?flagged=true. Use to mark studies that require urgent review or special handling. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "flagged", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        flagged: { type: "boolean", description: "true to set priority flag, false to clear it" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "clone_project",
+    description: "Duplicate a project with all its settings: routing rules (project-scoped), anon profiles (with default profile pointer), protocol templates, PHI config, retention_days, stuck_threshold_minutes. Studies, audit entries, and invite codes are NOT copied. Returns the new project record. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        name: { type: "string", minLength: 1, maxLength: 128, description: "New project name (default: 'Copy of <source>')" },
+        slug: { type: "string", minLength: 1, maxLength: 128, description: "New project slug (auto-derived from name if omitted)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "extend_share",
+    description: "Extend the expiry of an export share by N hours. Works on both active and already-expired (but not revoked) shares — the extension is computed from max(current_expires_at, now). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["share_id", "extend_hours", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        share_id: { type: "string", format: "uuid" },
+        extend_hours: { type: "integer", minimum: 1, maximum: 8760, description: "Hours to extend from the later of expires_at or now" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "export_project_batch",
+    description: "Trigger batch export forwarding for all eligible studies in a project: approved studies with export_required=true and export_status in (pending, failed). Returns {dispatched, study_ids, message}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID to batch-export" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "reactivate_study",
+    description: "Reactivate an expired study by resetting its status back to 'approved'. Only works on studies in 'expired' status. Use when a study's retention window has passed but it still needs to be accessible. Emits a study.reactivated audit entry. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_institution_stats",
+    description: "Get aggregate statistics for an institution: total study count, studies broken down by status and modality, and the timestamp of the most recent study. Useful for understanding an institution's contribution and activity patterns.",
+    inputSchema: {
+      type: "object",
+      required: ["institution_id"],
+      properties: {
+        request_id: { type: "string" },
+        institution_id: { type: "string", format: "uuid", description: "Institution UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_protocol_templates",
+    description: "List all MRI protocol compliance templates for a project. Each template defines expected acquisition parameters (TR, TE, flip angle, slice thickness, etc.) for a specific scanner/sequence combination. Use before running a protocol check to understand what rules will be applied.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_federation_peers",
+    description: "List all federation peer registrations. Federation peers are trusted remote AEGIS instances configured for future cross-tenant study sharing. Returns peer name, slug, API URL, and enabled status. No data flows to peers yet — this is a registry for future activation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_phi_config",
+    description: "Get per-project PHI detection configuration: confidence_threshold (0.0–1.0, minimum OCR confidence to flag text) and min_text_length (minimum text length to report). If no project-specific config exists, returns global defaults from PHI_CONFIDENCE_THRESHOLD and PHI_MIN_TEXT_LENGTH env vars.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_anon_profiles",
+    description: "List all anonymization profiles for a project. Each profile defines which DICOM tags are retained instead of being stripped/zeroed during PS3.15 Basic Profile de-identification. The default profile (if set) is applied automatically by the upload portal.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "test_webhook",
+    description: "Send a synthetic test delivery to a webhook subscription's URL. Sends a 'study.approved' test payload immediately, records the attempt in webhook_deliveries, and returns {success, status_code, url, error?}. Use to verify connectivity before real study events fire. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["subscription_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid", description: "Webhook subscription UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_api_keys",
+    description: "List all machine-to-machine API keys. Returns each key's ID, name, prefix (first 14 chars of the key for identification), created_by, enabled status, last_used_at, expires_at, and timestamps. The raw key value is never returned after creation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_api_key",
+    description: "Create a new machine-to-machine API key. Returns the API key record plus the raw key value (shown exactly once — must be copied immediately). The key is used as a Bearer token in the Authorization header. Optionally set an expiry date (RFC3339). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        name: { type: "string", minLength: 1, maxLength: 128, description: "Human-readable key name" },
+        expires_at: { type: "string", format: "date-time", description: "Optional RFC3339 expiry; must be in the future" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "rotate_api_key",
+    description: "Rotate an API key: generates a new cryptographically random key, updates the stored hash and prefix, and returns the new raw key exactly once. The old key immediately stops working. Use this instead of delete+create to avoid an authentication gap in dependent services. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["key_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        key_id: { type: "string", format: "uuid", description: "API key UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "enable_api_key",
+    description: "Enable a disabled API key so it can authenticate requests again. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["key_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        key_id: { type: "string", format: "uuid", description: "API key UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "disable_api_key",
+    description: "Disable an active API key so it can no longer authenticate requests. The key record is preserved and can be re-enabled. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["key_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        key_id: { type: "string", format: "uuid", description: "API key UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_api_key",
+    description: "Permanently delete an API key. This cannot be undone. The key will immediately stop authenticating requests. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["key_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        key_id: { type: "string", format: "uuid", description: "API key UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "bulk_approve_studies",
+    description: "Approve up to 200 studies in a single call. Already-terminal studies (already approved/rejected) are skipped with an error entry. On approval, export forwarding and uploader notification emails fire automatically (same as single approve). Returns {processed, errors[]}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_ids", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_ids: {
+          type: "array",
+          items: { type: "string", format: "uuid" },
+          minItems: 1,
+          maxItems: 200,
+          description: "List of study UUIDs to approve (max 200)"
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "bulk_reject_studies",
+    description: "Reject up to 200 studies in a single call. Already-terminal studies are skipped with an error entry. Returns {processed, errors[]}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_ids", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_ids: {
+          type: "array",
+          items: { type: "string", format: "uuid" },
+          minItems: 1,
+          maxItems: 200,
+          description: "List of study UUIDs to reject (max 200)"
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "bulk_label_studies",
+    description: "Add or remove a label across up to 200 studies in a single call. action='add' inserts the label (duplicates silently ignored). action='remove' deletes it (case-insensitive). Returns {applied/removed, total}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_ids", "label", "action", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_ids: {
+          type: "array",
+          items: { type: "string", format: "uuid" },
+          minItems: 1,
+          maxItems: 200,
+          description: "List of study UUIDs to label (max 200)"
+        },
+        label: { type: "string", minLength: 1, maxLength: 80, description: "Label text" },
+        action: { type: "string", enum: ["add", "remove"], description: "'add' inserts the label; 'remove' deletes it" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "generate_synthetic_study",
+    description: "Generate a synthetic brain MRI DICOM study via the synth-service and import it into AEGIS. Useful for populating test data, validating the pipeline, or producing demo studies. The generated phantom is a Shepp-Logan brain with optional facial anatomy (with_face=true) so the defacing pipeline can be exercised. Returns {study_id, study_uid, file_count, tool_used, duration_seconds}. Requires SYNTH_SERVICE_URL to be configured on the API. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_slug: { type: "string", minLength: 1, maxLength: 64, description: "Target project slug (default: 'default')" },
+        slices: { type: "integer", minimum: 1, maximum: 100, description: "Number of axial slices to generate (default: 20)" },
+        size: { type: "integer", minimum: 64, maximum: 512, description: "Image matrix size in pixels (default: 256)" },
+        seed: { type: "integer", minimum: 0, description: "Random seed for reproducible phantoms (default: random)" },
+        with_face: { type: "boolean", description: "Include facial anatomy to exercise the defacing pipeline (default: false)" },
+        use_gpu: { type: "boolean", description: "Use GPU-accelerated MONAI BraTS LDM if available (default: false)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
       },
       additionalProperties: false
     }
@@ -606,6 +1219,8 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.body_part) query.set("body_part", parsed.body_part);
       if (parsed.source) query.set("source", parsed.source);
       if (parsed.search) query.set("search", parsed.search);
+      if (parsed.label) query.set("label", parsed.label);
+      if (parsed.subject_id) query.set("subject_id", parsed.subject_id);
       if (parsed.date_from) query.set("date_from", parsed.date_from);
       if (parsed.date_to) query.set("date_to", parsed.date_to);
 
@@ -623,7 +1238,7 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "get_study_by_uid") {
       const parsed = studyUidArgsSchema.parse(args);
       const uid = encodeURIComponent(parsed.study_instance_uid);
-      const data = await client.get(`/api/studies/by-uid/${uid}`);
+      const data = await client.get(`/api/study-uid/${uid}`);
       return formatSuccess(requestId, name, data);
     }
 
@@ -747,6 +1362,128 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_projects") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/projects");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_institutions") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/institutions");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_routing_rules") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/routing-rules");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_destinations") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/destinations");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "test_destination") {
+      const parsed = testDestinationArgsSchema.parse(args);
+      const data = await client.post(`/api/destinations/${encodeURIComponent(parsed.destination_id)}/test`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_study_series") {
+      const parsed = studyIdArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/series`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_study_labels") {
+      const parsed = studyIdArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/labels`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_subjects") {
+      const parsed = projectScopedArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/subjects${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_export_analytics") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/export-analytics");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_webhook_subscriptions") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/webhook-subscriptions");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_webhook_deliveries") {
+      const parsed = getWebhookDeliveriesArgsSchema.parse(args);
+      const data = await client.get(`/api/webhook-subscriptions/${parsed.subscription_id}/deliveries`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_ingestion_timeline") {
+      const parsed = getIngestionTimelineArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/timeline${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_study_dicom_tags") {
+      const parsed = getStudyDicomTagsArgsSchema.parse(args);
+      const uid = encodeURIComponent(parsed.study_instance_uid);
+      const data = await client.get(`/api/studies/${uid}/dicom-tags`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_institution_stats") {
+      const parsed = getInstitutionStatsArgsSchema.parse(args);
+      const data = await client.get(`/api/institutions/${parsed.institution_id}/stats`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_protocol_templates") {
+      const parsed = listProtocolTemplatesArgsSchema.parse(args);
+      const data = await client.get(`/api/projects/${parsed.project_id}/protocol-templates`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_federation_peers") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/federation-peers");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_phi_config") {
+      const parsed = listProtocolTemplatesArgsSchema.parse(args); // same shape: {project_id}
+      const data = await client.get(`/api/projects/${parsed.project_id}/phi-config`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_anon_profiles") {
+      const parsed = listProtocolTemplatesArgsSchema.parse(args); // same shape: {project_id}
+      const data = await client.get(`/api/projects/${parsed.project_id}/anon-profiles`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_api_keys") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/api-keys");
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -776,6 +1513,111 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "re_evaluate_routing") {
         const parsedReEval = reEvaluateRoutingArgsSchema.parse(args);
         return handleReEvaluateRouting(parsedReEval.request_id ?? buildRequestId(), parsedReEval);
+      }
+
+      if (name === "reset_pipeline_step") {
+        const parsedReset = resetPipelineStepArgsSchema.parse(args);
+        return handleResetPipelineStep(parsedReset.request_id ?? buildRequestId(), parsedReset);
+      }
+
+      if (name === "reassign_study") {
+        const parsedReassign = reassignStudyArgsSchema.parse(args);
+        return handleReassignStudy(parsedReassign.request_id ?? buildRequestId(), parsedReassign);
+      }
+
+      if (name === "add_study_label") {
+        const parsedLabel = addStudyLabelArgsSchema.parse(args);
+        return handleAddStudyLabel(parsedLabel.request_id ?? buildRequestId(), parsedLabel);
+      }
+
+      if (name === "remove_study_label") {
+        const parsedRemLabel = removeStudyLabelArgsSchema.parse(args);
+        return handleRemoveStudyLabel(parsedRemLabel.request_id ?? buildRequestId(), parsedRemLabel);
+      }
+
+      if (name === "set_study_subject") {
+        const parsedSubject = setStudySubjectArgsSchema.parse(args);
+        return handleSetStudySubject(parsedSubject.request_id ?? buildRequestId(), parsedSubject);
+      }
+
+      if (name === "add_study_note") {
+        const parsedNote = addStudyNoteArgsSchema.parse(args);
+        return handleAddStudyNote(parsedNote.request_id ?? buildRequestId(), parsedNote);
+      }
+
+      if (name === "toggle_study_flag") {
+        const parsedFlag = toggleStudyFlagArgsSchema.parse(args);
+        return handleToggleStudyFlag(parsedFlag.request_id ?? buildRequestId(), parsedFlag);
+      }
+
+      if (name === "clone_project") {
+        const parsed = cloneProjectArgsSchema.parse(args);
+        return handleCloneProject(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "extend_share") {
+        const parsedExtend = extendShareArgsSchema.parse(args);
+        return handleExtendShare(parsedExtend.request_id ?? buildRequestId(), parsedExtend);
+      }
+
+      if (name === "export_project_batch") {
+        const parsedBatch = exportProjectBatchArgsSchema.parse(args);
+        return handleExportProjectBatch(parsedBatch.request_id ?? buildRequestId(), parsedBatch);
+      }
+
+      if (name === "reactivate_study") {
+        const parsedReactivate = reactivateStudyArgsSchema.parse(args);
+        return handleReactivateStudy(parsedReactivate.request_id ?? buildRequestId(), parsedReactivate);
+      }
+
+      if (name === "test_webhook") {
+        const parsedTestWebhook = testWebhookArgsSchema.parse(args);
+        return handleTestWebhook(parsedTestWebhook.request_id ?? buildRequestId(), parsedTestWebhook);
+      }
+
+      if (name === "create_api_key") {
+        const parsedCreate = createApiKeyArgsSchema.parse(args);
+        return handleCreateApiKey(parsedCreate.request_id ?? buildRequestId(), parsedCreate);
+      }
+
+      if (name === "rotate_api_key") {
+        const parsedRotate = apiKeyIdArgsSchema.parse(args);
+        return handleRotateApiKey(parsedRotate.request_id ?? buildRequestId(), parsedRotate);
+      }
+
+      if (name === "enable_api_key") {
+        const parsedEnable = apiKeyIdArgsSchema.parse(args);
+        return handleSetApiKeyEnabled(parsedEnable.request_id ?? buildRequestId(), parsedEnable, true);
+      }
+
+      if (name === "disable_api_key") {
+        const parsedDisable = apiKeyIdArgsSchema.parse(args);
+        return handleSetApiKeyEnabled(parsedDisable.request_id ?? buildRequestId(), parsedDisable, false);
+      }
+
+      if (name === "delete_api_key") {
+        const parsedDelete = apiKeyIdArgsSchema.parse(args);
+        return handleDeleteApiKey(parsedDelete.request_id ?? buildRequestId(), parsedDelete);
+      }
+
+      if (name === "bulk_approve_studies") {
+        const parsedBulkApprove = bulkStudyActionArgsSchema.parse(args);
+        return handleBulkStudyAction(parsedBulkApprove.request_id ?? buildRequestId(), parsedBulkApprove, "approve");
+      }
+
+      if (name === "bulk_reject_studies") {
+        const parsedBulkReject = bulkStudyActionArgsSchema.parse(args);
+        return handleBulkStudyAction(parsedBulkReject.request_id ?? buildRequestId(), parsedBulkReject, "reject");
+      }
+
+      if (name === "bulk_label_studies") {
+        const parsedBulkLabel = bulkLabelStudiesArgsSchema.parse(args);
+        return handleBulkLabelStudies(parsedBulkLabel.request_id ?? buildRequestId(), parsedBulkLabel);
+      }
+
+      if (name === "generate_synthetic_study") {
+        const parsedSynth = generateSyntheticStudyArgsSchema.parse(args);
+        return handleGenerateSyntheticStudy(parsedSynth.request_id ?? buildRequestId(), parsedSynth);
       }
 
       const parsed = writeArgsSchema.parse(args);
@@ -877,11 +1719,51 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   if (name === "retry_dimse_study") {
     return typeof args.study_instance_uid === "string" ? args.study_instance_uid : null;
   }
-  if (name === "approve_study" || name === "reject_study" || name === "create_share" || name === "re_evaluate_routing") {
+  if (
+    name === "approve_study" ||
+    name === "reject_study" ||
+    name === "create_share" ||
+    name === "re_evaluate_routing" ||
+    name === "reset_pipeline_step" ||
+    name === "reassign_study" ||
+    name === "add_study_label" ||
+    name === "remove_study_label" ||
+    name === "set_study_subject" ||
+    name === "add_study_note" ||
+    name === "reactivate_study" ||
+    name === "toggle_study_flag"
+  ) {
     return typeof args.study_id === "string" ? args.study_id : null;
   }
-  if (name === "revoke_share") {
+  if (name === "revoke_share" || name === "extend_share") {
     return typeof args.share_id === "string" ? args.share_id : null;
+  }
+  if (name === "export_project_batch" || name === "clone_project") {
+    return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "test_webhook") {
+    return typeof args.subscription_id === "string" ? args.subscription_id : null;
+  }
+  if (
+    name === "rotate_api_key" ||
+    name === "enable_api_key" ||
+    name === "disable_api_key" ||
+    name === "delete_api_key"
+  ) {
+    return typeof args.key_id === "string" ? args.key_id : null;
+  }
+  if (name === "create_api_key") {
+    return typeof args.name === "string" ? args.name : null;
+  }
+  if (name === "bulk_approve_studies" || name === "bulk_reject_studies" || name === "bulk_label_studies") {
+    const ids = args.study_ids;
+    if (Array.isArray(ids) && ids.length > 0) {
+      return `${ids.length} studies`;
+    }
+    return null;
+  }
+  if (name === "generate_synthetic_study") {
+    return typeof args.project_slug === "string" ? args.project_slug : "default";
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -927,7 +1809,9 @@ async function main(): Promise<void> {
       llmApiKey: config.agentLlmApiKey,
       llmModel: config.agentLlmModel,
       llmTemperature: config.agentLlmTemperature,
-      llmMaxTokens: config.agentLlmMaxTokens
+      llmMaxTokens: config.agentLlmMaxTokens,
+      llmUseGcpAuth: config.agentLlmUseGcpAuth,
+      llmGcpProject: config.agentLlmGcpProject
     });
   }
   const transport = new StdioServerTransport();
@@ -1489,7 +2373,7 @@ function formatError(
 
 async function handleCreateShare(
   requestId: string,
-  parsed: { study_id: string; recipient_email: string; note?: string; expiry_hours?: number; reason: string; confirm: true }
+  parsed: { study_id: string; recipient_email: string; note?: string; expiry_hours?: number; max_downloads?: number; reason: string; confirm: true }
 ) {
   if (config.mcpMode !== "operator") {
     return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_share");
@@ -1506,6 +2390,7 @@ async function handleCreateShare(
   const payload: Record<string, unknown> = { recipient_email: parsed.recipient_email };
   if (parsed.note !== undefined) payload.note = parsed.note;
   if (parsed.expiry_hours !== undefined) payload.expiry_hours = parsed.expiry_hours;
+  if (parsed.max_downloads !== undefined) payload.max_downloads = parsed.max_downloads;
 
   const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/share`, payload);
   return formatSuccess(requestId, "create_share", {
@@ -1565,7 +2450,7 @@ async function handleApproveStudy(
 
 async function handleRejectStudy(
   requestId: string,
-  parsed: { study_id: string; reason: string; confirm: true }
+  parsed: { study_id: string; rejection_reason?: string; reason: string; confirm: true }
 ) {
   if (config.mcpMode !== "operator") {
     return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reject_study");
@@ -1580,10 +2465,13 @@ async function handleRejectStudy(
     return formatError(requestId, "CONFLICT", "Study is already rejected", false, "reject_study");
   }
 
-  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reject`);
+  // Pass optional rejection_reason to the API (stored on study + included in uploader email).
+  const rejectPayload = parsed.rejection_reason ? { reason: parsed.rejection_reason } : undefined;
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reject`, rejectPayload);
   return formatSuccess(requestId, "reject_study", {
     accepted: true,
     study_id: parsed.study_id,
+    rejection_reason: parsed.rejection_reason,
     reason: parsed.reason,
     result: data
   });
@@ -1591,7 +2479,7 @@ async function handleRejectStudy(
 
 async function handleRevokeShare(
   requestId: string,
-  parsed: { share_id: string; reason: string; confirm: true }
+  parsed: { share_id: string; revocation_reason?: string; reason: string; confirm: true }
 ) {
   if (config.mcpMode !== "operator") {
     return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "revoke_share");
@@ -1600,10 +2488,438 @@ async function handleRevokeShare(
     return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow revoke_share", false, "revoke_share");
   }
 
-  const data = await client.delete(`/api/shares/${encodeURIComponent(parsed.share_id)}`);
+  const body = parsed.revocation_reason ? { reason: parsed.revocation_reason } : {};
+  const data = await client.delete(`/api/shares/${encodeURIComponent(parsed.share_id)}`, body);
   return formatSuccess(requestId, "revoke_share", {
     accepted: true,
     share_id: parsed.share_id,
+    revocation_reason: parsed.revocation_reason ?? null,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleResetPipelineStep(
+  requestId: string,
+  parsed: { study_id: string; step: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reset_pipeline_step");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow reset_pipeline_step", false, "reset_pipeline_step");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reset-pipeline-step`, { step: parsed.step });
+  return formatSuccess(requestId, "reset_pipeline_step", {
+    accepted: true,
+    study_id: parsed.study_id,
+    step: parsed.step,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleReassignStudy(
+  requestId: string,
+  parsed: { study_id: string; project_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reassign_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow reassign_study", false, "reassign_study");
+  }
+
+  const data = await client.put(`/api/studies/${encodeURIComponent(parsed.study_id)}/project`, { project_id: parsed.project_id });
+  return formatSuccess(requestId, "reassign_study", {
+    accepted: true,
+    study_id: parsed.study_id,
+    project_id: parsed.project_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleAddStudyLabel(
+  requestId: string,
+  parsed: { study_id: string; label: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "add_study_label");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow add_study_label", false, "add_study_label");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/labels`, { label: parsed.label });
+  return formatSuccess(requestId, "add_study_label", {
+    accepted: true,
+    study_id: parsed.study_id,
+    label: parsed.label,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleRemoveStudyLabel(
+  requestId: string,
+  parsed: { study_id: string; label_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "remove_study_label");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow remove_study_label", false, "remove_study_label");
+  }
+
+  const data = await client.delete(`/api/studies/${encodeURIComponent(parsed.study_id)}/labels/${encodeURIComponent(parsed.label_id)}`);
+  return formatSuccess(requestId, "remove_study_label", {
+    accepted: true,
+    study_id: parsed.study_id,
+    label_id: parsed.label_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleSetStudySubject(
+  requestId: string,
+  parsed: { study_id: string; subject_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "set_study_subject");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow set_study_subject", false, "set_study_subject");
+  }
+
+  const data = await client.put(`/api/studies/${encodeURIComponent(parsed.study_id)}/subject`, { subject_id: parsed.subject_id });
+  return formatSuccess(requestId, "set_study_subject", {
+    accepted: true,
+    study_id: parsed.study_id,
+    subject_id: parsed.subject_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleAddStudyNote(
+  requestId: string,
+  parsed: { study_id: string; note: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "add_study_note");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow add_study_note", false, "add_study_note");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/notes`, { note: parsed.note });
+  return formatSuccess(requestId, "add_study_note", {
+    accepted: true,
+    study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleToggleStudyFlag(
+  requestId: string,
+  parsed: { study_id: string; flagged: boolean; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "toggle_study_flag");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow toggle_study_flag", false, "toggle_study_flag");
+  }
+
+  const data = await client.patch(`/api/studies/${encodeURIComponent(parsed.study_id)}/flag`, { flagged: parsed.flagged });
+  return formatSuccess(requestId, "toggle_study_flag", {
+    accepted: true,
+    study_id: parsed.study_id,
+    flagged: parsed.flagged,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleCloneProject(
+  requestId: string,
+  parsed: { project_id: string; name?: string; slug?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "clone_project");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow clone_project", false, "clone_project");
+  }
+  const body: Record<string, string> = {};
+  if (parsed.name) body.name = parsed.name;
+  if (parsed.slug) body.slug = parsed.slug;
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/clone`, body);
+  return formatSuccess(requestId, "clone_project", {
+    accepted: true,
+    source_project_id: parsed.project_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleExtendShare(
+  requestId: string,
+  parsed: { share_id: string; extend_hours: number; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "extend_share");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow extend_share", false, "extend_share");
+  }
+
+  const data = await client.patch(`/api/shares/${encodeURIComponent(parsed.share_id)}/extend`, { extend_hours: parsed.extend_hours });
+  return formatSuccess(requestId, "extend_share", {
+    accepted: true,
+    share_id: parsed.share_id,
+    extend_hours: parsed.extend_hours,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleExportProjectBatch(
+  requestId: string,
+  parsed: { project_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "export_project_batch");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow export_project_batch", false, "export_project_batch");
+  }
+
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/export-batch`);
+  return formatSuccess(requestId, "export_project_batch", {
+    accepted: true,
+    project_id: parsed.project_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleReactivateStudy(
+  requestId: string,
+  parsed: { study_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reactivate_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow reactivate_study", false, "reactivate_study");
+  }
+
+  const study = await client.get(`/api/studies/${encodeURIComponent(parsed.study_id)}`) as Record<string, unknown>;
+  if (study?.status !== "expired") {
+    return formatError(requestId, "CONFLICT", `Only expired studies can be reactivated; current status: ${study?.status ?? "unknown"}`, false, "reactivate_study");
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/reactivate`);
+  return formatSuccess(requestId, "reactivate_study", {
+    accepted: true,
+    study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTestWebhook(
+  requestId: string,
+  parsed: { subscription_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "test_webhook");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow test_webhook", false, "test_webhook");
+  }
+
+  const data = await client.post(`/api/webhook-subscriptions/${encodeURIComponent(parsed.subscription_id)}/test`);
+  return formatSuccess(requestId, "test_webhook", {
+    accepted: true,
+    subscription_id: parsed.subscription_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleCreateApiKey(
+  requestId: string,
+  parsed: { name: string; expires_at?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_api_key");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_api_key", false, "create_api_key");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name };
+  if (parsed.expires_at) body.expires_at = parsed.expires_at;
+  const data = await client.post("/api/api-keys", body);
+  return formatSuccess(requestId, "create_api_key", {
+    accepted: true,
+    name: parsed.name,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleRotateApiKey(
+  requestId: string,
+  parsed: { key_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "rotate_api_key");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow rotate_api_key", false, "rotate_api_key");
+  }
+
+  const data = await client.post(`/api/api-keys/${encodeURIComponent(parsed.key_id)}/rotate`);
+  return formatSuccess(requestId, "rotate_api_key", {
+    accepted: true,
+    key_id: parsed.key_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleSetApiKeyEnabled(
+  requestId: string,
+  parsed: { key_id: string; reason: string; confirm: true },
+  enabled: boolean
+) {
+  const toolName = enabled ? "enable_api_key" : "disable_api_key";
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, toolName);
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", `Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow ${toolName}`, false, toolName);
+  }
+
+  const action = enabled ? "enable" : "disable";
+  const data = await client.patch(`/api/api-keys/${encodeURIComponent(parsed.key_id)}/${action}`, null);
+  return formatSuccess(requestId, toolName, {
+    accepted: true,
+    key_id: parsed.key_id,
+    enabled,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleDeleteApiKey(
+  requestId: string,
+  parsed: { key_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_api_key");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_api_key", false, "delete_api_key");
+  }
+
+  const data = await client.delete(`/api/api-keys/${encodeURIComponent(parsed.key_id)}`);
+  return formatSuccess(requestId, "delete_api_key", {
+    accepted: true,
+    key_id: parsed.key_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleBulkStudyAction(
+  requestId: string,
+  parsed: { study_ids: string[]; reason: string; confirm: true },
+  action: "approve" | "reject"
+) {
+  const toolName = action === "approve" ? "bulk_approve_studies" : "bulk_reject_studies";
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, toolName);
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", `Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow ${toolName}`, false, toolName);
+  }
+
+  const data = await client.post("/api/studies/bulk", { action, study_ids: parsed.study_ids });
+  return formatSuccess(requestId, toolName, {
+    accepted: true,
+    action,
+    count: parsed.study_ids.length,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleBulkLabelStudies(
+  requestId: string,
+  parsed: { study_ids: string[]; label: string; action: "add" | "remove"; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "bulk_label_studies");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow bulk_label_studies", false, "bulk_label_studies");
+  }
+
+  const data = await client.post("/api/studies/bulk-label", {
+    study_ids: parsed.study_ids,
+    label: parsed.label,
+    action: parsed.action
+  });
+  return formatSuccess(requestId, "bulk_label_studies", {
+    accepted: true,
+    action: parsed.action,
+    label: parsed.label,
+    count: parsed.study_ids.length,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleGenerateSyntheticStudy(
+  requestId: string,
+  parsed: {
+    project_slug?: string;
+    slices?: number;
+    size?: number;
+    seed?: number;
+    with_face?: boolean;
+    use_gpu?: boolean;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "generate_synthetic_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow generate_synthetic_study", false, "generate_synthetic_study");
+  }
+
+  const body: Record<string, unknown> = {};
+  if (parsed.project_slug) body.project_slug = parsed.project_slug;
+  if (parsed.slices !== undefined) body.slices = parsed.slices;
+  if (parsed.size !== undefined) body.size = parsed.size;
+  if (parsed.seed !== undefined) body.seed = parsed.seed;
+  if (parsed.with_face !== undefined) body.with_face = parsed.with_face;
+  if (parsed.use_gpu !== undefined) body.use_gpu = parsed.use_gpu;
+
+  const data = await client.post("/api/studies/generate-synthetic", body);
+  return formatSuccess(requestId, "generate_synthetic_study", {
+    accepted: true,
+    project_slug: parsed.project_slug ?? "default",
     reason: parsed.reason,
     result: data
   });

@@ -2,8 +2,23 @@
 
 Personal environment setup tasks for building the MVP/POC. Complete these in order — each section unblocks the next.
 
-> **GCP Production Status (2026-02-22):** `aegis-prod-488120` is live.
+> **GCP Production Status (2026-02-23):** `aegis-prod-488120` is live.
 > API: `https://api.aegisimaging.ai` — all services healthy, cloud smoke suite 11/11 PASS.
+> DIMSE receiver: `aegis-prod-dimse-receiver` (Compute Engine VM, `us-central1-a`, static IP `35.232.172.221`, port 11112).
+> CI/CD: Cloud Build triggers active in `us-central1` (`deploy-on-develop` + `terraform-apply-on-develop`).
+
+---
+
+## Monitoring & Observability
+
+**Cloud Monitoring Dashboard** (requires GCP console access):
+https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+
+**Alert policies** (9 active):
+- API 5xx rate, API p99 latency, API uptime check
+- Cloud SQL CPU, disk, connections
+- Cloud Run memory
+- Study stuck SLA, pipeline failures
 
 ---
 
@@ -139,6 +154,71 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   ```bash
   gcloud monitoring policies list --format='value(displayName)'
   ```
+- [ ] Open the Cloud Monitoring dashboard in GCP Console:
+  ```
+  https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+  ```
+  Expected: "AEGIS Operations — prod" dashboard with 11 tiles (API rate/errors/latency, Cloud Run instances/memory, Cloud SQL CPU/disk/connections, sidecar 5xx, pipeline failures, stuck-study SLA alerts).
+- [ ] Confirm alert policies are active (9 total after Feature 55):
+  ```bash
+  gcloud monitoring policies list --project=aegis-prod-488120 --format='table(displayName,enabled)'
+  ```
+- [ ] Confirm log-based metrics exist:
+  ```bash
+  gcloud logging metrics list --project=aegis-prod-488120 --format='value(name)'
+  # Expected: aegis-prod-pipeline-failures, aegis-prod-study-stuck
+  ```
+- [ ] See `terraform/monitoring/README.md` for full metric reference and runbook links.
+- [ ] See `docs/runbooks/alert-response.md` for per-alert incident response procedures (triage steps, remediation commands, escalation paths for all 9 alert policies).
+
+## 4x. DIMSE Receiver — Compute Engine VM
+
+The DIMSE C-STORE SCP runs on a dedicated Compute Engine VM because Cloud Run cannot expose raw TCP ports. Terraform creates the VM; Cloud Build deploys new images by updating VM metadata and resetting the instance.
+
+- [x] VM `aegis-prod-dimse-receiver` created in `us-central1-a` via `terraform/infra/dimse.tf`
+- [x] Static regional IP `35.232.172.221` assigned; firewall rule allows TCP 11112 from `0.0.0.0/0`
+- [x] VPC-internal firewall allows TCP 8080 from Go API → DIMSE VM health endpoint
+- [x] Startup script mounts GCS staging bucket via gcsfuse at `/app/data` and starts the DIMSE container
+- [x] `dimse_receiver_image` and `dimse_api_url` set in `terraform/infra/terraform.tfvars` (stored in Secret Manager as `aegis-prod-terraform-tfvars` version 2)
+- [ ] Verify DIMSE receiver is running after a test C-STORE from PACS:
+  ```bash
+  # From any host with storescu installed
+  storescu -v -aec AEGIS 35.232.172.221 11112 /path/to/test.dcm
+  # Then verify in admin dashboard → Studies tab
+  ```
+- [ ] Verify VM health endpoint (VPC-internal only):
+  ```bash
+  # From a Cloud Run service or Cloud Shell with VPC access
+  curl http://<vm-internal-ip>:8080/healthz
+  ```
+
+**To update the DIMSE receiver image** (done automatically by Cloud Build on `develop` push):
+```bash
+# Manual update (if needed):
+gcloud compute instances add-metadata aegis-prod-dimse-receiver \
+  --zone=us-central1-a \
+  --metadata=dimse-image=us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/dimse-receiver:latest
+gcloud compute instances reset aegis-prod-dimse-receiver --zone=us-central1-a
+```
+
+## 4y. Cloud Build CI/CD Triggers
+
+Cloud Build triggers were created by `scripts/gcp_setup_cloudbuild.sh` and run in `us-central1`.
+
+- [x] GitHub App connection established (Cloud Build → `aegis` connection → `aegis-imaging/aegis` repo)
+- [x] Trigger `deploy-on-develop` — fires on push to `develop`; runs `cloudbuild.yaml` (builds+pushes all images, deploys Cloud Run services, hot-swaps DIMSE VM)
+- [x] Trigger `terraform-apply-on-develop` — fires when `terraform/infra/**` changes on `develop`; runs `cloudbuild.terraform.yaml`; reads `terraform.tfvars` from Secret Manager
+- [x] Cloud Build SA `aegis-cloud-build@aegis-prod-488120.iam.gserviceaccount.com` has all required IAM roles (tracked in `terraform/project/main.tf`)
+
+**Monitor recent builds:**
+```bash
+gcloud builds list --project=aegis-prod-488120 --region=us-central1 --limit=5
+```
+
+**Re-run setup (idempotent):**
+```bash
+./scripts/gcp_setup_cloudbuild.sh
+```
 
 ## 4a. First Admin Bootstrap
 
@@ -268,10 +348,10 @@ Manual trigger via GitHub Actions:
 
 - [ ] `cd frontend/admin-dashboard && npm install`
 - [ ] `npm run dev` — verify it runs on http://localhost:3001
-- [ ] Click **View** on any study row → OHIF Viewer iframe appears inline
+- [ ] Click **View** on any study row → Weasis viewer iframe appears inline
 - [ ] Click **Open in new tab ↗** → viewer opens in a new browser tab
 - [ ] Click **Audit Log** tab → shows event table (empty until actions are taken)
-- [ ] For a defaced head study: click **Review defacing** → side-by-side OHIF panel (Before/After)
+- [ ] For a defaced head study: click **Review defacing** → side-by-side Weasis panel (Before/After)
 - [ ] Click **Routing** tab → Destinations and Rules sections load (empty state)
 - [ ] Click **Institutions** tab → Institutions table loads (empty state)
 
@@ -482,15 +562,15 @@ Manual trigger via GitHub Actions:
 
 ## 7n. Authentication Middleware
 
-Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-authenticate as `dev@aegis.local`.
+Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-authenticate as `ai@aegisimaging.ai`.
 
 ### Dev mode (default)
 
 - [ ] Start the API: `cd api && go run .`
-- [ ] Verify auth identity: `curl -s http://localhost:8080/api/auth/me | jq .` → shows `dev@aegis.local`, role `admin`
+- [ ] Verify auth identity: `curl -s http://localhost:8080/api/auth/me | jq .` → shows `ai@aegisimaging.ai`, role `admin`
 - [ ] Verify public routes work without auth: `curl -s http://localhost:8080/healthz` → `ok`
 - [ ] Verify admin routes work without auth headers: `curl -s http://localhost:8080/api/studies | jq .total`
-- [ ] Check Audit Log tab → audit entries show `dev@aegis.local` as the actor (not `admin`)
+- [ ] Check Audit Log tab → audit entries show `ai@aegisimaging.ai` as the actor (not `admin`)
 
 ### Production mode (GCP IAP)
 
@@ -562,7 +642,7 @@ Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-
   cd api && STORAGE_MODE=s3 S3_BUCKET=aegis-dev S3_REGION=us-east-1 S3_ENDPOINT=http://localhost:4566 go run .
   ```
 - [ ] Upload a study via the Upload Portal → verify files stored in S3 bucket
-- [ ] View study in OHIF → verify DICOMweb proxy retrieves from S3
+- [ ] View study in Weasis → verify DICOMweb proxy retrieves from S3
 - [ ] Verify signed URLs work: upload + download flows complete without error
 
 ### Azure AD App Registration Setup (for production Azure deployments)
@@ -604,9 +684,9 @@ The viewer role is read-only — viewers can browse all data but cannot create, 
   ```bash
   curl -s -X POST http://localhost:8080/api/admin-users \
     -H "Content-Type: application/json" \
-    -d '{"email":"viewer@aegis.local","name":"Test Viewer","role":"viewer","enabled":true}'
+    -d '{"email":"viewer@aegisimaging.ai","name":"Test Viewer","role":"viewer","enabled":true}'
   ```
-- [ ] Restart API as viewer: `cd api && DEV_USER_EMAIL=viewer@aegis.local go run .`
+- [ ] Restart API as viewer: `cd api && DEV_USER_EMAIL=viewer@aegisimaging.ai go run .`
 - [ ] Verify read endpoints work:
   ```bash
   curl -s http://localhost:8080/api/studies | jq .total   # → 200 OK
@@ -629,7 +709,7 @@ The viewer role is read-only — viewers can browse all data but cannot create, 
 - [ ] Verify Routing tab: data visible; Add/Edit/Delete/Toggle buttons hidden
 - [ ] Verify Institutions tab: data visible; Add/Edit/Delete/Toggle/Link/Unlink hidden; Projects view button visible
 - [ ] Verify Profiles, Protocol Templates, Notifications, Projects tabs: data visible; create/edit/delete buttons hidden
-- [ ] Switch back to admin: restart API with `DEV_USER_EMAIL=dev@aegis.local` (or default) — all buttons return
+- [ ] Switch back to admin: restart API with `DEV_USER_EMAIL=ai@aegisimaging.ai` (or default) — all buttons return
 
 ## 7p. Defacing Service Backends
 
@@ -796,7 +876,7 @@ The admin dashboard now includes a study detail view. Clicking a study UID in th
 - [ ] Verify meta row shows modality, body part, files, series, store, timestamps
 - [ ] Verify pipeline visualization shows 7 stages with color-coded dots
 - [ ] Test action buttons: Approve, Reject, Classify, Scan for PHI, etc.
-- [ ] Click "View in OHIF" → OHIF viewer opens inline
+- [ ] Click "View" → Weasis viewer opens inline
 - [ ] For approved studies: verify share form appears, create a share link
 - [ ] Check Audit Trail tab → shows all audit entries for this study
 - [ ] Check Routing Log tab → shows routing rule evaluations
@@ -848,7 +928,7 @@ make test-race   # full suite with race detector
 - [ ] `docker compose up -d` — builds and starts all 11 services
 - [ ] Verify API health: `curl http://localhost:8080/healthz | python3 -m json.tool`
   - Should show `"status":"ok"`, `"database":"healthy"`, `"storage":"healthy"`, and all configured sidecar services as `"healthy"`
-- [ ] Verify OHIF loads at http://localhost:3002 (shows the AEGIS data source)
+- [ ] Verify Weasis loads at http://localhost:3005
 - [ ] Verify Mailpit web UI at http://localhost:8025
 
 Services started by `docker compose up`:
@@ -857,7 +937,7 @@ Services started by `docker compose up`:
 |---------|------|-------|
 | postgres | 5432 | Data in `pgdata` named volume (persists across restarts) |
 | mailpit | 1025 / 8025 | SMTP capture + web UI |
-| ohif | 3002 | OHIF Viewer (waits for API health) |
+| weasis | 3005 | Weasis DWV viewer |
 | api | 8080 | Go API (runs migrations on startup) |
 | defacing | (internal) | Defacing service |
 | phi-detection | (internal) | Burned-in PHI detection |
@@ -910,6 +990,7 @@ docker compose down -v           # stop + destroy volumes (fresh start)
 
 Runbook:
 - `docs/planning/dimse-pacs-e2e-validation-runbook.md`
+- `docs/dicom-conformance.md` — DICOM conformance statement (SOP classes, transfer syntaxes, DICOMweb services, DIMSE services, de-identification profile)
 
 ## 8ab. DICOM File Retention & Cleanup Policy
 
@@ -1151,7 +1232,7 @@ Use GitHub Organizations to separate codebases by company.
 
 ## 10. Future — Before Proposing to Work
 
-- [ ] Have a working end-to-end demo: upload → anonymize → view in OHIF
+- [ ] Have a working end-to-end demo: upload → anonymize → view in Weasis
 - [ ] Prepare a 5-minute screen recording of the demo flow
 - [ ] Draft a one-page proposal covering: problem, solution, differentiation, cost estimate
 - [ ] Identify potential pilot users / departments at your institution
@@ -1159,4 +1240,4 @@ Use GitHub Organizations to separate codebases by company.
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-20. See AEGIS_Architecture.md for the full system design. Cloud AI backends and importer contract hardening reflected through 2026-02-20.*
+*Generated 2026-02-18. Updated 2026-02-23. See AEGIS_Architecture.md for the full system design. DIMSE receiver Compute Engine VM, Cloud Build CI/CD triggers, IAM hardening, DICOM conformance statement, and alert runbooks reflected through 2026-02-23.*

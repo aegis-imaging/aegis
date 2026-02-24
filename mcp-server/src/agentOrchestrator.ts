@@ -1,25 +1,35 @@
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 import { AegisApiClient } from "./aegisClient.js";
 
-type AgentData = {
-  summary: string;
-  evidence: Array<{ field: string; value: string | number | boolean | null; timestamp?: string | null }>;
-  diagnostics: {
-    terminal: boolean;
-    stuck: boolean;
-    blockers: string[];
-    recommended_actions: string[];
-  };
-  timeline: Array<{ event: string; timestamp: string }>;
-  next_steps: string[];
-};
+const agentDataSchema = z.object({
+  summary: z.string(),
+  evidence: z.array(
+    z.object({
+      field: z.string(),
+      value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+      timestamp: z.string().nullable().optional()
+    })
+  ),
+  diagnostics: z.object({
+    terminal: z.boolean(),
+    stuck: z.boolean(),
+    blockers: z.array(z.string()),
+    recommended_actions: z.array(z.string())
+  }),
+  timeline: z.array(z.object({ event: z.string(), timestamp: z.string() })),
+  next_steps: z.array(z.string())
+});
 
-type AgentRequest = {
+type AgentData = z.infer<typeof agentDataSchema>;
+
+export type AgentRequest = {
   request_id?: string;
   question?: string;
   study_id?: string;
   study_instance_uid?: string;
   include_next_steps?: boolean;
+  model?: string;
 };
 
 type LlmConfig = {
@@ -28,9 +38,36 @@ type LlmConfig = {
   model: string;
   temperature: number;
   maxTokens: number;
+  useGcpAuth: boolean;
+  gcpProject?: string;
 };
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
+
+// Allowed Gemini model overrides — must be models available on Vertex AI OpenAI-compatible endpoint.
+const ALLOWED_MODEL_OVERRIDES = new Set([
+  // Gemini 3 series (latest)
+  "google/gemini-3.1-pro-preview",
+  "google/gemini-3-pro-preview",
+  "google/gemini-3-flash-preview",
+  // Gemini 2.5 series
+  "google/gemini-2.5-pro",
+  "google/gemini-2.5-flash",
+  "google/gemini-2.5-flash-lite",
+  // Gemini 2.0 series
+  "google/gemini-2.0-flash-001",
+  "google/gemini-2.0-flash-lite-001",
+  // Gemini 1.5 series (legacy)
+  "google/gemini-1.5-flash-001",
+  "google/gemini-1.5-pro-001",
+]);
+
+function resolveModel(requested: string | undefined, config: LlmConfig): string {
+  if (requested && ALLOWED_MODEL_OVERRIDES.has(requested)) {
+    return requested;
+  }
+  return config.model;
+}
 
 const DEFAULT_PROMPT = `AEGIS Agent Prompt (Read-only)
 
@@ -51,8 +88,18 @@ Behavior Rules:
 - Only include next steps when the caller explicitly asks for them.
 
 Output:
-- Return JSON matching the AEGIS Agent response schema file: aegis-agent.response-schema.json.
-- Do not add extra fields outside the schema.`;
+- Return a single raw JSON object — no markdown, no code fences, no prose.
+- The object must have exactly these top-level keys: summary, evidence, diagnostics, timeline, next_steps.
+- Do not wrap the response in an envelope (no "ok", "request_id", or "data" wrapper).
+- Schema:
+  {
+    "summary": "<string>",
+    "evidence": [{"field":"<str>","value":"<str|num|bool|null>","timestamp":"<str|null>"}],
+    "diagnostics": {"terminal":<bool>,"stuck":<bool>,"blockers":["<str>"],"recommended_actions":["<str>"]},
+    "timeline": [{"event":"<str>","timestamp":"<str>"}],
+    "next_steps": ["<str>"]
+  }
+`;
 
 function loadPrompt(): string {
   try {
@@ -63,6 +110,11 @@ function loadPrompt(): string {
 }
 
 const AGENT_PROMPT = loadPrompt();
+
+const FINAL_JSON_REQUEST =
+  'Based on the tool results above, produce ONLY the JSON response object. ' +
+  'No prose, no code fences, no explanation — just the raw JSON object with exactly these top-level keys: ' +
+  'summary, evidence, diagnostics, timeline, next_steps.';
 
 function stripCodeFence(input: string): string {
   const trimmed = input.trim();
@@ -75,32 +127,30 @@ function stripCodeFence(input: string): string {
 
 function parseAgentData(content: string): AgentData {
   const cleaned = stripCodeFence(content);
-  const parsed = JSON.parse(cleaned) as Partial<AgentData>;
 
-  if (!parsed || typeof parsed.summary !== "string") {
-    throw new Error("Invalid agent response: missing summary");
-  }
-  if (!Array.isArray(parsed.evidence) || !parsed.diagnostics || !Array.isArray(parsed.timeline) || !Array.isArray(parsed.next_steps)) {
-    throw new Error("Invalid agent response: missing sections");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(cleaned);
+  } catch {
+    throw new Error(`Agent returned non-JSON content: ${cleaned.slice(0, 200)}`);
   }
 
-  return {
-    summary: parsed.summary,
-    evidence: parsed.evidence,
-    diagnostics: {
-      terminal: Boolean(parsed.diagnostics.terminal),
-      stuck: Boolean(parsed.diagnostics.stuck),
-      blockers: Array.isArray(parsed.diagnostics.blockers) ? parsed.diagnostics.blockers.map(String) : [],
-      recommended_actions: Array.isArray(parsed.diagnostics.recommended_actions)
-        ? parsed.diagnostics.recommended_actions.map(String)
-        : []
-    },
-    timeline: parsed.timeline.map((item) => ({
-      event: String((item as { event?: string }).event ?? ""),
-      timestamp: String((item as { timestamp?: string }).timestamp ?? "")
-    })),
-    next_steps: parsed.next_steps.map(String)
-  };
+  // Unwrap full-envelope responses: {"ok":true,"data":{summary,...}} → {summary,...}
+  const candidate =
+    raw &&
+    typeof raw === "object" &&
+    "data" in (raw as object) &&
+    typeof (raw as Record<string, unknown>).data === "object" &&
+    !("summary" in (raw as object))
+      ? (raw as Record<string, unknown>).data
+      : raw;
+
+  const result = agentDataSchema.safeParse(candidate);
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Invalid agent response: ${issues}`);
+  }
+  return result.data;
 }
 
 function buildToolHandlers(client: AegisApiClient): Record<string, ToolHandler> {
@@ -120,7 +170,7 @@ function buildToolHandlers(client: AegisApiClient): Record<string, ToolHandler> 
     },
     get_study_by_uid: async (args) => {
       const studyUid = String(args.study_instance_uid ?? "");
-      return client.get(`/api/studies/by-uid/${encodeURIComponent(studyUid)}`);
+      return client.get(`/api/study-uid/${encodeURIComponent(studyUid)}`);
     },
     get_study_diagnostics: async (args) => {
       const studyId = String(args.study_id ?? "");
@@ -244,31 +294,53 @@ type LlmMessage = {
   tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
 };
 
+async function fetchGcpAccessToken(): Promise<string> {
+  const url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
+  const response = await fetch(url, { headers: { "Metadata-Flavor": "Google" } });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch GCP access token: ${response.status}`);
+  }
+  const data = (await response.json()) as { access_token: string };
+  return data.access_token;
+}
+
 async function callLlm(
   config: LlmConfig,
   messages: LlmMessage[],
-  tools: unknown
+  tools: unknown,
+  forceJsonOutput = false
 ): Promise<{ content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> }> {
   const url = `${config.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const authToken = config.useGcpAuth ? await fetchGcpAccessToken() : config.apiKey;
+
+  const body: Record<string, unknown> = {
+    model: config.model,
+    messages,
+    temperature: config.temperature,
+    max_tokens: config.maxTokens
+  };
+
+  if (tools) {
+    body.tools = tools;
+    body.tool_choice = "auto";
+  }
+
+  if (forceJsonOutput) {
+    body.response_format = { type: "json_object" };
+  }
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`
+      Authorization: `Bearer ${authToken}`
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      tools,
-      tool_choice: "auto",
-      temperature: config.temperature,
-      max_tokens: config.maxTokens
-    })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`LLM request failed: ${response.status} ${body}`);
+    const text = await response.text();
+    throw new Error(`LLM request failed: ${response.status} ${text}`);
   }
 
   const payload = (await response.json()) as {
@@ -276,7 +348,7 @@ async function callLlm(
   };
 
   const message = payload.choices?.[0]?.message;
-  return { content: message?.content, tool_calls: message?.tool_calls };
+  return { content: message?.content ?? undefined, tool_calls: message?.tool_calls };
 }
 
 export async function runAgentWithLlm(
@@ -286,6 +358,9 @@ export async function runAgentWithLlm(
 ): Promise<AgentData> {
   const toolHandlers = buildToolHandlers(client);
   const tools = buildToolSchema();
+
+  const effectiveModel = resolveModel(request.model, llmConfig);
+  const effectiveConfig = effectiveModel !== llmConfig.model ? { ...llmConfig, model: effectiveModel } : llmConfig;
 
   const userContext = {
     question: request.question ?? "",
@@ -299,10 +374,15 @@ export async function runAgentWithLlm(
     { role: "user", content: JSON.stringify(userContext) }
   ];
 
-  for (let i = 0; i < 4; i += 1) {
-    const result = await callLlm(llmConfig, messages, tools);
+  let finalContent: string | null = null;
+  let madeToolCalls = false;
+
+  // Phase 1: tool-call loop — gather data via tools (up to 6 rounds).
+  for (let i = 0; i < 6; i += 1) {
+    const result = await callLlm(effectiveConfig, messages, tools);
 
     if (result.tool_calls && result.tool_calls.length > 0) {
+      madeToolCalls = true;
       messages.push({
         role: "assistant",
         content: result.content ?? "",
@@ -337,14 +417,36 @@ export async function runAgentWithLlm(
       continue;
     }
 
-    if (!result.content) {
-      throw new Error("LLM response missing content");
+    // No tool calls — model produced a text response.
+    if (result.content) {
+      finalContent = result.content;
     }
-
-    return parseAgentData(result.content);
+    break;
   }
 
-  throw new Error("LLM did not return a final response after tool calls");
+  // Phase 2: if we have no valid final content yet, explicitly request the JSON answer.
+  // This handles models (like Gemini) that exhaust tool rounds without producing structured output.
+  if (!finalContent) {
+    messages.push({ role: "user", content: FINAL_JSON_REQUEST });
+    const finalResult = await callLlm(effectiveConfig, messages, null, true);
+    finalContent = finalResult.content ?? null;
+  } else if (madeToolCalls) {
+    // We got content after tool calls — try to parse it.
+    // If it fails, retry with an explicit JSON request and response_format.
+    try {
+      return parseAgentData(finalContent);
+    } catch {
+      messages.push({ role: "user", content: FINAL_JSON_REQUEST });
+      const retryResult = await callLlm(effectiveConfig, messages, null, true);
+      finalContent = retryResult.content ?? null;
+    }
+  }
+
+  if (!finalContent) {
+    throw new Error("LLM did not return a final response after tool calls");
+  }
+
+  return parseAgentData(finalContent);
 }
 
 export function buildLlmConfig(env: {
@@ -353,7 +455,25 @@ export function buildLlmConfig(env: {
   model: string | undefined;
   temperature: number;
   maxTokens: number;
+  useGcpAuth: boolean;
+  gcpProject?: string;
 }): LlmConfig | null {
+  if (env.useGcpAuth) {
+    if (!env.gcpProject) {
+      return null;
+    }
+    const vertexBaseUrl = `https://us-central1-aiplatform.googleapis.com/v1beta1/projects/${env.gcpProject}/locations/us-central1/endpoints/openapi`;
+    return {
+      baseUrl: env.baseUrl || vertexBaseUrl,
+      apiKey: "",
+      model: env.model || "google/gemini-2.0-flash-001",
+      temperature: env.temperature,
+      maxTokens: env.maxTokens,
+      useGcpAuth: true,
+      gcpProject: env.gcpProject
+    };
+  }
+
   if (!env.baseUrl || !env.apiKey) {
     return null;
   }
@@ -363,6 +483,9 @@ export function buildLlmConfig(env: {
     apiKey: env.apiKey,
     model: env.model || "gpt-4.1-mini",
     temperature: env.temperature,
-    maxTokens: env.maxTokens
+    maxTokens: env.maxTokens,
+    useGcpAuth: false
   };
 }
+
+export { ALLOWED_MODEL_OVERRIDES };

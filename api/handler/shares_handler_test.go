@@ -52,8 +52,8 @@ func TestListAllShares_ReturnsAll(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	expiresAt := time.Now().Add(24 * time.Hour)
-	model.CreateExportShare(t.Context(), db, study.ID, "hash1", "alice@test.com", "", "admin@test.com", expiresAt)
-	model.CreateExportShare(t.Context(), db, study.ID, "hash2", "bob@test.com", "", "admin@test.com", expiresAt)
+	model.CreateExportShare(t.Context(), db, study.ID, "hash1", "alice@test.com", "", "admin@test.com", expiresAt, nil)
+	model.CreateExportShare(t.Context(), db, study.ID, "hash2", "bob@test.com", "", "admin@test.com", expiresAt, nil)
 
 	req := httptest.NewRequest("GET", "/api/shares", nil)
 	rr := httptest.NewRecorder()
@@ -75,8 +75,8 @@ func TestListAllShares_StatusActiveFilter(t *testing.T) {
 	futureExpiry := time.Now().Add(24 * time.Hour)
 	pastExpiry := time.Now().Add(-24 * time.Hour)
 
-	model.CreateExportShare(t.Context(), db, study.ID, "hash-active", "alice@test.com", "", "admin", futureExpiry)
-	model.CreateExportShare(t.Context(), db, study.ID, "hash-expired", "bob@test.com", "", "admin", pastExpiry)
+	model.CreateExportShare(t.Context(), db, study.ID, "hash-active", "alice@test.com", "", "admin", futureExpiry, nil)
+	model.CreateExportShare(t.Context(), db, study.ID, "hash-expired", "bob@test.com", "", "admin", pastExpiry, nil)
 
 	req := httptest.NewRequest("GET", "/api/shares?status=active", nil)
 	rr := httptest.NewRecorder()
@@ -98,8 +98,8 @@ func TestListAllShares_StatusExpiredFilter(t *testing.T) {
 	futureExpiry := time.Now().Add(24 * time.Hour)
 	pastExpiry := time.Now().Add(-24 * time.Hour)
 
-	model.CreateExportShare(t.Context(), db, study.ID, "hash-active", "alice@test.com", "", "admin", futureExpiry)
-	model.CreateExportShare(t.Context(), db, study.ID, "hash-expired", "bob@test.com", "", "admin", pastExpiry)
+	model.CreateExportShare(t.Context(), db, study.ID, "hash-active", "alice@test.com", "", "admin", futureExpiry, nil)
+	model.CreateExportShare(t.Context(), db, study.ID, "hash-expired", "bob@test.com", "", "admin", pastExpiry, nil)
 
 	req := httptest.NewRequest("GET", "/api/shares?status=expired", nil)
 	rr := httptest.NewRecorder()
@@ -121,7 +121,7 @@ func TestListAllShares_Pagination(t *testing.T) {
 	expiresAt := time.Now().Add(24 * time.Hour)
 	for i := 0; i < 5; i++ {
 		model.CreateExportShare(t.Context(), db, study.ID,
-			"hash-"+string(rune('a'+i)), "user@test.com", "", "admin", expiresAt)
+			"hash-"+string(rune('a'+i)), "user@test.com", "", "admin", expiresAt, nil)
 	}
 
 	req := httptest.NewRequest("GET", "/api/shares?limit=2&offset=0", nil)
@@ -143,7 +143,7 @@ func TestGetShareDownloads_Empty(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	share, err := model.CreateExportShare(t.Context(), db, study.ID, "hash-dl-empty",
-		"viewer@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour))
+		"viewer@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour), nil)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/api/shares/"+share.ID+"/downloads", nil)
@@ -167,7 +167,7 @@ func TestGetShareDownloads_ReturnsDownloads(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	share, err := model.CreateExportShare(t.Context(), db, study.ID, "hash-dl-multi",
-		"viewer@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour))
+		"viewer@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, model.CreateExportDownload(context.Background(), db, share.ID, "10.0.0.1"))
@@ -197,7 +197,7 @@ func TestListAllShares_DownloadCountReflectsDownloads(t *testing.T) {
 
 	expiresAt := time.Now().Add(24 * time.Hour)
 	share, err := model.CreateExportShare(t.Context(), db, study.ID, "hash-cnt",
-		"user@test.com", "", "admin", expiresAt)
+		"user@test.com", "", "admin", expiresAt, nil)
 	require.NoError(t, err)
 
 	// Seed 3 downloads for this share.

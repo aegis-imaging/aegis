@@ -69,6 +69,7 @@ type Config struct {
 	AuthEnabled  bool
 	AuthProvider string // AUTH_PROVIDER — "auto" (default), "iap" (GCP), "azure" (Azure AD), or "aws" (ALB + Cognito)
 	DevUserEmail string // DEV_USER_EMAIL — auto-authenticated email when AUTH_ENABLED=false
+	AWSALBRegion string // AWS_REGION — region for ALB public key endpoint (default us-east-1)
 
 	// Pipeline
 	PipelineAuto bool // PIPELINE_AUTO — auto-dispatch processing after routing (default true)
@@ -89,6 +90,15 @@ type Config struct {
 
 	// Contact form recipient
 	ContactEmail string // CONTACT_EMAIL — where contact form submissions go (default: contact@aegisimaging.ai)
+
+	// Invite request flow — "Request access" on the gate page.
+	// InviteRequestSecret signs one-time approval tokens sent to the admin.
+	// InviteRequestAdminEmail is who receives the notification (defaults to ContactEmail).
+	// LandingBaseURL is used to build /?invite=CODE links in the code-issued email.
+	InviteRequestSecret     string // INVITE_REQUEST_SECRET — HMAC key for approval tokens; feature disabled when empty
+	InviteRequestAdminEmail string // INVITE_REQUEST_ADMIN_EMAIL — who gets notified (default: ContactEmail)
+	LandingBaseURL          string // LANDING_BASE_URL — base URL for invite links (default: https://aegisimaging.ai)
+	AdminDashboardURL       string // ADMIN_DASHBOARD_URL — used in approval email back-links (default: https://admin.aegisimaging.ai)
 
 	// SLA stuck-study alerting — sends email when studies idle too long in pipeline.
 	// Disabled when SLAPipelineMinutes == 0 or SLAAlertEmail is empty.
@@ -115,13 +125,15 @@ func Load() *Config {
 		dbName := envOr("DB_NAME", "aegis")
 		dbUser := envOr("DB_USER", "aegis")
 		dbPassword := envOr("DB_PASSWORD", "aegis")
+		dbSSLMode := envOr("DB_SSLMODE", "disable")
 		databaseURL = fmt.Sprintf(
-			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			"postgres://%s:%s@%s:%s/%s?sslmode=%s",
 			url.QueryEscape(dbUser),
 			url.QueryEscape(dbPassword),
 			dbHost,
 			dbPort,
 			dbName,
+			dbSSLMode,
 		)
 	}
 
@@ -160,20 +172,26 @@ func Load() *Config {
 		RateLimitRPS:     floatEnvOr("RATE_LIMIT_RPS", 20),
 		RateLimitBurst:   envInt("RATE_LIMIT_BURST", 50),
 
-		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004"), ","),
+		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,https://aegisimaging.ai,https://www.aegisimaging.ai"), ","),
 
 		AuthEnabled:  os.Getenv("AUTH_ENABLED") == "true",
 		AuthProvider: envOr("AUTH_PROVIDER", "auto"),
-		DevUserEmail: envOr("DEV_USER_EMAIL", "dev@aegis.local"),
+		DevUserEmail: envOr("DEV_USER_EMAIL", "ai@aegisimaging.ai"),
+		AWSALBRegion: envOr("AWS_REGION", envOr("AWS_DEFAULT_REGION", "us-east-1")),
 
 		SMTPHost:     smtpHost,
 		SMTPPort:     envOr("SMTP_PORT", "587"),
-		SMTPFrom:     envOr("SMTP_FROM", "noreply@aegis.local"),
+		SMTPFrom:     envOr("SMTP_FROM", "noreply@aegisimaging.ai"),
 		SMTPUsername: os.Getenv("SMTP_USERNAME"),
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
 		EmailEnabled: smtpHost != "",
 
 		ContactEmail: envOr("CONTACT_EMAIL", "contact@aegisimaging.ai"),
+
+		InviteRequestSecret:     os.Getenv("INVITE_REQUEST_SECRET"),
+		InviteRequestAdminEmail: os.Getenv("INVITE_REQUEST_ADMIN_EMAIL"),
+		LandingBaseURL:          envOr("LANDING_BASE_URL", "https://aegisimaging.ai"),
+		AdminDashboardURL:       envOr("ADMIN_DASHBOARD_URL", "https://admin.aegisimaging.ai"),
 
 		SLAPipelineMinutes: envInt("SLA_PIPELINE_MINUTES", 0),
 		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),

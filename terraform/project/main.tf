@@ -131,8 +131,12 @@ locals {
 
     { sa = "cloud_build", role = "roles/logging.logWriter" },
     { sa = "cloud_build", role = "roles/artifactregistry.writer" },
+    { sa = "cloud_build", role = "roles/artifactregistry.admin" }, # set IAM on AR repos
     { sa = "cloud_build", role = "roles/run.admin" },
-    { sa = "cloud_build", role = "roles/iam.serviceAccountUser" }
+    { sa = "cloud_build", role = "roles/iam.serviceAccountUser" },
+    { sa = "cloud_build", role = "roles/compute.admin" },                   # manage GCE instances (dimse-receiver)
+    { sa = "cloud_build", role = "roles/resourcemanager.projectIamAdmin" }, # set project-level IAM (dimse SA bindings)
+    { sa = "cloud_build", role = "roles/iap.admin" }                        # manage IAP backend service IAM
   ]
 
   access_policy_resource_name = startswith(var.access_policy_id, "accessPolicies/") ? var.access_policy_id : "accessPolicies/${var.access_policy_id}"

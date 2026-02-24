@@ -24,13 +24,23 @@ type uploadInitRequest struct {
 	Metadata      studyMetadata `json:"study_metadata"`
 }
 
+type seriesMetadata struct {
+	SeriesInstanceUID string `json:"series_instance_uid"`
+	SeriesDescription string `json:"series_description"`
+	Modality          string `json:"modality"`
+	BodyPart          string `json:"body_part"`
+	InstanceCount     int    `json:"instance_count"`
+}
+
 type studyMetadata struct {
-	StudyInstanceUID string `json:"study_instance_uid"`
-	Modality         string `json:"modality"`
-	BodyPart         string `json:"body_part"`
-	StudyDescription string `json:"study_description"`
-	SeriesCount      int    `json:"series_count"`
-	InstanceCount    int    `json:"instance_count"`
+	StudyInstanceUID string           `json:"study_instance_uid"`
+	Modality         string           `json:"modality"`
+	BodyPart         string           `json:"body_part"`
+	StudyDescription string           `json:"study_description"`
+	SeriesCount      int              `json:"series_count"`
+	InstanceCount    int              `json:"instance_count"`
+	StudySizeBytes   int64            `json:"study_size_bytes,omitempty"`
+	Series           []seriesMetadata `json:"series,omitempty"`
 }
 
 type uploadInitResponse struct {
@@ -155,6 +165,12 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enforce per-project storage quota (if set).
+	if err := s.checkStorageQuota(r.Context(), session.ProjectID); err != nil {
+		s.writeError(w, http.StatusRequestEntityTooLarge, err.Error())
+		return
+	}
+
 	// Update status to ingesting
 	if err := model.UpdateUploadSessionStatus(r.Context(), s.db, session.ID, "ingesting"); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to update session status")
@@ -178,8 +194,17 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute and store total study size (non-fatal).
+	if dicomFiles, listErr := s.store.List(r.Context(), "dicom/raw/"+study.StudyInstanceUID); listErr == nil {
+		if sizeBytes := sumStoredSizes(r.Context(), s.store, dicomFiles); sizeBytes > 0 {
+			model.UpdateStudySizeBytes(r.Context(), s.db, study.ID, sizeBytes)
+			study.StudySizeBytes = sizeBytes
+		}
+	}
+
 	if session.UploaderEmail != "" {
-		subject, body := email.UploadConfirmed(study.StudyInstanceUID, study.Modality, len(files), study.CreatedAt)
+		projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
+		subject, body := email.UploadConfirmed(study.StudyInstanceUID, study.Modality, projectName, len(files), study.CreatedAt)
 		if err := s.mailer.Send(r.Context(), session.UploaderEmail, subject, body); err != nil {
 			log.Printf("upload confirm email to %s: %v", session.UploaderEmail, err)
 		}

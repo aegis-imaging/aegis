@@ -69,3 +69,90 @@ func TestUpdateProject(t *testing.T) {
 	assert.Equal(t, "updated-slug", updated.Slug)
 	assert.Equal(t, "new desc", updated.Description)
 }
+
+func TestProjectsWithRetentionPolicy(t *testing.T) {
+	db := testutil.TestDB(t)
+	ctx := context.Background()
+
+	// Default project from migration has no retention policy.
+	// Create one with and one without.
+	withPolicy, err := model.CreateProject(ctx, db, "Has Policy", "has-policy", "")
+	require.NoError(t, err)
+	noPolicy, _ := model.CreateProject(ctx, db, "No Policy", "no-policy", "")
+	_ = noPolicy
+
+	days := 30
+	require.NoError(t, model.UpdateProjectRetentionDays(ctx, db, withPolicy.ID, &days))
+
+	projects, err := model.ProjectsWithRetentionPolicy(ctx, db)
+	require.NoError(t, err)
+
+	found := false
+	for _, p := range projects {
+		if p.ID == withPolicy.ID {
+			found = true
+			require.NotNil(t, p.RetentionDays)
+			assert.Equal(t, 30, *p.RetentionDays)
+		}
+		assert.NotEqual(t, noPolicy.ID, p.ID, "project without retention_days should not appear")
+	}
+	assert.True(t, found, "project with retention_days should appear in results")
+}
+
+func TestExpireStudiesByRetention_ExpiresOldApproved(t *testing.T) {
+	db := testutil.TestDB(t)
+	ctx := context.Background()
+
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	// Promote to approved and backdate created_at to 100 days ago.
+	require.NoError(t, model.UpdateStudyStatus(ctx, db, study.ID, "approved"))
+	_, err := db.ExecContext(ctx, `UPDATE studies SET created_at = now() - INTERVAL '100 days' WHERE id = $1`, study.ID)
+	require.NoError(t, err)
+
+	n, err := model.ExpireStudiesByRetention(ctx, db, proj.ID, 30)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n, "one old approved study should be expired")
+
+	updated, err := model.GetStudyByID(ctx, db, study.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "expired", updated.Status)
+}
+
+func TestExpireStudiesByRetention_PreservesRecentStudies(t *testing.T) {
+	db := testutil.TestDB(t)
+	ctx := context.Background()
+
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	require.NoError(t, model.UpdateStudyStatus(ctx, db, study.ID, "approved"))
+	// created_at is now() — well within a 30-day window.
+
+	n, err := model.ExpireStudiesByRetention(ctx, db, proj.ID, 30)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, n, "recent approved study should not be expired")
+
+	updated, err := model.GetStudyByID(ctx, db, study.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "approved", updated.Status)
+}
+
+func TestExpireStudiesByRetention_OnlyExpireApproved(t *testing.T) {
+	db := testutil.TestDB(t)
+	ctx := context.Background()
+
+	proj := testutil.SeedProject(t, db)
+
+	// Create old studies in non-approved statuses.
+	for _, status := range []string{"received", "rejected", "defacing"} {
+		s := testutil.CreateTestStudy(t, db, proj.ID)
+		require.NoError(t, model.UpdateStudyStatus(ctx, db, s.ID, status))
+		_, err := db.ExecContext(ctx, `UPDATE studies SET created_at = now() - INTERVAL '100 days' WHERE id = $1`, s.ID)
+		require.NoError(t, err)
+	}
+
+	n, err := model.ExpireStudiesByRetention(ctx, db, proj.ID, 30)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, n, "non-approved studies should never be expired by retention policy")
+}

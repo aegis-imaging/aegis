@@ -156,7 +156,7 @@ func TestServeDicomDownloadByToken_Expired(t *testing.T) {
 	rawToken := "expired-token-abc"
 	tokenHash := createShareToken(rawToken)
 	past := time.Now().Add(-48 * time.Hour)
-	_, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "r@test.com", "", "admin", past)
+	_, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "r@test.com", "", "admin", past, nil)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/export/"+rawToken+"/download", nil)
@@ -178,9 +178,9 @@ func TestServeDicomDownloadByToken_Revoked(t *testing.T) {
 	rawToken := "revoked-token-xyz"
 	tokenHash := createShareToken(rawToken)
 	future := time.Now().Add(24 * time.Hour)
-	share, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "r@test.com", "", "admin", future)
+	share, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "r@test.com", "", "admin", future, nil)
 	require.NoError(t, err)
-	require.NoError(t, model.RevokeExportShare(context.Background(), db, share.ID))
+	require.NoError(t, model.RevokeExportShare(context.Background(), db, share.ID, ""))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/export/"+rawToken+"/download", nil)
 	req.SetPathValue("token", rawToken)
@@ -201,7 +201,7 @@ func TestServeDicomDownloadByToken_NoFiles(t *testing.T) {
 	rawToken := "nofiles-token-456"
 	tokenHash := createShareToken(rawToken)
 	future := time.Now().Add(24 * time.Hour)
-	_, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "r@test.com", "", "admin", future)
+	_, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "r@test.com", "", "admin", future, nil)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/export/"+rawToken+"/download", nil)
@@ -226,7 +226,7 @@ func TestServeDicomDownloadByToken_Success(t *testing.T) {
 	rawToken := "valid-token-success-789"
 	tokenHash := createShareToken(rawToken)
 	future := time.Now().Add(24 * time.Hour)
-	_, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "recipient@test.com", "test note", "admin", future)
+	_, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "recipient@test.com", "test note", "admin", future, nil)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/export/"+rawToken+"/download", nil)

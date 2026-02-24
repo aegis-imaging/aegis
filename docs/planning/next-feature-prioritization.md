@@ -1,9 +1,9 @@
 # AEGIS Next Feature Prioritization Backlog
 
-Review date: 2026-02-22
+Review date: 2026-02-23
 Scope reviewed: All services, API, frontend, Terraform, CI, MCP, docs.
 
-## Current-State Snapshot (as of 2026-02-22)
+## Current-State Snapshot (as of 2026-02-23)
 
 - **GCP production is live**: deployed to `aegis-prod-488119`, `us-central1`
 - All P0/P1/P2 items from the 2026-02-20 backlog are **complete** (see archived section below)
@@ -40,6 +40,10 @@ Scope reviewed: All services, API, frontend, Terraform, CI, MCP, docs.
 | Q-6 | Admin study notes (stored as audit entries, inline form in detail panel) | 2026-02-22 |
 | Q-7 | Shares tab improvements (email search, countdown display, Note column) | 2026-02-22 |
 | Q-8 | Executive summary + architecture diagram + PDF regeneration | 2026-02-22 |
+| Q-9 | DIMSE receiver deployed to Compute Engine VM (`aegis-prod-dimse-receiver`, static IP `35.232.172.221`, TCP 11112) | 2026-02-23 |
+| Q-10 | Cloud Build CI/CD triggers (`deploy-on-develop` + `terraform-apply-on-develop`) active in `us-central1` | 2026-02-23 |
+| Q-11 | MCP agent Zod validation fix (invalid response: missing summary bug) | 2026-02-23 |
+| Q-12 | Cloud Build SA IAM hardening — all required roles for `terraform apply` tracked in Terraform + setup script | 2026-02-23 |
 
 ## New Feature Candidates
 

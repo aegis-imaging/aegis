@@ -7,7 +7,7 @@
 *  { box-sizing: border-box; margin: 0; padding: 0; }
 
 @page {
-  size: 500mm 345mm;   /* ~20" × 13.6" landscape */
+  size: 500mm 420mm;   /* wide landscape — height sized to hold all content on one page */
   margin: 5mm;
 }
 
@@ -57,8 +57,10 @@ body {
 
 .z-src  { background: #EFF6FF; border-color: #1D4ED8; }
 .z-src  .zone-hdr { color: #1D4ED8; }
-.z-gcp  { background: #F0FDF4; border-color: #15803D; }
-.z-gcp  .zone-hdr { color: #15803D; }
+.z-gcp  { background: #F0FDFA; border-color: #0F766E; }
+.z-gcp  .zone-hdr { color: #0F766E; }
+.z-aws  { background: #FFF7ED; border-color: #EA580C; }
+.z-aws  .zone-hdr { color: #EA580C; }
 .z-pipe { background: #EFF6FF; border-color: #1D4ED8; }
 .z-pipe .zone-hdr { color: #1D4ED8; }
 .z-ph   { background: #FAF5FF; border-color: #7C3AED; }
@@ -222,7 +224,7 @@ body {
     </div>
     <div class="g3">
       <div class="card" style="--c:#0EA5E9"><div class="card-hdr">React Upload Portal  (PWA)</div><ul><li>Drag-and-drop: files, folders, DICOM directories</li><li>Client-side tag de-identification (DICOM PS3.15)</li><li>Anonymization preview — before / after tag diff</li><li>Multi-study detection with per-study upload cards</li><li>Per-project retained-tag anonymization profiles</li><li>Auto-retry: 3× exponential backoff per file</li></ul></div>
-      <div class="card" style="--c:#3776AB"><div class="card-hdr">DIMSE Receiver  (pynetdicom)</div><ul><li>C-STORE SCP listening on port 11112</li><li>Receives studies from PACS systems / scanners</li><li>Institution attribution (AE title or IP CIDR)</li><li>Calls POST /api/ingest on DICOM association close</li><li>Durable retry queue + dead-letter (disk-persistent)</li><li>Exponential backoff · operator control API</li></ul></div>
+      <div class="card" style="--c:#3776AB"><div class="card-hdr">DIMSE Receiver  (pynetdicom · GCE VM)</div><ul><li>Compute Engine VM — aegis-prod-dimse-receiver</li><li>Static IP 35.232.172.221 · TCP port 11112</li><li>C-STORE SCP — receives from PACS systems / scanners</li><li>Institution attribution (AE title or IP CIDR)</li><li>Calls POST /api/ingest on DICOM association close</li><li>Durable retry queue + dead-letter (disk-persistent)</li></ul></div>
       
     <div class="privacy">
       <div class="privacy-title">Key Privacy Principle</div>
@@ -257,7 +259,7 @@ body {
     <!-- Core services -->
     <div class="core-grid">
       <div class="card" style="--c:#00ADD8"><div class="card-hdr">API Backend  (Go / Cloud Run)</div><ul><li>Upload orchestration (sessions, chunked PUT)</li><li>Study / project / institution management</li><li>Routing rules engine → auto-pipeline dispatch</li><li>DICOMweb proxy  (QIDO-RS + WADO-RS)</li><li>Export shares: token-auth, ZIP download</li><li>Email digest scheduler + SMTP relay</li><li>DIMSE retry control proxy</li><li>MCP tool backend + batch import CLI</li><li>distroless image — minimal CVE surface</li></ul></div>
-      <div class="card" style="--c:#0891B2"><div class="card-hdr">Admin Dashboard + OHIF  (React / Cloud Run)</div><ul><li>Behind Identity-Aware Proxy (IAP)</li><li>Study browser: filter, search, paginate, bulk ops</li><li>OHIF Viewer — before/after defacing side-by-side</li><li>7-stage pipeline visualization per study</li><li>RBAC: admin (write) + viewer (read-only)</li><li>Routing rules, institutions, anon profiles</li><li>Protocol templates, API keys, webhooks</li><li>Audit log + CSV export, share management</li><li>Federation peers, project lifecycle</li></ul></div>
+      <div class="card" style="--c:#0891B2"><div class="card-hdr">Admin Dashboard + Weasis DWV  (React / Cloud Run)</div><ul><li>Behind Identity-Aware Proxy (IAP)</li><li>Study browser: filter, search, paginate, bulk ops</li><li>Weasis DWV — yoked before/after defacing review</li><li>7-stage pipeline visualization per study</li><li>RBAC: admin (write) + viewer (read-only)</li><li>Routing rules, institutions, anon profiles</li><li>Protocol templates, API keys, webhooks</li><li>Audit log + CSV export, share management</li><li>Federation peers, project lifecycle</li></ul></div>
       <div class="infra-stack">
         <div class="card" style="--c:#D97706"><div class="card-hdr">Cloud SQL  (PostgreSQL 15)</div><ul><li>Studies, projects, institutions, admin users</li><li>Routing rules, audit trail, export shares</li><li>Private IP · Secret Manager credentials</li><li>Point-in-time recovery (7-day retention)</li></ul></div>
         <div class="card" style="--c:#4285F4"><div class="card-hdr">Cloud Storage  (GCS)</div><ul><li>dicom/raw/{uid}/   — tag-de-identified</li><li>dicom/clean/{uid}/ — defaced + processed</li><li>bids/{uid}/        — NIfTI / BIDS output</li><li>Shared volume (Go API + all 8 sidecars)</li></ul></div>
@@ -271,10 +273,28 @@ body {
 
     <!-- Security / Export / MCP / Landing -->
     <div class="g4" style="margin-top:6px">
-      <div class="info-box" style="--c:#DC2626;background:#FFF1F2"><div class="ib-title">Security Layers</div><div class="ib-sec"></div><ul><li>VPC private subnets + Cloud NAT</li><li>Cloud Armor DDoS / WAF</li><li>TLS 1.2+ on all endpoints</li><li>CMEK (Cloud KMS)</li><li>IAM least privilege</li><li>Secret Manager (DB creds, API keys)</li><li>Cloud Audit Logs</li><li>Artifact Registry vuln scanning</li><li>distroless containers (Go API)</li><li>IAP on all admin routes</li><li>No PHI in email / audit entries</li></ul></div>
-      <div class="info-box" style="--c:#15803D;background:#F0FDF4"><div class="ib-title">Export &amp; Sharing</div><div class="ib-sec">Export Portal  (React / public SPA)</div><ul><li>Token-authenticated share links</li><li>Study info, expiry countdown (server-anchored)</li><li>ZIP download of approved DICOM files</li></ul><div class="ib-sec">DICOM Forwarding  (route_to)</div><ul><li>DICOMweb STOW-RS destinations</li><li>DIMSE C-STORE to remote AE Title</li><li>Auto-forwards on study approval</li></ul><div class="ib-sec">Share Lifecycle</div><ul><li>Extend / revoke anytime</li><li>Immutable download log per share</li><li>Export analytics dashboard</li></ul></div>
+      <div class="info-box" style="--c:#EA580C;background:#FFF1F2"><div class="ib-title">Security Layers</div><div class="ib-sec"></div><ul><li>VPC private subnets + Cloud NAT</li><li>Cloud Armor DDoS / WAF</li><li>TLS 1.2+ on all endpoints</li><li>CMEK (Cloud KMS)</li><li>IAM least privilege</li><li>Secret Manager (DB creds, API keys)</li><li>Cloud Audit Logs</li><li>Artifact Registry vuln scanning</li><li>distroless containers (Go API)</li><li>IAP on all admin routes</li><li>No PHI in email / audit entries</li></ul></div>
+      <div class="info-box" style="--c:#0F766E;background:#F0FDF4"><div class="ib-title">Export &amp; Sharing</div><div class="ib-sec">Export Portal  (React / public SPA)</div><ul><li>Token-authenticated share links</li><li>Study info, expiry countdown (server-anchored)</li><li>ZIP download of approved DICOM files</li></ul><div class="ib-sec">DICOM Forwarding  (route_to)</div><ul><li>DICOMweb STOW-RS destinations</li><li>DIMSE C-STORE to remote AE Title</li><li>Auto-forwards on study approval</li></ul><div class="ib-sec">Share Lifecycle</div><ul><li>Extend / revoke anytime</li><li>Immutable download log per share</li><li>Export analytics dashboard</li></ul></div>
       <div class="info-box" style="--c:#7C3AED;background:#F5F3FF"><div class="ib-title">MCP Server + AI Agent Tools</div><div class="ib-sec">Model Context Protocol  (Claude)</div><ul><li>17 read tools: studies, audit, stats, health</li><li>13 write tools (confirm:true + reason required)</li><li>Zod-validated schemas — read-safe by default</li><li>DIMSE retry proxy: process, replay, dead-letter</li></ul><div class="ib-sec">Batch Import + Webhooks + API Keys</div><ul><li>aegis-import CLI — bulk historical migration</li><li>5 webhook events, HMAC-SHA256 signed payloads</li><li>Machine-to-machine bearer tokens (hashed)</li></ul></div>
       <div class="card" style="--c:#0EA5E9"><div class="card-hdr">Landing Page  (nginx / Cloud Run)</div><ul><li>aegisimaging.ai — public marketing site</li><li>React + Vite built, served by nginx</li><li>Interactive synthetic DICOM demo widget</li><li>Schedule Demo / Contact form</li><li>Market opportunity: $45B imaging market</li><li>LB default backend — no IAP required</li><li>www + apex domains on SSL cert v3</li></ul></div>
+    </div>
+  </div>
+
+  <!-- AWS ACCOUNT -->
+  <div class="zone" style="background:#FFF7ED;border-color:#EA580C;margin-bottom:6px">
+    <div class="zone-hdr" style="color:#EA580C">
+      AWS ACCOUNT
+      <span class="zone-sub" style="color:#9A3412">301691475234 &nbsp;·&nbsp; us-east-1 &nbsp;·&nbsp; Deploying Q1 2026 — same app layer as GCP, parallel infrastructure</span>
+    </div>
+    <div class="g3" style="margin-bottom:6px">
+      <div class="card" style="--c:#EA580C"><div class="card-hdr">ALB + Cognito  (Auth Layer)</div><ul><li>HTTPS listener on ACM certificate</li><li>Cognito hosted UI — admin-create-only user pool</li><li>authenticate-cognito default action</li><li>Public bypass rules: /healthz, upload, export</li></ul></div>
+      <div class="card" style="--c:#00ADD8"><div class="card-hdr">API + Admin  (ECS Fargate)</div><ul><li>Go API — same image as GCP (1 vCPU / 2 GB)</li><li>Admin Dashboard — React / nginx (0.5 vCPU / 1 GB)</li><li>Service discovery: api.aegis.local</li><li>Force-new-deployment via GitHub Actions</li></ul></div>
+      <div class="card" style="--c:#3776AB"><div class="card-hdr">7 Python Sidecars  (ECS Fargate)</div><ul><li>defacing · phi-detection · qc-service</li><li>bids-service · classification-service</li><li>protocol-service · synth-service</li><li>Cloud Map private DNS: svc.aegis.local:8080</li></ul></div>
+    </div>
+    <div class="g3">
+      <div class="card" style="--c:#D97706"><div class="card-hdr">RDS + S3  (Data Layer)</div><ul><li>RDS PostgreSQL 15 — private subnet</li><li>Secrets Manager — master credentials</li><li>S3 DICOM bucket — versioned, KMS-encrypted</li><li>Same STORAGE_MODE=s3 as GCP (same Go code)</li></ul></div>
+      <div class="card" style="--c:#3776AB"><div class="card-hdr">DIMSE EC2  (t3.small)</div><ul><li>Elastic IP — stable for PACS AE title registration</li><li>Amazon Linux 2023 — Docker + SSM agent</li><li>SSM Parameter Store → image URI on every boot</li><li>GitHub Actions: write SSM param + reboot instance</li></ul></div>
+      <div class="card" style="--c:#374151"><div class="card-hdr">GitHub Actions CI/CD</div><ul><li>Triggers on push to develop (same as GCP Cloud Build)</li><li>Matrix build: 10 services, --platform linux/amd64</li><li>Push SHA tag + latest tag to ECR</li><li>Force-new-deployment for 9 ECS services</li><li>Update SSM param + reboot DIMSE EC2</li></ul></div>
     </div>
   </div>
 
@@ -299,8 +319,8 @@ body {
     <div class="g5"><div class="phase" style="--c:#15803D"><div class="phase-title">Phase 1: Foundation  ✓</div><div class="phase-desc">Terraform (GCP + AWS) · Go API · Upload Portal · Admin Dashboard · PostgreSQL · CI/CD</div></div>
 <div class="phase" style="--c:#1D4ED8"><div class="phase-title">Phase 2: Processing  ✓</div><div class="phase-desc">Defacing · PHI Detection · QC · BIDS · Classification · Protocol · DIMSE Receiver</div></div>
 <div class="phase" style="--c:#D97706"><div class="phase-title">Phase 3: Operations  ✓</div><div class="phase-desc">Routing rules · Institutions · Audit · Export Portal · Shares · Email · MCP Server</div></div>
-<div class="phase" style="--c:#7C3AED"><div class="phase-title">Phase 4: Production  ✓</div><div class="phase-desc">GCP live (aegis-prod) · Landing Page · Batch import · Synth MRI sidecar (8th) · RBAC</div></div>
-<div class="phase" style="--c:#DC2626"><div class="phase-title">Phase 5: Enterprise  🚧</div><div class="phase-desc">AEGIS AI Agent · Observability dashboard · Multi-tenant federation · Repo split</div></div></div>
+<div class="phase" style="--c:#7C3AED"><div class="phase-title">Phase 4: Production  ✓</div><div class="phase-desc">GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC</div></div>
+<div class="phase" style="--c:#DC2626"><div class="phase-title">Phase 5: Beta → GA  🚧</div><div class="phase-desc">Private beta · AWS deployment (Q1, deploying now) · Azure + SOC 2 (Q3) · Enterprise GA (Q4)</div></div></div>
   </div>
 
   <!-- TECH STACK + MULTI-CLOUD -->
@@ -308,11 +328,11 @@ body {
     <div class="g2">
       <div class="kv-box">
         <div class="kv-box-title">Key Open-Source Dependencies</div>
-        <div class="kv"><span class="kv-k" style="color:#00ADD8">Go:</span><span class="kv-v">suyashkumar/dicom · pgx · testcontainers-go · testify</span></div><div class="kv"><span class="kv-k" style="color:#0EA5E9">Browser:</span><span class="kv-v">dcmjs · dicomParser · OHIF Viewer (MIT) · React 19 · Vite</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Defacing:</span><span class="kv-v">mri_reface · DeepDefacer · mri_deface · dcm2niix · nibabel</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">PHI/OCR:</span><span class="kv-v">pytesseract · Google Cloud Vision · AWS Textract · Pillow</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">QC/BIDS:</span><span class="kv-v">pydicom · numpy · dcm2niix · pynetdicom (C-STORE SCP)</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Synth:</span><span class="kv-v">numpy · pydicom · MONAI Generative · torch · huggingface-hub</span></div><div class="kv"><span class="kv-k" style="color:#374151">Infra:</span><span class="kv-v">Terraform Google + AWS providers · Docker distroless/slim</span></div>
+        <div class="kv"><span class="kv-k" style="color:#00ADD8">Go:</span><span class="kv-v">suyashkumar/dicom · pgx · testcontainers-go · testify</span></div><div class="kv"><span class="kv-k" style="color:#0EA5E9">Browser:</span><span class="kv-v">dcmjs · dicomParser · Weasis DWV (MIT) · React 19 · Vite</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Defacing:</span><span class="kv-v">mri_reface · DeepDefacer · mri_deface · dcm2niix · nibabel</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">PHI/OCR:</span><span class="kv-v">pytesseract · Google Cloud Vision · AWS Textract · Pillow</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">QC/BIDS:</span><span class="kv-v">pydicom · numpy · dcm2niix · pynetdicom (C-STORE SCP)</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Synth:</span><span class="kv-v">numpy · pydicom · MONAI Generative · torch · huggingface-hub</span></div><div class="kv"><span class="kv-k" style="color:#374151">Infra:</span><span class="kv-v">Terraform Google + AWS providers · Docker distroless/slim</span></div>
       </div>
       <div class="kv-box">
         <div class="kv-box-title">Multi-Cloud + Test Coverage</div>
-        <div class="kv"><span class="kv-k" style="color:#4285F4">GCP:</span><span class="kv-v">Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · KMS · Pub/Sub</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">AWS:</span><span class="kv-v">ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager</span></div><div class="kv"><span class="kv-k" style="color:#374151">Local:</span><span class="kv-v">Docker Compose · PostgreSQL 15 · Mailpit · local filesystem</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">Auth:</span><span class="kv-v">GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth</span></div><div class="kv"><span class="kv-k" style="color:#00ADD8">Storage:</span><span class="kv-v">STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes</span></div><div class="kv"><span class="kv-k" style="color:#15803D">CI:</span><span class="kv-v">Go tests (273+) · Python tests (244+) · TS typecheck · Docker (9)</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Domains:</span><span class="kv-v">aegisimaging.ai · www · api · admin  —  SSL cert v3</span></div>
+        <div class="kv"><span class="kv-k" style="color:#4285F4">GCP:</span><span class="kv-v">Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · KMS · Pub/Sub</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">AWS:</span><span class="kv-v">ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager</span></div><div class="kv"><span class="kv-k" style="color:#374151">Local:</span><span class="kv-v">Docker Compose · PostgreSQL 15 · Mailpit · local filesystem</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">Auth:</span><span class="kv-v">GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth</span></div><div class="kv"><span class="kv-k" style="color:#00ADD8">Storage:</span><span class="kv-v">STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes</span></div><div class="kv"><span class="kv-k" style="color:#0F766E">CI/CD:</span><span class="kv-v">GitHub Actions: Go (120+) · Python (252+) · TS · Docker (9) · Cloud Build auto-deploy</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Domains:</span><span class="kv-v">aegisimaging.ai · www · api · admin  —  SSL cert v3</span></div>
       </div>
     </div>
   </div>

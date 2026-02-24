@@ -32,6 +32,24 @@ type AgentPanelProps = {
   prefillStudyUid?: string
 }
 
+const GEMINI_MODELS = [
+  { value: '', label: 'Server default' },
+  // Gemini 3 series (latest)
+  { value: 'google/gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
+  { value: 'google/gemini-3-pro-preview',   label: 'Gemini 3 Pro (Preview)' },
+  { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
+  // Gemini 2.5 series
+  { value: 'google/gemini-2.5-pro',            label: 'Gemini 2.5 Pro' },
+  { value: 'google/gemini-2.5-flash',          label: 'Gemini 2.5 Flash' },
+  { value: 'google/gemini-2.5-flash-lite',     label: 'Gemini 2.5 Flash-Lite' },
+  // Gemini 2.0 series
+  { value: 'google/gemini-2.0-flash-001',      label: 'Gemini 2.0 Flash' },
+  { value: 'google/gemini-2.0-flash-lite-001', label: 'Gemini 2.0 Flash Lite' },
+  // Gemini 1.5 series (legacy)
+  { value: 'google/gemini-1.5-pro-001',        label: 'Gemini 1.5 Pro' },
+  { value: 'google/gemini-1.5-flash-001',      label: 'Gemini 1.5 Flash' },
+]
+
 export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps) {
   const baseUrl = import.meta.env.VITE_AGENT_BASE_URL || DEFAULT_AGENT_BASE_URL
   const [studyId, setStudyId] = useState('')
@@ -39,6 +57,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
   const [question, setQuestion] = useState('')
   const [includeNextSteps, setIncludeNextSteps] = useState(true)
   const [agentApiKey, setAgentApiKey] = useState('')
+  const [model, setModel] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AgentResult | null>(null)
@@ -63,7 +82,8 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
       question: question.trim() || undefined,
       study_id: studyId.trim() || undefined,
       study_instance_uid: studyUid.trim() || undefined,
-      include_next_steps: includeNextSteps
+      include_next_steps: includeNextSteps,
+      model: model || undefined
     }
 
     setLoading(true)
@@ -71,11 +91,16 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (agentApiKey.trim()) headers.Authorization = `Bearer ${agentApiKey.trim()}`
 
-      const response = await fetch(`${baseUrl}/agent/ask`, {
+      const response = await fetch(`${baseUrl}/ask`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
       })
+
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Agent service unavailable (HTTP ${response.status}) — is the MCP server running?`)
+      }
 
       const data = await response.json()
       setResult(data as AgentResult)
@@ -96,6 +121,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
     setQuestion('')
     setIncludeNextSteps(true)
     setAgentApiKey('')
+    setModel('')
     setError(null)
     setResult(null)
   }
@@ -145,6 +171,15 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
             value={agentApiKey}
             onChange={(e) => setAgentApiKey(e.target.value)}
           />
+          <select
+            className="form-input"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          >
+            {GEMINI_MODELS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
         </div>
         <label className="form-checkbox">
           <input

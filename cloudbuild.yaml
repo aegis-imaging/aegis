@@ -1,0 +1,470 @@
+################################################################################
+# AEGIS — Cloud Build CI/CD pipeline
+#
+# Triggered automatically on every push to `develop`.
+# Runs `scripts/gcp_setup_cloudbuild.sh` once to create this trigger.
+#
+# Phase 1: Build + push all images in parallel (waitFor: ['-'])
+# Phase 2: Deploy each Cloud Run service in parallel (waits for its build step)
+#
+# Substitutions (override via trigger settings or --substitutions on manual run):
+#   _REGION         GCP region                      (default: us-central1)
+#   _PROJECT_ID     GCP project ID                  (default: aegis-prod-488120)
+#   _REPO           Artifact Registry repo base URL
+#   _WEASIS_URL     DWV viewer Cloud Run URL (baked into admin-dashboard at build time)
+#   _API_URL        Public API base URL  (baked into landing page at build time)
+################################################################################
+
+substitutions:
+  _REGION: us-central1
+  _PROJECT_ID: aegis-prod-488120
+  _REPO: us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services
+  _WEASIS_URL: https://weasis-uk5cvzf5nq-uc.a.run.app
+  _API_URL: https://api.aegisimaging.ai
+  # DIMSE receiver — Compute Engine instance. Override in trigger if zone/name differ.
+  _DIMSE_ZONE: us-central1-a
+  _DIMSE_INSTANCE: aegis-prod-dimse-receiver
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 3600s
+
+steps:
+  # ============================================================
+  # PHASE 1: Build + push all images in parallel
+  # ============================================================
+
+  # --- api ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-api
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/api:${SHORT_SHA} \
+          -t ${_REPO}/api:latest \
+          api
+        docker push ${_REPO}/api:${SHORT_SHA}
+        docker push ${_REPO}/api:latest
+
+  # --- admin-dashboard (VITE_WEASIS_BASE_URL baked in at build time) ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-admin-dashboard
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          --build-arg VITE_WEASIS_BASE_URL=${_WEASIS_URL} \
+          -t ${_REPO}/admin-dashboard:${SHORT_SHA} \
+          -t ${_REPO}/admin-dashboard:latest \
+          frontend/admin-dashboard
+        docker push ${_REPO}/admin-dashboard:${SHORT_SHA}
+        docker push ${_REPO}/admin-dashboard:latest
+
+  # --- landing (repo-root build context; gate is server-side via GATE_ENABLED env var) ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-landing
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -f frontend/landing/Dockerfile \
+          --build-arg VITE_API_BASE_URL=${_API_URL} \
+          -t ${_REPO}/landing:${SHORT_SHA} \
+          -t ${_REPO}/landing:latest \
+          .
+        docker push ${_REPO}/landing:${SHORT_SHA}
+        docker push ${_REPO}/landing:latest
+
+  # --- weasis (DWV-based DICOM viewer) ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-weasis
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/weasis:${SHORT_SHA} \
+          -t ${_REPO}/weasis:latest \
+          weasis
+        docker push ${_REPO}/weasis:${SHORT_SHA}
+        docker push ${_REPO}/weasis:latest
+
+  # --- defacing ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-defacing
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/defacing:${SHORT_SHA} \
+          -t ${_REPO}/defacing:latest \
+          defacing
+        docker push ${_REPO}/defacing:${SHORT_SHA}
+        docker push ${_REPO}/defacing:latest
+
+  # --- phi-detection ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-phi-detection
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/phi-detection:${SHORT_SHA} \
+          -t ${_REPO}/phi-detection:latest \
+          phi-detection
+        docker push ${_REPO}/phi-detection:${SHORT_SHA}
+        docker push ${_REPO}/phi-detection:latest
+
+  # --- qc-service ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-qc-service
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/qc-service:${SHORT_SHA} \
+          -t ${_REPO}/qc-service:latest \
+          qc-service
+        docker push ${_REPO}/qc-service:${SHORT_SHA}
+        docker push ${_REPO}/qc-service:latest
+
+  # --- bids-service ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-bids-service
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/bids-service:${SHORT_SHA} \
+          -t ${_REPO}/bids-service:latest \
+          bids-service
+        docker push ${_REPO}/bids-service:${SHORT_SHA}
+        docker push ${_REPO}/bids-service:latest
+
+  # --- classification-service ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-classification-service
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/classification-service:${SHORT_SHA} \
+          -t ${_REPO}/classification-service:latest \
+          classification-service
+        docker push ${_REPO}/classification-service:${SHORT_SHA}
+        docker push ${_REPO}/classification-service:latest
+
+  # --- protocol-service ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-protocol-service
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/protocol-service:${SHORT_SHA} \
+          -t ${_REPO}/protocol-service:latest \
+          protocol-service
+        docker push ${_REPO}/protocol-service:${SHORT_SHA}
+        docker push ${_REPO}/protocol-service:latest
+
+  # --- synth-service ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-synth-service
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/synth-service:${SHORT_SHA} \
+          -t ${_REPO}/synth-service:latest \
+          synth-service
+        docker push ${_REPO}/synth-service:${SHORT_SHA}
+        docker push ${_REPO}/synth-service:latest
+
+  # --- mcp-server ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-mcp-server
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/mcp-server:${SHORT_SHA} \
+          -t ${_REPO}/mcp-server:latest \
+          mcp-server
+        docker push ${_REPO}/mcp-server:${SHORT_SHA}
+        docker push ${_REPO}/mcp-server:latest
+
+  # --- dimse-receiver (build + push) ---
+  # DIMSE receiver runs on Compute Engine (not Cloud Run) because DICOM C-STORE
+  # requires raw TCP port 11112, which Cloud Run cannot expose.
+  # The deploy step below updates the instance metadata and resets the VM;
+  # the startup script reads the new image URI and re-pulls on every boot.
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-dimse-receiver
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/dimse-receiver:${SHORT_SHA} \
+          -t ${_REPO}/dimse-receiver:latest \
+          dimse-receiver
+        docker push ${_REPO}/dimse-receiver:${SHORT_SHA}
+        docker push ${_REPO}/dimse-receiver:latest
+
+  # ============================================================
+  # PHASE 2: Deploy to Cloud Run (each waits for its build step)
+  # Deploys in parallel once the image is pushed.
+  # Only the container image is updated; all env vars, secrets,
+  # CPU/memory, and service accounts are preserved from the
+  # currently deployed service configuration.
+  # ============================================================
+
+  # --- deploy api ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-api
+    waitFor: [build-push-api]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - aegis-api
+      - --image=${_REPO}/api:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy admin-dashboard ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-admin-dashboard
+    waitFor: [build-push-admin-dashboard]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - aegis-admin-dashboard
+      - --image=${_REPO}/admin-dashboard:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy landing ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-landing
+    waitFor: [build-push-landing]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - aegis-prod-landing
+      - --image=${_REPO}/landing:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy weasis ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-weasis
+    waitFor: [build-push-weasis]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - weasis
+      - --image=${_REPO}/weasis:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --allow-unauthenticated
+      - --set-env-vars=API_URL=https://api.aegisimaging.ai
+      - --quiet
+
+  # --- deploy defacing ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-defacing
+    waitFor: [build-push-defacing]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - defacing
+      - --image=${_REPO}/defacing:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy phi-detection ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-phi-detection
+    waitFor: [build-push-phi-detection]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - phi-detection
+      - --image=${_REPO}/phi-detection:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy qc-service ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-qc-service
+    waitFor: [build-push-qc-service]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - qc-service
+      - --image=${_REPO}/qc-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy bids-service ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-bids-service
+    waitFor: [build-push-bids-service]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - bids-service
+      - --image=${_REPO}/bids-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy classification-service ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-classification-service
+    waitFor: [build-push-classification-service]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - classification-service
+      - --image=${_REPO}/classification-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy protocol-service ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-protocol-service
+    waitFor: [build-push-protocol-service]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - protocol-service
+      - --image=${_REPO}/protocol-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy synth-service ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-synth-service
+    waitFor: [build-push-synth-service]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - synth-service
+      - --image=${_REPO}/synth-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy mcp-server ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-mcp-server
+    waitFor: [build-push-mcp-server]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - aegis-mcp-server
+      - --image=${_REPO}/mcp-server:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy dimse-receiver (Compute Engine VM) ---
+  # Updates the 'dimse-image' metadata key on the VM and resets the instance.
+  # The startup script reads this key on every boot and pulls the new image.
+  # Terraform lifecycle.ignore_changes prevents terraform apply from reverting this.
+  # Skipped gracefully if the VM doesn't exist yet (first deploy via terraform apply).
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-dimse-receiver
+    waitFor: [build-push-dimse-receiver]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        IMAGE="${_REPO}/dimse-receiver:${SHORT_SHA}"
+        INSTANCE="${_DIMSE_INSTANCE}"
+        ZONE="${_DIMSE_ZONE}"
+        PROJECT="${_PROJECT_ID}"
+
+        # Check if the instance exists; skip gracefully if not yet created by Terraform.
+        if ! gcloud compute instances describe "$$INSTANCE" \
+            --zone="$$ZONE" --project="$$PROJECT" --quiet &>/dev/null; then
+          echo "==> dimse-receiver instance '$$INSTANCE' not found — skipping deploy."
+          echo "    Run 'terraform apply' with dimse_receiver_image set to create it."
+          exit 0
+        fi
+
+        echo "==> Updating dimse-image metadata to: $$IMAGE"
+        gcloud compute instances add-metadata "$$INSTANCE" \
+          --zone="$$ZONE" \
+          --project="$$PROJECT" \
+          --metadata="dimse-image=$$IMAGE"
+
+        echo "==> Resetting instance to apply new image..."
+        gcloud compute instances reset "$$INSTANCE" \
+          --zone="$$ZONE" \
+          --project="$$PROJECT" \
+          --quiet
+
+        echo "==> dimse-receiver deploy complete."

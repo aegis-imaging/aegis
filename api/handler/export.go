@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/email"
@@ -35,9 +36,11 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.approved", actorEmail(r), "study", study.ID, clientIP(r), nil)
 	webhook.Deliver(r.Context(), s.db, "study.approved", study)
+	s.publishStudyEvent("study.status_changed", study.ID, study.ProjectID, "approved")
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
-		subject, body := email.StudyApproved(study.StudyInstanceUID)
+		projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
+		subject, body := email.StudyApproved(study.StudyInstanceUID, projectName)
 		if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
 			log.Printf("approve email to %s: %v", uploaderEmail, err)
 		}
@@ -54,6 +57,7 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 }
 
 // RejectStudy transitions a study to 'rejected'.
+// Accepts an optional JSON body: {"reason": "..."} (max 500 chars).
 func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	study, err := model.GetStudyByID(r.Context(), s.db, id)
@@ -65,15 +69,37 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "study is already rejected")
 		return
 	}
-	if err := model.UpdateStudyStatus(r.Context(), s.db, study.ID, "rejected"); err != nil {
+
+	// Parse optional reason from request body.
+	var reason string
+	if r.ContentLength != 0 {
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			reason = strings.TrimSpace(body.Reason)
+			if len(reason) > 500 {
+				reason = reason[:500]
+			}
+		}
+	}
+
+	if err := model.UpdateStudyRejected(r.Context(), s.db, study.ID, reason); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to update status")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actorEmail(r), "study", study.ID, clientIP(r), nil)
+
+	var auditMeta map[string]any
+	if reason != "" {
+		auditMeta = map[string]any{"rejection_reason": reason}
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actorEmail(r), "study", study.ID, clientIP(r), auditMeta)
 	webhook.Deliver(r.Context(), s.db, "study.rejected", study)
+	s.publishStudyEvent("study.status_changed", study.ID, study.ProjectID, "rejected")
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
-		subject, body := email.StudyRejected(study.StudyInstanceUID)
+		projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
+		subject, body := email.StudyRejected(study.StudyInstanceUID, reason, projectName)
 		if err := s.mailer.Send(r.Context(), uploaderEmail, subject, body); err != nil {
 			log.Printf("reject email to %s: %v", uploaderEmail, err)
 		}
@@ -109,6 +135,7 @@ type createShareRequest struct {
 	Note           string `json:"note"`
 	ExpiryHours    int    `json:"expiry_hours"`         // default 168 (7 days)
 	ExpiresAt      string `json:"expires_at,omitempty"` // optional RFC3339 timestamp
+	MaxDownloads   *int   `json:"max_downloads,omitempty"` // nil = unlimited
 }
 
 type createShareResponse struct {
@@ -154,6 +181,11 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.MaxDownloads != nil && *req.MaxDownloads <= 0 {
+		s.writeError(w, http.StatusBadRequest, "max_downloads must be a positive integer")
+		return
+	}
+
 	rawToken, tokenHash, err := generateShareToken()
 	if err != nil {
 		log.Printf("generate share token: %v", err)
@@ -162,7 +194,7 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	share, err := model.CreateExportShare(r.Context(), s.db,
-		study.ID, tokenHash, req.RecipientEmail, req.Note, actorEmail(r), expiresAt)
+		study.ID, tokenHash, req.RecipientEmail, req.Note, actorEmail(r), expiresAt, req.MaxDownloads)
 	if err != nil {
 		log.Printf("create export share: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to create share")
@@ -371,14 +403,28 @@ func (s *Server) ExtendShare(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// RevokeShare immediately revokes an export share.
+type revokeShareRequest struct {
+	Reason string `json:"reason"`
+}
+
+// RevokeShare immediately revokes an export share with an optional reason.
 func (s *Server) RevokeShare(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareID")
-	if err := model.RevokeExportShare(r.Context(), s.db, shareID); err != nil {
+
+	var req revokeShareRequest
+	// Decode is best-effort — omitting the body is allowed (reason stays empty).
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
+
+	if err := model.RevokeExportShare(r.Context(), s.db, shareID, req.Reason); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to revoke share")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "share.revoked", actorEmail(r), "export_share", shareID, clientIP(r), nil)
+
+	meta := map[string]any{"revoked": true}
+	if req.Reason != "" {
+		meta["reason"] = req.Reason
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "share.revoked", actorEmail(r), "export_share", shareID, clientIP(r), meta)
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 

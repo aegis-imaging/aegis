@@ -168,6 +168,26 @@ func ListRoutingRules(ctx context.Context, db *sql.DB) ([]RoutingRule, error) {
 	return out, rows.Err()
 }
 
+// ListRoutingRulesByProject returns all routing rules scoped to a specific project.
+func ListRoutingRulesByProject(ctx context.Context, db *sql.DB, projectID string) ([]RoutingRule, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT`+routingRuleColumns+` FROM routing_rules WHERE project_id = $1 ORDER BY priority, name`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []RoutingRule
+	for rows.Next() {
+		var r RoutingRule
+		if err := scanRoutingRule(rows, &r); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // ListEnabledRoutingRules returns rules ordered by priority (ascending) for evaluation.
 func ListEnabledRoutingRules(ctx context.Context, db *sql.DB) ([]RoutingRule, error) {
 	rows, err := db.QueryContext(ctx,

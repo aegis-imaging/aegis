@@ -111,6 +111,36 @@ func (s *Server) setAPIKeyEnabled(w http.ResponseWriter, r *http.Request, enable
 	s.writeJSON(w, http.StatusOK, map[string]any{"id": id, "enabled": enabled})
 }
 
+// RotateAPIKey POST /api/api-keys/{id}/rotate
+// Generates a new random key value, updates the stored hash and prefix, and
+// returns the new raw key exactly once. Useful for periodic key refresh without
+// a delete+create gap that would interrupt dependent services.
+func (s *Server) RotateAPIKey(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	// Generate a new cryptographically random key.
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to generate key")
+		return
+	}
+	rawKey := "aegis_" + base64.RawURLEncoding.EncodeToString(buf)
+	h := sha256.Sum256([]byte(rawKey))
+	keyHash := hex.EncodeToString(h[:])
+	keyPrefix := rawKey[:min(14, len(rawKey))]
+
+	k, err := model.RotateAPIKey(r.Context(), s.db, id, keyHash, keyPrefix)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "key not found")
+		return
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "api_key.rotated", actorEmail(r), "api_key", id, clientIP(r), map[string]any{
+		"name":   k.Name,
+		"prefix": keyPrefix,
+	})
+	s.writeJSON(w, http.StatusOK, createAPIKeyResponse{APIKey: k, RawKey: rawKey})
+}
+
 // DeleteAPIKey DELETE /api/api-keys/{id}
 func (s *Server) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

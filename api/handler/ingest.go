@@ -78,6 +78,12 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		studyUID = fmt.Sprintf("2.25.%d", time.Now().UnixNano())
 	}
 
+	// Enforce per-project storage quota (if set).
+	if err := s.checkStorageQuota(r.Context(), project.ID); err != nil {
+		s.writeError(w, http.StatusRequestEntityTooLarge, err.Error())
+		return
+	}
+
 	bodyPart := strings.ToUpper(req.Metadata.BodyPart)
 	defacingRequired := bodyPart == "HEAD" || bodyPart == "BRAIN"
 
@@ -99,6 +105,33 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		log.Printf("create study (internal ingest): %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to create study record")
 		return
+	}
+
+	// Store file size if provided by the caller (e.g. DIMSE receiver).
+	if req.Metadata.StudySizeBytes > 0 {
+		if err := model.UpdateStudySizeBytes(r.Context(), s.db, study.ID, req.Metadata.StudySizeBytes); err != nil {
+			log.Printf("update study size %s: %v", study.ID, err)
+		} else {
+			study.StudySizeBytes = req.Metadata.StudySizeBytes
+		}
+	}
+
+	// Upsert per-series metadata when the caller provides it.
+	for _, sm := range req.Metadata.Series {
+		if sm.SeriesInstanceUID == "" {
+			continue
+		}
+		sr := &model.StudySeries{
+			StudyID:           study.ID,
+			SeriesInstanceUID: sm.SeriesInstanceUID,
+			SeriesDescription: sm.SeriesDescription,
+			Modality:          sm.Modality,
+			BodyPart:          sm.BodyPart,
+			InstanceCount:     sm.InstanceCount,
+		}
+		if err := model.UpsertStudySeries(r.Context(), s.db, sr); err != nil {
+			log.Printf("upsert series %s: %v", sm.SeriesInstanceUID, err)
+		}
 	}
 
 	// Evaluate routing rules — may mutate study (e.g. auto_approve, require_defacing).
@@ -128,6 +161,7 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		detail["institution_ae_title"] = strings.TrimSpace(req.InstitutionAETitle)
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "ingest.internal", actorEmail(r), "study", study.ID, clientIP(r), detail)
+	s.publishStudyEvent("study.created", study.ID, study.ProjectID, "received")
 
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"status":  "received",

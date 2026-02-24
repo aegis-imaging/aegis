@@ -1,7 +1,7 @@
 import http from "node:http";
 import { AegisApiClient, DisallowedPathError, UpstreamHttpError } from "./aegisClient.js";
 import { InMemoryRateLimiter } from "./rateLimiter.js";
-import { buildLlmConfig, runAgentWithLlm } from "./agentOrchestrator.js";
+import { buildLlmConfig, runAgentWithLlm, ALLOWED_MODEL_OVERRIDES } from "./agentOrchestrator.js";
 
 export type AgentHttpConfig = {
   port: number;
@@ -15,6 +15,8 @@ export type AgentHttpConfig = {
   llmModel: string;
   llmTemperature: number;
   llmMaxTokens: number;
+  llmUseGcpAuth: boolean;
+  llmGcpProject?: string;
 };
 
 type AgentRequest = {
@@ -23,6 +25,7 @@ type AgentRequest = {
   study_id?: string;
   study_instance_uid?: string;
   include_next_steps?: boolean;
+  model?: string;
 };
 
 type AgentResponse = {
@@ -121,7 +124,9 @@ export function startAgentHttpServer(client: AegisApiClient, config: AgentHttpCo
     llmApiKey,
     llmModel,
     llmTemperature,
-    llmMaxTokens
+    llmMaxTokens,
+    llmUseGcpAuth,
+    llmGcpProject
   } = config;
 
   if (requireAuth && !apiKey && !bearerToken) {
@@ -133,7 +138,9 @@ export function startAgentHttpServer(client: AegisApiClient, config: AgentHttpCo
     apiKey: llmApiKey,
     model: llmModel,
     temperature: llmTemperature,
-    maxTokens: llmMaxTokens
+    maxTokens: llmMaxTokens,
+    useGcpAuth: llmUseGcpAuth,
+    gcpProject: llmGcpProject
   });
 
   const server = http.createServer(async (req, res) => {
@@ -194,6 +201,12 @@ export function startAgentHttpServer(client: AegisApiClient, config: AgentHttpCo
 
     if (!request.study_id && !request.study_instance_uid) {
       sendJson(res, 400, buildError(requestId, "VALIDATION_ERROR", "Provide study_id or study_instance_uid"), allowedOrigin);
+      return;
+    }
+
+    if (request.model !== undefined && !ALLOWED_MODEL_OVERRIDES.has(request.model)) {
+      const allowed = Array.from(ALLOWED_MODEL_OVERRIDES).join(", ");
+      sendJson(res, 400, buildError(requestId, "VALIDATION_ERROR", `Unknown model. Allowed: ${allowed}`), allowedOrigin);
       return;
     }
 

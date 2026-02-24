@@ -36,6 +36,9 @@ type Study struct {
 	ExportStatus           string    `json:"export_status"`
 	DefaceQaScore          *float64  `json:"deface_qa_score,omitempty"`
 	SubjectID              *string   `json:"subject_id,omitempty"`
+	RejectionReason        *string   `json:"rejection_reason,omitempty"`
+	StudySizeBytes         int64     `json:"study_size_bytes"`
+	PriorityFlag           bool      `json:"priority_flag"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
@@ -49,6 +52,9 @@ const studyColumns = `
 	export_required, export_status,
 	deface_qa_score,
 	subject_id,
+	rejection_reason,
+	study_size_bytes,
+	priority_flag,
 	created_at, updated_at`
 
 type scannable interface {
@@ -67,6 +73,9 @@ func scanStudy(row scannable, s *Study) error {
 		&s.ExportRequired, &s.ExportStatus,
 		&s.DefaceQaScore,
 		&s.SubjectID,
+		&s.RejectionReason,
+		&s.StudySizeBytes,
+		&s.PriorityFlag,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -121,8 +130,10 @@ type StudyFilters struct {
 	Source    string    // external|internal
 	Search    string    // substring match on study_instance_uid or study_description
 	SubjectID string    // exact match on subject_id
+	Label     string    // substring match on any study_labels.label value (case-insensitive)
 	DateFrom  time.Time // created_at >= DateFrom (zero = no lower bound)
 	DateTo    time.Time // created_at <= DateTo   (zero = no upper bound)
+	Flagged   *bool     // if non-nil, filter by priority_flag value
 }
 
 func studyWhere(f StudyFilters) (string, []any) {
@@ -166,6 +177,12 @@ func studyWhere(f StudyFilters) (string, []any) {
 		args = append(args, f.SubjectID)
 		n++
 	}
+	if f.Label != "" {
+		clauses = append(clauses, fmt.Sprintf(
+			`EXISTS (SELECT 1 FROM study_labels sl WHERE sl.study_id = studies.id AND sl.label ILIKE $%d)`, n))
+		args = append(args, "%"+f.Label+"%")
+		n++
+	}
 	if !f.DateFrom.IsZero() {
 		clauses = append(clauses, fmt.Sprintf(`created_at >= $%d`, n))
 		args = append(args, f.DateFrom.UTC())
@@ -174,6 +191,11 @@ func studyWhere(f StudyFilters) (string, []any) {
 	if !f.DateTo.IsZero() {
 		clauses = append(clauses, fmt.Sprintf(`created_at <= $%d`, n))
 		args = append(args, f.DateTo.UTC())
+		n++
+	}
+	if f.Flagged != nil {
+		clauses = append(clauses, fmt.Sprintf(`priority_flag = $%d`, n))
+		args = append(args, *f.Flagged)
 		n++
 	}
 	_ = n
@@ -228,9 +250,27 @@ func CountStudies(ctx context.Context, db *sql.DB, f StudyFilters) (int, error) 
 	return total, err
 }
 
+func UpdateStudySizeBytes(ctx context.Context, db *sql.DB, id string, sizeBytes int64) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET study_size_bytes = $1, updated_at = now() WHERE id = $2`, sizeBytes, id)
+	return err
+}
+
 func UpdateStudyStatus(ctx context.Context, db *sql.DB, id, status string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET status = $1, updated_at = now() WHERE id = $2`, status, id)
+	return err
+}
+
+// UpdateStudyRejected sets status to 'rejected' and stores an optional reason.
+func UpdateStudyRejected(ctx context.Context, db *sql.DB, id, reason string) error {
+	var reasonVal *string
+	if reason != "" {
+		reasonVal = &reason
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET status = 'rejected', rejection_reason = $1, updated_at = now()
+		WHERE id = $2`, reasonVal, id)
 	return err
 }
 
@@ -250,6 +290,13 @@ func GetUploaderEmail(ctx context.Context, db *sql.DB, studyID string) (string, 
 func SetDefacingRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET defacing_required = $1, updated_at = now() WHERE id = $2`, required, id)
+	return err
+}
+
+// SetPriorityFlag sets or clears the priority_flag on a study for high-priority triage.
+func SetPriorityFlag(ctx context.Context, db *sql.DB, id string, flagged bool) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET priority_flag = $1, updated_at = now() WHERE id = $2`, flagged, id)
 	return err
 }
 
@@ -274,6 +321,14 @@ func UpdateStudySubjectID(ctx context.Context, db *sql.DB, id string, subjectID 
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET subject_id = $1, updated_at = now()
 		WHERE id = $2`, subjectID, id)
+	return err
+}
+
+// ReassignStudyProject moves a study to a different project.
+func ReassignStudyProject(ctx context.Context, db *sql.DB, studyID, newProjectID string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE studies SET project_id = $1, updated_at = now() WHERE id = $2`,
+		newProjectID, studyID)
 	return err
 }
 
@@ -621,11 +676,12 @@ func GetStudyBreakdown(ctx context.Context, db *sql.DB, projectID ...string) ([]
 
 // StorageStats summarises DICOM file counts across studies by store type.
 type StorageStats struct {
-	RawFileCount     int `json:"raw_file_count"`   // files in dicom_store='raw'
-	CleanFileCount   int `json:"clean_file_count"` // files in dicom_store='clean'
-	TotalFileCount   int `json:"total_file_count"`
-	TotalStudies     int `json:"total_studies"`
-	GeneratedAt      string `json:"generated_at"`
+	RawFileCount   int    `json:"raw_file_count"`   // files in dicom_store='raw'
+	CleanFileCount int    `json:"clean_file_count"` // files in dicom_store='clean'
+	TotalFileCount int    `json:"total_file_count"`
+	TotalStudies   int    `json:"total_studies"`
+	TotalSizeBytes int64  `json:"total_size_bytes"` // sum of study_size_bytes across all studies
+	GeneratedAt    string `json:"generated_at"`
 }
 
 // GetStorageStats returns aggregate DICOM file counts derived from the studies table.
@@ -642,10 +698,11 @@ func GetStorageStats(ctx context.Context, db *sql.DB, projectID ...string) (*Sto
 		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'raw'),   0)::int,
 		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'clean'), 0)::int,
 		  coalesce(sum(instance_count), 0)::int,
-		  count(*)::int
+		  count(*)::int,
+		  coalesce(sum(study_size_bytes), 0)::bigint
 		FROM studies`+where, args...)
 	var s StorageStats
-	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies); err != nil {
+	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies, &s.TotalSizeBytes); err != nil {
 		return nil, err
 	}
 	return &s, nil
@@ -678,7 +735,7 @@ func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...st
 		    count(*) FILTER (WHERE status = 'approved')  AS received,
 		  count(*) FILTER (WHERE status = 'approved')   AS approved
 		FROM studies
-		WHERE created_at >= now() - ($1 || ' days')::INTERVAL`+where+`
+		WHERE created_at >= now() - ($1 * INTERVAL '1 day')`+where+`
 		GROUP BY day
 		ORDER BY day`, args...)
 	if err != nil {
@@ -698,4 +755,24 @@ func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...st
 		result = []TimelineDay{}
 	}
 	return result, rows.Err()
+}
+
+// DeleteStudy permanently removes a study and all its dependent rows.
+// export_shares lacks ON DELETE CASCADE, so it is cleared explicitly first.
+// All other child tables (study_labels, study_sla_alerts, study_series,
+// routing_rule_log, etc.) cascade automatically.
+func DeleteStudy(ctx context.Context, db *sql.DB, id string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM export_shares WHERE study_id = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM studies WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

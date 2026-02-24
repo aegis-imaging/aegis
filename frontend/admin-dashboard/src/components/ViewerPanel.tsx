@@ -1,15 +1,15 @@
-const OHIF_BASE = import.meta.env.VITE_OHIF_BASE_URL ?? 'http://localhost:3002'
+const WEASIS_BASE = import.meta.env.VITE_WEASIS_BASE_URL || 'http://localhost:3005'
 
 export function ViewerPanel({ studyUID, onClose }: { studyUID: string; onClose: () => void }) {
-  const viewerUrl = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${studyUID}`
+  const url = `${WEASIS_BASE}/viewer?studyUID=${studyUID}`
 
   return (
     <div className="viewer-panel">
       <div className="viewer-panel-header">
-        <span className="viewer-panel-title">OHIF Viewer</span>
+        <span className="viewer-panel-title">AEGIS DICOM Viewer</span>
         <div className="viewer-panel-actions">
           <a
-            href={viewerUrl}
+            href={url}
             target="_blank"
             rel="noreferrer"
             className="viewer-open-tab"
@@ -22,7 +22,7 @@ export function ViewerPanel({ studyUID, onClose }: { studyUID: string; onClose: 
         </div>
       </div>
       <iframe
-        src={viewerUrl}
+        src={url}
         className="viewer-iframe"
         title="DICOM Viewer"
         allow="fullscreen"

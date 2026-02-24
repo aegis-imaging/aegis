@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import threading
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any
 
 from app import config
 from app.ingest import StudyAccumulator, submit_ingest
+from app.storage_backend import next_file_index, write_dicom
 
 log = logging.getLogger(__name__)
 
@@ -64,20 +66,17 @@ def handle_store(event: Any) -> int:
     series_uid = str(getattr(ds, "SeriesInstanceUID", ""))
     calling_ae = str(getattr(event.assoc.requestor, "ae_title", ""))
 
-    # Write file to shared volume: dicom/raw/{studyUID}/{index}.dcm
-    study_dir = Path(config.DIMSE_DATA_DIR) / "dicom" / "raw" / study_uid
-    study_dir.mkdir(parents=True, exist_ok=True)
-
-    file_index = _get_file_index(study_dir)
-    file_path = study_dir / f"{file_index}.dcm"
-
+    # Write file to configured storage backend (local filesystem or S3).
     try:
-        ds.save_as(file_path, write_like_original=False)
+        file_index = next_file_index(study_uid)
+        buf = io.BytesIO()
+        ds.save_as(buf, write_like_original=False)
+        write_dicom(study_uid, file_index, buf.getvalue())
     except Exception as e:
-        log.error("Failed to save DICOM file %s: %s", file_path, e)
+        log.error("Failed to save DICOM file for study %s: %s", study_uid, e)
         return 0xC000  # Failure
 
-    log.debug("Saved %s (study %s, file %d)", file_path, study_uid, file_index)
+    log.debug("Saved file %d for study %s", file_index, study_uid)
 
     # Update per-association accumulator
     assoc_id = id(event.assoc)

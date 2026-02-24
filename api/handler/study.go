@@ -49,8 +49,13 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		Source:    q.Get("source"),
 		Search:    q.Get("search"),
 		SubjectID: q.Get("subject_id"),
+		Label:     q.Get("label"),
 		DateFrom:  dateFrom,
 		DateTo:    dateTo,
+	}
+	if v := q.Get("flagged"); v == "true" {
+		t := true
+		f.Flagged = &t
 	}
 
 	total, err := model.CountStudies(r.Context(), s.db, f)
@@ -105,6 +110,52 @@ func (s *Server) GetStudyByUID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, study)
+}
+
+// DeleteStudy permanently deletes a study, its DICOM files, and all child rows.
+// This is a destructive, irreversible action — admin-only.
+func (s *Server) DeleteStudy(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	study, err := model.GetStudyByID(r.Context(), s.db, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		return
+	}
+
+	// Delete DICOM files from storage (best-effort — don't block DB delete on storage errors).
+	for _, prefix := range []string{
+		"dicom/raw/" + study.StudyInstanceUID + "/",
+		"dicom/clean/" + study.StudyInstanceUID + "/",
+		"bids/" + study.StudyInstanceUID + "/",
+	} {
+		if keys, lerr := s.store.List(r.Context(), prefix); lerr == nil {
+			for _, k := range keys {
+				_ = s.store.Delete(r.Context(), k)
+			}
+		}
+	}
+
+	if err := model.DeleteStudy(r.Context(), s.db, id); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to delete study")
+		return
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "study.deleted", actorEmail(r), "study", id, clientIP(r), nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// RecordStudyView records that an authenticated user opened a study detail panel.
+// POST /api/studies/{id}/viewed
+// Fire-and-forget from the dashboard; creates a study.viewed audit entry.
+func (s *Server) RecordStudyView(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	actor := actorEmail(r)
+	ip := clientIP(r)
+	model.CreateAuditEntry(r.Context(), s.db, "study.viewed", actor, "study", id, ip, nil)
+	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // ListStudyAudit returns all audit entries for a specific study.

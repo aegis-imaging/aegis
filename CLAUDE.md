@@ -30,6 +30,12 @@ Current research files:
 - `docs/research/mri-protocol-compliance.md` — MRI acquisition parameter ranges, consortia protocols (ADNI4, HCP, ABCD, UK Biobank, ENIGMA), tolerance recommendations, mrQA tool, Enhanced vs Classic DICOM
 - `docs/research/mri-defacing-tools-comparison.md` — tool comparison (afni_refacer, DeepDefacer, PyDeface, mri_deface, Quickshear), success rates, speed benchmarks, Docker size, licensing
 
+Operational docs:
+- `docs/dicom-conformance.md` — formal DICOM conformance statement: supported SOP classes, transfer syntaxes, DICOMweb (QIDO-RS/STOW-RS/WADO-RS), DIMSE (C-STORE SCP, C-ECHO SCP, C-STORE SCU), de-identification profile, limitations
+- `docs/runbooks/alert-response.md` — per-alert incident response for all 9 Cloud Monitoring alert policies: triage steps, remediation commands, escalation paths
+- `docs/runbooks/incident-response.md` — general incident management workflow (severity levels, communication, post-mortem)
+- `docs/runbooks/secret-rotation.md` — secret rotation procedures for DB password, API keys, and DIMSE operator key
+
 ## Repository Structure (Monorepo)
 
 ```
@@ -40,7 +46,7 @@ aegis/
 ├── api/                  # Go backend — upload orchestration, DICOMweb proxy
 ├── frontend/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
-│   ├── admin-dashboard/  # React — internal QC, OHIF viewer, study management
+│   ├── admin-dashboard/  # React — internal QC, Weasis viewer, study management
 │   ├── export-portal/    # React — public-facing export share download UI
 │   └── landing/          # React — public landing page (aegisimaging.ai)
 ├── client/               # TypeScript DICOM anonymization library (npm package)
@@ -65,7 +71,7 @@ Planned to split into 5 separate repos once interfaces stabilize:
 - **DICOM Storage**: Cloud-neutral file storage (local, GCS, or S3) with DICOMweb proxy
 - **DICOM Networking**: DIMSE receiver sidecar (pynetdicom C-STORE SCP on port 11112)
 - **Defacing**: Python — mri_deface, dcm2niix, pydicom
-- **Viewer**: OHIF Viewer (embedded in admin dashboard)
+- **Viewer**: Weasis DWV (embedded in admin dashboard)
 - **AI/ML**: Pluggable — local backends (Tesseract OCR, pydicom heuristics) or cloud AI (Google Cloud Vision, AWS Textract/Rekognition)
 - **Email**: Standard SMTP (works with any provider). Dev: Mailpit.
 - **Infrastructure**: Terraform (GCP and AWS modules), Docker Compose for local dev
@@ -158,7 +164,7 @@ Email env vars (`api/email/client.go`, `api/config/config.go`):
 |-----|---------|-------|
 | `SMTP_HOST` | *(empty — disabled)* | Set to enable; empty = silent no-op |
 | `SMTP_PORT` | `587` | Use `1025` with Mailpit |
-| `SMTP_FROM` | `noreply@aegis.local` | Envelope sender address |
+| `SMTP_FROM` | `noreply@aegisimaging.ai` | Envelope sender address |
 | `SMTP_USERNAME` | *(empty)* | Omit for unauthenticated relays |
 | `SMTP_PASSWORD` | *(empty)* | |
 
@@ -188,7 +194,72 @@ cd frontend/admin-dashboard && npm install && npm run dev  # runs on :3001, prox
 cd frontend/landing && npm install && npm run dev    # runs on :3003
 ```
 
-Static marketing site for aegisimaging.ai. Deployed to Vercel, separate from the GCP/AWS backend.
+Static marketing site for aegisimaging.ai. Deployed on GCP Cloud Run (`aegis-prod-landing`).
+
+**Invite Code Gate** — server-side access control for the private beta. When `VITE_INVITE_GATE_ENABLED=true` is baked in at build time, all visitors see a code entry form before the site content. Codes are validated via `POST /api/invite/validate` — no secret is stored in the client bundle.
+
+| Component | Description |
+|-----------|-------------|
+| `frontend/landing/src/hooks/useInviteCode.ts` | State hook — calls API for validation, persists admission in localStorage |
+| `frontend/landing/src/components/InviteGate.tsx` | Full-screen gate UI shown to unadmitted visitors |
+| `api/handler/invite_code.go` | Go handler for validate (public) + CRUD (admin-only) |
+| `api/model/invite_code.go` | Model — random code generation (`XXXX-XXXX-XXXX` format), validate+record usage |
+| Migration 036 | `invite_codes` table (`id`, `code`, `label`, `enabled`, `created_at`, `used_at`, `used_by_ip`) |
+
+**Invite code API endpoints:**
+- `POST /api/invite/validate` — public, rate-limited; `{"code":"..."}` → `{"valid":true/false}`
+- `GET /api/invite-codes` — admin; list all codes with usage stats
+- `POST /api/invite-codes` — admin; `{"label":"Dr. Smith"}` → generates new `XXXX-XXXX-XXXX` code
+- `POST /api/invite-codes/{id}/revoke` — admin; disables a code (keeps record)
+- `DELETE /api/invite-codes/{id}` — admin; permanently removes a code
+
+**Invite request system** — prospective users can submit an access request from the landing page (`POST /api/invite/request`, public + rate-limited). Requests are stored in the `invite_requests` table (migration 040) and surface in the admin dashboard "Access Requests" sub-tab under Invite Codes.
+
+| Component | Description |
+|-----------|-------------|
+| `api/handler/invite_request.go` | `RequestInvite` (public submit), `ListInviteRequestsAdmin`, `ApproveInviteRequestAdmin`, `DenyInviteRequestAdmin` |
+| `api/model/invite_request.go` | Model: `CreateInviteRequest`, `GetInviteRequest`, `ListInviteRequests`, `ApproveInviteRequest`, `DenyInviteRequest` |
+| Migration 040 | `invite_requests` table (`id`, `name`, `email`, `org`, `message`, `status`, `ip`, `created_at`, `reviewed_at`, `reviewed_by`, `invite_code_id`) |
+
+**Invite request API endpoints:**
+- `POST /api/invite/request` — public, rate-limited; submits a request and sends an email notification to admins
+- `GET /api/invite/requests` — admin; list requests (filterable by `status=pending|approved|denied|all`), returns `{requests, total}`
+- `POST /api/invite/requests/{id}/approve` — admin-only; creates a new invite code, emails the requester with their code, marks the request approved; returns `{status, invite_code}`
+- `POST /api/invite/requests/{id}/deny` — admin-only; marks request denied; returns `{status}`
+
+**Admin dashboard:** "Invite Codes" tab has two sub-tabs — "Invite Codes" (existing code management) and "Access Requests" (pending/approved/denied request list with Approve/Deny action buttons). Status badges use colorblind-friendly teal (approved) and orange (denied) palette.
+
+**Dockerfile build arg:**
+
+| Arg | Default | Notes |
+|-----|---------|-------|
+| `VITE_INVITE_GATE_ENABLED` | `false` | Set to `true` to enable the gate; `false` = open access (dev default) |
+| `VITE_API_BASE_URL` | `https://api.aegisimaging.ai` | API base for invite validation calls |
+
+**Deploy the gated landing page:**
+```bash
+docker build --platform linux/amd64 \
+  --build-arg VITE_INVITE_GATE_ENABLED=true \
+  --build-arg VITE_API_BASE_URL=https://api.aegisimaging.ai \
+  -f frontend/landing/Dockerfile \
+  -t us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/landing:gated .
+docker push us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/landing:gated
+gcloud run services update aegis-prod-landing --image .../landing:gated --region us-central1
+```
+
+**Generate invite codes (after deployment):**
+```bash
+# Create a code for a specific person
+curl -X POST https://api.aegisimaging.ai/api/invite-codes \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"label": "Dr. Smith – Stanford"}'
+# Returns: {"id":"...","code":"ABCD-EFGH-IJKL","label":"...","enabled":true,...}
+
+# Send the invite URL: https://aegisimaging.ai/?invite=ABCD-EFGH-IJKL
+```
+
+**CORS:** `aegisimaging.ai` and `www.aegisimaging.ai` are included in the default `ALLOWED_ORIGINS` so the invite validation call works cross-origin.
 
 **Contact form** has two delivery paths (both use the same `/api/contact` endpoint):
 
@@ -222,11 +293,11 @@ Public-facing download page for export share recipients. Reads a share token fro
 
 ### Full-Stack Docker Compose
 
-`docker compose up` starts the entire platform: PostgreSQL, Mailpit, OHIF, Go API, and all 7 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
+`docker compose up` starts the entire platform: PostgreSQL, Mailpit, Weasis, Go API, and all 7 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
 
 ```bash
 docker compose up -d          # start everything (background)
-docker compose up ohif        # start OHIF only
+docker compose up weasis      # start Weasis only
 docker compose down           # stop all (data persists)
 docker compose down -v        # stop all + destroy volumes
 ```
@@ -235,7 +306,7 @@ docker compose down -v        # stop all + destroy volumes
 |---------|------|-------|
 | postgres | 5432 | PostgreSQL 15, data in `pgdata` volume |
 | mailpit | 1025 (SMTP) / 8025 (UI) | Email capture for dev |
-| ohif | 3002 | OHIF Viewer, waits for API health |
+| weasis | 3005 | Weasis DWV viewer |
 | api | 8080 | Go API, runs migrations on startup |
 | defacing | (internal) | Python defacing service |
 | phi-detection | (internal) | Burned-in PHI detection (Tesseract) |
@@ -252,24 +323,27 @@ Most sidecar services have no host port mapping — the Go API reaches them via 
 {"status":"ok","database":"healthy","storage":"healthy","services":{"defacing":"healthy",...}}
 ```
 
-### OHIF Viewer
-OHIF Viewer runs as a Docker container on `:3002`, configured to load DICOM images via the Go API's DICOMweb proxy.
+### Weasis DWV Viewer
+Weasis (DWV — DICOM Web Viewer) runs as a Docker container on `:3005`, configured to load DICOM images via the Go API's DICOMweb proxy. It is the sole viewer used in the admin dashboard.
 
-`ohif-config.js` (repo root) configures the OHIF data source pointing at `http://localhost:8080/dicomweb`.
+**URL params**: `?studyUID=<UID>` (required) and `?store=raw|clean` (optional, default `clean`). When `store=raw`, all DICOMweb fetches use `/dicomweb-raw/` instead of `/dicomweb/`.
+
+**Build arg** (`VITE_WEASIS_BASE_URL`): baked into admin-dashboard at build time via `--build-arg VITE_WEASIS_BASE_URL=<url>`.
 
 **DICOMweb proxy** (`api/handler/dicomweb.go`) — minimal QIDO-RS + WADO-RS, no DICOM library:
 - `GET /dicomweb/studies` — list studies from DB
 - `GET /dicomweb/studies/{studyUID}/series` — single fake series per study
 - `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances` — enumerate instances by file count
 - `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}` — stream DICOM bytes from `dicom_store`
+- `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata` — WADO-RS instance metadata (DICOMweb JSON, no pixel data)
 
-**Raw DICOMweb proxy** — same routes under `/dicomweb-raw/*`, but WADO-RS always reads from `dicom/raw/` regardless of `dicom_store`. Used by OHIF's `dicomweb-raw` data source for defacing review.
+**Raw DICOMweb proxy** — same routes under `/dicomweb-raw/*`, but WADO-RS always reads from `dicom/raw/` regardless of `dicom_store`. Used by the Weasis viewer with `?store=raw` for defacing review. Includes `/metadata` route.
 
 SOPInstanceUID format: `{studyUID}.1.{fileIndex}` (index maps to `dicom/{store}/{studyUID}/{index}.dcm`).
 
 In the admin dashboard:
 - Each study row has a **View** button (inline iframe) and an **Open in new tab ↗** link.
-- Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side before/after OHIF panel. OHIF selects the data source via `?dataSource=dicomweb-raw` (before) or `?dataSource=dicomweb` (after).
+- Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side Weasis panel: left iframe uses `?store=raw` (before defacing), right iframe uses `?store=clean` (after defacing).
 - **Studies tab** — filter by status, modality, source, project; search by UID or description; paginated 50 per page.
 - **Routing tab** — manage Destinations and Routing Rules (see below).
 - **Institutions tab** — manage institutions and their project memberships.
@@ -294,14 +368,23 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 | `body_part` | Case-insensitive exact match (e.g. `HEAD`, `CHEST`) |
 | `source` | `external\|internal` |
 | `search` | Substring match on `study_instance_uid` or `study_description` |
+| `label` | Case-insensitive substring match on any `study_labels.label` for the study |
+| `subject_id` | Exact match on `subject_id` field |
+| `flagged` | `true` to return only priority-flagged studies |
 
 ### Study Detail (`GET /api/studies/{id}`)
 
 Returns a single study by UUID. Used by the admin dashboard's study detail panel.
 
-### Study Lookup by DICOM UID (`GET /api/studies/by-uid/{studyInstanceUID}`)
+### Study Lookup by DICOM UID (`GET /api/study-uid/{studyInstanceUID}`)
 
 Returns a single study by DICOM StudyInstanceUID. Useful for integrations (PACS, DIMSE receivers, external tools) that only have the DICOM UID and not the database UUID. Returns the same payload as `GET /api/studies/{id}`. Returns 404 if no study with that UID exists.
+
+### Study Series (`GET /api/studies/{id}/series`)
+
+Returns per-series DICOM metadata for a study: `{study_id, series: [{id, series_instance_uid, series_description, modality, body_part, instance_count, created_at}], total}`.
+
+Populated at ingest time by the batch importer and the internal ingest endpoint (when the caller provides `series` in `study_metadata`). Upload-portal studies start with no series rows; the classification service may backfill them. Shown in the admin dashboard study detail panel under a "Series" tab (tab only appears when series rows exist).
 
 ### Study Audit (`GET /api/studies/{id}/audit`)
 
@@ -325,7 +408,7 @@ Clicking a study UID in the studies table navigates to a dedicated detail view w
 - **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
 - **Timestamp rendering** — admin dashboard, export portal, and upload portal support user-selectable viewing time zones (`UTC`, browser local, or custom IANA zone like `America/Chicago`) for display-only conversion. Preference is synced across all three UIs via shared `localStorage` keys. Upload portal converts DICOM study date/time only when an offset is present (falls back to explicit floating-time text when offset is missing).
 - **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
-- **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
+- **Action buttons** — all processing triggers, approve/reject, share, view in Weasis, review defacing, download DICOM/BIDS
 - **Share form** — inline share creation for approved studies (email, note, expiry)
 - **Detail tabs** — Audit Trail, Routing Log, Export Shares with per-study data
 
@@ -453,14 +536,14 @@ Per-route authentication middleware that protects all admin endpoints. Supports 
 |-----|---------|-------|
 | `AUTH_ENABLED` | `false` | Enable authentication middleware; `false` = dev mode (auto-auth) |
 | `AUTH_PROVIDER` | `auto` | Identity provider: `auto` (try all), `iap` (GCP), `azure` (Azure AD), or `aws` (ALB + Cognito) |
-| `DEV_USER_EMAIL` | `dev@aegis.local` | Auto-authenticated email when `AUTH_ENABLED=false` |
+| `DEV_USER_EMAIL` | `ai@aegisimaging.ai` | Auto-authenticated email when `AUTH_ENABLED=false` |
 
 **How it works:**
 - `AUTH_ENABLED=false` (default, local dev): every request is auto-authenticated as `DEV_USER_EMAIL`. If that email exists in `admin_users`, uses that record; otherwise uses a synthetic admin user. Zero config needed to start developing.
 - `AUTH_ENABLED=true` (production): reads identity headers from the reverse proxy:
   - **GCP IAP**: `X-Goog-Authenticated-User-Email` (format: `accounts.google.com:user@example.com`)
   - **Azure AD Easy Auth**: `X-MS-CLIENT-PRINCIPAL-NAME` (user's email)
-  - **AWS ALB + Cognito**: `X-Amzn-Oidc-Data` (JWT — email extracted from payload, no signature verification needed since ALB guarantees integrity)
+  - **AWS ALB + Cognito**: `X-Amzn-Oidc-Data` (JWT — ES256 signature verified against ALB regional public key endpoint; email extracted from payload claims)
 - Looks up the email in `admin_users` table; rejects unknown or disabled users.
 - Injects `AuthUser` into request context; all audit entries now record the real user email.
 
@@ -496,8 +579,8 @@ The viewer role is read-only. All write endpoints (POST, PUT, DELETE) use `Requi
 - View, Download BIDS, and Review Defacing buttons remain visible for viewers (read-only actions)
 
 **Testing RBAC locally:**
-1. Create a viewer user: `curl -X POST http://localhost:8080/api/admin-users -H 'Content-Type: application/json' -d '{"email":"viewer@aegis.local","name":"Test Viewer","role":"viewer","enabled":true}'`
-2. Set `DEV_USER_EMAIL=viewer@aegis.local` when running the Go API
+1. Create a viewer user: `curl -X POST http://localhost:8080/api/admin-users -H 'Content-Type: application/json' -d '{"email":"viewer@aegisimaging.ai","name":"Test Viewer","role":"viewer","enabled":true}'`
+2. Set `DEV_USER_EMAIL=viewer@aegisimaging.ai` when running the Go API
 3. Verify: GET endpoints return 200; POST/PUT/DELETE return 403
 4. Open admin dashboard: write buttons hidden, Users tab hidden
 
@@ -862,6 +945,35 @@ uvicorn app.main:app --port 8086
 - `require_protocol_check` option in routing rules action dropdown
 - **Protocol Templates tab** — full CRUD for per-project templates with rules editor
 
+### Synthetic MRI Service (`synth-service/`, `api/handler/synth_generate.go`)
+
+Generates synthetic DICOM brain MRI phantoms for pipeline testing, defacing demos, and
+protocol development. Runs as a separate Python FastAPI service (nibabel + NumPy).
+
+**Running locally:**
+```bash
+cd synth-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8088
+# Then set SYNTH_SERVICE_URL=http://localhost:8088 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `SYNTH_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = endpoint returns 503 |
+
+**API endpoint:**
+- `POST /api/studies/generate-synthetic` — generates a synthetic study and imports it into AEGIS
+- Body: `{"project_slug", "slices", "size", "seed", "with_face", "use_gpu"}`
+- Returns `{study_uid, study_ids, file_count, tool_used, duration_seconds, message}`
+- Auto-dispatches the processing pipeline on the generated study
+
+**Admin dashboard:** Synthetic MRI Generator panel in the Studies tab with controls for slices (10–200),
+size (64/128/256/512), seed (randomisable), with-face toggle, and project selector.
+Result shows study UID, file count, tool, and duration; triggers a study list refresh automatically.
+
 ### DIMSE Receiver Service (`dimse-receiver/`)
 
 Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
@@ -1072,10 +1184,11 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 
 ### Study Operations — Bulk, CSV, Notes, SLA, Re-processing, Expiry
 
-**Bulk approve/reject** (`POST /api/studies/bulk`, admin-only):
-- Body: `{"action": "approve"|"reject", "study_ids": ["<uuid>", ...]}` (max 200 IDs per call)
+**Bulk approve/reject/delete** (`POST /api/studies/bulk`, admin-only):
+- Body: `{"action": "approve"|"reject"|"delete", "study_ids": ["<uuid>", ...]}` (max 200 IDs per call)
 - Returns `{processed, errors[]}` — partial success supported; already-terminal studies are skipped with an error entry
 - Triggers export forwarding and uploader notification emails on bulk approve (same as single approve)
+- `action: "delete"` permanently removes the study record and all DICOM files from storage
 
 **Studies CSV export** (`GET /api/studies.csv`, admin-read):
 - Accepts same filter params as `GET /api/studies` (`project_id`, `status`, `modality`, `body_part`, `source`, `search`, plus `date_from`/`date_to` in RFC3339)
@@ -1089,9 +1202,13 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 
 **SLA / stuck studies** (`GET /api/studies/stuck`, admin-read):
 - Returns studies that have not advanced beyond a non-terminal state within a configurable idle window
-- Query params: `minutes` (default 60), `project_id` (optional)
+- Query params: `minutes` (default 60, or project's `stuck_threshold_minutes` if set), `project_id` (optional)
 - Response: `{stuck: [], total, minutes}`
 - Alerts are stored in `study_sla_alerts` table (migration 020); admin dashboard highlights stuck studies
+- Per-project SLA threshold: `PUT /api/projects/{id}/sla-threshold` — body `{"stuck_threshold_minutes": 120}` or `null` to reset to global default; emits `project.sla_threshold_updated` audit entry
+- `stuck_threshold_minutes` is stored on the `projects` table (migration 039); when `project_id` is scoped and that project has a non-null value, it is used as the default threshold (still overridable by explicit `?minutes=` param)
+- Admin dashboard: "SLA" button per project in Projects tab opens an inline editor (same pattern as Retention); shows current threshold as badge (e.g. `120m`) or `60m` for global default
+- MCP `list_projects`: now returns `stuck_threshold_minutes` field
 
 **Pipeline step reset / re-processing** (`POST /api/studies/{id}/reset-pipeline-step`, admin-only):
 - Body: `{"step": "deface"|"phi_scan"|"qc"|"bids"|"classify"|"protocol"|"export"}`
@@ -1227,6 +1344,15 @@ After defacing completes, the `deface_qa_score` field (NUMERIC(5,4), range 0.0�
 - `POST /api/projects/{id}/restore` — clears `archived` flag; emits `project.restored` audit entry
 - Archived projects are visually flagged in the Projects tab; studies remain accessible
 
+**Project clone** (`POST /api/projects/{id}/clone`, adminOnly):
+- Body: `{"name": "Copy of X", "slug": "copy-of-x"}` (both optional — name defaults to "Copy of <source>", slug auto-derived from name)
+- Clones: routing rules (project-scoped only), anon profiles (all + default profile pointer re-mapped), protocol templates, PHI config, retention_days, stuck_threshold_minutes
+- Does NOT clone: studies, audit entries, invite codes
+- Returns new project record with HTTP 201; emits `project.cloned` audit entry with source_project_id
+- Returns 409 Conflict if slug already exists
+- Admin dashboard: "Clone" button per project row → prompts for new name → calls API
+- MCP `clone_project` write tool: `{project_id, name?, slug?, confirm, reason}`
+
 ### Federation Peers (`api/handler/federation_peer.go`, migration 028)
 
 Stub registry for future cross-tenant federation. Defines trusted remote AEGIS instances that will eventually be able to pull approved studies. **No data flows yet** — this is a placeholder with full CRUD, ready to be activated in a future release.
@@ -1324,15 +1450,21 @@ Per-institution aggregate statistics derived from the studies table.
 - Query params: `days` (1–365), `project_id` (UUID, optional)
 - **Admin dashboard:** collapsible "Daily ingestion (last 30 days)" table showing received and approved counts per day; respects global project selector; resets when project changes
 
-### Protocol Template Export (`api/handler/protocol_template.go`)
+### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
-Exports all protocol templates for a project as a formatted JSON file.
+Export and import protocol templates for a project as a JSON file.
 
-**API:**
+**Export API:**
 - `GET /api/projects/{projectID}/protocol-templates/export` — returns `Content-Disposition: attachment; filename="protocol-templates.json"` with `{"project_id", "templates": [...], "count"}` indented JSON
 - Emits `protocol_template.exported` audit entry with count
 
-**Admin dashboard:** "Export JSON" download link in the Protocol Templates section header.
+**Import API** (admin-only):
+- `POST /api/projects/{projectID}/protocol-templates/import` — body: either a raw JSON array `[{name, manufacturer, ...}]` or the export format `{"templates":[...]}`
+- Skips templates whose name already exists in the project (no overwrite)
+- Returns `{imported: N, skipped: M, errors: []}` — partial success supported
+- Emits `protocol_template.imported` audit entry with imported/skipped counts
+
+**Admin dashboard:** "Export JSON" and "Import JSON" buttons in the Protocol Templates section header. Import shows a success/error toast after file selection.
 
 ### Export Share Extension (`api/handler/export.go`)
 
@@ -1345,6 +1477,36 @@ Extends the expiry of an active or already-expired export share without revoking
 - Emits `share.extended` audit entry
 
 **Admin dashboard:** "Extend" button in the Shares tab for active and expired (but not revoked) shares.
+
+### Share Revocation Reason (`api/handler/export.go`, migration 038)
+
+Stores an optional free-text reason when revoking an export share. Visible in the audit trail.
+
+**API:**
+- `DELETE /api/shares/{shareID}` — body: `{"reason": "optional text (max 500 chars)"}` (body is optional; omitting it revokes with no reason)
+- Reason stored in `export_shares.revocation_reason` column (migration 038)
+- Included in `share.revoked` audit entry metadata when provided
+
+**Admin dashboard:** Revoke button opens an inline modal with an optional reason textarea (max 500 chars) before confirming. Present in both the global Shares tab and the per-study share panel.
+
+**MCP `revoke_share` tool:** Accepts optional `revocation_reason` field (stored in DB) in addition to the required `reason` field (audit justification only).
+
+### Destination Connectivity Test (`api/handler/routing.go`, `dimse-receiver/app/`)
+
+Probes an external DICOM destination to verify network reachability before adding routing rules that depend on it.
+
+**API:**
+- `POST /api/destinations/{id}/test` (adminOnly) — tests connectivity to the destination
+  - **DICOMweb**: sends `GET {dicomweb_url}/studies?limit=1` with auth header; checks for non-4xx response
+  - **DIMSE**: sends C-ECHO to `ae_title@host:port` via the dimse-receiver `/echo` endpoint (requires `DIMSE_RECEIVER_URL`)
+  - Returns `{destination_id, type, success, latency_ms, status_code?, error?}`
+  - Emits `destination.tested` audit entry
+
+**dimse-receiver `/echo` endpoint** (`POST /echo`): accepts `{ae_title, host, port}`, sends C-ECHO via pynetdicom, returns `{success, latency_ms}` or HTTP 502 on failure.
+
+**Admin dashboard:** "Test" button per destination row in the Routing tab; shows inline result (teal for success, orange for failure + latency).
+
+**MCP `test_destination` read tool:** `{destination_id}` → calls `POST /api/destinations/{id}/test`, returns connectivity result.
 
 ### Per-IP Rate Limiting (`api/middleware/`)
 
@@ -1386,6 +1548,11 @@ cd mcp-server && npm install && npm run build
 | `get_breakdown_stats` | Modality/body part breakdown (optional project_id) |
 | `get_storage_stats` | Raw/clean file counts (optional project_id) |
 | `get_audit_actors` | Top admin actors in the last 30 days |
+| `list_projects` | All projects with id/name/slug/archived/retention_days |
+| `list_institutions` | All institutions with type/ae_title/ip_ranges |
+| `list_routing_rules` | All routing rules ordered by priority |
+| `list_destinations` | All DICOM forwarding destinations |
+| `test_destination` | Test connectivity to a DICOM destination (DICOMweb GET probe or DIMSE C-ECHO) |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
@@ -1404,6 +1571,8 @@ cd mcp-server && npm install && npm run build
 | `revoke_share` | Revoke an export share |
 | `create_share` | Create a new export share |
 | `re_evaluate_routing` | Re-evaluate routing rules for a study |
+| `toggle_study_flag` | Set or clear the priority flag (★) on a study |
+| `clone_project` | Duplicate a project with all settings (routing rules, profiles, templates, PHI config) |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 
@@ -1469,9 +1638,59 @@ git checkout develop && git pull
 # then branch again for the next feature
 ```
 
+## CI/CD — Auto-Deploy on Push to `develop`
+
+**Never manually deploy after merging a PR to `develop` — Cloud Build handles everything automatically.**
+
+### Cloud Build triggers (GCP)
+
+Two triggers are active in Cloud Build (configured by `scripts/gcp_setup_cloudbuild.sh`, run once per environment):
+
+#### Trigger 1: Application deploy — `deploy-on-develop`
+- **Config**: `cloudbuild.yaml`
+- **Fires on**: any push to `develop`
+- **Phase 1** (all parallel): build + push Docker images to Artifact Registry (`{service}:{SHORT_SHA}` + `{service}:latest`)
+- **Phase 2** (each parallel, waits for its own build): `gcloud run deploy` each service with the new image
+
+| Cloud Run service | Source directory |
+|---|---|
+| `aegis-api` | `api/` |
+| `aegis-admin-dashboard` | `frontend/admin-dashboard/` (build arg: `VITE_WEASIS_BASE_URL`) |
+| `aegis-prod-landing` | `frontend/landing/` (build arg: `VITE_API_BASE_URL`) |
+| `weasis` | `weasis/` |
+| `defacing` | `defacing/` |
+| `phi-detection` | `phi-detection/` |
+| `qc-service` | `qc-service/` |
+| `bids-service` | `bids-service/` |
+| `classification-service` | `classification-service/` |
+| `protocol-service` | `protocol-service/` |
+| `synth-service` | `synth-service/` |
+| `aegis-mcp-server` | `mcp-server/` |
+| `aegis-prod-dimse-receiver` (GCE VM) | `dimse-receiver/` — see note below |
+
+Only the container image is updated on each deploy; all env vars, secrets, CPU/memory, and service accounts are preserved from the running config.
+
+> **dimse-receiver deploy note**: Cloud Run cannot expose raw TCP port 11112 required by DICOM C-STORE SCP. The dimse-receiver runs on a **Compute Engine VM** (Debian 12) provisioned by `terraform/infra/dimse.tf`. Cloud Build deploys it by updating the `dimse-image` metadata key on the VM and issuing `gcloud compute instances reset`. The startup script reads this key on every boot and pulls + starts the new image. The VM is only created when `dimse_receiver_image` is set in `terraform.tfvars` (empty = skip all DIMSE resources). `lifecycle { ignore_changes = [metadata["dimse-image"]] }` prevents `terraform apply` from reverting Cloud Build's metadata updates.
+
+#### Trigger 2: Terraform apply — `terraform-apply-on-develop`
+- **Config**: `cloudbuild.terraform.yaml`
+- **Fires on**: push to `develop` **where `terraform/infra/**` files changed**
+- **Steps**: fetch `terraform.tfvars` from Secret Manager (`aegis-prod-terraform-tfvars`) → `terraform init` (GCS backend: `aegis-prod-488120-tfstate`) → `terraform validate` → `terraform apply -auto-approve`
+- **Scope**: only `terraform/infra/`
+
+**`terraform/project/` is intentionally manual** — it manages project-bootstrap resources that are dangerous to auto-apply:
+- KMS key ring + crypto key (`prevent_destroy = true`) — accidental re-creation locks encrypted data
+- Service accounts — deletion breaks all workload identity bindings
+- Project-level IAM and API enables — VPC Service Controls perimeter, audit log config
+- Run manually: `cd terraform/project && terraform apply` after careful `terraform plan` review
+
+**`terraform/aws/` is intentionally manual** — AWS is a future multi-cloud deployment path, not the current production environment. GCP (`aegis-prod-488120`) is the live prod. AWS will be used for the first AWS beta deployment once GCP beta is stable. At that point a separate Cloud Build trigger (or GitHub Actions workflow) should be added.
+
+Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
+
 ## CI (GitHub Actions)
 
-`.github/workflows/ci.yml` runs on PRs to `develop` and `main`:
+`.github/workflows/ci.yml` runs on PRs to `develop` and `main` — **validation only, no deploy**:
 
 | Job | What it checks |
 |-----|---------------|

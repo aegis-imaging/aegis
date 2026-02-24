@@ -10,10 +10,10 @@ export class UpstreamHttpError extends Error {
 }
 
 export class DisallowedPathError extends Error {
-  method: "GET" | "POST" | "DELETE";
+  method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
   path: string;
 
-  constructor(method: "GET" | "POST" | "DELETE", path: string) {
+  constructor(method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH", path: string) {
     super(`Outbound ${method} path is not allowed: ${path}`);
     this.method = method;
     this.path = path;
@@ -22,22 +22,49 @@ export class DisallowedPathError extends Error {
 
 const allowedGetPathPatterns = [
   /^\/healthz(?:\?.*)?$/,
-  /^\/api\/stats$/,
+  /^\/api\/stats(?:\?.*)?$/,
+  /^\/api\/stats\/breakdown(?:\?.*)?$/,
+  /^\/api\/stats\/timeline(?:\?.*)?$/,
+  /^\/api\/storage\/stats(?:\?.*)?$/,
   /^\/api\/studies(?:\?.*)?$/,
+  /^\/api\/studies\/stuck(?:\?.*)?$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/diagnostics$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/audit$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/routing-log$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/shares$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/series$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels$/,
+  /^\/api\/studies\/[0-9.]+\/dicom-tags$/,
   /^\/api\/dimse\/retry\/details(?:\?.*)?$/,
   /^\/api\/dimse\/retry\/summary(?:\?.*)?$/,
-  /^\/api\/studies\/by-uid\/[0-9.]+$/,
+  /^\/api\/study-uid\/[0-9.]+$/,
   /^\/api\/audit(?:\?.*)?$/,
+  /^\/api\/audit\/actors(?:\?.*)?$/,
   /^\/api\/shares(?:\?.*)?$/,
-  /^\/api\/shares\/[0-9a-fA-F-]{36}\/downloads$/
+  /^\/api\/shares\/[0-9a-fA-F-]{36}\/downloads$/,
+  /^\/api\/projects(?:\?.*)?$/,
+  /^\/api\/institutions(?:\?.*)?$/,
+  /^\/api\/routing-rules(?:\?.*)?$/,
+  /^\/api\/destinations(?:\?.*)?$/,
+  /^\/api\/subjects(?:\?.*)?$/,
+  /^\/api\/export-analytics$/,
+  /^\/api\/webhook-subscriptions(?:\?.*)?$/,
+  /^\/api\/webhook-subscriptions\/[0-9a-fA-F-]{36}\/deliveries(?:\?.*)?$/,
+  /^\/api\/institutions\/[0-9a-fA-F-]{36}\/stats$/,
+  /^\/api\/projects\/[0-9a-fA-F-]{36}\/protocol-templates(?:\?.*)?$/,
+  /^\/api\/federation-peers(?:\?.*)?$/,
+  /^\/api\/projects\/[0-9a-fA-F-]{36}\/phi-config$/,
+  /^\/api\/projects\/[0-9a-fA-F-]{36}\/anon-profiles$/,
+  /^\/api\/api-keys$/
 ] as const;
 
 const allowedPostPathPatterns = [
+  /^\/api\/api-keys$/,
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/rotate$/,
+  /^\/api\/studies\/bulk$/,
+  /^\/api\/studies\/bulk-label$/,
+  /^\/api\/studies\/generate-synthetic$/,
   /^\/api\/studies\/[0-9.]+\/classify$/,
   /^\/api\/studies\/[0-9.]+\/bids-convert$/,
   /^\/api\/studies\/[0-9.]+\/trigger-export$/,
@@ -50,14 +77,35 @@ const allowedPostPathPatterns = [
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/approve$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/reject$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/share$/,
-  /^\/api\/routing-rules\/evaluate\/[0-9a-fA-F-]{36}$/
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/reset-pipeline-step$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/notes$/,
+  /^\/api\/projects\/[0-9a-fA-F-]{36}\/export-batch$/,
+  /^\/api\/routing-rules\/evaluate\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/reactivate$/,
+  /^\/api\/webhook-subscriptions\/[0-9a-fA-F-]{36}\/test$/,
+  /^\/api\/destinations\/[0-9a-fA-F-]{36}\/test$/,
+  /^\/api\/projects\/[0-9a-fA-F-]{36}\/clone$/
 ] as const;
 
 const allowedDeletePathPatterns = [
-  /^\/api\/shares\/[0-9a-fA-F-]{36}$/
+  /^\/api\/shares\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}$/
 ] as const;
 
-function assertAllowedPath(method: "GET" | "POST" | "DELETE", path: string): void {
+const allowedPutPathPatterns = [
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/project$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/subject$/
+] as const;
+
+const allowedPatchPathPatterns = [
+  /^\/api\/shares\/[0-9a-fA-F-]{36}\/extend$/,
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/enable$/,
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/disable$/
+] as const;
+
+function assertAllowedPath(method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH", path: string): void {
   if (!path.startsWith("/")) {
     throw new DisallowedPathError(method, path);
   }
@@ -65,8 +113,10 @@ function assertAllowedPath(method: "GET" | "POST" | "DELETE", path: string): voi
   const patterns =
     method === "GET" ? allowedGetPathPatterns :
     method === "DELETE" ? allowedDeletePathPatterns :
+    method === "PUT" ? allowedPutPathPatterns :
+    method === "PATCH" ? allowedPatchPathPatterns :
     allowedPostPathPatterns;
-  const allowed = patterns.some((pattern) => pattern.test(path));
+  const allowed = (patterns as readonly RegExp[]).some((pattern) => pattern.test(path));
   if (!allowed) {
     throw new DisallowedPathError(method, path);
   }
@@ -137,15 +187,76 @@ export class AegisApiClient {
     }
   }
 
-  async delete(path: string): Promise<unknown> {
+  async put(path: string, payload: unknown): Promise<unknown> {
+    assertAllowedPath("PUT", path);
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "PUT",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${this.token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const body = await response.text();
+    if (!response.ok) {
+      throw new UpstreamHttpError(response.status, body);
+    }
+
+    if (!body) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(body);
+    } catch {
+      return { raw: body };
+    }
+  }
+
+  async patch(path: string, payload: unknown): Promise<unknown> {
+    assertAllowedPath("PATCH", path);
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "PATCH",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${this.token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const body = await response.text();
+    if (!response.ok) {
+      throw new UpstreamHttpError(response.status, body);
+    }
+
+    if (!body) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(body);
+    } catch {
+      return { raw: body };
+    }
+  }
+
+  async delete(path: string, payload?: Record<string, unknown>): Promise<unknown> {
     assertAllowedPath("DELETE", path);
 
+    const hasBody = payload && Object.keys(payload).length > 0;
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: "DELETE",
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${this.token}`
-      }
+        Authorization: `Bearer ${this.token}`,
+        ...(hasBody ? { "Content-Type": "application/json" } : {})
+      },
+      ...(hasBody ? { body: JSON.stringify(payload) } : {})
     });
 
     const body = await response.text();

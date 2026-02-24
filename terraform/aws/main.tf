@@ -110,6 +110,18 @@ variable "api_allowed_origins" {
   default     = []
 }
 
+variable "api_domain" {
+  description = "Custom FQDN for the API (e.g. aws.api.aegisimaging.ai). Empty = use raw ALB DNS."
+  type        = string
+  default     = ""
+}
+
+variable "admin_domain" {
+  description = "Custom FQDN for the admin dashboard (e.g. aws.admin.aegisimaging.ai). Empty = use raw ALB DNS."
+  type        = string
+  default     = ""
+}
+
 variable "admin_image_tag" {
   description = "Container image tag used for the admin dashboard ECS task"
   type        = string
@@ -132,6 +144,60 @@ variable "admin_memory" {
   description = "Memory (MiB) for admin dashboard ECS task definition"
   type        = number
   default     = 1024
+}
+
+variable "sidecar_image_tag" {
+  description = "Container image tag used for all sidecar ECS tasks"
+  type        = string
+  default     = "latest"
+}
+
+variable "dimse_receiver_image" {
+  description = "Full ECR image URI for the DIMSE receiver EC2 instance (empty = skip all DIMSE resources)"
+  type        = string
+  default     = ""
+}
+
+variable "weasis_domain" {
+  description = "Custom FQDN for Weasis viewer (e.g. aws.weasis.aegisimaging.ai). Empty = use raw ALB DNS."
+  type        = string
+  default     = ""
+}
+
+variable "weasis_image_tag" {
+  description = "Container image tag for Weasis ECS task"
+  type        = string
+  default     = "latest"
+}
+
+variable "weasis_cpu" {
+  description = "CPU units for Weasis ECS task definition"
+  type        = number
+  default     = 256
+}
+
+variable "weasis_memory" {
+  description = "Memory (MiB) for Weasis ECS task definition"
+  type        = number
+  default     = 512
+}
+
+variable "smtp_from" {
+  description = "SMTP FROM address for AEGIS transactional email"
+  type        = string
+  default     = "noreply@aegisimaging.ai"
+}
+
+variable "ses_smtp_region" {
+  description = "AWS region for the SES SMTP endpoint. Defaults to var.aws_region."
+  type        = string
+  default     = ""
+}
+
+variable "first_admin_email" {
+  description = "Seeds the first admin user in admin_users on startup (idempotent). Set to ops email."
+  type        = string
+  default     = ""
 }
 
 provider "aws" {
@@ -360,22 +426,34 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "dimse-receiver"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver", "weasis"]
 
-  api_image   = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
-  admin_image = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
+  api_image    = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
+  admin_image  = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
+  weasis_image = "${aws_ecr_repository.services["weasis"].repository_url}:${var.weasis_image_tag}"
+
+  # Friendly FQDNs — use custom domains when set, fall back to raw ALB DNS.
+  api_fqdn    = var.api_domain != "" ? var.api_domain : aws_lb.main.dns_name
+  admin_fqdn  = var.admin_domain != "" ? var.admin_domain : aws_lb.main.dns_name
+  weasis_fqdn = var.weasis_domain != "" ? var.weasis_domain : aws_lb.main.dns_name
 
   cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
-    "https://${aws_lb.main.dns_name}/oauth2/idpresponse"
+    "https://${local.admin_fqdn}/oauth2/idpresponse"
   ]
 
   cognito_logout_urls = length(var.cognito_logout_urls) > 0 ? var.cognito_logout_urls : [
-    "https://${aws_lb.main.dns_name}/logout"
+    "https://${local.admin_fqdn}/logout"
   ]
 
   resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : [
-    "https://${aws_lb.main.dns_name}"
+    "https://${local.admin_fqdn}",
+    "https://${local.weasis_fqdn}",
   ]
+
+  # SES SMTP endpoint — region-specific. Use ses_smtp_region override when set,
+  # otherwise fall back to the primary deployment region.
+  ses_smtp_region   = var.ses_smtp_region != "" ? var.ses_smtp_region : var.aws_region
+  ses_smtp_hostname = "email-smtp.${local.ses_smtp_region}.amazonaws.com"
 
   public_path_rules = {
     healthz = {
@@ -547,6 +625,25 @@ resource "aws_lb_target_group" "admin" {
   tags = { Name = "${var.project_name}-admin-tg" }
 }
 
+resource "aws_lb_target_group" "weasis" {
+  name        = "${var.project_name}-weasis"
+  port        = 8080
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.main.id
+
+  health_check {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher             = "200-399"
+  }
+
+  tags = { Name = "${var.project_name}-weasis-tg" }
+}
+
 # HTTP listener — redirects to HTTPS
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
@@ -688,6 +785,77 @@ resource "aws_lb_listener_rule" "https_api_authenticated" {
   }
 }
 
+# ── Host-based routing — custom subdomains (e.g. aws.api.aegisimaging.ai) ──────
+# Created only when api_domain / admin_domain are set in terraform.tfvars.
+# Priorities 1 and 2 fire before all path-based rules.
+# api_domain → forwards directly to API target group (Go API handles its own auth).
+# admin_domain → Cognito authenticate-cognito + forward to admin target group.
+
+resource "aws_lb_listener_rule" "api_subdomain" {
+  count        = var.api_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 1
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.api_domain]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "admin_subdomain" {
+  count        = var.admin_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 2
+
+  action {
+    type = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn              = aws_cognito_user_pool.admin.arn
+      user_pool_client_id        = aws_cognito_user_pool_client.admin.id
+      user_pool_domain           = aws_cognito_user_pool_domain.admin.domain
+      on_unauthenticated_request = "authenticate"
+      scope                      = join(" ", var.cognito_allowed_oauth_scopes)
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.admin.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.admin_domain]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "weasis_subdomain" {
+  count        = var.weasis_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 3
+
+  # Weasis is served as a public iframe target — no Cognito gate on the container itself.
+  # Security is provided by the Go API's DICOMweb auth (X-Amzn-Oidc-Data on /api/* calls).
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.weasis.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.weasis_domain]
+    }
+  }
+}
+
 # --- ECS API runtime ---
 
 data "aws_iam_policy_document" "ecs_task_execution_assume_role" {
@@ -720,6 +888,7 @@ data "aws_iam_policy_document" "ecs_task_execution_secrets" {
     ]
     resources = [
       aws_db_instance.main.master_user_secret[0].secret_arn,
+      aws_secretsmanager_secret.smtp_password.arn,
       aws_kms_key.main.arn
     ]
   }
@@ -796,17 +965,33 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DB_PORT", value = "5432" },
         { name = "DB_NAME", value = "aegis" },
         { name = "DB_USER", value = var.db_master_username },
+        { name = "DB_SSLMODE", value = "require" },
         { name = "STORAGE_MODE", value = "s3" },
         { name = "S3_BUCKET", value = aws_s3_bucket.dicom.bucket },
         { name = "S3_REGION", value = var.aws_region },
-        { name = "API_BASE_URL", value = "https://${aws_lb.main.dns_name}" },
+        { name = "API_BASE_URL", value = "https://${local.api_fqdn}" },
         { name = "APP_TIMEZONE", value = "UTC" },
         { name = "ALLOWED_ORIGINS", value = join(",", local.resolved_api_allowed_origins) },
         { name = "AUTH_ENABLED", value = "true" },
-        { name = "AUTH_PROVIDER", value = "aws" }
+        { name = "AUTH_PROVIDER", value = "aws" },
+        { name = "PIPELINE_AUTO", value = "true" },
+        { name = "DEFACING_SERVICE_URL", value = "http://defacing.aegis.local:8080" },
+        { name = "PHI_DETECTION_SERVICE_URL", value = "http://phi-detection.aegis.local:8080" },
+        { name = "QC_SERVICE_URL", value = "http://qc-service.aegis.local:8080" },
+        { name = "BIDS_SERVICE_URL", value = "http://bids-service.aegis.local:8080" },
+        { name = "CLASSIFICATION_SERVICE_URL", value = "http://classification-service.aegis.local:8080" },
+        { name = "PROTOCOL_SERVICE_URL", value = "http://protocol-service.aegis.local:8080" },
+        { name = "SYNTH_SERVICE_URL", value = "http://synth-service.aegis.local:8080" },
+        { name = "DIMSE_RECEIVER_URL", value = try("http://${aws_instance.dimse_receiver[0].private_ip}:8080", "") },
+        { name = "FIRST_ADMIN_EMAIL", value = var.first_admin_email },
+        { name = "SMTP_HOST", value = local.ses_smtp_hostname },
+        { name = "SMTP_PORT", value = "587" },
+        { name = "SMTP_FROM", value = var.smtp_from },
+        { name = "SMTP_USERNAME", value = aws_iam_access_key.ses_smtp.id }
       ]
       secrets = [
-        { name = "DB_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" }
+        { name = "DB_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
+        { name = "SMTP_PASSWORD", valueFrom = aws_secretsmanager_secret.smtp_password.arn }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -845,6 +1030,10 @@ resource "aws_ecs_service" "api" {
     container_port   = 8080
   }
 
+  service_registries {
+    registry_arn = aws_service_discovery_service.sidecars["api"].arn
+  }
+
   depends_on = [aws_lb_listener.https]
 }
 
@@ -868,6 +1057,10 @@ resource "aws_ecs_task_definition" "admin" {
           hostPort      = 8080
           protocol      = "tcp"
         }
+      ]
+      environment = [
+        # nginx uses this at startup (envsubst) to proxy /api/* to the correct cloud API.
+        { name = "API_URL", value = "https://${local.api_fqdn}" },
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -903,6 +1096,71 @@ resource "aws_ecs_service" "admin" {
   load_balancer {
     target_group_arn = aws_lb_target_group.admin.arn
     container_name   = "admin-dashboard"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.https]
+}
+
+# --- Weasis DWV viewer ---
+
+resource "aws_ecs_task_definition" "weasis" {
+  family                   = "${var.project_name}-weasis"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.weasis_cpu)
+  memory                   = tostring(var.weasis_memory)
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "weasis"
+      image     = local.weasis_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "API_URL", value = "https://${local.api_fqdn}" }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.main.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "weasis"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_service" "weasis" {
+  name            = "${var.project_name}-weasis"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.weasis.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.weasis.arn
+    container_name   = "weasis"
     container_port   = 8080
   }
 
@@ -986,15 +1244,15 @@ output "alb_dns" {
 }
 
 output "api_base_url" {
-  value = "https://${aws_lb.main.dns_name}"
+  value = "https://${local.api_fqdn}"
 }
 
 output "api_healthz_url" {
-  value = "https://${aws_lb.main.dns_name}/healthz"
+  value = "https://${local.api_fqdn}/healthz"
 }
 
 output "admin_base_url" {
-  value = "https://${aws_lb.main.dns_name}/"
+  value = "https://${local.admin_fqdn}/"
 }
 
 output "alb_https_listener_arn" {
@@ -1029,6 +1287,27 @@ output "cognito_user_pool_domain" {
   value = aws_cognito_user_pool_domain.admin.domain
 }
 
+output "weasis_base_url" {
+  value = "https://${local.weasis_fqdn}/"
+}
+
 output "ecr_repositories" {
   value = { for k, v in aws_ecr_repository.services : k => v.repository_url }
+}
+
+# ── SES outputs — DNS records required after apply ───────────────────────────
+
+output "ses_domain_verification_token" {
+  description = "Add TXT record: _amazonses.aegisimaging.ai → this value"
+  value       = aws_ses_domain_identity.main.verification_token
+}
+
+output "ses_dkim_tokens" {
+  description = "Add 3 CNAME records: <token>._domainkey.aegisimaging.ai → <token>.dkim.amazonses.com"
+  value       = aws_ses_domain_dkim.main.dkim_tokens
+}
+
+output "ses_smtp_username" {
+  description = "SES SMTP username (IAM access key ID)"
+  value       = aws_iam_access_key.ses_smtp.id
 }

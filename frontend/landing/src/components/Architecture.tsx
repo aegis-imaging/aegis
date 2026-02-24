@@ -8,13 +8,13 @@ const TECH_TAGS = [
   'Python FastAPI',
   'Terraform',
   'Docker',
-  'OHIF Viewer',
+  'Weasis DWV',
 ]
 
 const CLOUDS = [
-  { name: 'Google Cloud', status: 'supported' as const },
-  { name: 'AWS', status: 'supported' as const },
-  { name: 'Azure', status: 'planned' as const },
+  { name: 'Google Cloud', status: 'supported' as const, url: 'https://api.aegisimaging.ai/healthz' },
+  { name: 'AWS', status: 'supported' as const, url: 'https://aws.api.aegisimaging.ai/healthz' },
+  { name: 'Azure', status: 'planned' as const, url: null },
 ]
 
 export function Architecture() {
@@ -27,7 +27,7 @@ export function Architecture() {
           Architecture
         </h2>
         <p className={`section__subtitle animate animate--fade-up animate--delay-1 ${isVisible ? 'animate--visible' : ''}`}>
-          Multi-cloud, built on established standards
+          Microservices architecture, multi-cloud, built on established standards
         </p>
 
         <div className={`arch__diagram-wrapper animate animate--scale-in animate--delay-2 ${isVisible ? 'animate--visible' : ''}`}>
@@ -55,13 +55,26 @@ export function Architecture() {
             <h3 className="arch__heading">Cloud Support</h3>
             <div className="arch__cloud-badges">
               {CLOUDS.map((c) => (
-                <span
-                  key={c.name}
-                  className={`arch__cloud-badge arch__cloud-badge--${c.status}`}
-                >
-                  {c.name}
-                  {c.status === 'planned' && <span className="arch__cloud-planned"> (planned)</span>}
-                </span>
+                c.url ? (
+                  <a
+                    key={c.name}
+                    href={c.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`arch__cloud-badge arch__cloud-badge--${c.status}`}
+                    title={`View live ${c.name} deployment`}
+                  >
+                    {c.name} ↗
+                  </a>
+                ) : (
+                  <span
+                    key={c.name}
+                    className={`arch__cloud-badge arch__cloud-badge--${c.status}`}
+                  >
+                    {c.name}
+                    <span className="arch__cloud-planned"> (planned)</span>
+                  </span>
+                )
               ))}
             </div>
           </div>

@@ -31,7 +31,7 @@ func TestShareCreated_NoNote(t *testing.T) {
 
 func TestUploadConfirmed(t *testing.T) {
 	received := time.Date(2026, 2, 19, 10, 30, 0, 0, time.UTC)
-	subject, body := UploadConfirmed("1.2.3.4", "MRI", 42, received)
+	subject, body := UploadConfirmed("1.2.3.4", "MRI", "", 42, received)
 
 	assert.Equal(t, "AEGIS — Upload Received", subject)
 	assert.Contains(t, body, "1.2.3.4")
@@ -40,20 +40,47 @@ func TestUploadConfirmed(t *testing.T) {
 	assert.Contains(t, body, "2026-02-19 10:30 UTC")
 }
 
+func TestUploadConfirmed_WithProject(t *testing.T) {
+	received := time.Date(2026, 2, 19, 10, 30, 0, 0, time.UTC)
+	_, body := UploadConfirmed("1.2.3.4", "MRI", "ADNI Phase 4", 42, received)
+
+	assert.Contains(t, body, "ADNI Phase 4")
+}
+
 func TestStudyApproved(t *testing.T) {
-	subject, body := StudyApproved("1.2.3.4")
+	subject, body := StudyApproved("1.2.3.4", "")
 
 	assert.Equal(t, "AEGIS — Study Approved", subject)
 	assert.Contains(t, body, "1.2.3.4")
 	assert.Contains(t, body, "approved")
 }
 
+func TestStudyApproved_WithProject(t *testing.T) {
+	_, body := StudyApproved("1.2.3.4", "ADNI Phase 4")
+
+	assert.Contains(t, body, "ADNI Phase 4")
+}
+
 func TestStudyRejected(t *testing.T) {
-	subject, body := StudyRejected("1.2.3.4")
+	subject, body := StudyRejected("1.2.3.4", "", "")
 
 	assert.Equal(t, "AEGIS — Study Rejected", subject)
 	assert.Contains(t, body, "1.2.3.4")
 	assert.Contains(t, body, "rejected")
+}
+
+func TestStudyRejected_WithReason(t *testing.T) {
+	_, body := StudyRejected("1.2.3.4", "Poor image quality", "")
+
+	assert.Contains(t, body, "1.2.3.4")
+	assert.Contains(t, body, "Poor image quality")
+}
+
+func TestStudyRejected_WithProjectAndReason(t *testing.T) {
+	_, body := StudyRejected("1.2.3.4", "Poor image quality", "ADNI Phase 4")
+
+	assert.Contains(t, body, "ADNI Phase 4")
+	assert.Contains(t, body, "Poor image quality")
 }
 
 func TestDigestSummary(t *testing.T) {
@@ -78,9 +105,9 @@ func TestDigestSummary_Monthly(t *testing.T) {
 func TestTemplates_NoPHI(t *testing.T) {
 	// Verify no template includes real patient data patterns
 	_, shareBody := ShareCreated("https://example.com", time.Now(), "test")
-	_, uploadBody := UploadConfirmed("1.2.3", "CT", 1, time.Now())
-	_, approvedBody := StudyApproved("1.2.3")
-	_, rejectedBody := StudyRejected("1.2.3")
+	_, uploadBody := UploadConfirmed("1.2.3", "CT", "", 1, time.Now())
+	_, approvedBody := StudyApproved("1.2.3", "")
+	_, rejectedBody := StudyRejected("1.2.3", "", "")
 	_, digestBody := DigestSummary("Test", "weekly", "test", 0, 0, 0, 0, 0)
 
 	for _, body := range []string{shareBody, uploadBody, approvedBody, rejectedBody, digestBody} {

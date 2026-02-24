@@ -128,6 +128,8 @@ func cleanAndSeed(t *testing.T, db *sql.DB) {
 			admin_users,
 			institutions,
 			audit_trail,
+			api_keys,
+			invite_codes,
 			projects
 		CASCADE
 	`)

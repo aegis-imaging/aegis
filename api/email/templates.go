@@ -32,7 +32,9 @@ Study UID:  {{ .StudyUID }}
 Modality:   {{ .Modality }}
 Files:      {{ .FileCount }}
 Received:   {{ .ReceivedAt }}
-
+{{ if .ProjectName }}
+Project:    {{ .ProjectName }}
+{{ end }}
 You will be notified once your study has been reviewed by an administrator.
 
 --
@@ -43,7 +45,8 @@ var studyApprovedTmpl = template.Must(template.New("study_approved").Parse(
 	`Your study submission has been reviewed and approved.
 
 Study UID:  {{ .StudyUID }}
-
+{{ if .ProjectName }}Project:    {{ .ProjectName }}
+{{ end }}
 The study is now eligible for sharing with collaborators.
 
 --
@@ -54,8 +57,10 @@ var studyRejectedTmpl = template.Must(template.New("study_rejected").Parse(
 	`Your study submission has been reviewed and rejected.
 
 Study UID:  {{ .StudyUID }}
-
-Please contact the administrator for more information.
+{{ if .ProjectName }}Project:    {{ .ProjectName }}
+{{ end }}{{ if .Reason }}Reason:     {{ .Reason }}
+{{ end }}
+Please contact your administrator if you have questions about this decision.
 
 --
 This is an automated message from AEGIS. Do not reply to this email.
@@ -72,29 +77,37 @@ func ShareCreated(exportURL string, expiresAt time.Time, note string) (subject, 
 	return subject, buf.String()
 }
 
-func UploadConfirmed(studyUID, modality string, fileCount int, receivedAt time.Time) (subject, body string) {
+func UploadConfirmed(studyUID, modality, projectName string, fileCount int, receivedAt time.Time) (subject, body string) {
 	subject = "AEGIS — Upload Received"
 	var buf bytes.Buffer
 	uploadConfirmedTmpl.Execute(&buf, struct {
-		StudyUID   string
-		Modality   string
-		FileCount  int
-		ReceivedAt string
-	}{studyUID, modality, fileCount, receivedAt.UTC().Format("2006-01-02 15:04 UTC")})
+		StudyUID    string
+		Modality    string
+		ProjectName string
+		FileCount   int
+		ReceivedAt  string
+	}{studyUID, modality, projectName, fileCount, receivedAt.UTC().Format("2006-01-02 15:04 UTC")})
 	return subject, buf.String()
 }
 
-func StudyApproved(studyUID string) (subject, body string) {
+func StudyApproved(studyUID, projectName string) (subject, body string) {
 	subject = "AEGIS — Study Approved"
 	var buf bytes.Buffer
-	studyApprovedTmpl.Execute(&buf, struct{ StudyUID string }{studyUID})
+	studyApprovedTmpl.Execute(&buf, struct {
+		StudyUID    string
+		ProjectName string
+	}{studyUID, projectName})
 	return subject, buf.String()
 }
 
-func StudyRejected(studyUID string) (subject, body string) {
+func StudyRejected(studyUID, reason, projectName string) (subject, body string) {
 	subject = "AEGIS — Study Rejected"
 	var buf bytes.Buffer
-	studyRejectedTmpl.Execute(&buf, struct{ StudyUID string }{studyUID})
+	studyRejectedTmpl.Execute(&buf, struct {
+		StudyUID    string
+		Reason      string
+		ProjectName string
+	}{studyUID, reason, projectName})
 	return subject, buf.String()
 }
 
@@ -141,6 +154,74 @@ func PipelineFailure(studyUID, service, errMsg string) (subject, body string) {
 		FailedAt string
 		ErrMsg   string
 	}{service, studyUID, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"), errMsg})
+	return subject, buf.String()
+}
+
+var inviteRequestTmpl = template.Must(template.New("invite_request").Parse(
+	`Someone has requested early access to AEGIS.
+
+Name:         {{ .Name }}
+Email:        {{ .Email }}
+{{ if .Organization }}Organization: {{ .Organization }}
+{{ end }}{{ if .Message }}Message:
+{{ .Message }}
+
+{{ end }}Requested at: {{ .RequestedAt }} UTC
+
+Click the link below to instantly generate an invite code and email it to them:
+
+  {{ .ApprovalURL }}
+
+This link is valid for 7 days. You can also create codes manually in the admin dashboard.
+
+--
+This is an automated notification from AEGIS.
+`))
+
+var inviteCodeIssuedTmpl = template.Must(template.New("invite_code_issued").Parse(
+	`Hi {{ .Name }},
+
+You've been granted early access to AEGIS — the HIPAA-compliant medical imaging platform.
+
+Your invite code is:
+
+  {{ .Code }}
+
+Use the link below to access AEGIS with your code pre-filled:
+
+  {{ .InviteURL }}
+
+Or enter the code manually at {{ .LandingURL }}.
+
+--
+This is an automated message from AEGIS. Do not reply to this email.
+`))
+
+// InviteRequest renders the admin notification email sent when someone requests access.
+func InviteRequest(name, requestEmail, organization, message, approvalURL string) (subject, body string) {
+	subject = "[AEGIS] Access request from " + name
+	var buf bytes.Buffer
+	inviteRequestTmpl.Execute(&buf, struct {
+		Name        string
+		Email       string
+		Organization string
+		Message     string
+		ApprovalURL string
+		RequestedAt string
+	}{name, requestEmail, organization, message, approvalURL, time.Now().UTC().Format("2006-01-02 15:04:05")})
+	return subject, buf.String()
+}
+
+// InviteCodeIssued renders the email sent to the requester with their invite code.
+func InviteCodeIssued(name, code, inviteURL, landingURL string) (subject, body string) {
+	subject = "Your AEGIS invite code"
+	var buf bytes.Buffer
+	inviteCodeIssuedTmpl.Execute(&buf, struct {
+		Name       string
+		Code       string
+		InviteURL  string
+		LandingURL string
+	}{name, code, inviteURL, landingURL})
 	return subject, buf.String()
 }
 

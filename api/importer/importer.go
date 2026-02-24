@@ -6,10 +6,12 @@
 package importer
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -64,6 +66,14 @@ func IsValidationError(err error) bool {
 	return errors.As(err, &vErr)
 }
 
+// SeriesInfo accumulates per-series metadata from DICOM file headers.
+type SeriesInfo struct {
+	SeriesDescription string
+	Modality          string
+	BodyPart          string
+	InstanceCount     int
+}
+
 // StudyGroup holds DICOM files grouped by StudyInstanceUID.
 type StudyGroup struct {
 	StudyInstanceUID string
@@ -71,7 +81,8 @@ type StudyGroup struct {
 	BodyPart         string
 	StudyDescription string
 	SeriesUIDs       map[string]bool
-	Files            []string // absolute file paths
+	SeriesMeta       map[string]*SeriesInfo // keyed by SeriesInstanceUID
+	Files            []string               // absolute file paths
 }
 
 // Run executes the batch import.
@@ -131,6 +142,9 @@ func Run(ctx context.Context, db *sql.DB, store storage.Storage, opts Options) (
 	}
 	log.Printf("aegis-import: found %d DICOM files across %d studies (%d skipped)",
 		result.FilesScanned, len(groups), result.FilesSkipped)
+	for _, e := range result.Errors {
+		log.Printf("aegis-import: parse error: %s", e)
+	}
 
 	if opts.DryRun {
 		for _, g := range sortedGroups(groups) {
@@ -277,7 +291,7 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 
 		result.FilesScanned++
 
-		studyUID, modality, bodyPart, studyDesc, seriesUID, parseErr := parseDICOMHeaders(path)
+		studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, parseErr := parseDICOMHeaders(path)
 		if parseErr != nil {
 			result.FilesSkipped++
 			result.Errors = append(result.Errors, fmt.Sprintf("parse %s: %v", filepath.Base(path), parseErr))
@@ -292,12 +306,23 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 				BodyPart:         strings.ToUpper(bodyPart),
 				StudyDescription: studyDesc,
 				SeriesUIDs:       make(map[string]bool),
+				SeriesMeta:       make(map[string]*SeriesInfo),
 			}
 			groups[studyUID] = g
 		}
 		g.Files = append(g.Files, path)
 		if seriesUID != "" {
 			g.SeriesUIDs[seriesUID] = true
+			if info, exists := g.SeriesMeta[seriesUID]; exists {
+				info.InstanceCount++
+			} else {
+				g.SeriesMeta[seriesUID] = &SeriesInfo{
+					SeriesDescription: seriesDesc,
+					Modality:          modality,
+					BodyPart:          strings.ToUpper(bodyPart),
+					InstanceCount:     1,
+				}
+			}
 		}
 
 		return nil
@@ -307,21 +332,31 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 }
 
 // parseDICOMHeaders extracts key tags from a DICOM file without loading pixel data.
-func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, seriesUID string, err error) {
+func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("open: %w", err)
+		return "", "", "", "", "", "", fmt.Errorf("open: %w", err)
 	}
 	defer f.Close()
 
-	info, err := f.Stat()
+	// Read the full file content before parsing. GCS FUSE can return size=0
+	// from both Stat() and Seek(SEEK_END) for freshly-written files due to
+	// stale metadata cache, which causes dicom.Parse to read 0 bytes and fail.
+	// io.ReadAll always returns actual bytes regardless of metadata.
+	data, err := io.ReadAll(f)
 	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("stat: %w", err)
+		return "", "", "", "", "", "", fmt.Errorf("read: %w", err)
 	}
 
-	dataset, err := dicom.Parse(f, info.Size(), nil, dicom.SkipPixelData())
+	dataset, err := dicom.Parse(bytes.NewReader(data), int64(len(data)), nil,
+		dicom.SkipPixelData(),
+		// Allow files that omit the MetaElementGroupLength (0002,0000) tag —
+		// some generators (e.g. pydicom 3.x without enforce_file_format=True)
+		// produce valid-content DICOM files that lack this header element.
+		dicom.AllowMissingMetaElementGroupLength(),
+	)
 	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
+		return "", "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
 	}
 
 	studyUID = getStringTag(dataset, tag.StudyInstanceUID)
@@ -329,11 +364,12 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 	bodyPart = getStringTag(dataset, tag.BodyPartExamined)
 	studyDesc = getStringTag(dataset, tag.StudyDescription)
 	seriesUID = getStringTag(dataset, tag.SeriesInstanceUID)
+	seriesDesc = getStringTag(dataset, tag.SeriesDescription)
 
 	if studyUID == "" {
-		return "", "", "", "", "", fmt.Errorf("missing StudyInstanceUID")
+		return "", "", "", "", "", "", fmt.Errorf("missing StudyInstanceUID")
 	}
-	return studyUID, modality, bodyPart, studyDesc, seriesUID, nil
+	return studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, nil
 }
 
 // getStringTag extracts a string value from a DICOM dataset element.
@@ -364,13 +400,17 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 	// Sort files for deterministic ordering.
 	sort.Strings(g.Files)
 
-	// Copy files to raw DICOM store.
+	// Copy files to raw DICOM store, accumulating total size.
+	var totalSizeBytes int64
 	for i, filePath := range g.Files {
 		key := fmt.Sprintf("dicom/raw/%s/%d.dcm", g.StudyInstanceUID, i)
 		f, err := os.Open(filePath)
 		if err != nil {
 			model.UpdateUploadSessionFailed(ctx, db, session.ID, err.Error())
 			return "", fmt.Errorf("open source file %s: %w", filepath.Base(filePath), err)
+		}
+		if fi, statErr := f.Stat(); statErr == nil {
+			totalSizeBytes += fi.Size()
 		}
 		if err := store.Store(ctx, key, f); err != nil {
 			f.Close()
@@ -408,6 +448,28 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 	if err := model.CreateStudy(ctx, db, study); err != nil {
 		model.UpdateUploadSessionFailed(ctx, db, session.ID, err.Error())
 		return "", fmt.Errorf("create study: %w", err)
+	}
+
+	// Store computed file size (non-fatal).
+	if totalSizeBytes > 0 {
+		if err := model.UpdateStudySizeBytes(ctx, db, study.ID, totalSizeBytes); err != nil {
+			log.Printf("update study size %s: %v", study.ID, err)
+		}
+	}
+
+	// Upsert per-series metadata now that we have a study ID.
+	for seriesUID, info := range g.SeriesMeta {
+		s := &model.StudySeries{
+			StudyID:           study.ID,
+			SeriesInstanceUID: seriesUID,
+			SeriesDescription: info.SeriesDescription,
+			Modality:          info.Modality,
+			BodyPart:          info.BodyPart,
+			InstanceCount:     info.InstanceCount,
+		}
+		if err := model.UpsertStudySeries(ctx, db, s); err != nil {
+			log.Printf("upsert series %s: %v", seriesUID, err)
+		}
 	}
 
 	// Evaluate routing rules — may set defacing_required, phi_scan, auto_approve, etc.

@@ -1,10 +1,39 @@
 package handler
 
 import (
+	"context"
+	"database/sql"
 	"net/http"
 
 	"github.com/aegis-imaging/aegis/api/middleware"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/storage"
 )
+
+// sumStoredSizes returns the total byte size of all keys in the slice.
+// Errors per-key are silently ignored (non-fatal — size tracking is best-effort).
+func sumStoredSizes(ctx context.Context, store storage.Storage, keys []string) int64 {
+	var total int64
+	for _, key := range keys {
+		if n, err := store.Size(ctx, key); err == nil {
+			total += n
+		}
+	}
+	return total
+}
+
+// projectNameForStudy returns the project name for the given project ID.
+// Returns an empty string on any error (non-fatal — emails still send without it).
+func projectNameForStudy(ctx context.Context, db *sql.DB, projectID string) string {
+	if projectID == "" {
+		return ""
+	}
+	p, err := model.GetProjectByID(ctx, db, projectID)
+	if err != nil {
+		return ""
+	}
+	return p.Name
+}
 
 // actorEmail returns the authenticated user's email from the request context,
 // or "anonymous" if no auth context is present (public routes).

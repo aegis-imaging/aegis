@@ -82,7 +82,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Syntax check (harness scripts)
-        run: python -m py_compile scripts/cloud_smoke_test.py scripts/dimse_pacs_e2e_harness.py
+        run: python -m py_compile scripts/cloud_smoke_test.py scripts/dimse_pacs_e2e_harness.py scripts/tcia_download.py
 
   shell-scripts:
     name: "Shell script syntax (${{ matrix.script }})"
@@ -99,6 +99,7 @@ jobs:
           - scripts/aws_build_push_images.sh
           - scripts/aws_apply_infra.sh
           - scripts/aws_install_poc.sh
+          - scripts/gcp_setup_cloudbuild.sh
     steps:
       - uses: actions/checkout@v4
       - name: Syntax check
@@ -177,7 +178,7 @@ jobs:
           - { context: dimse-receiver, name: dimse-receiver }
           - { context: synth-service, name: synth-service }
           - { context: mcp-server, name: mcp-server }
-          - { context: ohif, name: ohif }
+          - { context: weasis, name: weasis }
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image (retry on transient registry errors)

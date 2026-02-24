@@ -1,11 +1,16 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import './App.css'
 import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
+import { TCIAPanel } from './components/TCIAPanel'
+import { SynthPanel } from './components/SynthPanel'
+import { SystemHealthPanel } from './components/SystemHealthPanel'
+import { ComplianceReportPanel } from './components/ComplianceReportPanel'
+import { useStudyEvents } from './hooks/useStudyEvents'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'users' | 'api_keys'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'system'
 
 type APIKey = {
   id: string
@@ -25,6 +30,36 @@ type StudyLabel = {
   label: string
   created_by: string
   created_at: string
+}
+
+type SeriesRow = {
+  id: string
+  study_id: string
+  series_instance_uid: string
+  series_description: string
+  modality: string
+  body_part: string
+  instance_count: number
+  created_at: string
+}
+
+type RelatedStudySummary = {
+  id: string
+  study_instance_uid: string
+  study_description: string
+  status: string
+  modality: string
+}
+
+type RelationshipWithStudy = {
+  id: string
+  study_id: string
+  related_study_id: string
+  relationship: string
+  notes: string | null
+  created_by: string
+  created_at: string
+  related_study: RelatedStudySummary
 }
 
 type AuditEntry = {
@@ -63,8 +98,11 @@ type Study = {
   export_status: string
   dicom_store: string
   instance_count: number
+  study_size_bytes: number
+  priority_flag: boolean
   deface_qa_score?: number
   subject_id?: string
+  rejection_reason?: string
   created_at: string
   updated_at: string
 }
@@ -92,6 +130,8 @@ type Share = {
   revoked_at?: string
   status?: 'active' | 'expired' | 'revoked'
   created_at: string
+  max_downloads?: number
+  download_count?: number
 }
 
 type NewShareResult = Share & {
@@ -158,6 +198,8 @@ type Project = {
   description: string
   default_anon_profile_id?: string | null
   retention_days?: number | null
+  stuck_threshold_minutes?: number | null
+  storage_quota_bytes?: number | null
   archived?: boolean
   created_at: string
 }
@@ -530,6 +572,13 @@ function uidShort(uid: string) {
   return uid.length > 20 ? '…' + uid.slice(-18) : uid
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i]
+}
+
 function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' | 'export' }) {
   const modifier =
     (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
@@ -865,6 +914,8 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
   const [downloads, setDownloads] = useState<Record<string, DownloadRecord[]>>({})
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [analytics, setAnalytics] = useState<DownloadAnalytics | null>(null)
+  const [revokeModalId, setRevokeModalId] = useState<string | null>(null)
+  const [revokeModalReason, setRevokeModalReason] = useState('')
 
   useEffect(() => {
     fetch('/api/export-analytics')
@@ -912,11 +963,22 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
 
   const setStatusF = (v: string) => { setStatusFilter(v); setPage(0) }
 
-  const revokeShare = async (id: string) => {
-    if (!window.confirm('Revoke this share link? Recipients will lose access immediately.')) return
+  const revokeShare = (id: string) => {
+    setRevokeModalReason('')
+    setRevokeModalId(id)
+  }
+
+  const confirmRevoke = async () => {
+    const id = revokeModalId
+    if (!id) return
+    setRevokeModalId(null)
     setRevoking(id)
     try {
-      const res = await fetch(`/api/shares/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/shares/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: revokeModalReason.trim() }),
+      })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       fetchShares(statusFilter, page)
     } catch (err) {
@@ -1138,17 +1200,53 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
           </div>
         </div>
       )}
+      {revokeModalId && (
+        <div style={{ marginTop: 12, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px' }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#9a3412' }}>Revoke share link</p>
+          <p style={{ margin: '0 0 8px', fontSize: 13, color: '#78350f' }}>Recipients will lose access immediately.</p>
+          <textarea
+            style={{ width: '100%', minHeight: 60, resize: 'vertical', borderRadius: 4, border: '1px solid #fdba74', padding: '6px 8px', fontFamily: 'inherit', fontSize: 13, boxSizing: 'border-box' }}
+            maxLength={500}
+            placeholder="Reason for revocation (optional)"
+            value={revokeModalReason}
+            onChange={e => setRevokeModalReason(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button type="button" className="btn btn--reject" onClick={confirmRevoke}>Confirm Revoke</button>
+            <button type="button" className="btn btn--secondary" onClick={() => setRevokeModalId(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Defacing Review Panel ─────────────────────────────────────────────────────
 
-const OHIF_BASE = import.meta.env.VITE_OHIF_BASE_URL ?? 'http://localhost:3002'
+const WEASIS_BASE_DEFACE = import.meta.env.VITE_WEASIS_BASE_URL || 'http://localhost:3005'
 
 function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
-  const beforeUrl = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${study.study_instance_uid}&dataSource=dicomweb-raw`
-  const afterUrl  = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${study.study_instance_uid}&dataSource=dicomweb`
+  const beforeUrl = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=raw`
+  const afterUrl  = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=clean`
+  const [yokeEnabled, setYokeEnabled] = useState(true)
+  const beforeRef = useRef<HTMLIFrameElement>(null)
+  const afterRef  = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    if (!yokeEnabled) return
+    const handler = (e: MessageEvent) => {
+      if (!e.data || e.data.type !== 'dwv-position') return
+      if (typeof e.data.k !== 'number') return
+      const cmd = { type: 'dwv-goto', k: e.data.k }
+      if (e.source === beforeRef.current?.contentWindow) {
+        afterRef.current?.contentWindow?.postMessage(cmd, '*')
+      } else if (e.source === afterRef.current?.contentWindow) {
+        beforeRef.current?.contentWindow?.postMessage(cmd, '*')
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [yokeEnabled])
 
   return (
     <div className="deface-panel">
@@ -1157,7 +1255,17 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
           <span className="deface-panel-title">Defacing Review</span>
           <span className="deface-panel-uid">{uidShort(study.study_instance_uid)}</span>
         </div>
-        <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">×</button>
+        <div className="deface-header-actions">
+          <button
+            type="button"
+            className={`deface-yoke-btn${yokeEnabled ? ' deface-yoke-btn--on' : ''}`}
+            onClick={() => setYokeEnabled(y => !y)}
+            title={yokeEnabled ? 'Scroll is yoked — click to scroll independently' : 'Scroll is independent — click to yoke'}
+          >
+            {yokeEnabled ? '⛓ Yoked' : '⛓ Free'}
+          </button>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">×</button>
+        </div>
       </div>
       <p className="deface-panel-hint">
         Verify that facial features have been removed. Approve only if the right panel (defaced) shows no identifiable face.
@@ -1166,12 +1274,12 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
         <div className="deface-viewer-col">
           <div className="deface-viewer-label deface-viewer-label--before">Before (raw)</div>
           <a href={beforeUrl} target="_blank" rel="noreferrer" className="viewer-open-tab deface-open-tab">Open ↗</a>
-          <iframe src={beforeUrl} className="deface-iframe" title="Pre-defacing DICOM" allow="fullscreen" />
+          <iframe ref={beforeRef} src={beforeUrl} className="deface-iframe" title="Pre-defacing DICOM" allow="fullscreen" />
         </div>
         <div className="deface-viewer-col">
           <div className="deface-viewer-label deface-viewer-label--after">After (defaced)</div>
           <a href={afterUrl} target="_blank" rel="noreferrer" className="viewer-open-tab deface-open-tab">Open ↗</a>
-          <iframe src={afterUrl} className="deface-iframe" title="Defaced DICOM" allow="fullscreen" />
+          <iframe ref={afterRef} src={afterUrl} className="deface-iframe" title="Defaced DICOM" allow="fullscreen" />
         </div>
       </div>
     </div>
@@ -1191,6 +1299,8 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [revokeModalId, setRevokeModalId] = useState<string | null>(null)
+  const [revokeModalReason, setRevokeModalReason] = useState('')
 
   const fetchShares = useCallback(async () => {
     try {
@@ -1250,11 +1360,22 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
     }
   }
 
-  const handleRevoke = async (shareId: string) => {
-    if (!confirm('Revoke this share? The recipient will lose access immediately.')) return
-    await fetch(`/api/shares/${shareId}`, { method: 'DELETE' })
+  const handleRevoke = (shareId: string) => {
+    setRevokeModalReason('')
+    setRevokeModalId(shareId)
+  }
+
+  const confirmRevoke = async () => {
+    const id = revokeModalId
+    if (!id) return
+    setRevokeModalId(null)
+    await fetch(`/api/shares/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: revokeModalReason.trim() }),
+    })
     fetchShares()
-    if (newShare?.id === shareId) setNewShare(null)
+    if (newShare?.id === id) setNewShare(null)
   }
 
   const handleExtend = async (shareId: string) => {
@@ -1392,6 +1513,23 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
           </tbody>
         </table>
       )}
+      {revokeModalId && (
+        <div style={{ marginTop: 12, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px' }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#9a3412' }}>Revoke share link</p>
+          <p style={{ margin: '0 0 8px', fontSize: 13, color: '#78350f' }}>The recipient will lose access immediately.</p>
+          <textarea
+            style={{ width: '100%', minHeight: 60, resize: 'vertical', borderRadius: 4, border: '1px solid #fdba74', padding: '6px 8px', fontFamily: 'inherit', fontSize: 13, boxSizing: 'border-box' }}
+            maxLength={500}
+            placeholder="Reason for revocation (optional)"
+            value={revokeModalReason}
+            onChange={e => setRevokeModalReason(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button type="button" className="btn btn--reject" onClick={confirmRevoke}>Confirm Revoke</button>
+            <button type="button" className="btn btn--secondary" onClick={() => setRevokeModalId(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1468,8 +1606,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shares, setShares] = useState<Share[]>([])
   const [diagnostics, setDiagnostics] = useState<StudyDiagnosticsResponse | null>(null)
   const [labels, setLabels] = useState<StudyLabel[]>([])
+  const [seriesList, setSeriesList] = useState<SeriesRow[]>([])
+  const [relationships, setRelationships] = useState<RelationshipWithStudy[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships'>('audit')
   const [newLabel, setNewLabel] = useState('')
   const [labelSaving, setLabelSaving] = useState(false)
 
@@ -1498,10 +1638,46 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     }
   }
 
+  // Anonymization diff state
+  const [anonDiffOpen, setAnonDiffOpen] = useState(false)
+  const [anonDiffLoading, setAnonDiffLoading] = useState(false)
+  const [anonDiff, setAnonDiff] = useState<{
+    diff: {
+      removed: { tag: string; keyword: string; vr: string; raw_value: string }[]
+      modified: { tag: string; keyword: string; vr: string; raw_value: string; clean_value: string }[]
+      added: { tag: string; keyword: string; vr: string; clean_value: string }[]
+    }
+    raw_file: string
+    clean_file: string
+  } | null>(null)
+  const [anonDiffMsg, setAnonDiffMsg] = useState('')
+
+  const openAnonDiff = async () => {
+    if (anonDiffOpen) { setAnonDiffOpen(false); return }
+    if (!study) return
+    setAnonDiffOpen(true)
+    if (anonDiff) return
+    setAnonDiffLoading(true)
+    setAnonDiffMsg('')
+    try {
+      const res = await fetch(`/api/studies/${study.study_instance_uid}/anonymization-diff`)
+      if (res.status === 204) { setAnonDiffMsg('Clean store not yet available — defacing has not completed.'); setAnonDiffLoading(false); return }
+      if (res.status === 404) { setAnonDiffMsg('Raw DICOM store not found (may have been purged).'); setAnonDiffLoading(false); return }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setAnonDiff(data)
+    } catch {
+      setAnonDiffMsg('Failed to load anonymization diff.')
+    } finally {
+      setAnonDiffLoading(false)
+    }
+  }
+
   // Share form state
   const [shareEmail, setShareEmail] = useState('')
   const [shareNote, setShareNote] = useState('')
   const [shareDays, setShareDays] = useState(7)
+  const [shareMaxDownloads, setShareMaxDownloads] = useState('')
   const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -1514,6 +1690,22 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [subjectEdit, setSubjectEdit] = useState(false)
   const [subjectDraft, setSubjectDraft] = useState('')
 
+  // Project reassignment state
+  const [reassignOpen, setReassignOpen] = useState(false)
+  const [allProjects, setAllProjects] = useState<{ id: string; name: string }[]>([])
+  const [reassignTarget, setReassignTarget] = useState('')
+
+  // Reject reason modal state
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+  const [rejectReasonText, setRejectReasonText] = useState('')
+
+  // Link study form state (for relationships tab)
+  const [linkStudyUID, setLinkStudyUID] = useState('')
+  const [linkRelType, setLinkRelType] = useState('follow_up')
+  const [linkNotes, setLinkNotes] = useState('')
+  const [linkSaving, setLinkSaving] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
+
   const loadData = useCallback(() => {
     setLoading(true)
     Promise.all([
@@ -1523,7 +1715,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/shares`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/diagnostics`).then(r => r.ok ? r.json() : null),
       fetch(`/api/studies/${studyId}/labels`).then(r => r.ok ? r.json() : []),
-    ]).then(([s, a, rl, sh, diag, lbls]) => {
+      fetch(`/api/studies/${studyId}/series`).then(r => r.ok ? r.json() : { series: [] }),
+      fetch(`/api/studies/${studyId}/relationships`).then(r => r.ok ? r.json() : { relationships: [] }),
+    ]).then(([s, a, rl, sh, diag, lbls, sr, relData]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
@@ -1532,6 +1726,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       setShares(shareRows.map(row => withShareExpiryAnchor(row, now)))
       setDiagnostics(diag ?? null)
       setLabels(lbls ?? [])
+      setSeriesList((sr?.series ?? []) as SeriesRow[])
+      setRelationships((relData?.relationships ?? []) as RelationshipWithStudy[])
       setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -1581,18 +1777,61 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     onAction()
   }
 
+  const handleReject = () => {
+    setRejectReasonText('')
+    setRejectModalOpen(true)
+  }
+
+  const confirmReject = async () => {
+    await fetch(`/api/studies/${study.id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: rejectReasonText.trim() }),
+    })
+    setRejectModalOpen(false)
+    loadData()
+    onAction()
+  }
+
+  const openReassign = async () => {
+    if (allProjects.length === 0) {
+      const res = await fetch('/api/projects')
+      if (res.ok) {
+        const data = await res.json()
+        setAllProjects(data ?? [])
+        const first = (data ?? []).find((p: { id: string }) => p.id !== study.project_id)
+        setReassignTarget(first?.id ?? '')
+      }
+    }
+    setReassignOpen(true)
+  }
+
+  const handleReassign = async () => {
+    if (!reassignTarget) return
+    await fetch(`/api/studies/${study.id}/project`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: reassignTarget }),
+    })
+    setReassignOpen(false)
+    loadData()
+    onAction()
+  }
+
   const handleShare = async () => {
     const expiryHours = Math.max(1, shareDays * 24)
+    const maxDl = shareMaxDownloads.trim() === '' ? undefined : parseInt(shareMaxDownloads, 10)
     const resp = await fetch(`/api/studies/${study.id}/share`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expiry_hours: expiryHours }),
+      body: JSON.stringify({ recipient_email: shareEmail, note: shareNote, expiry_hours: expiryHours, max_downloads: maxDl }),
     })
     if (resp.ok) {
       const result = await resp.json()
       setShareResult(result)
       setShareEmail('')
       setShareNote('')
+      setShareMaxDownloads('')
       loadData()
     }
   }
@@ -1605,6 +1844,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           <h2 className="study-detail__title">{study.study_instance_uid}</h2>
           <Badge label={study.status} prefix="status" />
           <Badge label={study.source} prefix="source" />
+          {study.priority_flag && <span className="badge badge--flagged">★ Priority</span>}
         </div>
         {study.study_description && <p className="study-detail__description">{study.study_description}</p>}
       </div>
@@ -1615,6 +1855,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="study-detail__meta-item"><strong>Body Part</strong> {study.body_part || '—'}</div>
         <div className="study-detail__meta-item"><strong>Files</strong> {study.instance_count}</div>
         <div className="study-detail__meta-item"><strong>Series</strong> {study.series_count}</div>
+        <div className="study-detail__meta-item"><strong>Size</strong> {study.study_size_bytes > 0 ? formatBytes(study.study_size_bytes) : '—'}</div>
         <div className="study-detail__meta-item"><strong>Store</strong> {study.dicom_store || 'raw'}</div>
         <div className="study-detail__meta-item"><strong>Received</strong> {fmtDate(study.created_at)}</div>
         <div className="study-detail__meta-item"><strong>Updated</strong> {fmtDate(study.updated_at)}</div>
@@ -1663,6 +1904,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         </div>
       </div>
 
+      {study.status === 'rejected' && study.rejection_reason && (
+        <div className="study-detail__meta-item">
+          <strong>Rejection Reason</strong>
+          <span style={{ color: '#9a3412', background: '#ffedd5', padding: '2px 6px', borderRadius: 4 }}>{study.rejection_reason}</span>
+        </div>
+      )}
+
       {/* Pipeline visualization */}
       <div className="study-detail__section">
         <h3 className="study-detail__section-title">Processing Pipeline</h3>
@@ -1681,7 +1929,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <h3 className="study-detail__section-title">Actions</h3>
         <div className="study-detail__actions">
           {isAdmin && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
-          {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={() => { if (confirm('Reject this study?')) doAction(`/api/studies/${study.id}/reject`) }}>Reject</button>}
+          {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>}
           {isAdmin && canReactivate && <button type="button" className="btn btn--approve" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
           {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
           {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
@@ -1694,9 +1942,43 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             <button type="button" className="btn btn--export" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/trigger-export`)}>Export</button>
           )}
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
-          <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View in OHIF'}</button>
+          <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View'}</button>
           <button type="button" className="btn btn--secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
+          <button type="button" className="btn btn--secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
+          {isAdmin && <button type="button" className="btn btn--secondary" onClick={openReassign}>Move to Project</button>}
         </div>
+        {isAdmin && reassignOpen && (
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <select
+              title="Target project"
+              value={reassignTarget}
+              onChange={e => setReassignTarget(e.target.value)}
+              className="share-select"
+            >
+              {allProjects.filter(p => p.id !== study.project_id).map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <button type="button" className="btn btn--approve" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
+            <button type="button" className="btn btn--secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
+          </div>
+        )}
+        {isAdmin && rejectModalOpen && (
+          <div style={{ marginTop: 12, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px' }}>
+            <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#9a3412' }}>Reject study</p>
+            <textarea
+              style={{ width: '100%', minHeight: 72, resize: 'vertical', borderRadius: 4, border: '1px solid #fdba74', padding: '6px 8px', fontFamily: 'inherit', fontSize: 13 }}
+              maxLength={500}
+              placeholder="Rejection reason (optional — shown to uploader)"
+              value={rejectReasonText}
+              onChange={e => setRejectReasonText(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button type="button" className="btn btn--reject" onClick={confirmReject}>Confirm Reject</button>
+              <button type="button" className="btn btn--secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* DICOM tag inspection panel */}
@@ -1722,6 +2004,78 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         </div>
       )}
 
+      {/* Anonymization diff panel */}
+      {anonDiffOpen && (
+        <div className="dicom-tags-panel">
+          {anonDiffLoading && <div className="state-loading">Loading diff…</div>}
+          {!anonDiffLoading && anonDiffMsg && <div className="state-empty">{anonDiffMsg}</div>}
+          {!anonDiffLoading && anonDiff && (() => {
+            const { removed, modified, added } = anonDiff.diff
+            const totalChanges = removed.length + modified.length + added.length
+            if (totalChanges === 0) return <div className="state-empty">No tag differences found — files appear identical.</div>
+            return (
+              <div>
+                {removed.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ margin: '0 0 6px', fontSize: 13, color: '#9a3412' }}>Removed ({removed.length})</h4>
+                    <table className="audit-table dicom-tags-table">
+                      <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Raw Value</th></tr></thead>
+                      <tbody>
+                        {removed.map(t => (
+                          <tr key={t.tag} style={{ background: '#ffedd5' }}>
+                            <td><code>{t.tag}</code></td>
+                            <td>{t.keyword}</td>
+                            <td><code>{t.vr}</code></td>
+                            <td className="dicom-tag-value">{t.raw_value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {modified.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ margin: '0 0 6px', fontSize: 13, color: '#0f766e' }}>Modified ({modified.length})</h4>
+                    <table className="audit-table dicom-tags-table">
+                      <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Raw Value</th><th>Clean Value</th></tr></thead>
+                      <tbody>
+                        {modified.map(t => (
+                          <tr key={t.tag} style={{ background: '#ccfbf1' }}>
+                            <td><code>{t.tag}</code></td>
+                            <td>{t.keyword}</td>
+                            <td><code>{t.vr}</code></td>
+                            <td className="dicom-tag-value">{t.raw_value}</td>
+                            <td className="dicom-tag-value">{t.clean_value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {added.length > 0 && (
+                  <div>
+                    <h4 style={{ margin: '0 0 6px', fontSize: 13, color: '#374151' }}>Added ({added.length})</h4>
+                    <table className="audit-table dicom-tags-table">
+                      <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Clean Value</th></tr></thead>
+                      <tbody>
+                        {added.map(t => (
+                          <tr key={t.tag}>
+                            <td><code>{t.tag}</code></td>
+                            <td>{t.keyword}</td>
+                            <td><code>{t.vr}</code></td>
+                            <td className="dicom-tag-value">{t.clean_value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
       {/* Inline viewer */}
       {viewOpen && <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />}
       {defaceOpen && <DefacingReviewPanel study={study} onClose={() => setDefaceOpen(false)} />}
@@ -1739,6 +2093,16 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               <option value={30}>30 days</option>
               <option value={90}>90 days</option>
             </select>
+            <input
+              type="number"
+              min={1}
+              placeholder="Max downloads (∞)"
+              value={shareMaxDownloads}
+              onChange={e => setShareMaxDownloads(e.target.value)}
+              className="share-input"
+              style={{ width: 160 }}
+              title="Leave blank for unlimited downloads"
+            />
             <button type="button" className="btn btn--approve" disabled={!shareEmail} onClick={handleShare}>Send</button>
           </div>
           {shareResult && (
@@ -1807,6 +2171,14 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           <button type="button" className={`tab-btn${detailTab === 'labels' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('labels')}>
             Labels ({labels.length})
           </button>
+          {seriesList.length > 0 && (
+            <button type="button" className={`tab-btn${detailTab === 'series' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('series')}>
+              Series ({seriesList.length})
+            </button>
+          )}
+          <button type="button" className={`tab-btn${detailTab === 'relationships' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('relationships')}>
+            Related Studies ({relationships.length})
+          </button>
         </div>
 
         {detailTab === 'audit' && (
@@ -1850,10 +2222,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         {detailTab === 'shares' && (
           <table className="detail-table">
             <thead>
-              <tr><th>Recipient</th><th>Created</th><th>Expires</th><th>Status</th><th>Note</th></tr>
+              <tr><th>Recipient</th><th>Created</th><th>Expires</th><th>Status</th><th>Downloads</th><th>Note</th></tr>
             </thead>
             <tbody>
-              {shares.length === 0 && <tr><td colSpan={5}>No shares.</td></tr>}
+              {shares.length === 0 && <tr><td colSpan={6}>No shares.</td></tr>}
               {shares.map(s => {
                 const shareStatus = shareStatusLabel(s, nowMs)
                 const statusClass = `share-status--${shareStatus}`
@@ -1862,6 +2234,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                   shareStatus === 'active' && remainingSeconds !== null
                     ? fmtRemaining(remainingSeconds)
                     : ''
+                const dlCount = s.download_count ?? 0
+                const dlLabel = s.max_downloads != null
+                  ? `${dlCount} / ${s.max_downloads}`
+                  : String(dlCount)
                 return (
                   <tr key={s.id}>
                     <td>{s.recipient_email}</td>
@@ -1871,6 +2247,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                       {remainingLabel && <div className="td-subtle">({remainingLabel} remaining)</div>}
                     </td>
                     <td><span className={statusClass}>{shareStatus}</span></td>
+                    <td>{dlLabel}</td>
                     <td>{s.note || '—'}</td>
                   </tr>
                 )
@@ -1931,6 +2308,129 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                   {labelSaving ? 'Adding…' : 'Add'}
                 </button>
               </form>
+            )}
+          </div>
+        )}
+
+        {detailTab === 'series' && (
+          <table className="detail-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Series UID</th>
+                <th>Description</th>
+                <th>Modality</th>
+                <th>Body Part</th>
+                <th>Instances</th>
+              </tr>
+            </thead>
+            <tbody>
+              {seriesList.length === 0 && (
+                <tr><td colSpan={6} style={{textAlign:'center',color:'var(--color-gray-500)'}}>No series metadata recorded.</td></tr>
+              )}
+              {seriesList.map((s, i) => (
+                <tr key={s.id}>
+                  <td style={{color:'var(--color-gray-500)'}}>{i + 1}</td>
+                  <td style={{fontFamily:'monospace',fontSize:'0.78rem'}}>{s.series_instance_uid}</td>
+                  <td>{s.series_description || '—'}</td>
+                  <td>{s.modality || '—'}</td>
+                  <td>{s.body_part || '—'}</td>
+                  <td>{s.instance_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {detailTab === 'relationships' && (
+          <div className="labels-panel">
+            {/* Existing relationship cards */}
+            {relationships.length === 0 && <div className="routing-desc" style={{ marginBottom: '12px' }}>No related studies linked yet.</div>}
+            {relationships.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                {relationships.map(rel => (
+                  <div key={rel.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                    <span className={`badge badge--${rel.related_study.status === 'approved' ? 'enabled' : rel.related_study.status === 'rejected' ? 'rejected' : 'status'}`}>
+                      {rel.related_study.status}
+                    </span>
+                    <span className="routing-action" style={{ background: 'var(--teal-100)', color: 'var(--teal-800)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 500 }}>
+                      {rel.relationship.replace('_', ' ')}
+                    </span>
+                    <code style={{ fontSize: '0.78rem', flex: 1 }}>{rel.related_study.study_instance_uid}</code>
+                    {rel.related_study.study_description && (
+                      <span className="routing-desc">{rel.related_study.study_description}</span>
+                    )}
+                    {rel.related_study.modality && (
+                      <span className="badge badge--neutral">{rel.related_study.modality}</span>
+                    )}
+                    {rel.notes && <span className="routing-desc" style={{ fontStyle: 'italic' }}>{rel.notes}</span>}
+                    {isAdmin && (
+                      <button type="button" className="btn btn--revoke" style={{ marginLeft: 'auto' }}
+                        title="Remove this relationship link"
+                        onClick={async () => {
+                          await fetch(`/api/studies/${studyId}/relationships/${rel.id}`, { method: 'DELETE' })
+                          loadData()
+                        }}>
+                        Unlink
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Link new study form (admin only) */}
+            {isAdmin && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+                <div style={{ fontWeight: 500, fontSize: '0.875rem', marginBottom: '8px' }}>Link a study</div>
+                {linkError && <div className="form-error" style={{ marginBottom: '8px' }}>{linkError}</div>}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <input className="form-input" style={{ flex: '1 1 260px' }}
+                    placeholder="Study UUID or DICOM UID"
+                    value={linkStudyUID}
+                    onChange={e => setLinkStudyUID(e.target.value)} />
+                  <select className="form-select" style={{ flex: '0 0 auto' }} value={linkRelType} onChange={e => setLinkRelType(e.target.value)}>
+                    <option value="baseline">Baseline</option>
+                    <option value="follow_up">Follow-up</option>
+                    <option value="comparison">Comparison</option>
+                    <option value="replicate">Replicate</option>
+                  </select>
+                  <input className="form-input" style={{ flex: '1 1 160px' }}
+                    placeholder="Notes (optional)"
+                    value={linkNotes}
+                    onChange={e => setLinkNotes(e.target.value)} />
+                  <button type="button" className="btn-primary" disabled={linkSaving || !linkStudyUID.trim()}
+                    onClick={async () => {
+                      setLinkSaving(true)
+                      setLinkError(null)
+                      try {
+                        // Accept both UUID and DICOM UID — resolve via lookup if needed.
+                        let relatedId = linkStudyUID.trim()
+                        // Heuristic: DICOM UIDs contain dots, UUIDs contain hyphens
+                        if (relatedId.includes('.')) {
+                          const r = await fetch(`/api/study-uid/${encodeURIComponent(relatedId)}`)
+                          if (!r.ok) throw new Error('Study not found by DICOM UID')
+                          const s = await r.json()
+                          relatedId = s.id
+                        }
+                        const res = await fetch(`/api/studies/${studyId}/relationships`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ related_study_id: relatedId, relationship: linkRelType, notes: linkNotes.trim() }),
+                        })
+                        if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Link failed') }
+                        setLinkStudyUID('')
+                        setLinkNotes('')
+                        loadData()
+                      } catch (err) {
+                        setLinkError(err instanceof Error ? err.message : 'Link failed')
+                      } finally {
+                        setLinkSaving(false)
+                      }
+                    }}>
+                    {linkSaving ? 'Linking…' : 'Link'}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -2024,18 +2524,35 @@ function StudyRow({
   checked: boolean
   onToggle: () => void
 }) {
-  const [shareOpen,  setShareOpen]  = useState(false)
-  const [viewOpen,   setViewOpen]   = useState(false)
-  const [defaceOpen, setDefaceOpen] = useState(false)
+  const [shareOpen,      setShareOpen]      = useState(false)
+  const [viewOpen,       setViewOpen]       = useState(false)
+  const [defaceOpen,     setDefaceOpen]     = useState(false)
+  const [rejectRowOpen,  setRejectRowOpen]  = useState(false)
+  const [rejectRowText,  setRejectRowText]  = useState('')
 
   const handleApprove = async () => {
     await fetch(`/api/studies/${study.id}/approve`, { method: 'POST' })
     onAction()
   }
 
-  const handleReject = async () => {
-    if (!confirm('Reject this study? This cannot be undone.')) return
-    await fetch(`/api/studies/${study.id}/reject`, { method: 'POST' })
+  const handleReject = () => {
+    setRejectRowText('')
+    setRejectRowOpen(true)
+  }
+
+  const confirmRejectRow = async () => {
+    await fetch(`/api/studies/${study.id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: rejectRowText.trim() }),
+    })
+    setRejectRowOpen(false)
+    onAction()
+  }
+
+  const handleDelete = async () => {
+    if (!confirm(`Permanently delete study ${uidShort(study.study_instance_uid)}?\n\nThis removes all DICOM files and cannot be undone.`)) return
+    await fetch(`/api/studies/${study.id}`, { method: 'DELETE' })
     onAction()
   }
 
@@ -2082,10 +2599,30 @@ function StudyRow({
     onAction()
   }
 
+  const handleToggleFlag = async () => {
+    await fetch(`/api/studies/${study.id}/flag`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flagged: !study.priority_flag }),
+    })
+    onAction()
+  }
+
   return (
     <>
-      <tr className={checked ? 'tr--selected' : ''}>
+      <tr className={`${checked ? 'tr--selected' : ''}${study.priority_flag ? ' tr--flagged' : ''}`}>
         <td className="td-check"><input type="checkbox" checked={checked} onChange={onToggle} aria-label="Select study" /></td>
+        <td className="td-flag">
+          <button
+            type="button"
+            className={`btn-flag${study.priority_flag ? ' btn-flag--on' : ''}`}
+            onClick={isAdmin ? handleToggleFlag : undefined}
+            title={isAdmin ? (study.priority_flag ? 'Remove priority flag' : 'Mark as priority') : (study.priority_flag ? 'Priority' : '')}
+            style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+          >
+            {study.priority_flag ? '★' : '☆'}
+          </button>
+        </td>
         <td className="td-uid"><button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button></td>
         <td>{study.modality || '—'}</td>
         <td>{study.body_part || '—'}</td>
@@ -2150,6 +2687,11 @@ function StudyRow({
             <button type="button" className="btn btn--agent" onClick={onAskAgent}>
               Ask agent
             </button>
+            {isAdmin && (
+              <button type="button" className="btn btn--revoke" onClick={handleDelete} title="Permanently delete study and all DICOM files">
+                Delete
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -2171,6 +2713,26 @@ function StudyRow({
         <tr>
           <td colSpan={14}>
             <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
+          </td>
+        </tr>
+      )}
+      {rejectRowOpen && (
+        <tr>
+          <td colSpan={14}>
+            <div style={{ background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px', margin: '4px 0' }}>
+              <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#9a3412' }}>Reject study</p>
+              <textarea
+                style={{ width: '100%', minHeight: 64, resize: 'vertical', borderRadius: 4, border: '1px solid #fdba74', padding: '6px 8px', fontFamily: 'inherit', fontSize: 13 }}
+                maxLength={500}
+                placeholder="Rejection reason (optional — shown to uploader)"
+                value={rejectRowText}
+                onChange={e => setRejectRowText(e.target.value)}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="button" className="btn btn--reject" onClick={confirmRejectRow}>Confirm Reject</button>
+                <button type="button" className="btn btn--secondary" onClick={() => setRejectRowOpen(false)}>Cancel</button>
+              </div>
+            </div>
           </td>
         </tr>
       )}
@@ -2203,6 +2765,11 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   const [showDestForm, setShowDestForm] = useState(false)
   const [destSaving, setDestSaving]     = useState(false)
   const [destError, setDestError]       = useState<string | null>(null)
+
+  // Destination connectivity test
+  type DestTestResult = { success: boolean; latency_ms: number; error?: string; status_code?: number }
+  const [destTestResults, setDestTestResults] = useState<Record<string, DestTestResult>>({})
+  const [destTesting, setDestTesting]         = useState<Record<string, boolean>>({})
 
   // Rule form
   const [ruleForm, setRuleForm]         = useState<Omit<RoutingRule, 'id' | 'created_at'>>(EMPTY_RULE)
@@ -2272,6 +2839,20 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
     if (!confirm(`Delete destination "${name}"? Rules using it will lose their target.`)) return
     await fetch(`/api/destinations/${id}`, { method: 'DELETE' })
     fetchAll()
+  }
+
+  async function testDest(id: string) {
+    setDestTesting(prev => ({ ...prev, [id]: true }))
+    setDestTestResults(prev => { const next = { ...prev }; delete next[id]; return next })
+    try {
+      const res = await fetch(`/api/destinations/${id}/test`, { method: 'POST' })
+      const data = await res.json()
+      setDestTestResults(prev => ({ ...prev, [id]: data }))
+    } catch {
+      setDestTestResults(prev => ({ ...prev, [id]: { success: false, latency_ms: 0, error: 'Request failed' } }))
+    } finally {
+      setDestTesting(prev => ({ ...prev, [id]: false }))
+    }
   }
 
   // ── Routing Rule CRUD ───────────────────────────────────────────────────────
@@ -2404,31 +2985,56 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               </tr>
             </thead>
             <tbody>
-              {destinations.map(d => (
-                <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
-                  <td>
-                    <div className="routing-name">{d.name}</div>
-                    {d.description && <div className="routing-desc">{d.description}</div>}
-                  </td>
-                  <td><code>{d.type}</code></td>
-                  <td className="routing-target">
-                    {d.type === 'dicomweb' ? (d.dicomweb_url || '—') : `${d.ae_title}@${d.host}:${d.port}`}
-                  </td>
-                  <td>
-                    <span className={`badge badge--${d.enabled ? 'enabled' : 'disabled'}`}>
-                      {d.enabled ? 'enabled' : 'disabled'}
-                    </span>
-                  </td>
-                  <td>
-                    {isAdmin && (
+              {destinations.map(d => {
+                const testResult = destTestResults[d.id]
+                const testing = destTesting[d.id]
+                return (
+                  <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
+                    <td>
+                      <div className="routing-name">{d.name}</div>
+                      {d.description && <div className="routing-desc">{d.description}</div>}
+                      {testResult && (
+                        <div style={{
+                          marginTop: 4,
+                          fontSize: 12,
+                          padding: '3px 7px',
+                          borderRadius: 4,
+                          display: 'inline-block',
+                          background: testResult.success ? '#ccfbf1' : '#ffedd5',
+                          color: testResult.success ? '#0f766e' : '#9a3412',
+                          border: `1px solid ${testResult.success ? '#5eead4' : '#fed7aa'}`,
+                        }}>
+                          {testResult.success
+                            ? `✓ reachable — ${testResult.latency_ms}ms${testResult.status_code ? ` (HTTP ${testResult.status_code})` : ''}`
+                            : `✗ ${testResult.error || 'unreachable'}`}
+                        </div>
+                      )}
+                    </td>
+                    <td><code>{d.type}</code></td>
+                    <td className="routing-target">
+                      {d.type === 'dicomweb' ? (d.dicomweb_url || '—') : `${d.ae_title}@${d.host}:${d.port}`}
+                    </td>
+                    <td>
+                      <span className={`badge badge--${d.enabled ? 'enabled' : 'disabled'}`}>
+                        {d.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </td>
+                    <td>
                       <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
-                        <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                        <button type="button" className="btn btn--secondary" onClick={() => testDest(d.id)} disabled={testing}>
+                          {testing ? 'Testing…' : 'Test'}
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
+                            <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                          </>
+                        )}
                       </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
@@ -2837,6 +3443,10 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [saving, setSaving]         = useState(false)
   const [formError, setFormError]   = useState<string | null>(null)
 
+  const [importMsg, setImportMsg]   = useState<string | null>(null)
+  const [importing, setImporting]   = useState(false)
+  const importRef = useRef<HTMLInputElement>(null)
+
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -2927,6 +3537,35 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const projectName = (id: string) => projects.find(p => p.id === id)?.name ?? id
 
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const targetProjectID = formProject || projects[0]?.id
+    if (!targetProjectID) return
+    setImporting(true)
+    setImportMsg(null)
+    try {
+      const text = await file.text()
+      const res = await fetch(`/api/projects/${targetProjectID}/protocol-templates/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: text,
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setImportMsg(`Import failed: ${data.error ?? res.status}`)
+      } else {
+        setImportMsg(`Imported ${data.imported}, skipped ${data.skipped} duplicate${data.skipped !== 1 ? 's' : ''}`)
+        if (data.imported > 0) fetchAll()
+      }
+    } catch {
+      setImportMsg('Import failed: could not read file')
+    } finally {
+      setImporting(false)
+      if (importRef.current) importRef.current.value = ''
+    }
+  }
+
   return (
     <div className="routing-panel">
       <div className="routing-section">
@@ -2949,9 +3588,34 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 Export JSON
               </a>
             )}
+            {isAdmin && projects.length > 0 && (
+              <>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleImport}
+                />
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => importRef.current?.click()}
+                  disabled={importing}
+                  title="Import templates from a JSON file"
+                >
+                  {importing ? 'Importing…' : 'Import JSON'}
+                </button>
+              </>
+            )}
             {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
           </div>
         </div>
+        {importMsg && (
+          <div style={{ padding: '6px 12px', fontSize: 13, color: importMsg.startsWith('Import failed') ? '#9a3412' : '#0f766e', background: importMsg.startsWith('Import failed') ? '#ffedd5' : '#ccfbf1', borderRadius: 4, marginTop: 4 }}>
+            {importMsg}
+          </div>
+        )}
 
         {isAdmin && showForm && (
           <div className="routing-form">
@@ -3103,6 +3767,10 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
   const [deliveries, setDeliveries]               = useState<WebhookDelivery[]>([])
   const [deliveriesLoading, setDeliveriesLoading] = useState(false)
 
+  // Webhook stats state
+  const [statsWhId, setStatsWhId] = useState<string | null>(null)
+  const [statsMap, setStatsMap]   = useState<Record<string, { total_deliveries: number; successful: number; failed: number; success_rate_pct: number; last_delivery_at?: string; deliveries_by_event: Record<string, number> }>>({})
+
   const showDeliveries = async (id: string) => {
     if (deliveryWhId === id) { setDeliveryWhId(null); return }
     setDeliveryWhId(id)
@@ -3111,6 +3779,33 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
       const res = await fetch(`/api/webhook-subscriptions/${id}/deliveries`)
       const data = res.ok ? await res.json() : { deliveries: [] }
       setDeliveries(data.deliveries ?? [])
+    } finally {
+      setDeliveriesLoading(false)
+    }
+  }
+
+  const showStats = async (id: string) => {
+    if (statsWhId === id) { setStatsWhId(null); return }
+    setStatsWhId(id)
+    if (!statsMap[id]) {
+      try {
+        const res = await fetch(`/api/webhook-subscriptions/${id}/stats`)
+        const data = res.ok ? await res.json() : null
+        if (data) setStatsMap(prev => ({ ...prev, [id]: data }))
+      } catch { /* ignore */ }
+    }
+  }
+
+  const retryDelivery = async (deliveryId: string, whId: string) => {
+    await fetch(`/api/webhook-deliveries/${deliveryId}/retry`, { method: 'POST' })
+    // Refresh the delivery log for this webhook
+    setDeliveriesLoading(true)
+    try {
+      const res = await fetch(`/api/webhook-subscriptions/${whId}/deliveries`)
+      const data = res.ok ? await res.json() : { deliveries: [] }
+      setDeliveries(data.deliveries ?? [])
+      // Invalidate cached stats so they reload on next toggle
+      setStatsMap(prev => { const n = { ...prev }; delete n[whId]; return n })
     } finally {
       setDeliveriesLoading(false)
     }
@@ -3418,6 +4113,11 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                     <td>
                       <div className="actions-cell">
                         <button type="button" className="btn-secondary"
+                          onClick={() => showStats(wh.id)}
+                          title="View delivery statistics">
+                          {statsWhId === wh.id ? 'Hide Stats' : 'Stats'}
+                        </button>
+                        <button type="button" className="btn-secondary"
                           onClick={() => showDeliveries(wh.id)}
                           title="View delivery log">
                           {deliveryWhId === wh.id ? 'Hide Log' : 'Log'}
@@ -3436,6 +4136,35 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                       </div>
                     </td>
                   </tr>
+                  {statsWhId === wh.id && (
+                    <tr key={`${wh.id}-stats`}>
+                      <td colSpan={5} className="audit-sub-cell">
+                        {!statsMap[wh.id] ? (
+                          <span className="td-muted">Loading stats…</span>
+                        ) : (() => {
+                          const s = statsMap[wh.id]
+                          const rate = s.success_rate_pct ?? 0
+                          return (
+                            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', padding: '0.25rem 0' }}>
+                              <div><strong>{s.total_deliveries}</strong> <span className="td-muted">total</span></div>
+                              <div><strong style={{ color: '#0d9488' }}>{s.successful}</strong> <span className="td-muted">ok</span></div>
+                              <div><strong style={{ color: '#ea580c' }}>{s.failed}</strong> <span className="td-muted">failed</span></div>
+                              <div>
+                                <strong>{rate.toFixed(1)}%</strong> <span className="td-muted">success rate</span>
+                                <div style={{ width: 120, height: 6, background: '#e5e7eb', borderRadius: 3, marginTop: 3 }}>
+                                  <div style={{ width: `${Math.min(rate, 100)}%`, height: '100%', background: rate >= 95 ? '#0d9488' : '#ea580c', borderRadius: 3 }} />
+                                </div>
+                              </div>
+                              {s.last_delivery_at && <div><span className="td-muted">last:</span> {fmtDate(s.last_delivery_at)}</div>}
+                              {Object.keys(s.deliveries_by_event).length > 0 && (
+                                <div><span className="td-muted">by event:</span> {Object.entries(s.deliveries_by_event).map(([ev, n]) => `${ev} ×${n}`).join(' · ')}</div>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </td>
+                    </tr>
+                  )}
                   {deliveryWhId === wh.id && (
                     <tr key={`${wh.id}-deliveries`}>
                       <td colSpan={5} className="audit-sub-cell">
@@ -3452,6 +4181,7 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                                 <th>Status</th>
                                 <th>Result</th>
                                 <th>Time</th>
+                                {isAdmin && <th></th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -3467,6 +4197,15 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                                     {d.error_message && <span className="td-subtle"> {d.error_message}</span>}
                                   </td>
                                   <td className="td-date">{fmtDate(d.delivered_at)}</td>
+                                  {isAdmin && (
+                                    <td>
+                                      {!d.success && (
+                                        <button type="button" className="btn btn--action"
+                                          title="Re-deliver this payload"
+                                          onClick={() => retryDelivery(d.id, wh.id)}>Retry</button>
+                                      )}
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
@@ -3885,8 +4624,24 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [retentionSaving, setRetentionSaving]         = useState(false)
   const [retentionError, setRetentionError]           = useState<string | null>(null)
 
+  // SLA threshold editor state
+  const [slaProjectId, setSlaProjectId]   = useState<string | null>(null)
+  const [slaDraft, setSlaDraft]           = useState<string>('')
+  const [slaSaving, setSlaSaving]         = useState(false)
+  const [slaError, setSlaError]           = useState<string | null>(null)
+
+  // Storage quota editor state
+  const [quotaProjectId, setQuotaProjectId] = useState<string | null>(null)
+  const [quotaDraft, setQuotaDraft]         = useState<string>('')
+  const [quotaSaving, setQuotaSaving]       = useState(false)
+  const [quotaError, setQuotaError]         = useState<string | null>(null)
+  const [quotaUsage, setQuotaUsage]         = useState<{used_bytes: number, quota_bytes: number | null, usage_pct: number | null} | null>(null)
+
   // Archive/restore state
   const [archiving, setArchiving] = useState<string | null>(null)
+
+  // Compliance report modal
+  const [complianceProjectId, setComplianceProjectId] = useState<string | null>(null)
 
   async function openPhiConfig(projectId: string) {
     setPhiProjectId(projectId)
@@ -3946,6 +4701,92 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
       setRetentionError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setRetentionSaving(false)
+    }
+  }
+
+  function openSla(p: Project) {
+    setSlaProjectId(p.id)
+    setSlaDraft(p.stuck_threshold_minutes != null ? String(p.stuck_threshold_minutes) : '')
+    setSlaError(null)
+  }
+
+  async function saveSla() {
+    if (!slaProjectId) return
+    const mins = slaDraft.trim() === '' ? null : parseInt(slaDraft, 10)
+    if (mins !== null && (isNaN(mins) || mins <= 0)) {
+      setSlaError('Must be a positive integer or leave blank to use the global default (60 min)')
+      return
+    }
+    setSlaSaving(true)
+    setSlaError(null)
+    try {
+      const res = await fetch(`/api/projects/${slaProjectId}/sla-threshold`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stuck_threshold_minutes: mins }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setSlaProjectId(null)
+      fetchProjects()
+    } catch (err) {
+      setSlaError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSlaSaving(false)
+    }
+  }
+
+  async function openQuota(p: Project) {
+    setQuotaProjectId(p.id)
+    setQuotaDraft(p.storage_quota_bytes != null ? String((p.storage_quota_bytes / (1024 * 1024 * 1024)).toFixed(2)).replace(/\.?0+$/, '') : '')
+    setQuotaError(null)
+    setQuotaUsage(null)
+    const res = await fetch(`/api/projects/${p.id}/storage-usage`)
+    if (res.ok) setQuotaUsage(await res.json())
+  }
+
+  async function saveQuota() {
+    if (!quotaProjectId) return
+    const gb = quotaDraft.trim() === '' ? null : parseFloat(quotaDraft)
+    if (gb !== null && (isNaN(gb) || gb <= 0)) {
+      setQuotaError('Must be a positive number or leave blank to disable')
+      return
+    }
+    const bytes = gb !== null ? Math.round(gb * 1024 * 1024 * 1024) : null
+    setQuotaSaving(true)
+    setQuotaError(null)
+    try {
+      const res = await fetch(`/api/projects/${quotaProjectId}/storage-quota`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storage_quota_bytes: bytes }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setQuotaProjectId(null)
+      fetchProjects()
+    } catch (err) {
+      setQuotaError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setQuotaSaving(false)
+    }
+  }
+
+  const cloneProject = async (p: Project) => {
+    const name = prompt(`New project name (default: "Copy of ${p.name}"):`)
+    if (name === null) return // cancelled
+    const body: Record<string, string> = {}
+    if (name.trim()) body.name = name.trim()
+    try {
+      const res = await fetch(`/api/projects/${p.id}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      alert(`Project cloned successfully as "${data.name}"`)
+      fetchProjects()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Clone failed')
     }
   }
 
@@ -4114,6 +4955,77 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
 
+        {/* Inline SLA threshold editor */}
+        {slaProjectId && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>SLA Threshold — {projects.find(p => p.id === slaProjectId)?.name}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Studies idle beyond this threshold are surfaced as "stuck". Leave blank to use the global default (60 min).
+            </div>
+            {slaError && <div className="form-error">{slaError}</div>}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Stuck threshold (minutes, blank = global default)
+                <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 120"
+                  value={slaDraft}
+                  onChange={e => setSlaDraft(e.target.value)} />
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveSla} disabled={slaSaving}>
+                {slaSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setSlaProjectId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Inline storage quota editor */}
+        {quotaProjectId && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>Storage Quota — {projects.find(p => p.id === quotaProjectId)?.name}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Maximum total storage for this project. Uploads are rejected when the quota is reached.
+              Leave blank to allow unlimited storage.
+            </div>
+            {quotaError && <div className="form-error">{quotaError}</div>}
+            {quotaUsage && (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  Current usage: {formatBytes(quotaUsage.used_bytes)}
+                  {quotaUsage.quota_bytes != null && ` / ${formatBytes(quotaUsage.quota_bytes)}`}
+                  {quotaUsage.usage_pct != null && ` (${quotaUsage.usage_pct.toFixed(1)}%)`}
+                </div>
+                {quotaUsage.quota_bytes != null && quotaUsage.quota_bytes > 0 && (
+                  <div style={{ height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.min(100, quotaUsage.usage_pct ?? 0)}%`,
+                      background: (quotaUsage.usage_pct ?? 0) >= 90 ? '#ea580c' : '#0d9488',
+                      borderRadius: '4px',
+                      transition: 'width 0.3s',
+                    }} />
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Storage limit (GB, blank = unlimited)
+                <input className="form-input" type="number" min="0.1" step="0.1" placeholder="e.g. 10"
+                  value={quotaDraft}
+                  onChange={e => setQuotaDraft(e.target.value)} />
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveQuota} disabled={quotaSaving}>
+                {quotaSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setQuotaProjectId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {projects.length === 0 && !showForm ? (
           <div className="state-empty">No projects yet.</div>
         ) : projects.length > 0 && (
@@ -4124,6 +5036,8 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Slug</th>
                 <th>Default profile</th>
                 <th>Retention</th>
+                <th>SLA</th>
+                <th>Quota</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -4147,6 +5061,16 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                   <td>
                     {p.retention_days != null
                       ? <span className="badge badge--status">{p.retention_days}d</span>
+                      : <span className="routing-desc">unlimited</span>}
+                  </td>
+                  <td>
+                    {p.stuck_threshold_minutes != null
+                      ? <span className="badge badge--status">{p.stuck_threshold_minutes}m</span>
+                      : <span className="routing-desc">60m</span>}
+                  </td>
+                  <td>
+                    {p.storage_quota_bytes != null
+                      ? <span className="badge badge--status">{formatBytes(p.storage_quota_bytes)}</span>
                       : <span className="routing-desc">unlimited</span>}
                   </td>
                   <td className="td-date">{fmtDate(p.created_at)}</td>
@@ -4175,12 +5099,32 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => openRetention(p)}>
                           Retention
                         </button>
+                        <button type="button" className="btn btn--action"
+                          title="Set per-project SLA threshold for stuck studies"
+                          onClick={() => openSla(p)}>
+                          SLA
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Set per-project storage quota"
+                          onClick={() => openQuota(p)}>
+                          Quota
+                        </button>
                         <button type="button"
                           className={p.archived ? 'btn btn--approve' : 'btn btn--action'}
                           title={p.archived ? 'Restore project' : 'Archive project'}
                           disabled={archiving === p.id}
                           onClick={() => toggleArchive(p)}>
                           {archiving === p.id ? '…' : p.archived ? 'Restore' : 'Archive'}
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Duplicate this project with all settings (routing rules, profiles, templates)"
+                          onClick={() => cloneProject(p)}>
+                          Clone
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="View compliance metrics for this project"
+                          onClick={() => setComplianceProjectId(p.id)}>
+                          Compliance
                         </button>
                       </div>
                     )}
@@ -4191,11 +5135,508 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </table>
         )}
       </div>
+
+      {complianceProjectId && (
+        <ComplianceReportPanel
+          projectId={complianceProjectId}
+          onClose={() => setComplianceProjectId(null)}
+        />
+      )}
     </div>
   )
 }
 
 // ── Federation Panel ──────────────────────────────────────────────────────────
+
+// ── Invite Codes Panel ────────────────────────────────────────────────────────
+
+type InviteCode = {
+  id: string
+  code: string
+  label: string
+  enabled: boolean
+  created_at: string
+  used_at?: string
+  used_by_ip?: string
+}
+
+type InviteRequest = {
+  id: string
+  name: string
+  email: string
+  org: string
+  message: string
+  status: 'pending' | 'approved' | 'denied'
+  ip?: string
+  created_at: string
+  reviewed_at?: string
+  reviewed_by?: string
+  invite_code_id?: string
+}
+
+function InviteCodesPanel() {
+  const [subTab, setSubTab]       = useState<'codes' | 'requests'>('codes')
+
+  // ── Codes state ──────────────────────────────────────────────────────────
+  const [codes, setCodes]         = useState<InviteCode[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+  const [showForm, setShowForm]   = useState(false)
+  const [formLabel, setFormLabel] = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [newCode, setNewCode]     = useState<string | null>(null)
+  const [copied, setCopied]       = useState<string | null>(null)
+  const [sendId, setSendId]         = useState<string | null>(null)
+  const [sendEmail, setSendEmail]   = useState('')
+  const [sendName, setSendName]     = useState('')
+  const [sending, setSending]       = useState(false)
+  const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  // ── Requests state ───────────────────────────────────────────────────────
+  const [requests, setRequests]     = useState<InviteRequest[]>([])
+  const [reqLoading, setReqLoading] = useState(false)
+  const [reqError, setReqError]     = useState<string | null>(null)
+  const [reqFilter, setReqFilter]   = useState<'all' | 'pending' | 'approved' | 'denied'>('pending')
+  const [reqActing, setReqActing]   = useState<Record<string, boolean>>({})
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/invite-codes')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setCodes(data.codes ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally { setLoading(false) }
+  }, [])
+
+  const loadRequests = useCallback(async () => {
+    setReqLoading(true); setReqError(null)
+    try {
+      const qs = reqFilter !== 'all' ? `?status=${reqFilter}` : ''
+      const res = await fetch(`/api/invite/requests${qs}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setRequests(data.requests ?? [])
+    } catch (err) {
+      setReqError(err instanceof Error ? err.message : 'Failed to load')
+    } finally { setReqLoading(false) }
+  }, [reqFilter])
+
+  useEffect(() => { load() }, [load])
+  useEffect(() => { if (subTab === 'requests') loadRequests() }, [subTab, loadRequests])
+
+  async function create() {
+    if (!formLabel.trim()) { setFormError('Label is required'); return }
+    setSaving(true); setFormError(null); setNewCode(null)
+    try {
+      const res = await fetch('/api/invite-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: formLabel.trim() }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Create failed') }
+      const data: InviteCode = await res.json()
+      setNewCode(data.code)
+      setFormLabel(''); setShowForm(false)
+      load()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Create failed')
+    } finally { setSaving(false) }
+  }
+
+  async function revoke(ic: InviteCode) {
+    if (!confirm(`Revoke invite code "${ic.code}" (${ic.label})? The recipient will no longer be able to use it.`)) return
+    await fetch(`/api/invite-codes/${ic.id}/revoke`, { method: 'POST' })
+    load()
+  }
+
+  async function del(ic: InviteCode) {
+    if (!confirm(`Permanently delete invite code "${ic.code}" (${ic.label})?`)) return
+    await fetch(`/api/invite-codes/${ic.id}`, { method: 'DELETE' })
+    setNewCode(null)
+    load()
+  }
+
+  async function approveRequest(id: string) {
+    setReqActing(prev => ({ ...prev, [id]: true }))
+    try {
+      const res = await fetch(`/api/invite/requests/${id}/approve`, { method: 'POST' })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Approve failed') }
+      loadRequests()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Approve failed')
+    } finally {
+      setReqActing(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
+  async function denyRequest(id: string, email: string) {
+    if (!confirm(`Deny invite request from ${email}?`)) return
+    setReqActing(prev => ({ ...prev, [id]: true }))
+    try {
+      await fetch(`/api/invite/requests/${id}/deny`, { method: 'POST' })
+      loadRequests()
+    } finally {
+      setReqActing(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
+  function copy(text: string, key: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key)
+      setTimeout(() => setCopied(null), 2000)
+    })
+  }
+
+  async function sendCode(ic: InviteCode) {
+    if (!sendEmail.trim() || !sendEmail.includes('@')) {
+      setSendResult({ ok: false, msg: 'Enter a valid email address' })
+      return
+    }
+    setSending(true); setSendResult(null)
+    try {
+      const res = await fetch(`/api/invite-codes/${ic.id}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: sendEmail.trim(), name: sendName.trim() || ic.label }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || `HTTP ${res.status}`)
+      }
+      setSendResult({ ok: true, msg: `Sent to ${sendEmail.trim()}` })
+      setTimeout(() => { setSendId(null); setSendEmail(''); setSendName(''); setSendResult(null) }, 2500)
+    } catch (err) {
+      setSendResult({ ok: false, msg: err instanceof Error ? err.message : 'Failed to send' })
+    } finally { setSending(false) }
+  }
+
+  const SITE = 'https://aegisimaging.ai'
+
+  if (loading) return <div className="state-loading">Loading…</div>
+  if (error)   return <div className="state-error">{error}</div>
+
+  return (
+    <div className="routing-panel">
+      {/* Sub-tab switcher */}
+      <div style={{ display: 'flex', gap: '4px', padding: '0 0 16px 0', borderBottom: '1px solid #e2e8f0', marginBottom: '16px' }}>
+        {(['codes', 'requests'] as const).map(t => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setSubTab(t)}
+            style={{
+              padding: '6px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+              background: subTab === t ? '#0d9488' : 'transparent',
+              color: subTab === t ? '#fff' : '#64748b',
+            }}
+          >
+            {t === 'codes' ? 'Invite Codes' : 'Access Requests'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Access Requests tab ──────────────────────────────────────────── */}
+      {subTab === 'requests' && (
+        <div className="routing-section">
+          <div className="routing-section-header">
+            <div>
+              <div className="routing-section-title">Access Requests</div>
+              <div className="routing-section-sub">
+                Users who submitted an access request form. Approve to generate and email an invite code; deny to reject.
+              </div>
+            </div>
+            <div className="actions-cell">
+              <select
+                value={reqFilter}
+                onChange={e => setReqFilter(e.target.value as typeof reqFilter)}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+              >
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="denied">Denied</option>
+                <option value="all">All</option>
+              </select>
+              <button type="button" className="btn-refresh" onClick={loadRequests}>Refresh</button>
+            </div>
+          </div>
+
+          {reqLoading && <div className="state-loading">Loading…</div>}
+          {reqError   && <div className="state-error">{reqError}</div>}
+          {!reqLoading && !reqError && requests.length === 0 && (
+            <div className="state-empty">No {reqFilter !== 'all' ? reqFilter : ''} requests.</div>
+          )}
+          {!reqLoading && !reqError && requests.length > 0 && (
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>Requester</th>
+                  <th>Org</th>
+                  <th>Message</th>
+                  <th>Submitted</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map(req => (
+                  <tr key={req.id}>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{req.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{req.email}</div>
+                    </td>
+                    <td style={{ fontSize: '0.85rem' }}>{req.org || <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                    <td style={{ fontSize: '0.8rem', maxWidth: 220, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {req.message || <span style={{ color: '#94a3b8' }}>—</span>}
+                    </td>
+                    <td style={{ fontSize: '0.8rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </td>
+                    <td>
+                      <span style={{
+                        display: 'inline-block', padding: '2px 8px', borderRadius: '12px',
+                        fontSize: '0.75rem', fontWeight: 600,
+                        background: req.status === 'approved' ? '#ccfbf1' : req.status === 'denied' ? '#ffedd5' : '#f1f5f9',
+                        color:      req.status === 'approved' ? '#0f766e' : req.status === 'denied' ? '#9a3412' : '#475569',
+                      }}>
+                        {req.status}
+                      </span>
+                    </td>
+                    <td>
+                      {req.status === 'pending' ? (
+                        <div className="actions-cell">
+                          <button
+                            type="button"
+                            className="btn-sm"
+                            disabled={reqActing[req.id]}
+                            onClick={() => approveRequest(req.id)}
+                            style={{ background: '#0d9488', color: '#fff', border: 'none' }}
+                          >
+                            {reqActing[req.id] ? '…' : 'Approve'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-sm btn-warning"
+                            disabled={reqActing[req.id]}
+                            onClick={() => denyRequest(req.id, req.email)}
+                          >
+                            Deny
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                          {req.reviewed_at ? new Date(req.reviewed_at).toLocaleDateString() : '—'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ── Invite Codes tab ─────────────────────────────────────────────── */}
+      {subTab === 'codes' && <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Invite Codes</div>
+            <div className="routing-section-sub">
+              Per-person codes for landing page access. Each code is unique and can be individually revoked.
+              Share the direct link (<code style={{ fontSize: '0.8rem' }}>{SITE}/?invite=CODE</code>) for one-click admission.
+            </div>
+          </div>
+          <div className="actions-cell">
+            <button type="button" className="btn-refresh" onClick={load}>Refresh</button>
+            <button type="button" className="btn-primary" onClick={() => { setShowForm(true); setNewCode(null) }}>
+              + New code
+            </button>
+          </div>
+        </div>
+
+        {showForm && (
+          <div className="routing-form">
+            <h3>New invite code</h3>
+            {formError && <div className="form-error">{formError}</div>}
+            <div className="form-grid">
+              <input
+                className="form-input"
+                placeholder="Label (e.g. Dr. Jane Smith) *"
+                value={formLabel}
+                onChange={e => setFormLabel(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && create()}
+                autoFocus
+              />
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={create} disabled={saving}>
+                {saving ? 'Creating…' : 'Generate code'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {newCode && (
+          <div className="routing-form" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
+            <strong style={{ color: '#0f766e' }}>New invite code — share with your recipient:</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <code style={{ background: '#ccfbf1', padding: '6px 12px', borderRadius: '6px', fontSize: '0.95rem', letterSpacing: '0.1em', flex: 1 }}>
+                {newCode}
+              </code>
+              <button type="button" className="btn-secondary" onClick={() => copy(newCode, 'code')}>
+                {copied === 'code' ? 'Copied!' : 'Copy code'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => copy(`${SITE}/?invite=${newCode}`, 'link')}>
+                {copied === 'link' ? 'Copied!' : 'Copy link'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {codes.length === 0 && !showForm ? (
+          <div className="state-empty">No invite codes yet. Create one to grant landing page access.</div>
+        ) : codes.length > 0 && (
+          <table className="routing-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Label</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Used</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {codes.map(ic => (
+                <Fragment key={ic.id}>
+                <tr>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <code style={{ fontSize: '0.85rem', letterSpacing: '0.08em' }}>{ic.code}</code>
+                      <button
+                        type="button"
+                        className="btn-sm"
+                        title="Copy code"
+                        onClick={() => copy(ic.code, ic.id + '-code')}
+                        style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                      >
+                        {copied === ic.id + '-code' ? '✓' : 'Copy'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-sm"
+                        title="Copy invite link"
+                        onClick={() => copy(`${SITE}/?invite=${ic.code}`, ic.id + '-link')}
+                        style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                      >
+                        {copied === ic.id + '-link' ? '✓' : 'Link'}
+                      </button>
+                      {ic.enabled && (
+                        <button
+                          type="button"
+                          className="btn-sm"
+                          title="Email this invite code"
+                          onClick={() => { setSendId(ic.id); setSendEmail(''); setSendName(''); setSendResult(null) }}
+                          style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                        >
+                          ✉ Send
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td>{ic.label || <span style={{ color: '#64748b' }}>—</span>}</td>
+                  <td>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      background: ic.enabled ? '#ccfbf1' : '#ffedd5',
+                      color: ic.enabled ? '#0f766e' : '#9a3412',
+                    }}>
+                      {ic.enabled ? 'Active' : 'Revoked'}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                    {new Date(ic.created_at).toLocaleDateString()}
+                  </td>
+                  <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                    {ic.used_at
+                      ? <span title={ic.used_by_ip ?? ''}>{new Date(ic.used_at).toLocaleDateString()}{ic.used_by_ip ? ` (${ic.used_by_ip})` : ''}</span>
+                      : <span style={{ color: '#64748b' }}>Unused</span>}
+                  </td>
+                  <td>
+                    <div className="actions-cell">
+                      {ic.enabled && (
+                        <button type="button" className="btn-sm btn-warning" onClick={() => revoke(ic)}>
+                          Revoke
+                        </button>
+                      )}
+                      <button type="button" className="btn-sm btn-danger" onClick={() => del(ic)}>
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {sendId === ic.id && (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '8px 12px', background: '#0f172a' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          type="email"
+                          placeholder="recipient@example.com"
+                          value={sendEmail}
+                          onChange={e => setSendEmail(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && sendCode(ic)}
+                          style={{ flex: '1 1 200px', padding: '4px 8px', borderRadius: 4,
+                                   border: '1px solid #374151', background: '#1f2937', color: '#f9fafb' }}
+                          autoFocus
+                        />
+                        <input
+                          type="text"
+                          placeholder={`Name (default: ${ic.label})`}
+                          value={sendName}
+                          onChange={e => setSendName(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && sendCode(ic)}
+                          style={{ flex: '1 1 160px', padding: '4px 8px', borderRadius: 4,
+                                   border: '1px solid #374151', background: '#1f2937', color: '#f9fafb' }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={() => sendCode(ic)}
+                          disabled={sending}
+                        >{sending ? 'Sending…' : 'Send'}</button>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => { setSendId(null); setSendResult(null) }}
+                        >Cancel</button>
+                        {sendResult && (
+                          <span style={{ fontSize: 12, color: sendResult.ok ? '#0d9488' : '#ea580c' }}>
+                            {sendResult.msg}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>}
+    </div>
+  )
+}
 
 type FederationPeer = {
   id: string
@@ -4376,6 +5817,22 @@ function UsersPanel() {
   const [saving, setSaving]       = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
+  // Preferences editor state
+  const [prefsUserId, setPrefsUserId]           = useState<string | null>(null)
+  const [prefsUserName, setPrefsUserName]       = useState('')
+  const [prefsFreq, setPrefsFreq]               = useState('weekly')
+  const [prefsEvents, setPrefsEvents]           = useState<string[]>([])
+  const [prefsSaving, setPrefsSaving]           = useState(false)
+  const [prefsError, setPrefsError]             = useState<string | null>(null)
+
+  const NOTIFY_EVENT_OPTIONS: {value: string; label: string}[] = [
+    { value: 'study.stuck',       label: 'Study stuck (idle beyond SLA)' },
+    { value: 'pipeline.failed',   label: 'Pipeline step failed' },
+    { value: 'study.phi_flagged', label: 'PHI flagged in scan' },
+    { value: 'study.approved',    label: 'Study approved' },
+    { value: 'study.rejected',    label: 'Study rejected' },
+  ]
+
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -4441,6 +5898,41 @@ function UsersPanel() {
     fetchUsers()
   }
 
+  async function openPrefs(u: AdminUser) {
+    setPrefsUserId(u.id)
+    setPrefsUserName(u.name || u.email)
+    setPrefsError(null)
+    const res = await fetch(`/api/admin-users/${u.id}/preferences`)
+    if (res.ok) {
+      const p = await res.json()
+      setPrefsFreq(p.digest_frequency ?? 'weekly')
+      setPrefsEvents(p.notify_events ?? [])
+    }
+  }
+
+  async function savePrefs() {
+    if (!prefsUserId) return
+    setPrefsSaving(true)
+    setPrefsError(null)
+    try {
+      const res = await fetch(`/api/admin-users/${prefsUserId}/preferences`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digest_frequency: prefsFreq, notify_events: prefsEvents }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setPrefsUserId(null)
+    } catch (err) {
+      setPrefsError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setPrefsSaving(false)
+    }
+  }
+
+  function togglePrefsEvent(ev: string) {
+    setPrefsEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev])
+  }
+
   if (loading) return <div className="state-loading">Loading users…</div>
   if (error)   return <div className="state-error">{error}</div>
 
@@ -4486,6 +5978,47 @@ function UsersPanel() {
           </div>
         )}
 
+        {/* Inline notification preferences editor */}
+        {prefsUserId && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>Notification Preferences — {prefsUserName}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Controls digest email frequency and which events trigger notifications for this user.
+            </div>
+            {prefsError && <div className="form-error">{prefsError}</div>}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Digest frequency
+                <select className="form-select" value={prefsFreq} onChange={e => setPrefsFreq(e.target.value)}>
+                  <option value="none">None — no digest emails</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
+            </div>
+            <div style={{ marginTop: '12px', fontSize: '0.875rem' }}>
+              <div style={{ marginBottom: '6px', fontWeight: 500 }}>Notify on events</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {NOTIFY_EVENT_OPTIONS.map(opt => (
+                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={prefsEvents.includes(opt.value)}
+                      onChange={() => togglePrefsEvent(opt.value)} />
+                    <span>{opt.label}</span>
+                    <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{opt.value}</code>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="form-row form-row--actions" style={{ marginTop: '12px' }}>
+              <button type="button" className="btn-primary" onClick={savePrefs} disabled={prefsSaving}>
+                {prefsSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setPrefsUserId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {users.length === 0 && !showForm ? (
           <div className="state-empty">No users yet.</div>
         ) : users.length > 0 && (
@@ -4520,6 +6053,10 @@ function UsersPanel() {
                   <td>
                     <div className="actions-cell">
                       <button type="button" className="btn btn--edit" onClick={() => openEdit(u)}>Edit</button>
+                      <button type="button" className="btn btn--action" onClick={() => openPrefs(u)}
+                        title="Configure digest frequency and notification event preferences">
+                        Preferences
+                      </button>
                       <button type="button" className="btn btn--secondary" onClick={() => toggleUser(u)}>
                         {u.enabled ? 'Disable' : 'Enable'}
                       </button>
@@ -4966,6 +6503,8 @@ function APIKeysPanel() {
   const [saving, setSaving]       = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
+  const [newKeyLabel, setNewKeyLabel] = useState<'created' | 'rotated'>('created')
+  const [rotatingId, setRotatingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -4998,6 +6537,7 @@ function APIKeysPanel() {
       })
       if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Create failed') }
       const data = await res.json()
+      setNewKeyLabel('created')
       setNewKeyValue(data.key)
       setFormName('')
       setFormExpiry('')
@@ -5014,6 +6554,23 @@ function APIKeysPanel() {
     const action = key.enabled ? 'disable' : 'enable'
     await fetch(`/api/api-keys/${key.id}/${action}`, { method: 'PATCH' })
     load()
+  }
+
+  async function rotate(key: APIKey) {
+    if (!confirm(`Rotate API key "${key.name}"? The current key value will stop working immediately.`)) return
+    setRotatingId(key.id)
+    try {
+      const res = await fetch(`/api/api-keys/${key.id}/rotate`, { method: 'POST' })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Rotate failed') }
+      const data = await res.json()
+      setNewKeyLabel('rotated')
+      setNewKeyValue(data.key)
+      load()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Rotate failed')
+    } finally {
+      setRotatingId(null)
+    }
   }
 
   async function del(key: APIKey) {
@@ -5040,7 +6597,7 @@ function APIKeysPanel() {
 
         {newKeyValue && (
           <div className="routing-form" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-            <strong style={{ color: '#166534' }}>API key created — copy it now, it will not be shown again:</strong>
+            <strong style={{ color: '#166534' }}>API key {newKeyLabel} — copy it now, it will not be shown again:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
               <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
                 {newKeyValue}
@@ -5108,6 +6665,10 @@ function APIKeysPanel() {
                       <button type="button" className="btn btn--action" onClick={() => toggle(k)}>
                         {k.enabled ? 'Disable' : 'Enable'}
                       </button>
+                      <button type="button" className="btn btn--action" onClick={() => rotate(k)}
+                        disabled={rotatingId === k.id}>
+                        {rotatingId === k.id ? 'Rotating…' : 'Rotate'}
+                      </button>
                       <button type="button" className="btn btn--revoke" onClick={() => del(k)}>Delete</button>
                     </div>
                   </td>
@@ -5138,10 +6699,19 @@ export function App() {
   const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null)
+
+  // Fire-and-forget: record that the current user viewed this study (HIPAA access audit).
+  const selectStudy = (id: string | null) => {
+    setSelectedStudyId(id)
+    if (id) {
+      fetch(`/api/studies/${id}/viewed`, { method: 'POST' }).catch(() => {/* best-effort */})
+    }
+  }
   const [agentPrefill, setAgentPrefill] = useState<{ studyId: string; studyUid: string } | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
   const [bulkLabelInput, setBulkLabelInput] = useState('')
+  const [bulkPipelineStep, setBulkPipelineStep] = useState('qc')
   const [stuckCount, setStuckCount] = useState(0)
 
   // Global project selector — persisted to localStorage.
@@ -5195,10 +6765,19 @@ export function App() {
   const [filterProject,  setFilterProject]  = useState('')
   const [filterSearch,   setFilterSearch]   = useState('')
   const [filterSubject,  setFilterSubject]  = useState('')
+  const [filterLabel,    setFilterLabel]    = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo,   setFilterDateTo]   = useState('')
+  const [filterFlagged,  setFilterFlagged]  = useState(false)
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
+
+  // Real-time SSE updates — bump refreshTick on any study change so the list
+  // re-fetches automatically without requiring a manual refresh.
+  useStudyEvents({
+    projectId: globalProjectId || undefined,
+    onEvent: () => setRefreshTick(t => t + 1),
+  })
 
   // Persist global project selection to localStorage and sync to filterProject.
   useEffect(() => {
@@ -5250,7 +6829,7 @@ export function App() {
     else setShowBreakdown(v => !v)
   }
 
-  type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number }
+  type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number; total_size_bytes: number }
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
   const loadStorageStats = useCallback(async () => {
     const params = new URLSearchParams()
@@ -5272,6 +6851,98 @@ export function App() {
     else setShowTimeline(v => !v)
   }
 
+  // ── Quick-search palette (Cmd/Ctrl+K) ──────────────────────────────────────
+  type PaletteNavItem  = { kind: 'nav';   label: string; tab: AppTab; icon: string }
+  type PaletteStudyItem = { kind: 'study'; label: string; sub: string; id: string }
+  type PaletteItem = PaletteNavItem | PaletteStudyItem
+
+  const NAV_ITEMS: PaletteNavItem[] = [
+    { kind: 'nav', label: 'Studies',              tab: 'studies',            icon: '🗂' },
+    { kind: 'nav', label: 'Audit Log',             tab: 'audit',              icon: '📋' },
+    { kind: 'nav', label: 'Shares',                tab: 'shares',             icon: '🔗' },
+    { kind: 'nav', label: 'Routing Rules',         tab: 'routing',            icon: '🔀' },
+    { kind: 'nav', label: 'DIMSE Operations',      tab: 'dimse_ops',          icon: '📡' },
+    { kind: 'nav', label: 'Institutions',          tab: 'institutions',       icon: '🏥' },
+    { kind: 'nav', label: 'Anonymization Profiles',tab: 'profiles',           icon: '🔒' },
+    { kind: 'nav', label: 'Protocol Templates',    tab: 'protocol_templates', icon: '📐' },
+    { kind: 'nav', label: 'Notifications',         tab: 'notifications',      icon: '🔔' },
+    { kind: 'nav', label: 'Projects',              tab: 'projects',           icon: '📁' },
+    { kind: 'nav', label: 'Federation Peers',      tab: 'federation',         icon: '🌐' },
+    { kind: 'nav', label: 'TCIA Import',           tab: 'tcia_import',        icon: '🔬' },
+    { kind: 'nav', label: 'System Health',         tab: 'system',             icon: '⚙️' },
+    ...(isAdmin ? [
+      { kind: 'nav' as const, label: 'Users',        tab: 'users' as AppTab,         icon: '👤' },
+      { kind: 'nav' as const, label: 'API Keys',     tab: 'api_keys' as AppTab,      icon: '🔑' },
+      { kind: 'nav' as const, label: 'Invite Codes', tab: 'invite_codes' as AppTab,  icon: '🎟️' },
+    ] : []),
+  ]
+
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [paletteQuery, setPaletteQuery] = useState('')
+  const [paletteStudies, setPaletteStudies] = useState<PaletteStudyItem[]>([])
+  const [paletteHighlight, setPaletteHighlight] = useState(0)
+  const paletteInputRef = useRef<HTMLInputElement>(null)
+
+  // Open with Cmd/Ctrl+K
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setPaletteOpen(v => { if (!v) { setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }; return !v })
+      }
+      if (e.key === 'Escape') setPaletteOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Focus input when palette opens
+  useEffect(() => {
+    if (paletteOpen) setTimeout(() => paletteInputRef.current?.focus(), 0)
+  }, [paletteOpen])
+
+  // Debounced study search
+  useEffect(() => {
+    if (!paletteOpen || paletteQuery.trim().length < 2) { setPaletteStudies([]); return }
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/studies?search=${encodeURIComponent(paletteQuery.trim())}&limit=6`)
+      if (!res.ok) return
+      const data = await res.json()
+      setPaletteStudies((data.studies ?? []).map((s: Study) => ({
+        kind: 'study' as const,
+        label: uidShort(s.study_instance_uid),
+        sub: [s.modality, s.body_part, s.status].filter(Boolean).join(' · '),
+        id: s.id,
+      })))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [paletteQuery, paletteOpen])
+
+  const paletteNavFiltered = NAV_ITEMS.filter(n =>
+    !paletteQuery.trim() || n.label.toLowerCase().includes(paletteQuery.trim().toLowerCase())
+  )
+  const paletteItems: PaletteItem[] = [...paletteNavFiltered, ...paletteStudies]
+
+  const paletteSelect = (item: PaletteItem) => {
+    setPaletteOpen(false)
+    if (item.kind === 'nav') {
+      setTab(item.tab)
+    } else {
+      setTab('studies')
+      selectStudy(item.id)
+    }
+  }
+
+  const paletteKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteHighlight(h => Math.min(h + 1, paletteItems.length - 1)) }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setPaletteHighlight(h => Math.max(h - 1, 0)) }
+    if (e.key === 'Enter' && paletteItems[paletteHighlight]) paletteSelect(paletteItems[paletteHighlight])
+  }
+
+  // Reset highlight when results change
+  useEffect(() => { setPaletteHighlight(0) }, [paletteItems.length])
+  // ── end palette ─────────────────────────────────────────────────────────────
+
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
     let cancelled = false
@@ -5284,8 +6955,10 @@ export function App() {
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
     if (filterSubject)  params.set('subject_id', filterSubject)
+    if (filterLabel)    params.set('label',      filterLabel)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
+    if (filterFlagged)  params.set('flagged',    'true')
 
     fetch(`/api/studies?${params}`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
@@ -5301,7 +6974,7 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterDateFrom, filterDateTo, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterDateFrom, filterDateTo, filterFlagged, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
@@ -5311,15 +6984,18 @@ export function App() {
   function setProjectF(v: string)  { setFilterProject(v);  setPage(0); setBulkSelected(new Set()) }
   function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
   function setSubjectF(v: string)   { setFilterSubject(v);   setPage(0); setBulkSelected(new Set()) }
+  function setLabelF(v: string)     { setFilterLabel(v);     setPage(0); setBulkSelected(new Set()) }
   function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
   function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
+  function setFlaggedF(v: boolean)  { setFilterFlagged(v);   setPage(0); setBulkSelected(new Set()) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterDateFrom || filterDateTo)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterDateFrom || filterDateTo || filterFlagged)
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
     setFilterSource(''); setFilterProject(''); setFilterSearch('')
-    setFilterSubject(''); setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
+    setFilterSubject(''); setFilterLabel(''); setFilterDateFrom(''); setFilterDateTo('')
+    setFilterFlagged(false); setPage(0)
     setBulkSelected(new Set())
   }
 
@@ -5385,6 +7061,27 @@ export function App() {
     }
   }
 
+  async function doBulkPipelineTrigger() {
+    const ids = Array.from(bulkSelected)
+    if (ids.length === 0) return
+    if (!confirm(`Trigger "${bulkPipelineStep}" step for ${ids.length} selected ${ids.length === 1 ? 'study' : 'studies'}?`)) return
+    setBulkWorking(true)
+    try {
+      const res = await fetch('/api/studies/bulk-pipeline-trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ study_ids: ids, step: bulkPipelineStep }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        alert(`Triggered ${d.triggered} / Skipped ${d.skipped}${d.errors?.length ? ` / ${d.errors.length} error(s)` : ''}`)
+        setRefreshTick(t => t + 1)
+      }
+    } finally {
+      setBulkWorking(false)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(studiesTotal / PAGE_SIZE))
   const pageStart  = studiesTotal === 0 ? 0 : page * PAGE_SIZE + 1
 
@@ -5396,8 +7093,10 @@ export function App() {
     if (filterSource)   params.set('source',     filterSource)
     if (filterProject)  params.set('project_id', filterProject)
     if (filterSearch)   params.set('search',     filterSearch)
+    if (filterLabel)    params.set('label',      filterLabel)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
+    if (filterFlagged)  params.set('flagged',    'true')
     const qs = params.toString()
     return `/api/studies.csv${qs ? '?' + qs : ''}`
   })()
@@ -5405,6 +7104,71 @@ export function App() {
 
   return (
     <div className="admin-root">
+      {/* Cmd/Ctrl+K quick-search palette */}
+      {paletteOpen && (
+        <div className="palette-overlay" onClick={() => setPaletteOpen(false)}>
+          <div className="palette-modal" onClick={e => e.stopPropagation()}>
+            <div className="palette-search-row">
+              <span className="palette-search-icon">⌕</span>
+              <input
+                ref={paletteInputRef}
+                className="palette-input"
+                placeholder="Search studies, navigate…"
+                value={paletteQuery}
+                onChange={e => setPaletteQuery(e.target.value)}
+                onKeyDown={paletteKeyDown}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <kbd className="palette-esc-hint">Esc</kbd>
+            </div>
+            {paletteItems.length > 0 ? (
+              <ul className="palette-results">
+                {paletteNavFiltered.length > 0 && (
+                  <li className="palette-group-label">Navigate</li>
+                )}
+                {paletteNavFiltered.map((item, i) => (
+                  <li
+                    key={item.tab}
+                    className={`palette-result${paletteHighlight === i ? ' palette-result--active' : ''}`}
+                    onMouseEnter={() => setPaletteHighlight(i)}
+                    onClick={() => paletteSelect(item)}
+                  >
+                    <span className="palette-result__icon">{item.icon}</span>
+                    <span className="palette-result__label">{item.label}</span>
+                  </li>
+                ))}
+                {paletteStudies.length > 0 && (
+                  <li className="palette-group-label">Studies</li>
+                )}
+                {paletteStudies.map((item, j) => {
+                  const idx = paletteNavFiltered.length + j
+                  return (
+                    <li
+                      key={item.id}
+                      className={`palette-result${paletteHighlight === idx ? ' palette-result--active' : ''}`}
+                      onMouseEnter={() => setPaletteHighlight(idx)}
+                      onClick={() => paletteSelect(item)}
+                    >
+                      <span className="palette-result__icon">🔬</span>
+                      <span className="palette-result__label">{item.label}</span>
+                      <span className="palette-result__sub">{item.sub}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : paletteQuery.trim().length >= 2 ? (
+              <div className="palette-empty">No results</div>
+            ) : null}
+            <div className="palette-footer">
+              <span><kbd>↑↓</kbd> navigate</span>
+              <span><kbd>↵</kbd> select</span>
+              <span><kbd>Esc</kbd> close</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {authError && (
         <div className="auth-error-banner">
           Access denied: {authError}
@@ -5468,6 +7232,15 @@ export function App() {
               {currentUser.name || currentUser.email} ({currentUser.role})
             </span>
           )}
+          <button
+            type="button"
+            className="btn-palette-trigger"
+            onClick={() => { setPaletteOpen(true); setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }}
+            title="Quick search (⌘K)"
+          >
+            <span>Search…</span>
+            <kbd>⌘K</kbd>
+          </button>
           {tab === 'studies' && (
             <button type="button" className="btn-refresh" onClick={() => setRefreshTick(t => t + 1)}>Refresh</button>
           )}
@@ -5563,6 +7336,20 @@ export function App() {
         >
           Federation
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'tcia_import' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('tcia_import')}
+        >
+          TCIA Import
+        </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'system' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('system')}
+        >
+          System
+        </button>
         {isAdmin && (
           <button
             type="button"
@@ -5581,13 +7368,22 @@ export function App() {
             API Keys
           </button>
         )}
+        {isAdmin && (
+          <button
+            type="button"
+            className={`tab-btn${tab === 'invite_codes' ? ' tab-btn--active' : ''}`}
+            onClick={() => setTab('invite_codes')}
+          >
+            Invite Codes
+          </button>
+        )}
       </nav>
 
       {/* Studies tab */}
       {tab === 'studies' && selectedStudyId && (
         <StudyDetailPanel
           studyId={selectedStudyId}
-          onBack={() => setSelectedStudyId(null)}
+          onBack={() => selectStudy(null)}
           onAction={() => setRefreshTick(t => t + 1)}
           isAdmin={isAdmin}
         />
@@ -5632,8 +7428,9 @@ export function App() {
               {storageStats && (
                 <>
                   <span className="stats-banner__sep" />
-                  <span className="stats-banner__shares" title="DICOM file counts (raw / clean)">
+                  <span className="stats-banner__shares" title="DICOM file counts and total storage size">
                     {storageStats.total_file_count} files ({storageStats.raw_file_count} raw, {storageStats.clean_file_count} clean)
+                    {storageStats.total_size_bytes > 0 && ` · ${formatBytes(storageStats.total_size_bytes)}`}
                   </span>
                 </>
               )}
@@ -5692,6 +7489,9 @@ export function App() {
             )}
           </div>
 
+          {/* Synthetic MRI generator */}
+          <SynthPanel isAdmin={isAdmin} onStudyGenerated={() => setRefreshTick(t => t + 1)} />
+
           {/* Filter bar */}
           <div className="filter-bar">
             <input
@@ -5749,6 +7549,21 @@ export function App() {
               value={filterSubject}
               onChange={e => setSubjectF(e.target.value)}
             />
+            <input
+              className="filter-input filter-input--label"
+              type="search"
+              placeholder="Label…"
+              value={filterLabel}
+              onChange={e => setLabelF(e.target.value)}
+            />
+            <label className="filter-flagged-label" title="Show flagged studies only">
+              <input
+                type="checkbox"
+                checked={filterFlagged}
+                onChange={e => setFlaggedF(e.target.checked)}
+              />
+              {' '}Priority only
+            </label>
             <input
               type="date"
               className="filter-date"
@@ -5809,6 +7624,23 @@ export function App() {
               />
               <button type="button" className="btn btn--action" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
               <button type="button" className="btn btn--secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
+              <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
+              <select
+                className="audit-actor-input"
+                value={bulkPipelineStep}
+                onChange={e => setBulkPipelineStep(e.target.value)}
+                disabled={bulkWorking}
+                style={{height:'28px'}}
+              >
+                <option value="classify">Classify</option>
+                <option value="phi_scan">PHI Scan</option>
+                <option value="protocol">Protocol Check</option>
+                <option value="deface">Deface</option>
+                <option value="qc">QC Check</option>
+                <option value="bids">BIDS Convert</option>
+                <option value="export">Export</option>
+              </select>
+              <button type="button" className="btn btn--action" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
               <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
             </div>
           )}
@@ -5827,6 +7659,7 @@ export function App() {
                         aria-label="Select all on page"
                       />
                     </th>
+                    <th className="th-flag" title="Priority flag">★</th>
                     <th>Study UID</th>
                     <th>Modality</th>
                     <th>Body Part</th>
@@ -5849,7 +7682,7 @@ export function App() {
                       key={study.id}
                       study={study}
                       onAction={() => setRefreshTick(t => t + 1)}
-                      onSelect={() => setSelectedStudyId(study.id)}
+                      onSelect={() => selectStudy(study.id)}
                       onAskAgent={() => {
                         setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
                         setTab('agent')
@@ -5926,11 +7759,20 @@ export function App() {
       {/* Federation tab */}
       {tab === 'federation' && <FederationPanel isAdmin={isAdmin} />}
 
+      {/* TCIA Import tab */}
+      {tab === 'tcia_import' && <TCIAPanel isAdmin={isAdmin} />}
+
       {/* Users tab — admin only */}
       {tab === 'users' && isAdmin && <UsersPanel />}
 
       {/* API Keys tab — admin only */}
       {tab === 'api_keys' && isAdmin && <APIKeysPanel />}
+
+      {/* Invite Codes tab — admin only */}
+      {tab === 'invite_codes' && isAdmin && <InviteCodesPanel />}
+
+      {/* System Health tab */}
+      {tab === 'system' && <SystemHealthPanel />}
     </div>
   )
 }

@@ -166,6 +166,10 @@ def _build_dicom_slice(
     file_meta.MediaStorageSOPClassUID = "1.2.840.10008.5.1.4.1.1.4"
     file_meta.MediaStorageSOPInstanceUID = sop_uid
     file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    # FileMetaInformationVersion is required for a complete File Meta Information
+    # group; pydicom 3.x omits MetaElementGroupLength (0002,0000) unless the
+    # file meta is complete and enforce_file_format=True is passed on save.
+    file_meta.FileMetaInformationVersion = b"\x00\x01"
 
     ds = FileDataset(output_path, {}, file_meta=file_meta, preamble=b"\x00" * 128)
     ds.is_implicit_VR = False
@@ -216,15 +220,19 @@ def _build_dicom_slice(
     ds.Rows = size
     ds.Columns = size
     ds.BitsAllocated = 16
-    ds.BitsStored = 12
-    ds.HighBit = 11
+    ds.BitsStored = 16
+    ds.HighBit = 15
     ds.PixelRepresentation = 0
     ds.SamplesPerPixel = 1
     ds.PhotometricInterpretation = "MONOCHROME2"
-    ds.WindowWidth = 4096
-    ds.WindowCenter = 2048
+    # Window covers the meaningful tissue range (roughly 0–1000 out of 0–4095).
+    # WC=500/WW=1000 matches the working demo files and renders brain tissue
+    # at 50–100% brightness in OHIF instead of the near-black 20% produced
+    # by the old WC=2048/WW=4096 setting.
+    ds.WindowWidth = 1000
+    ds.WindowCenter = 500
 
-    # Pixel data — scale float [0, 1] → uint12
+    # Pixel data — scale float [0, 1] → uint16 (12-bit range: 0–4095)
     arr_u16 = (np.clip(pixel_array, 0, 1) * 4095).astype(np.uint16)
     ds.PixelData = arr_u16.tobytes()
 
@@ -291,7 +299,13 @@ def write_dicom_series(
             size=size,
             output_path=str(fname),
         )
-        ds.save_as(str(fname))
+        # enforce_file_format=True (pydicom ≥ 3.0) ensures MetaElementGroupLength
+        # (0002,0000) is written, making the file valid for strict DICOM parsers.
+        try:
+            ds.save_as(str(fname), enforce_file_format=True)
+        except TypeError:
+            # pydicom < 3.0 — save_as writes MetaElementGroupLength automatically.
+            ds.save_as(str(fname))
         paths.append(str(fname))
 
     return paths

@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -52,6 +53,55 @@ func TestListStudies_WithStatusFilter(t *testing.T) {
 	}
 	json.NewDecoder(rr.Body).Decode(&result)
 	assert.Equal(t, 0, result.Total, "no approved studies yet")
+}
+
+func TestListStudies_WithLabelFilter(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	s1 := testutil.CreateTestStudy(t, db, proj.ID)
+	s2 := testutil.CreateTestStudy(t, db, proj.ID)
+
+	// Label s1 only
+	_, err := model.AddStudyLabel(context.Background(), db, s1.ID, "cohort-A", "admin@test.local")
+	require.NoError(t, err)
+
+	// Filter by label — should return only s1
+	req := httptest.NewRequest("GET", "/api/studies?label=cohort-A", nil)
+	rr := httptest.NewRecorder()
+	srv.ListStudies(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var result struct {
+		Studies []model.Study `json:"studies"`
+		Total   int           `json:"total"`
+	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, s1.ID, result.Studies[0].ID)
+
+	// Filter by label that doesn't match either study
+	req2 := httptest.NewRequest("GET", "/api/studies?label=cohort-Z", nil)
+	rr2 := httptest.NewRecorder()
+	srv.ListStudies(rr2, req2)
+	require.Equal(t, http.StatusOK, rr2.Code)
+
+	var result2 struct {
+		Total int `json:"total"`
+	}
+	require.NoError(t, json.NewDecoder(rr2.Body).Decode(&result2))
+	assert.Equal(t, 0, result2.Total)
+
+	// No label filter returns both
+	req3 := httptest.NewRequest("GET", "/api/studies", nil)
+	rr3 := httptest.NewRecorder()
+	srv.ListStudies(rr3, req3)
+	var result3 struct{ Total int `json:"total"` }
+	json.NewDecoder(rr3.Body).Decode(&result3)
+	assert.Equal(t, 2, result3.Total)
+
+	_ = s2
 }
 
 func TestGetStudyByUID_Handler(t *testing.T) {
@@ -236,4 +286,64 @@ func TestEvaluateRoutingRules_AppliesMatchingRule(t *testing.T) {
 	updated, err := model.GetStudyByID(context.Background(), db, study.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "approved", updated.Status)
+}
+
+func TestDeleteStudy_Handler(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	req := httptest.NewRequest("DELETE", "/api/studies/"+study.ID, nil)
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.DeleteStudy(rr, req)
+
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+
+	// Study should no longer exist.
+	_, err := model.GetStudyByID(context.Background(), db, study.ID)
+	assert.ErrorIs(t, err, sql.ErrNoRows)
+}
+
+func TestDeleteStudy_NotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	req := httptest.NewRequest("DELETE", "/api/studies/00000000-0000-0000-0000-000000000000", nil)
+	req.SetPathValue("id", "00000000-0000-0000-0000-000000000000")
+	rr := httptest.NewRecorder()
+	srv.DeleteStudy(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestRecordStudyView_Handler(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/viewed", nil)
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.RecordStudyView(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var result map[string]string
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, "ok", result["status"])
+
+	// Verify audit entry was created.
+	entries, err := model.ListAuditEntriesForStudy(context.Background(), db, study.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range entries {
+		if e.Action == "study.viewed" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected study.viewed audit entry")
 }

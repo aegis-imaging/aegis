@@ -27,3 +27,21 @@ admin_memory         = 1024
 
 # Optional CORS override for API runtime
 # api_allowed_origins = ["https://admin.example.com"]
+
+# Custom subdomains — both CNAME to the same ALB DNS in GoDaddy/Route53.
+# api_domain routes all traffic to the API target group (Go API handles its own auth).
+# admin_domain routes all traffic through Cognito → admin dashboard target group.
+# Pattern across clouds:
+#   GCP:   api.aegisimaging.ai        /  admin.aegisimaging.ai         (Cloud Run)
+#   AWS:   aws.api.aegisimaging.ai    /  aws.admin.aegisimaging.ai
+#   Azure: azure.api.aegisimaging.ai  /  azure.admin.aegisimaging.ai   (future)
+# Leave empty to fall back to raw ALB DNS (useful for initial bring-up / testing).
+api_domain   = "aws.api.aegisimaging.ai"
+admin_domain = "aws.admin.aegisimaging.ai"
+
+# Sidecar image tag (shared across all 7 Python processing sidecars)
+# sidecar_image_tag = "latest"
+
+# DIMSE receiver EC2 instance — set to a full ECR image URI to enable.
+# Leave empty (default) to skip all DIMSE resources.
+# dimse_receiver_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/aegis/dimse-receiver:latest"

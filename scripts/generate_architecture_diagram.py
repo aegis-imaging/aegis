@@ -28,11 +28,11 @@ C = {
     "purple": "#7C3AED",
     "amber":  "#D97706",
     "cyan":   "#0891B2",
-    "red":    "#DC2626",
-    "green":  "#15803D",
+    "red":    "#EA580C",   # orange-600 — colorblind-safe (was #DC2626 red)
+    "green":  "#0F766E",   # teal-700 — colorblind-safe (was #15803D green)
     "navy":   "#1D4ED8",
     "slate":  "#374151",
-    "emerald":"#059669",
+    "emerald":"#0D9488",   # teal-600 — colorblind-safe (was #059669 emerald)
 }
 
 
@@ -82,7 +82,7 @@ CSS = """
 *  { box-sizing: border-box; margin: 0; padding: 0; }
 
 @page {
-  size: 500mm 345mm;   /* ~20" × 13.6" landscape */
+  size: 500mm 420mm;   /* wide landscape — height sized to hold all content on one page */
   margin: 5mm;
 }
 
@@ -132,8 +132,10 @@ body {
 
 .z-src  { background: #EFF6FF; border-color: #1D4ED8; }
 .z-src  .zone-hdr { color: #1D4ED8; }
-.z-gcp  { background: #F0FDF4; border-color: #15803D; }
-.z-gcp  .zone-hdr { color: #15803D; }
+.z-gcp  { background: #F0FDFA; border-color: #0F766E; }
+.z-gcp  .zone-hdr { color: #0F766E; }
+.z-aws  { background: #FFF7ED; border-color: #EA580C; }
+.z-aws  .zone-hdr { color: #EA580C; }
 .z-pipe { background: #EFF6FF; border-color: #1D4ED8; }
 .z-pipe .zone-hdr { color: #1D4ED8; }
 .z-ph   { background: #FAF5FF; border-color: #7C3AED; }
@@ -299,13 +301,13 @@ def build_html():
         "Auto-retry: 3× exponential backoff per file",
     ], "react")
 
-    dimse = card("DIMSE Receiver  (pynetdicom)", [
-        "C-STORE SCP listening on port 11112",
-        "Receives studies from PACS systems / scanners",
+    dimse = card("DIMSE Receiver  (pynetdicom · GCE VM)", [
+        "Compute Engine VM — aegis-prod-dimse-receiver",
+        "Static IP 35.232.172.221 · TCP port 11112",
+        "C-STORE SCP — receives from PACS systems / scanners",
         "Institution attribution (AE title or IP CIDR)",
         "Calls POST /api/ingest on DICOM association close",
         "Durable retry queue + dead-letter (disk-persistent)",
-        "Exponential backoff · operator control API",
     ], "py")
 
     privacy = """
@@ -334,10 +336,10 @@ def build_html():
         "distroless image — minimal CVE surface",
     ], "go")
 
-    dashboard = card("Admin Dashboard + OHIF  (React / Cloud Run)", [
+    dashboard = card("Admin Dashboard + Weasis DWV  (React / Cloud Run)", [
         "Behind Identity-Aware Proxy (IAP)",
         "Study browser: filter, search, paginate, bulk ops",
-        "OHIF Viewer — before/after defacing side-by-side",
+        "Weasis DWV — yoked before/after defacing review",
         "7-stage pipeline visualization per study",
         "RBAC: admin (write) + viewer (read-only)",
         "Routing rules, institutions, anon profiles",
@@ -509,10 +511,10 @@ def build_html():
          "Routing rules · Institutions · Audit · Export Portal · Shares · Email · MCP Server",
          "#D97706"),
         ("Phase 4: Production  ✓",
-         "GCP live (aegis-prod) · Landing Page · Batch import · Synth MRI sidecar (8th) · RBAC",
+         "GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC",
          "#7C3AED"),
-        ("Phase 5: Enterprise  🚧",
-         "AEGIS AI Agent · Observability dashboard · Multi-tenant federation · Repo split",
+        ("Phase 5: Beta → GA  🚧",
+         "Private beta · AWS deployment (Q1, deploying now) · Azure + SOC 2 (Q3) · Enterprise GA (Q4)",
          "#DC2626"),
     ]
     phases_html = "\n".join(
@@ -523,10 +525,54 @@ def build_html():
         for t, d, c in phases
     )
 
+    # ── AWS zone ─────────────────────────────────────────────────────────────
+    aws_alb = card("ALB + Cognito  (Auth Layer)", [
+        "HTTPS listener on ACM certificate",
+        "Cognito hosted UI — admin-create-only user pool",
+        "authenticate-cognito default action",
+        "Public bypass rules: /healthz, upload, export",
+    ], "orange")
+
+    aws_api = card("API + Admin  (ECS Fargate)", [
+        "Go API — same image as GCP (1 vCPU / 2 GB)",
+        "Admin Dashboard — React / nginx (0.5 vCPU / 1 GB)",
+        "Service discovery: api.aegis.local",
+        "Force-new-deployment via GitHub Actions",
+    ], "go")
+
+    aws_sidecars = card("7 Python Sidecars  (ECS Fargate)", [
+        "defacing · phi-detection · qc-service",
+        "bids-service · classification-service",
+        "protocol-service · synth-service",
+        "Cloud Map private DNS: svc.aegis.local:8080",
+    ], "py")
+
+    aws_data = card("RDS + S3  (Data Layer)", [
+        "RDS PostgreSQL 15 — private subnet",
+        "Secrets Manager — master credentials",
+        "S3 DICOM bucket — versioned, KMS-encrypted",
+        "Same STORAGE_MODE=s3 as GCP (same Go code)",
+    ], "amber")
+
+    aws_dimse = card("DIMSE EC2  (t3.small)", [
+        "Elastic IP — stable for PACS AE title registration",
+        "Amazon Linux 2023 — Docker + SSM agent",
+        "SSM Parameter Store → image URI on every boot",
+        "GitHub Actions: write SSM param + reboot instance",
+    ], "py")
+
+    aws_cicd = card("GitHub Actions CI/CD", [
+        "Triggers on push to develop (same as GCP Cloud Build)",
+        "Matrix build: 10 services, --platform linux/amd64",
+        "Push SHA tag + latest tag to ECR",
+        "Force-new-deployment for 9 ECS services",
+        "Update SSM param + reboot DIMSE EC2",
+    ], "slate")
+
     # ── Tech stack ───────────────────────────────────────────────────────────
     deps = [
         ("Go:",       "suyashkumar/dicom · pgx · testcontainers-go · testify",          "go"),
-        ("Browser:",  "dcmjs · dicomParser · OHIF Viewer (MIT) · React 19 · Vite",      "react"),
+        ("Browser:",  "dcmjs · dicomParser · Weasis DWV (MIT) · React 19 · Vite",       "react"),
         ("Defacing:", "mri_reface · DeepDefacer · mri_deface · dcm2niix · nibabel",     "py"),
         ("PHI/OCR:",  "pytesseract · Google Cloud Vision · AWS Textract · Pillow",      "py"),
         ("QC/BIDS:",  "pydicom · numpy · dcm2niix · pynetdicom (C-STORE SCP)",          "py"),
@@ -540,7 +586,7 @@ def build_html():
         ("Local:",   "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem",        "slate"),
         ("Auth:",    "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth",     "orange"),
         ("Storage:", "STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes",    "go"),
-        ("CI:",      "Go tests (273+) · Python tests (244+) · TS typecheck · Docker (9)", "green"),
+        ("CI/CD:",   "GitHub Actions: Go (120+) · Python (252+) · TS · Docker (9) · Cloud Build auto-deploy", "green"),
         ("Domains:", "aegisimaging.ai · www · api · admin  —  SSL cert v3",               "py"),
     ]
 
@@ -617,6 +663,24 @@ def build_html():
     </div>
   </div>
 
+  <!-- AWS ACCOUNT -->
+  <div class="zone" style="background:#FFF7ED;border-color:#EA580C;margin-bottom:6px">
+    <div class="zone-hdr" style="color:#EA580C">
+      AWS ACCOUNT
+      <span class="zone-sub" style="color:#9A3412">301691475234 &nbsp;·&nbsp; us-east-1 &nbsp;·&nbsp; Deploying Q1 2026 — same app layer as GCP, parallel infrastructure</span>
+    </div>
+    <div class="g3" style="margin-bottom:6px">
+      {aws_alb}
+      {aws_api}
+      {aws_sidecars}
+    </div>
+    <div class="g3">
+      {aws_data}
+      {aws_dimse}
+      {aws_cicd}
+    </div>
+  </div>
+
   <!-- PIPELINE -->
   <div class="zone z-pipe">
     <div class="zone-hdr">
@@ -664,13 +728,57 @@ def find_chrome():
     return next((c for c in candidates if c and os.path.exists(c)), None)
 
 
+def get_page_height(chrome, html_path):
+    """Measure document.body.scrollHeight via Chrome headless DOM dump."""
+    import re
+    import tempfile
+
+    with open(html_path, encoding="utf-8") as f:
+        html = f.read()
+
+    # Inject a one-liner that writes the height into the page title
+    html2 = html.replace(
+        "</body>",
+        '<script>document.title="H:"+document.body.scrollHeight;</script></body>',
+    )
+    tmp = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")
+    tmp.write(html2)
+    tmp.close()
+
+    try:
+        r = subprocess.run(
+            [
+                chrome,
+                "--headless=new",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--virtual-time-budget=3000",
+                "--run-all-compositor-stages-before-draw",
+                "--dump-dom",
+                f"file://{tmp.name}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        m = re.search(r"<title>H:(\d+)</title>", r.stdout)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    finally:
+        os.unlink(tmp.name)
+
+    return None
+
+
 def convert(html_path, pdf_path, png_path):
     chrome = find_chrome()
 
     if chrome:
         file_url = f"file://{html_path}"
 
-        # PDF
+        # PDF — @page size is set to 420mm tall; all content fits on one page
         r = subprocess.run(
             [
                 chrome,
@@ -691,7 +799,14 @@ def convert(html_path, pdf_path, png_path):
         else:
             print(f"Chrome PDF failed:\n{r.stderr[:400]}")
 
-        # PNG — full-page screenshot at 2x DPI
+        # PNG — measure actual page height first, then add a 100px buffer
+        page_h = get_page_height(chrome, html_path)
+        if page_h:
+            png_h = page_h + 100
+            print(f"  (detected page height: {page_h}px → using {png_h}px for PNG viewport)")
+        else:
+            png_h = 1600  # safe fallback
+
         r2 = subprocess.run(
             [
                 chrome,
@@ -699,7 +814,7 @@ def convert(html_path, pdf_path, png_path):
                 "--disable-gpu",
                 "--no-sandbox",
                 "--virtual-time-budget=2000",
-                "--window-size=1875,1410",
+                f"--window-size=1875,{png_h}",
                 "--force-device-scale-factor=2",
                 f"--screenshot={png_path}",
                 file_url,
@@ -730,7 +845,8 @@ if __name__ == "__main__":
     html     = build_html()
     html_path = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.html")
     pdf_path  = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.pdf")
-    png_path  = os.path.join(PROJECT_DIR, "AEGIS_Architecture_Diagram.png")
+    # Canonical PNG location: served directly by the landing page
+    png_path  = os.path.join(PROJECT_DIR, "frontend", "landing", "public", "architecture.png")
 
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)

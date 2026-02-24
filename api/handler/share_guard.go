@@ -33,8 +33,18 @@ func shareExpiresInSeconds(share *model.ExportShare, now time.Time) int64 {
 	return int64(remaining / time.Second)
 }
 
+// shareDownloadLimitReached reports whether the share has hit its max_downloads cap.
+// Always returns false when MaxDownloads is nil (unlimited).
+func shareDownloadLimitReached(share *model.ExportShare) bool {
+	if share == nil || share.MaxDownloads == nil {
+		return false
+	}
+	return share.DownloadCount >= *share.MaxDownloads
+}
+
 // shareGoneMessage returns the public-facing reason when a share token is no
 // longer usable. Empty string means the share is still active.
+// Note: the caller must ensure share.DownloadCount is populated (use scanShareWithCount).
 func shareGoneMessage(share *model.ExportShare, now time.Time) string {
 	switch shareStatus(share, now) {
 	case "unknown":
@@ -44,6 +54,9 @@ func shareGoneMessage(share *model.ExportShare, now time.Time) string {
 	case "expired":
 		return "share has expired"
 	default:
+		if shareDownloadLimitReached(share) {
+			return "download limit reached"
+		}
 		return ""
 	}
 }
