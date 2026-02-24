@@ -12,17 +12,18 @@ type Project struct {
 	Slug                  string    `json:"slug"`
 	Description           string    `json:"description"`
 	DefaultAnonProfileID  *string   `json:"default_anon_profile_id,omitempty"`
-	RetentionDays         *int      `json:"retention_days,omitempty"`          // nil = keep indefinitely
-	StuckThresholdMinutes *int      `json:"stuck_threshold_minutes,omitempty"` // nil = use request default (60)
+	RetentionDays         *int      `json:"retention_days,omitempty"`           // nil = keep indefinitely
+	StuckThresholdMinutes *int      `json:"stuck_threshold_minutes,omitempty"`  // nil = use request default (60)
+	StorageQuotaBytes     *int64    `json:"storage_quota_bytes,omitempty"`      // nil = unlimited
 	Archived              bool      `json:"archived"`
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }
 
-const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, stuck_threshold_minutes, archived, created_at, updated_at`
+const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, stuck_threshold_minutes, storage_quota_bytes, archived, created_at, updated_at`
 
 func scanProject(row scannable, p *Project) error {
-	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.StuckThresholdMinutes, &p.Archived, &p.CreatedAt, &p.UpdatedAt)
+	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.StuckThresholdMinutes, &p.StorageQuotaBytes, &p.Archived, &p.CreatedAt, &p.UpdatedAt)
 }
 
 func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
@@ -83,6 +84,27 @@ func UpdateProjectSLAThreshold(ctx context.Context, db *sql.DB, projectID string
 		UPDATE projects SET stuck_threshold_minutes = $1, updated_at = now() WHERE id = $2`,
 		minutes, projectID)
 	return err
+}
+
+// UpdateProjectStorageQuota sets or clears (nil) the storage quota for a project.
+func UpdateProjectStorageQuota(ctx context.Context, db *sql.DB, projectID string, bytes *int64) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE projects SET storage_quota_bytes = $1, updated_at = now() WHERE id = $2`,
+		bytes, projectID)
+	return err
+}
+
+// GetProjectStorageUsage returns the total size in bytes of all studies for a project.
+// It sums study_size_bytes from the studies table (populated by the DIMSE receiver and upload pipeline).
+func GetProjectStorageUsage(ctx context.Context, db *sql.DB, projectID string) (int64, error) {
+	var used sql.NullInt64
+	err := db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(study_size_bytes), 0) FROM studies WHERE project_id = $1`,
+		projectID).Scan(&used)
+	if err != nil {
+		return 0, err
+	}
+	return used.Int64, nil
 }
 
 // UpdateProjectRetentionDays sets or clears (nil) the retention policy for a project.
