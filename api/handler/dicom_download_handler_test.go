@@ -180,7 +180,7 @@ func TestServeDicomDownloadByToken_Revoked(t *testing.T) {
 	future := time.Now().Add(24 * time.Hour)
 	share, err := model.CreateExportShare(context.Background(), db, study.ID, tokenHash, "r@test.com", "", "admin", future, nil)
 	require.NoError(t, err)
-	require.NoError(t, model.RevokeExportShare(context.Background(), db, share.ID))
+	require.NoError(t, model.RevokeExportShare(context.Background(), db, share.ID, ""))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/export/"+rawToken+"/download", nil)
 	req.SetPathValue("token", rawToken)

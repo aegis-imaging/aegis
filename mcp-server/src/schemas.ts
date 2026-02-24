@@ -102,6 +102,7 @@ export const rejectStudyArgsSchema = z.object({
 export const revokeShareArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   share_id: z.string().uuid(),
+  revocation_reason: z.string().max(500).optional(), // stored in DB and included in audit entry
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
 });
