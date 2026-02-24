@@ -289,6 +289,15 @@ export const testDestinationArgsSchema = z.object({
   destination_id: z.string().uuid()
 });
 
+export const cloneProjectArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  name: z.string().min(1).max(128).optional(),
+  slug: z.string().min(1).max(128).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -361,7 +370,8 @@ export const writeToolNames = [
   "enable_api_key",
   "disable_api_key",
   "delete_api_key",
-  "toggle_study_flag"
+  "toggle_study_flag",
+  "clone_project"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

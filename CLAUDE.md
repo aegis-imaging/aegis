@@ -1325,6 +1325,15 @@ After defacing completes, the `deface_qa_score` field (NUMERIC(5,4), range 0.0�
 - `POST /api/projects/{id}/restore` — clears `archived` flag; emits `project.restored` audit entry
 - Archived projects are visually flagged in the Projects tab; studies remain accessible
 
+**Project clone** (`POST /api/projects/{id}/clone`, adminOnly):
+- Body: `{"name": "Copy of X", "slug": "copy-of-x"}` (both optional — name defaults to "Copy of <source>", slug auto-derived from name)
+- Clones: routing rules (project-scoped only), anon profiles (all + default profile pointer re-mapped), protocol templates, PHI config, retention_days, stuck_threshold_minutes
+- Does NOT clone: studies, audit entries, invite codes
+- Returns new project record with HTTP 201; emits `project.cloned` audit entry with source_project_id
+- Returns 409 Conflict if slug already exists
+- Admin dashboard: "Clone" button per project row → prompts for new name → calls API
+- MCP `clone_project` write tool: `{project_id, name?, slug?, confirm, reason}`
+
 ### Federation Peers (`api/handler/federation_peer.go`, migration 028)
 
 Stub registry for future cross-tenant federation. Defines trusted remote AEGIS instances that will eventually be able to pull approved studies. **No data flows yet** — this is a placeholder with full CRUD, ready to be activated in a future release.
@@ -1544,6 +1553,7 @@ cd mcp-server && npm install && npm run build
 | `create_share` | Create a new export share |
 | `re_evaluate_routing` | Re-evaluate routing rules for a study |
 | `toggle_study_flag` | Set or clear the priority flag (★) on a study |
+| `clone_project` | Duplicate a project with all settings (routing rules, profiles, templates, PHI config) |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 

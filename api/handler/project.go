@@ -169,6 +169,126 @@ func (s *Server) RestoreProject(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, project)
 }
 
+// CloneProject duplicates a project with all its settings (routing rules, anon profiles,
+// protocol templates, PHI config, retention_days, stuck_threshold_minutes).
+// Studies, audit entries, and invite codes are NOT cloned.
+// POST /api/projects/{id}/clone
+func (s *Server) CloneProject(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	src, err := model.GetProjectByID(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if req.Name == "" {
+		req.Name = "Copy of " + src.Name
+	}
+	if req.Slug == "" {
+		req.Slug = slugRe.ReplaceAllString(strings.ToLower(req.Name), "-")
+		req.Slug = strings.Trim(req.Slug, "-")
+	}
+
+	// Create the new project.
+	dst, err := model.CreateProject(r.Context(), s.db, req.Name, req.Slug, src.Description)
+	if err != nil {
+		log.Printf("clone project %s create: %v", id, err)
+		s.writeError(w, http.StatusConflict, "slug already exists or create failed")
+		return
+	}
+
+	// Copy scalar settings.
+	if src.RetentionDays != nil {
+		_ = model.UpdateProjectRetentionDays(r.Context(), s.db, dst.ID, src.RetentionDays)
+	}
+	if src.StuckThresholdMinutes != nil {
+		_ = model.UpdateProjectSLAThreshold(r.Context(), s.db, dst.ID, src.StuckThresholdMinutes)
+	}
+
+	// Clone anon profiles.
+	profiles, _ := model.ListAnonProfilesByProject(r.Context(), s.db, src.ID)
+	oldToNew := map[string]string{}
+	for _, p := range profiles {
+		np := model.AnonProfile{
+			ProjectID:    dst.ID,
+			Name:         p.Name,
+			Description:  p.Description,
+			RetainedTags: p.RetainedTags,
+			Enabled:      p.Enabled,
+		}
+		if err := model.CreateAnonProfile(r.Context(), s.db, &np); err == nil {
+			oldToNew[p.ID] = np.ID
+		}
+	}
+	// Preserve the default anon profile pointer.
+	if src.DefaultAnonProfileID != nil {
+		if newID, ok := oldToNew[*src.DefaultAnonProfileID]; ok {
+			_ = model.SetProjectDefaultAnonProfile(r.Context(), s.db, dst.ID, newID)
+		}
+	}
+
+	// Clone project-scoped routing rules.
+	rules, _ := model.ListRoutingRulesByProject(r.Context(), s.db, src.ID)
+	for _, rule := range rules {
+		nr := model.RoutingRule{
+			Name:          rule.Name,
+			Description:   rule.Description,
+			Priority:      rule.Priority,
+			Enabled:       rule.Enabled,
+			ProjectID:     &dst.ID,
+			Modality:      rule.Modality,
+			BodyPart:      rule.BodyPart,
+			Source:        rule.Source,
+			Action:        rule.Action,
+			DestinationID: rule.DestinationID,
+		}
+		_ = model.CreateRoutingRule(r.Context(), s.db, &nr)
+	}
+
+	// Clone protocol templates.
+	templates, _ := model.ListProtocolTemplatesByProject(r.Context(), s.db, src.ID)
+	for _, tmpl := range templates {
+		nt := model.ProtocolTemplate{
+			ProjectID:       dst.ID,
+			Name:            tmpl.Name,
+			Description:     tmpl.Description,
+			Manufacturer:    tmpl.Manufacturer,
+			Model:           tmpl.Model,
+			SoftwareVersion: tmpl.SoftwareVersion,
+			SequenceType:    tmpl.SequenceType,
+			Rules:           tmpl.Rules,
+			Enabled:         tmpl.Enabled,
+		}
+		_ = model.CreateProtocolTemplate(r.Context(), s.db, &nt)
+	}
+
+	// Clone PHI config (only if a row exists — skip on error or default).
+	if phiCfg, err := model.GetProjectPhiConfig(r.Context(), s.db, src.ID); err == nil {
+		_ , _ = model.UpsertProjectPhiConfig(r.Context(), s.db, dst.ID, phiCfg.ConfidenceThreshold, phiCfg.MinTextLength)
+	}
+
+	// Re-fetch dst to include all copied settings.
+	dst, _ = model.GetProjectByID(r.Context(), s.db, dst.ID)
+	model.CreateAuditEntry(r.Context(), s.db, "project.cloned", actorEmail(r), "project", dst.ID, clientIP(r), map[string]any{
+		"source_project_id": src.ID,
+		"source_name":       src.Name,
+		"name":              dst.Name,
+		"slug":              dst.Slug,
+		"routing_rules":     len(rules),
+		"anon_profiles":     len(profiles),
+		"protocol_templates": len(templates),
+	})
+	s.writeJSON(w, http.StatusCreated, dst)
+}
+
 // UpdateProject updates a project's name, slug, and description.
 // PUT /api/projects/{id}
 func (s *Server) UpdateProject(w http.ResponseWriter, r *http.Request) {
