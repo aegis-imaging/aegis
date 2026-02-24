@@ -1,7 +1,7 @@
 {
   "name": "aegis-dwv-viewer",
   "version": "1.0.0",
-  "description": "Lightweight DICOM Web Viewer (DWV) for AEGIS — second viewer option alongside OHIF.",
+  "description": "Lightweight DICOM Web Viewer (DWV) for AEGIS — primary viewer for QC and defacing review.",
   "private": true,
   "scripts": {
     "build": "vite build",

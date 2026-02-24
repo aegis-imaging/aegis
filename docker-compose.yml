@@ -23,23 +23,6 @@ services:
       - "1025:1025"   # SMTP
       - "8025:8025"   # Web UI
 
-  ohif:
-    build:
-      context: ./ohif
-    ports:
-      - "3002:8080"
-    environment:
-      API_URL: "http://api:8080"
-    depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-
   weasis:
     build:
       context: ./weasis

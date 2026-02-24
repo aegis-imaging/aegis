@@ -9,7 +9,6 @@ import { useScrollAnimation } from '../hooks/useScrollAnimation'
 // ---------------------------------------------------------------------------
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
-const OHIF_BASE = (import.meta.env.VITE_OHIF_BASE_URL as string | undefined) ?? ''
 
 // ---------------------------------------------------------------------------
 // Types
@@ -436,7 +435,7 @@ export default function PipelineDemo() {
       active: stage === 'polling',
     },
     {
-      n: '3', label: 'Verify', desc: 'DICOM tags + OHIF before/after',
+      n: '3', label: 'Verify', desc: 'DICOM tags + before/after review',
       done: stage === 'done',
       active: stage === 'loading' || stage === 'done',
     },
@@ -476,7 +475,7 @@ export default function PipelineDemo() {
           <p style={{ fontSize: '1.05rem', color: '#94a3b8', maxWidth: '640px', margin: '0 auto' }}>
             Click to generate a real synthetic brain MRI on the AEGIS server.
             The platform anonymizes every DICOM tag and runs server-side defacing.
-            Compare before and after in the embedded OHIF viewer.
+            Compare before and after in the Weasis DICOM viewer.
           </p>
         </div>
 
@@ -686,86 +685,6 @@ export default function PipelineDemo() {
             {/* DICOM tag diff */}
             {tagChanges.length > 0 && <TagDiffTable tags={tagChanges} />}
 
-            {/* ── OHIF side-by-side ── */}
-            {OHIF_BASE && studyUID && (
-              <div style={{
-                marginTop: '28px',
-                background: 'rgba(15,23,42,0.6)',
-                border: '1px solid rgba(59,130,246,0.2)',
-                borderRadius: '14px',
-                padding: '18px',
-              }}>
-                <div style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  marginBottom: '14px', flexWrap: 'wrap', gap: '8px',
-                }}>
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '0.92rem', marginBottom: '3px' }}>
-                      🩻 Live OHIF Viewer — before & after
-                    </div>
-                    <div style={{ color: '#64748b', fontSize: '0.78rem' }}>
-                      Interactive DICOM viewer — scroll through slices, adjust windowing
-                    </div>
-                  </div>
-                  <span style={{
-                    padding: '4px 12px', borderRadius: '10px',
-                    background: 'rgba(52,211,153,0.12)', color: '#34d399',
-                    fontSize: '0.7rem', fontWeight: 700,
-                  }}>
-                    Live data
-                  </span>
-                </div>
-
-                {/* Labels */}
-                <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                    <span style={{
-                      fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.07em',
-                      textTransform: 'uppercase', color: '#94a3b8',
-                    }}>
-                      Before — raw store
-                    </span>
-                  </div>
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                    <span style={{
-                      fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.07em',
-                      textTransform: 'uppercase', color: '#34d399',
-                    }}>
-                      After — clean store (defaced)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Iframes */}
-                <div style={{ display: 'flex', gap: '12px', height: '480px' }}>
-                  <iframe
-                    title="Before defacing — OHIF viewer"
-                    src={`${OHIF_BASE}/viewer?StudyInstanceUIDs=${studyUID}&dataSource=dicomweb-raw`}
-                    style={{
-                      flex: 1, border: '1px solid #1e293b', borderRadius: '8px',
-                      background: '#000',
-                    }}
-                    allowFullScreen
-                  />
-                  <iframe
-                    title="After defacing — OHIF viewer"
-                    src={`${OHIF_BASE}/viewer?StudyInstanceUIDs=${studyUID}&dataSource=dicomweb`}
-                    style={{
-                      flex: 1, border: '1px solid rgba(52,211,153,0.3)', borderRadius: '8px',
-                      background: '#000',
-                    }}
-                    allowFullScreen
-                  />
-                </div>
-
-                <p style={{
-                  textAlign: 'center', color: '#334155', fontSize: '0.72rem', marginTop: '10px',
-                }}>
-                  Powered by OHIF v3 · DICOM served via AEGIS DICOMweb proxy ·{' '}
-                  Study UID: <span style={{ fontFamily: 'monospace' }}>{studyUID}</span>
-                </p>
-              </div>
-            )}
 
             {/* CTA */}
             <div style={{

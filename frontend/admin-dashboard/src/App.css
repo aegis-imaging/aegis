@@ -602,34 +602,6 @@
   color: #c4b5fd;
 }
 
-.viewer-toggle {
-  display: flex;
-  gap: 2px;
-  background: #0f172a;
-  border-radius: 6px;
-  padding: 2px;
-}
-
-.viewer-toggle-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  background: transparent;
-  color: #94a3b8;
-  transition: background 0.15s, color 0.15s;
-}
-
-.viewer-toggle-btn:hover {
-  color: #e2e8f0;
-}
-
-.viewer-toggle-btn.active {
-  background: #0d9488;
-  color: #fff;
-}
 
 .viewer-panel-actions {
   display: flex;
@@ -718,8 +690,8 @@
   background: #0f172a;
 }
 
-.deface-viewer-label--before { color: #f87171; }
-.deface-viewer-label--after  { color: #4ade80; }
+.deface-viewer-label--before { color: #94a3b8; }  /* slate — neutral "before/raw" */
+.deface-viewer-label--after  { color: #0d9488; }  /* teal — positive "after/defaced" */
 
 .deface-open-tab {
   padding: 3px 12px;

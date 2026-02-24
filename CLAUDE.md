@@ -46,7 +46,7 @@ aegis/
 ├── api/                  # Go backend — upload orchestration, DICOMweb proxy
 ├── frontend/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
-│   ├── admin-dashboard/  # React — internal QC, OHIF viewer, study management
+│   ├── admin-dashboard/  # React — internal QC, Weasis viewer, study management
 │   ├── export-portal/    # React — public-facing export share download UI
 │   └── landing/          # React — public landing page (aegisimaging.ai)
 ├── client/               # TypeScript DICOM anonymization library (npm package)
@@ -71,7 +71,7 @@ Planned to split into 5 separate repos once interfaces stabilize:
 - **DICOM Storage**: Cloud-neutral file storage (local, GCS, or S3) with DICOMweb proxy
 - **DICOM Networking**: DIMSE receiver sidecar (pynetdicom C-STORE SCP on port 11112)
 - **Defacing**: Python — mri_deface, dcm2niix, pydicom
-- **Viewer**: OHIF Viewer (embedded in admin dashboard)
+- **Viewer**: Weasis DWV (embedded in admin dashboard)
 - **AI/ML**: Pluggable — local backends (Tesseract OCR, pydicom heuristics) or cloud AI (Google Cloud Vision, AWS Textract/Rekognition)
 - **Email**: Standard SMTP (works with any provider). Dev: Mailpit.
 - **Infrastructure**: Terraform (GCP and AWS modules), Docker Compose for local dev
@@ -293,11 +293,11 @@ Public-facing download page for export share recipients. Reads a share token fro
 
 ### Full-Stack Docker Compose
 
-`docker compose up` starts the entire platform: PostgreSQL, Mailpit, OHIF, Go API, and all 7 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
+`docker compose up` starts the entire platform: PostgreSQL, Mailpit, Weasis, Go API, and all 7 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
 
 ```bash
 docker compose up -d          # start everything (background)
-docker compose up ohif        # start OHIF only
+docker compose up weasis      # start Weasis only
 docker compose down           # stop all (data persists)
 docker compose down -v        # stop all + destroy volumes
 ```
@@ -306,7 +306,7 @@ docker compose down -v        # stop all + destroy volumes
 |---------|------|-------|
 | postgres | 5432 | PostgreSQL 15, data in `pgdata` volume |
 | mailpit | 1025 (SMTP) / 8025 (UI) | Email capture for dev |
-| ohif | 3002 | OHIF Viewer, waits for API health |
+| weasis | 3005 | Weasis DWV viewer |
 | api | 8080 | Go API, runs migrations on startup |
 | defacing | (internal) | Python defacing service |
 | phi-detection | (internal) | Burned-in PHI detection (Tesseract) |
@@ -323,25 +323,27 @@ Most sidecar services have no host port mapping — the Go API reaches them via 
 {"status":"ok","database":"healthy","storage":"healthy","services":{"defacing":"healthy",...}}
 ```
 
-### OHIF Viewer
-OHIF Viewer runs as a Docker container on `:3002`, configured to load DICOM images via the Go API's DICOMweb proxy.
+### Weasis DWV Viewer
+Weasis (DWV — DICOM Web Viewer) runs as a Docker container on `:3005`, configured to load DICOM images via the Go API's DICOMweb proxy. It is the sole viewer used in the admin dashboard.
 
-`ohif-config.js` (repo root) configures the OHIF data source pointing at `http://localhost:8080/dicomweb`.
+**URL params**: `?studyUID=<UID>` (required) and `?store=raw|clean` (optional, default `clean`). When `store=raw`, all DICOMweb fetches use `/dicomweb-raw/` instead of `/dicomweb/`.
+
+**Build arg** (`VITE_WEASIS_BASE_URL`): baked into admin-dashboard at build time via `--build-arg VITE_WEASIS_BASE_URL=<url>`.
 
 **DICOMweb proxy** (`api/handler/dicomweb.go`) — minimal QIDO-RS + WADO-RS, no DICOM library:
 - `GET /dicomweb/studies` — list studies from DB
 - `GET /dicomweb/studies/{studyUID}/series` — single fake series per study
 - `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances` — enumerate instances by file count
 - `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}` — stream DICOM bytes from `dicom_store`
-- `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata` — WADO-RS instance metadata (DICOMweb JSON, no pixel data); required by OHIF v3 to build its image manifest before loading pixels
+- `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata` — WADO-RS instance metadata (DICOMweb JSON, no pixel data)
 
-**Raw DICOMweb proxy** — same routes under `/dicomweb-raw/*`, but WADO-RS always reads from `dicom/raw/` regardless of `dicom_store`. Used by OHIF's `dicomweb-raw` data source for defacing review. Includes `/metadata` route.
+**Raw DICOMweb proxy** — same routes under `/dicomweb-raw/*`, but WADO-RS always reads from `dicom/raw/` regardless of `dicom_store`. Used by the Weasis viewer with `?store=raw` for defacing review. Includes `/metadata` route.
 
 SOPInstanceUID format: `{studyUID}.1.{fileIndex}` (index maps to `dicom/{store}/{studyUID}/{index}.dcm`).
 
 In the admin dashboard:
 - Each study row has a **View** button (inline iframe) and an **Open in new tab ↗** link.
-- Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side before/after OHIF panel. OHIF selects the data source via `?dataSource=dicomweb-raw` (before) or `?dataSource=dicomweb` (after).
+- Head studies with `defacing_required=true` and `status=defaced|approved` show a **Review defacing** button that opens a side-by-side Weasis panel: left iframe uses `?store=raw` (before defacing), right iframe uses `?store=clean` (after defacing).
 - **Studies tab** — filter by status, modality, source, project; search by UID or description; paginated 50 per page.
 - **Routing tab** — manage Destinations and Routing Rules (see below).
 - **Institutions tab** — manage institutions and their project memberships.
@@ -406,7 +408,7 @@ Clicking a study UID in the studies table navigates to a dedicated detail view w
 - **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
 - **Timestamp rendering** — admin dashboard, export portal, and upload portal support user-selectable viewing time zones (`UTC`, browser local, or custom IANA zone like `America/Chicago`) for display-only conversion. Preference is synced across all three UIs via shared `localStorage` keys. Upload portal converts DICOM study date/time only when an offset is present (falls back to explicit floating-time text when offset is missing).
 - **Pipeline visualization** — 7-stage horizontal pipeline (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export) with color-coded status dots
-- **Action buttons** — all processing triggers, approve/reject, share, view in OHIF, review defacing, download DICOM/BIDS
+- **Action buttons** — all processing triggers, approve/reject, share, view in Weasis, review defacing, download DICOM/BIDS
 - **Share form** — inline share creation for approved studies (email, note, expiry)
 - **Detail tabs** — Audit Trail, Routing Log, Export Shares with per-study data
 
@@ -1653,9 +1655,9 @@ Two triggers are active in Cloud Build (configured by `scripts/gcp_setup_cloudbu
 | Cloud Run service | Source directory |
 |---|---|
 | `aegis-api` | `api/` |
-| `aegis-admin-dashboard` | `frontend/admin-dashboard/` (build arg: `VITE_OHIF_BASE_URL`) |
+| `aegis-admin-dashboard` | `frontend/admin-dashboard/` (build arg: `VITE_WEASIS_BASE_URL`) |
 | `aegis-prod-landing` | `frontend/landing/` (build arg: `VITE_API_BASE_URL`) |
-| `ohif` | `ohif/` |
+| `weasis` | `weasis/` |
 | `defacing` | `defacing/` |
 | `phi-detection` | `phi-detection/` |
 | `qc-service` | `qc-service/` |
