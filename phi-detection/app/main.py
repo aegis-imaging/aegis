@@ -28,6 +28,7 @@ from .backends.base import PHIDetectionBackend
 from .backends.tesseract import TesseractBackend
 from .backends.google_vision import GoogleVisionBackend
 from .backends.aws_textract import AWSTextractBackend
+from .backends.gemini import GeminiBackend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,6 +55,10 @@ def _select_backend() -> PHIDetectionBackend:
         confidence_threshold=cfg.confidence_threshold,
         min_text_length=cfg.min_text_length,
     )
+    gemini = GeminiBackend(
+        confidence_threshold=cfg.confidence_threshold,
+        min_text_length=cfg.min_text_length,
+    )
 
     if cfg.phi_tool == "tesseract":
         candidates = [tesseract]
@@ -61,9 +66,12 @@ def _select_backend() -> PHIDetectionBackend:
         candidates = [google_vision]
     elif cfg.phi_tool == "aws_textract":
         candidates = [aws_textract]
+    elif cfg.phi_tool == "gemini":
+        candidates = [gemini]
     else:  # "auto"
-        # Priority: cloud backends first, then offline fallback.
-        candidates = [google_vision, aws_textract, tesseract]
+        # Priority: Gemini highest (best accuracy), then Cloud Vision, then
+        # AWS Textract, then offline Tesseract fallback.
+        candidates = [gemini, google_vision, aws_textract, tesseract]
 
     for backend in candidates:
         if backend.available():
@@ -72,7 +80,8 @@ def _select_backend() -> PHIDetectionBackend:
 
     raise RuntimeError(
         "No PHI detection backend is available. "
-        "Install tesseract-ocr+pytesseract, or google-cloud-vision, or boto3."
+        "Install google-cloud-aiplatform (Gemini), google-cloud-vision, "
+        "boto3 (AWS Textract), or tesseract-ocr+pytesseract."
     )
 
 
