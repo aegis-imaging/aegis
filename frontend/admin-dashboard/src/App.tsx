@@ -1588,6 +1588,41 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     }
   }
 
+  // Anonymization diff state
+  const [anonDiffOpen, setAnonDiffOpen] = useState(false)
+  const [anonDiffLoading, setAnonDiffLoading] = useState(false)
+  const [anonDiff, setAnonDiff] = useState<{
+    diff: {
+      removed: { tag: string; keyword: string; vr: string; raw_value: string }[]
+      modified: { tag: string; keyword: string; vr: string; raw_value: string; clean_value: string }[]
+      added: { tag: string; keyword: string; vr: string; clean_value: string }[]
+    }
+    raw_file: string
+    clean_file: string
+  } | null>(null)
+  const [anonDiffMsg, setAnonDiffMsg] = useState('')
+
+  const openAnonDiff = async () => {
+    if (anonDiffOpen) { setAnonDiffOpen(false); return }
+    if (!study) return
+    setAnonDiffOpen(true)
+    if (anonDiff) return
+    setAnonDiffLoading(true)
+    setAnonDiffMsg('')
+    try {
+      const res = await fetch(`/api/studies/${study.study_instance_uid}/anonymization-diff`)
+      if (res.status === 204) { setAnonDiffMsg('Clean store not yet available — defacing has not completed.'); setAnonDiffLoading(false); return }
+      if (res.status === 404) { setAnonDiffMsg('Raw DICOM store not found (may have been purged).'); setAnonDiffLoading(false); return }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setAnonDiff(data)
+    } catch {
+      setAnonDiffMsg('Failed to load anonymization diff.')
+    } finally {
+      setAnonDiffLoading(false)
+    }
+  }
+
   // Share form state
   const [shareEmail, setShareEmail] = useState('')
   const [shareNote, setShareNote] = useState('')
@@ -1850,6 +1885,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
           <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View in OHIF'}</button>
           <button type="button" className="btn btn--secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
+          <button type="button" className="btn btn--secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
           {isAdmin && <button type="button" className="btn btn--secondary" onClick={openReassign}>Move to Project</button>}
         </div>
         {isAdmin && reassignOpen && (
@@ -1906,6 +1942,78 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* Anonymization diff panel */}
+      {anonDiffOpen && (
+        <div className="dicom-tags-panel">
+          {anonDiffLoading && <div className="state-loading">Loading diff…</div>}
+          {!anonDiffLoading && anonDiffMsg && <div className="state-empty">{anonDiffMsg}</div>}
+          {!anonDiffLoading && anonDiff && (() => {
+            const { removed, modified, added } = anonDiff.diff
+            const totalChanges = removed.length + modified.length + added.length
+            if (totalChanges === 0) return <div className="state-empty">No tag differences found — files appear identical.</div>
+            return (
+              <div>
+                {removed.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ margin: '0 0 6px', fontSize: 13, color: '#9a3412' }}>Removed ({removed.length})</h4>
+                    <table className="audit-table dicom-tags-table">
+                      <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Raw Value</th></tr></thead>
+                      <tbody>
+                        {removed.map(t => (
+                          <tr key={t.tag} style={{ background: '#ffedd5' }}>
+                            <td><code>{t.tag}</code></td>
+                            <td>{t.keyword}</td>
+                            <td><code>{t.vr}</code></td>
+                            <td className="dicom-tag-value">{t.raw_value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {modified.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ margin: '0 0 6px', fontSize: 13, color: '#0f766e' }}>Modified ({modified.length})</h4>
+                    <table className="audit-table dicom-tags-table">
+                      <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Raw Value</th><th>Clean Value</th></tr></thead>
+                      <tbody>
+                        {modified.map(t => (
+                          <tr key={t.tag} style={{ background: '#ccfbf1' }}>
+                            <td><code>{t.tag}</code></td>
+                            <td>{t.keyword}</td>
+                            <td><code>{t.vr}</code></td>
+                            <td className="dicom-tag-value">{t.raw_value}</td>
+                            <td className="dicom-tag-value">{t.clean_value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {added.length > 0 && (
+                  <div>
+                    <h4 style={{ margin: '0 0 6px', fontSize: 13, color: '#374151' }}>Added ({added.length})</h4>
+                    <table className="audit-table dicom-tags-table">
+                      <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Clean Value</th></tr></thead>
+                      <tbody>
+                        {added.map(t => (
+                          <tr key={t.tag}>
+                            <td><code>{t.tag}</code></td>
+                            <td>{t.keyword}</td>
+                            <td><code>{t.vr}</code></td>
+                            <td className="dicom-tag-value">{t.clean_value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
       )}
 

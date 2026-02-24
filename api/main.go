@@ -202,6 +202,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{id}/series", auth(srv.ListStudySeries))
 	mux.HandleFunc("GET /api/studies/{id}/diagnostics", auth(srv.GetStudyDiagnostics))
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-tags", auth(srv.InspectDicomTags))
+	mux.HandleFunc("GET /api/studies/{studyUID}/anonymization-diff", auth(srv.GetAnonDiff))
 	mux.HandleFunc("POST /api/studies/bulk", adminOnly(srv.BulkStudyAction))
 	mux.HandleFunc("POST /api/studies/bulk-pipeline-trigger", adminOnly(srv.BulkPipelineTrigger))
 	mux.HandleFunc("POST /api/studies/{id}/notes", adminOnly(srv.AddStudyNote))
