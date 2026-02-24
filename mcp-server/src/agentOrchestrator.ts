@@ -23,12 +23,13 @@ const agentDataSchema = z.object({
 
 type AgentData = z.infer<typeof agentDataSchema>;
 
-type AgentRequest = {
+export type AgentRequest = {
   request_id?: string;
   question?: string;
   study_id?: string;
   study_instance_uid?: string;
   include_next_steps?: boolean;
+  model?: string;
 };
 
 type LlmConfig = {
@@ -42,6 +43,21 @@ type LlmConfig = {
 };
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
+
+// Allowed Gemini model overrides — must be models available on Vertex AI OpenAI-compatible endpoint.
+const ALLOWED_MODEL_OVERRIDES = new Set([
+  "google/gemini-2.0-flash-001",
+  "google/gemini-2.0-flash-lite-001",
+  "google/gemini-1.5-flash-001",
+  "google/gemini-1.5-pro-001"
+]);
+
+function resolveModel(requested: string | undefined, config: LlmConfig): string {
+  if (requested && ALLOWED_MODEL_OVERRIDES.has(requested)) {
+    return requested;
+  }
+  return config.model;
+}
 
 const DEFAULT_PROMPT = `AEGIS Agent Prompt (Read-only)
 
@@ -62,8 +78,18 @@ Behavior Rules:
 - Only include next steps when the caller explicitly asks for them.
 
 Output:
-- Return JSON matching the AEGIS Agent response schema file: aegis-agent.response-schema.json.
-- Do not add extra fields outside the schema.`;
+- Return a single raw JSON object — no markdown, no code fences, no prose.
+- The object must have exactly these top-level keys: summary, evidence, diagnostics, timeline, next_steps.
+- Do not wrap the response in an envelope (no "ok", "request_id", or "data" wrapper).
+- Schema:
+  {
+    "summary": "<string>",
+    "evidence": [{"field":"<str>","value":"<str|num|bool|null>","timestamp":"<str|null>"}],
+    "diagnostics": {"terminal":<bool>,"stuck":<bool>,"blockers":["<str>"],"recommended_actions":["<str>"]},
+    "timeline": [{"event":"<str>","timestamp":"<str>"}],
+    "next_steps": ["<str>"]
+  }
+`;
 
 function loadPrompt(): string {
   try {
@@ -74,6 +100,11 @@ function loadPrompt(): string {
 }
 
 const AGENT_PROMPT = loadPrompt();
+
+const FINAL_JSON_REQUEST =
+  'Based on the tool results above, produce ONLY the JSON response object. ' +
+  'No prose, no code fences, no explanation — just the raw JSON object with exactly these top-level keys: ' +
+  'summary, evidence, diagnostics, timeline, next_steps.';
 
 function stripCodeFence(input: string): string {
   const trimmed = input.trim();
@@ -91,7 +122,7 @@ function parseAgentData(content: string): AgentData {
   try {
     raw = JSON.parse(cleaned);
   } catch {
-    throw new Error(`Agent returned non-JSON content: ${cleaned.slice(0, 120)}`);
+    throw new Error(`Agent returned non-JSON content: ${cleaned.slice(0, 200)}`);
   }
 
   // Unwrap full-envelope responses: {"ok":true,"data":{summary,...}} → {summary,...}
@@ -266,29 +297,40 @@ async function fetchGcpAccessToken(): Promise<string> {
 async function callLlm(
   config: LlmConfig,
   messages: LlmMessage[],
-  tools: unknown
+  tools: unknown,
+  forceJsonOutput = false
 ): Promise<{ content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> }> {
   const url = `${config.baseUrl.replace(/\/$/, "")}/chat/completions`;
   const authToken = config.useGcpAuth ? await fetchGcpAccessToken() : config.apiKey;
+
+  const body: Record<string, unknown> = {
+    model: config.model,
+    messages,
+    temperature: config.temperature,
+    max_tokens: config.maxTokens
+  };
+
+  if (tools) {
+    body.tools = tools;
+    body.tool_choice = "auto";
+  }
+
+  if (forceJsonOutput) {
+    body.response_format = { type: "json_object" };
+  }
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${authToken}`
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      tools,
-      tool_choice: "auto",
-      temperature: config.temperature,
-      max_tokens: config.maxTokens
-    })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`LLM request failed: ${response.status} ${body}`);
+    const text = await response.text();
+    throw new Error(`LLM request failed: ${response.status} ${text}`);
   }
 
   const payload = (await response.json()) as {
@@ -296,7 +338,7 @@ async function callLlm(
   };
 
   const message = payload.choices?.[0]?.message;
-  return { content: message?.content, tool_calls: message?.tool_calls };
+  return { content: message?.content ?? undefined, tool_calls: message?.tool_calls };
 }
 
 export async function runAgentWithLlm(
@@ -306,6 +348,9 @@ export async function runAgentWithLlm(
 ): Promise<AgentData> {
   const toolHandlers = buildToolHandlers(client);
   const tools = buildToolSchema();
+
+  const effectiveModel = resolveModel(request.model, llmConfig);
+  const effectiveConfig = effectiveModel !== llmConfig.model ? { ...llmConfig, model: effectiveModel } : llmConfig;
 
   const userContext = {
     question: request.question ?? "",
@@ -319,10 +364,15 @@ export async function runAgentWithLlm(
     { role: "user", content: JSON.stringify(userContext) }
   ];
 
-  for (let i = 0; i < 4; i += 1) {
-    const result = await callLlm(llmConfig, messages, tools);
+  let finalContent: string | null = null;
+  let madeToolCalls = false;
+
+  // Phase 1: tool-call loop — gather data via tools (up to 6 rounds).
+  for (let i = 0; i < 6; i += 1) {
+    const result = await callLlm(effectiveConfig, messages, tools);
 
     if (result.tool_calls && result.tool_calls.length > 0) {
+      madeToolCalls = true;
       messages.push({
         role: "assistant",
         content: result.content ?? "",
@@ -357,14 +407,36 @@ export async function runAgentWithLlm(
       continue;
     }
 
-    if (!result.content) {
-      throw new Error("LLM response missing content");
+    // No tool calls — model produced a text response.
+    if (result.content) {
+      finalContent = result.content;
     }
-
-    return parseAgentData(result.content);
+    break;
   }
 
-  throw new Error("LLM did not return a final response after tool calls");
+  // Phase 2: if we have no valid final content yet, explicitly request the JSON answer.
+  // This handles models (like Gemini) that exhaust tool rounds without producing structured output.
+  if (!finalContent) {
+    messages.push({ role: "user", content: FINAL_JSON_REQUEST });
+    const finalResult = await callLlm(effectiveConfig, messages, null, true);
+    finalContent = finalResult.content ?? null;
+  } else if (madeToolCalls) {
+    // We got content after tool calls — try to parse it.
+    // If it fails, retry with an explicit JSON request and response_format.
+    try {
+      return parseAgentData(finalContent);
+    } catch {
+      messages.push({ role: "user", content: FINAL_JSON_REQUEST });
+      const retryResult = await callLlm(effectiveConfig, messages, null, true);
+      finalContent = retryResult.content ?? null;
+    }
+  }
+
+  if (!finalContent) {
+    throw new Error("LLM did not return a final response after tool calls");
+  }
+
+  return parseAgentData(finalContent);
 }
 
 export function buildLlmConfig(env: {
@@ -405,3 +477,5 @@ export function buildLlmConfig(env: {
     useGcpAuth: false
   };
 }
+
+export { ALLOWED_MODEL_OVERRIDES };
