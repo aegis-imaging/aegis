@@ -378,6 +378,154 @@ func TestServeStorageFile_TraversalBlocked(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "invalid path")
 }
 
+// ─── WADO-RS: Instance Metadata ──────────────────────────────────────────────
+
+func TestDicomwebInstanceMetadata_InvalidSopUID(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, _ := dicomTestServer(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/dicomweb/studies/1.2.3/series/s/instances/not-a-number/metadata", nil)
+	req.SetPathValue("studyUID", "1.2.3")
+	req.SetPathValue("sopUID", "not-a-number")
+	rr := httptest.NewRecorder()
+
+	srv.DicomwebInstanceMetadata(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid SOP UID")
+}
+
+func TestDicomwebInstanceMetadata_StudyNotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, _ := dicomTestServer(t, db)
+
+	req := httptest.NewRequest(http.MethodGet, "/dicomweb/studies/1.2.3.no-such/series/s/instances/1.2.3.1.0/metadata", nil)
+	req.SetPathValue("studyUID", "1.2.3.no-such")
+	req.SetPathValue("sopUID", "1.2.3.1.0")
+	rr := httptest.NewRecorder()
+
+	srv.DicomwebInstanceMetadata(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "study not found")
+}
+
+func TestDicomwebInstanceMetadata_FileNotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, _ := dicomTestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	sopUID := study.StudyInstanceUID + ".1.0"
+	req := httptest.NewRequest(http.MethodGet, "/dicomweb/studies/"+study.StudyInstanceUID+"/series/s/instances/"+sopUID+"/metadata", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	req.SetPathValue("sopUID", sopUID)
+	rr := httptest.NewRecorder()
+
+	srv.DicomwebInstanceMetadata(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "file not found")
+}
+
+func TestDicomwebInstanceMetadata_InvalidDicom(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, store := dicomTestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	// Write non-parseable content.
+	writeFakeDcm(t, store, "dicom/raw/"+study.StudyInstanceUID+"/0.dcm")
+
+	sopUID := study.StudyInstanceUID + ".1.0"
+	req := httptest.NewRequest(http.MethodGet, "/dicomweb/studies/"+study.StudyInstanceUID+"/series/s/instances/"+sopUID+"/metadata", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	req.SetPathValue("sopUID", sopUID)
+	rr := httptest.NewRecorder()
+
+	srv.DicomwebInstanceMetadata(rr, req)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
+	assert.Contains(t, rr.Body.String(), "failed to parse DICOM file")
+}
+
+func TestDicomwebInstanceMetadata_Success(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, store := dicomTestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	// Write a real parseable DICOM file with Modality=MR.
+	writeRealDcm(t, store, "dicom/raw/"+study.StudyInstanceUID+"/0.dcm", "MR")
+
+	sopUID := study.StudyInstanceUID + ".1.0"
+	req := httptest.NewRequest(http.MethodGet, "/dicomweb/studies/"+study.StudyInstanceUID+"/series/s/instances/"+sopUID+"/metadata", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	req.SetPathValue("sopUID", sopUID)
+	rr := httptest.NewRecorder()
+
+	srv.DicomwebInstanceMetadata(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Header().Get("Content-Type"), "application/dicom+json")
+
+	// Response must be a JSON array with exactly one object.
+	var result []map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	require.Len(t, result, 1)
+
+	// Modality tag (0008,0060) should be present with value "MR".
+	modalityTag, ok := result[0]["00080060"]
+	require.True(t, ok, "Modality tag 00080060 should be present")
+	modalityObj := modalityTag.(map[string]any)
+	assert.Equal(t, "CS", modalityObj["vr"])
+	vals := modalityObj["Value"].([]any)
+	assert.Equal(t, "MR", vals[0])
+}
+
+func TestDicomwebRawInstanceMetadata_AlwaysReadsRawStore(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, store := dicomTestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	// Study with DicomStore = "clean" (post-defacing).
+	study := &model.Study{
+		ProjectID:        proj.ID,
+		StudyInstanceUID: fmt.Sprintf("1.2.3.meta-raw-override.%d", uniqueInt()),
+		Modality:         "CT",
+		InstanceCount:    1,
+		Status:           "defaced",
+		DicomStore:       "clean",
+		Source:           "external",
+	}
+	require.NoError(t, model.CreateStudy(context.Background(), db, study))
+
+	// Write the real DICOM file only in the raw store.
+	writeRealDcm(t, store, "dicom/raw/"+study.StudyInstanceUID+"/0.dcm", "CT")
+
+	sopUID := study.StudyInstanceUID + ".1.0"
+	req := httptest.NewRequest(http.MethodGet, "/dicomweb-raw/studies/"+study.StudyInstanceUID+"/series/s/instances/"+sopUID+"/metadata", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	req.SetPathValue("sopUID", sopUID)
+	rr := httptest.NewRecorder()
+
+	// Raw metadata always reads from "raw", even though study.DicomStore = "clean".
+	srv.DicomwebRawInstanceMetadata(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var result []map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	require.Len(t, result, 1)
+
+	// Modality tag should reflect the raw file's CT modality.
+	modalityTag, ok := result[0]["00080060"]
+	require.True(t, ok, "Modality tag should be present")
+	modalityObj := modalityTag.(map[string]any)
+	vals := modalityObj["Value"].([]any)
+	assert.Equal(t, "CT", vals[0])
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 var uniqueCounter int
