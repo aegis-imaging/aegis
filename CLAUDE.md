@@ -30,6 +30,12 @@ Current research files:
 - `docs/research/mri-protocol-compliance.md` — MRI acquisition parameter ranges, consortia protocols (ADNI4, HCP, ABCD, UK Biobank, ENIGMA), tolerance recommendations, mrQA tool, Enhanced vs Classic DICOM
 - `docs/research/mri-defacing-tools-comparison.md` — tool comparison (afni_refacer, DeepDefacer, PyDeface, mri_deface, Quickshear), success rates, speed benchmarks, Docker size, licensing
 
+Operational docs:
+- `docs/dicom-conformance.md` — formal DICOM conformance statement: supported SOP classes, transfer syntaxes, DICOMweb (QIDO-RS/STOW-RS/WADO-RS), DIMSE (C-STORE SCP, C-ECHO SCP, C-STORE SCU), de-identification profile, limitations
+- `docs/runbooks/alert-response.md` — per-alert incident response for all 9 Cloud Monitoring alert policies: triage steps, remediation commands, escalation paths
+- `docs/runbooks/incident-response.md` — general incident management workflow (severity levels, communication, post-mortem)
+- `docs/runbooks/secret-rotation.md` — secret rotation procedures for DB password, API keys, and DIMSE operator key
+
 ## Repository Structure (Monorepo)
 
 ```
