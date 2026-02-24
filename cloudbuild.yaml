@@ -12,6 +12,7 @@
 #   _PROJECT_ID     GCP project ID                  (default: aegis-prod-488120)
 #   _REPO           Artifact Registry repo base URL
 #   _OHIF_URL       OHIF Cloud Run URL (baked into admin-dashboard at build time)
+#   _WEASIS_URL     DWV viewer Cloud Run URL (baked into admin-dashboard at build time)
 #   _API_URL        Public API base URL  (baked into landing page at build time)
 ################################################################################
 
@@ -20,6 +21,7 @@ substitutions:
   _PROJECT_ID: aegis-prod-488120
   _REPO: us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services
   _OHIF_URL: https://ohif-uk5cvzf5nq-uc.a.run.app
+  _WEASIS_URL: https://weasis-uk5cvzf5nq-uc.a.run.app
   _API_URL: https://api.aegisimaging.ai
   # DIMSE receiver — Compute Engine instance. Override in trigger if zone/name differ.
   _DIMSE_ZONE: us-central1-a
@@ -63,6 +65,7 @@ steps:
         set -euo pipefail
         docker build \
           --build-arg VITE_OHIF_BASE_URL=${_OHIF_URL} \
+          --build-arg VITE_WEASIS_BASE_URL=${_WEASIS_URL} \
           -t ${_REPO}/admin-dashboard:${SHORT_SHA} \
           -t ${_REPO}/admin-dashboard:latest \
           frontend/admin-dashboard
@@ -102,6 +105,22 @@ steps:
           ohif
         docker push ${_REPO}/ohif:${SHORT_SHA}
         docker push ${_REPO}/ohif:latest
+
+  # --- weasis (DWV-based DICOM viewer, second viewer option alongside OHIF) ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-weasis
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/weasis:${SHORT_SHA} \
+          -t ${_REPO}/weasis:latest \
+          weasis
+        docker push ${_REPO}/weasis:${SHORT_SHA}
+        docker push ${_REPO}/weasis:latest
 
   # --- defacing ---
   - name: gcr.io/cloud-builders/docker
@@ -313,6 +332,22 @@ steps:
       - --image=${_REPO}/ohif:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
+      - --set-env-vars=API_URL=https://api.aegisimaging.ai
+      - --quiet
+
+  # --- deploy weasis ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-weasis
+    waitFor: [build-push-weasis]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - weasis
+      - --image=${_REPO}/weasis:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --allow-unauthenticated
       - --set-env-vars=API_URL=https://api.aegisimaging.ai
       - --quiet
 
