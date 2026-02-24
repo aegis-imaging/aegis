@@ -134,6 +134,8 @@ body {
 .z-src  .zone-hdr { color: #1D4ED8; }
 .z-gcp  { background: #F0FDFA; border-color: #0F766E; }
 .z-gcp  .zone-hdr { color: #0F766E; }
+.z-aws  { background: #FFF7ED; border-color: #EA580C; }
+.z-aws  .zone-hdr { color: #EA580C; }
 .z-pipe { background: #EFF6FF; border-color: #1D4ED8; }
 .z-pipe .zone-hdr { color: #1D4ED8; }
 .z-ph   { background: #FAF5FF; border-color: #7C3AED; }
@@ -512,7 +514,7 @@ def build_html():
          "GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC",
          "#7C3AED"),
         ("Phase 5: Beta → GA  🚧",
-         "Private beta · AWS deployment (Q2) · Azure + SOC 2 (Q3) · Enterprise GA (Q4)",
+         "Private beta · AWS deployment (Q1, deploying now) · Azure + SOC 2 (Q3) · Enterprise GA (Q4)",
          "#DC2626"),
     ]
     phases_html = "\n".join(
@@ -522,6 +524,50 @@ def build_html():
         f"</div>"
         for t, d, c in phases
     )
+
+    # ── AWS zone ─────────────────────────────────────────────────────────────
+    aws_alb = card("ALB + Cognito  (Auth Layer)", [
+        "HTTPS listener on ACM certificate",
+        "Cognito hosted UI — admin-create-only user pool",
+        "authenticate-cognito default action",
+        "Public bypass rules: /healthz, upload, export",
+    ], "orange")
+
+    aws_api = card("API + Admin  (ECS Fargate)", [
+        "Go API — same image as GCP (1 vCPU / 2 GB)",
+        "Admin Dashboard — React / nginx (0.5 vCPU / 1 GB)",
+        "Service discovery: api.aegis.local",
+        "Force-new-deployment via GitHub Actions",
+    ], "go")
+
+    aws_sidecars = card("7 Python Sidecars  (ECS Fargate)", [
+        "defacing · phi-detection · qc-service",
+        "bids-service · classification-service",
+        "protocol-service · synth-service",
+        "Cloud Map private DNS: svc.aegis.local:8080",
+    ], "py")
+
+    aws_data = card("RDS + S3  (Data Layer)", [
+        "RDS PostgreSQL 15 — private subnet",
+        "Secrets Manager — master credentials",
+        "S3 DICOM bucket — versioned, KMS-encrypted",
+        "Same STORAGE_MODE=s3 as GCP (same Go code)",
+    ], "amber")
+
+    aws_dimse = card("DIMSE EC2  (t3.small)", [
+        "Elastic IP — stable for PACS AE title registration",
+        "Amazon Linux 2023 — Docker + SSM agent",
+        "SSM Parameter Store → image URI on every boot",
+        "GitHub Actions: write SSM param + reboot instance",
+    ], "py")
+
+    aws_cicd = card("GitHub Actions CI/CD", [
+        "Triggers on push to develop (same as GCP Cloud Build)",
+        "Matrix build: 10 services, --platform linux/amd64",
+        "Push SHA tag + latest tag to ECR",
+        "Force-new-deployment for 9 ECS services",
+        "Update SSM param + reboot DIMSE EC2",
+    ], "slate")
 
     # ── Tech stack ───────────────────────────────────────────────────────────
     deps = [
@@ -614,6 +660,24 @@ def build_html():
       {export}
       {mcp}
       {landing}
+    </div>
+  </div>
+
+  <!-- AWS ACCOUNT -->
+  <div class="zone" style="background:#FFF7ED;border-color:#EA580C;margin-bottom:6px">
+    <div class="zone-hdr" style="color:#EA580C">
+      AWS ACCOUNT
+      <span class="zone-sub" style="color:#9A3412">301691475234 &nbsp;·&nbsp; us-east-1 &nbsp;·&nbsp; Deploying Q1 2026 — same app layer as GCP, parallel infrastructure</span>
+    </div>
+    <div class="g3" style="margin-bottom:6px">
+      {aws_alb}
+      {aws_api}
+      {aws_sidecars}
+    </div>
+    <div class="g3">
+      {aws_data}
+      {aws_dimse}
+      {aws_cicd}
     </div>
   </div>
 
