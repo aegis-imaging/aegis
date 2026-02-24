@@ -5,6 +5,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 import { TCIAPanel } from './components/TCIAPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
+import { ComplianceReportPanel } from './components/ComplianceReportPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -4368,6 +4369,9 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   // Archive/restore state
   const [archiving, setArchiving] = useState<string | null>(null)
 
+  // Compliance report modal
+  const [complianceProjectId, setComplianceProjectId] = useState<string | null>(null)
+
   async function openPhiConfig(projectId: string) {
     setPhiProjectId(projectId)
     setPhiError(null)
@@ -4754,6 +4758,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => cloneProject(p)}>
                           Clone
                         </button>
+                        <button type="button" className="btn btn--action"
+                          title="View compliance metrics for this project"
+                          onClick={() => setComplianceProjectId(p.id)}>
+                          Compliance
+                        </button>
                       </div>
                     )}
                   </td>
@@ -4763,6 +4772,13 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </table>
         )}
       </div>
+
+      {complianceProjectId && (
+        <ComplianceReportPanel
+          projectId={complianceProjectId}
+          onClose={() => setComplianceProjectId(null)}
+        />
+      )}
     </div>
   )
 }
