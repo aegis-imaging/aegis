@@ -32,6 +32,14 @@ type AgentPanelProps = {
   prefillStudyUid?: string
 }
 
+const GEMINI_MODELS = [
+  { value: '', label: 'Server default' },
+  { value: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash' },
+  { value: 'google/gemini-2.0-flash-lite-001', label: 'Gemini 2.0 Flash Lite' },
+  { value: 'google/gemini-1.5-pro-001', label: 'Gemini 1.5 Pro' },
+  { value: 'google/gemini-1.5-flash-001', label: 'Gemini 1.5 Flash' },
+]
+
 export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps) {
   const baseUrl = import.meta.env.VITE_AGENT_BASE_URL || DEFAULT_AGENT_BASE_URL
   const [studyId, setStudyId] = useState('')
@@ -39,6 +47,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
   const [question, setQuestion] = useState('')
   const [includeNextSteps, setIncludeNextSteps] = useState(true)
   const [agentApiKey, setAgentApiKey] = useState('')
+  const [model, setModel] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AgentResult | null>(null)
@@ -63,7 +72,8 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
       question: question.trim() || undefined,
       study_id: studyId.trim() || undefined,
       study_instance_uid: studyUid.trim() || undefined,
-      include_next_steps: includeNextSteps
+      include_next_steps: includeNextSteps,
+      model: model || undefined
     }
 
     setLoading(true)
@@ -101,6 +111,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
     setQuestion('')
     setIncludeNextSteps(true)
     setAgentApiKey('')
+    setModel('')
     setError(null)
     setResult(null)
   }
@@ -150,6 +161,15 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
             value={agentApiKey}
             onChange={(e) => setAgentApiKey(e.target.value)}
           />
+          <select
+            className="form-input"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          >
+            {GEMINI_MODELS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
         </div>
         <label className="form-checkbox">
           <input
