@@ -188,6 +188,14 @@ export const addStudyNoteArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const toggleStudyFlagArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  flagged: z.boolean(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const extendShareArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   share_id: z.string().uuid(),
@@ -345,7 +353,8 @@ export const writeToolNames = [
   "rotate_api_key",
   "enable_api_key",
   "disable_api_key",
-  "delete_api_key"
+  "delete_api_key",
+  "toggle_study_flag"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
