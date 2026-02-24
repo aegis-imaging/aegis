@@ -129,10 +129,119 @@ func (s *Server) RequestInvite(w http.ResponseWriter, r *http.Request) {
 		// Still return OK — the form has done its job even if email is misconfigured.
 	}
 
-	model.CreateAuditEntry(r.Context(), s.db, "invite_request.submitted", req.Email, "invite_request", "", clientIP(r),
+	ir, dbErr := model.CreateInviteRequest(r.Context(), s.db, req.Name, req.Email, req.Org, req.Message, clientIP(r))
+	if dbErr != nil {
+		log.Printf("invite request: store in db: %v", dbErr)
+		// Non-fatal — email was already dispatched.
+	}
+
+	resourceID := ""
+	if ir != nil {
+		resourceID = ir.ID
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "invite_request.submitted", req.Email, "invite_request", resourceID, clientIP(r),
 		map[string]any{"name": req.Name, "org": req.Org})
 
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ListInviteRequestsAdmin returns stored invite requests. Admin-only.
+//
+// GET /api/invite/requests
+// Query param: status=pending|approved|denied (omit for all)
+func (s *Server) ListInviteRequestsAdmin(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	switch status {
+	case "pending", "approved", "denied", "":
+		// valid
+	default:
+		s.writeError(w, http.StatusBadRequest, "status must be pending, approved, or denied")
+		return
+	}
+
+	requests, err := model.ListInviteRequests(r.Context(), s.db, status)
+	if err != nil {
+		log.Printf("list invite requests: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to list invite requests")
+		return
+	}
+	if requests == nil {
+		requests = []model.InviteRequest{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"requests": requests,
+		"total":    len(requests),
+	})
+}
+
+// ApproveInviteRequestAdmin approves a pending request from the admin dashboard,
+// creating an invite code and emailing it to the requester.
+//
+// POST /api/invite/requests/{id}/approve
+func (s *Server) ApproveInviteRequestAdmin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ir, err := model.GetInviteRequest(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "invite request not found")
+		return
+	}
+	if ir.Status != "pending" {
+		s.writeError(w, http.StatusConflict, "invite request is not pending (status: "+ir.Status+")")
+		return
+	}
+
+	ic, err := model.CreateInviteCode(r.Context(), s.db, ir.Name+" ("+ir.Email+")")
+	if err != nil {
+		log.Printf("invite approve admin: create code for %s: %v", ir.Email, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to create invite code")
+		return
+	}
+
+	inviteURL := s.cfg.LandingBaseURL + "/?invite=" + ic.Code
+	subject, body := email.InviteCodeIssued(ir.Name, ic.Code, inviteURL, s.cfg.LandingBaseURL)
+	if sendErr := s.mailer.Send(r.Context(), ir.Email, subject, body); sendErr != nil {
+		log.Printf("invite approve admin: send email to %s: %v", ir.Email, sendErr)
+		// Code still created — mark approved regardless.
+	}
+
+	if markErr := model.ApproveInviteRequest(r.Context(), s.db, id, actorEmail(r), ic.ID); markErr != nil {
+		log.Printf("invite approve admin: mark approved %s: %v", id, markErr)
+	}
+
+	model.CreateAuditEntry(r.Context(), s.db, "invite_code.issued", actorEmail(r), "invite_code", ic.ID, clientIP(r),
+		map[string]any{"label": ic.Label, "requester": ir.Email, "request_id": id})
+
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"status":      "approved",
+		"invite_code": ic,
+	})
+}
+
+// DenyInviteRequestAdmin denies a pending invite request. Admin-only.
+//
+// POST /api/invite/requests/{id}/deny
+func (s *Server) DenyInviteRequestAdmin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ir, err := model.GetInviteRequest(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "invite request not found")
+		return
+	}
+	if ir.Status != "pending" {
+		s.writeError(w, http.StatusConflict, "invite request is not pending (status: "+ir.Status+")")
+		return
+	}
+
+	if err := model.DenyInviteRequest(r.Context(), s.db, id, actorEmail(r)); err != nil {
+		log.Printf("invite deny admin: mark denied %s: %v", id, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to deny invite request")
+		return
+	}
+
+	model.CreateAuditEntry(r.Context(), s.db, "invite_request.denied", actorEmail(r), "invite_request", id, clientIP(r),
+		map[string]any{"email": ir.Email})
+
+	s.writeJSON(w, http.StatusOK, map[string]any{"status": "denied"})
 }
 
 // ApproveInviteRequest handles GET /api/invite/request/approve?t=...
