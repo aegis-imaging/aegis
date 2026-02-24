@@ -2,6 +2,8 @@ import { App, AppOptions, ViewConfig } from 'dwv'
 
 const params = new URLSearchParams(window.location.search)
 const studyUID = params.get('studyUID')
+const store = params.get('store') || 'clean'   // 'raw' = pre-defacing store, 'clean' = defaced store
+const apiBase = store === 'raw' ? '/dicomweb-raw' : '/dicomweb'
 
 const statusEl = document.getElementById('status')
 
@@ -99,7 +101,7 @@ if (!studyUID) {
 
   // 1. Fetch series list via QIDO-RS
   setStatus('Fetching series…')
-  fetch(`/dicomweb/studies/${studyUID}/series`)
+  fetch(`${apiBase}/studies/${studyUID}/series`)
     .then((r) => {
       if (!r.ok) throw new Error(`Series request failed: ${r.status} ${r.statusText}`)
       return r.json()
@@ -110,7 +112,7 @@ if (!studyUID) {
       if (!seriesUID) throw new Error('Series response is missing SeriesInstanceUID (0020000E).')
 
       setStatus('Fetching instances…')
-      return fetch(`/dicomweb/studies/${studyUID}/series/${seriesUID}/instances`)
+      return fetch(`${apiBase}/studies/${studyUID}/series/${seriesUID}/instances`)
     })
     .then((r) => {
       if (!r.ok) throw new Error(`Instances request failed: ${r.status} ${r.statusText}`)
@@ -122,7 +124,7 @@ if (!studyUID) {
       const seriesUID = instances[0]['0020000E']?.Value?.[0]
       const urls = instances.map((inst) => {
         const sopUID = inst['00080018']?.Value?.[0]
-        return `/dicomweb/studies/${studyUID}/series/${seriesUID}/instances/${sopUID}`
+        return `${apiBase}/studies/${studyUID}/series/${seriesUID}/instances/${sopUID}`
       })
 
       setStatus(`Loading ${urls.length} image${urls.length !== 1 ? 's' : ''}…`)

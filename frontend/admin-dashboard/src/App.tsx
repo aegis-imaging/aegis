@@ -1223,11 +1223,11 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
 
 // ── Defacing Review Panel ─────────────────────────────────────────────────────
 
-const OHIF_BASE = import.meta.env.VITE_OHIF_BASE_URL || 'http://localhost:3002'
+const WEASIS_BASE_DEFACE = import.meta.env.VITE_WEASIS_BASE_URL || 'http://localhost:3005'
 
 function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
-  const beforeUrl = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${study.study_instance_uid}&dataSource=dicomweb-raw`
-  const afterUrl  = `${OHIF_BASE}/viewer?StudyInstanceUIDs=${study.study_instance_uid}&dataSource=dicomweb`
+  const beforeUrl = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=raw`
+  const afterUrl  = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=clean`
 
   return (
     <div className="deface-panel">
@@ -1913,7 +1913,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             <button type="button" className="btn btn--export" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/trigger-export`)}>Export</button>
           )}
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
-          <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View in OHIF'}</button>
+          <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View'}</button>
           <button type="button" className="btn btn--secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
           <button type="button" className="btn btn--secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
           {isAdmin && <button type="button" className="btn btn--secondary" onClick={openReassign}>Move to Project</button>}
