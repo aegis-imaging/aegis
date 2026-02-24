@@ -19,18 +19,18 @@ locals {
       cpu    = 256
       memory = 512
       env = [
-        { name = "PHI_TOOL",                 value = "auto" },
+        { name = "PHI_TOOL", value = "auto" },
         { name = "PHI_CONFIDENCE_THRESHOLD", value = "0.4" },
-        { name = "PHI_MIN_TEXT_LENGTH",      value = "3" },
+        { name = "PHI_MIN_TEXT_LENGTH", value = "3" },
       ]
     }
     "qc-service" = {
       cpu    = 256
       memory = 512
       env = [
-        { name = "QC_TOOL",          value = "auto" },
+        { name = "QC_TOOL", value = "auto" },
         { name = "QC_SNR_THRESHOLD", value = "10.0" },
-        { name = "QC_GAP_RATIO",     value = "2.0" },
+        { name = "QC_GAP_RATIO", value = "2.0" },
       ]
     }
     "bids-service" = {
@@ -44,7 +44,7 @@ locals {
       cpu    = 256
       memory = 512
       env = [
-        { name = "CLASSIFY_TOOL",                 value = "auto" },
+        { name = "CLASSIFY_TOOL", value = "auto" },
         { name = "CLASSIFY_CONFIDENCE_THRESHOLD", value = "0.5" },
       ]
     }
@@ -52,7 +52,7 @@ locals {
       cpu    = 256
       memory = 512
       env = [
-        { name = "PROTOCOL_TOOL",              value = "auto" },
+        { name = "PROTOCOL_TOOL", value = "auto" },
         { name = "PROTOCOL_DEFAULT_TOLERANCE", value = "5.0" },
       ]
     }
@@ -65,11 +65,11 @@ locals {
 
   # Common environment variables injected into every sidecar
   sidecar_common_env = [
-    { name = "STORAGE_MODE",      value = "s3" },
-    { name = "S3_BUCKET",         value = aws_s3_bucket.dicom.bucket },
-    { name = "S3_REGION",         value = var.aws_region },
+    { name = "STORAGE_MODE", value = "s3" },
+    { name = "S3_BUCKET", value = aws_s3_bucket.dicom.bucket },
+    { name = "S3_REGION", value = var.aws_region },
     { name = "LOCAL_STORAGE_DIR", value = "/app/data" },
-    { name = "PORT",              value = "8080" },
+    { name = "PORT", value = "8080" },
   ]
 }
 
