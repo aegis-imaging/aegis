@@ -4705,7 +4705,24 @@ type InviteCode = {
   used_by_ip?: string
 }
 
+type InviteRequest = {
+  id: string
+  name: string
+  email: string
+  org: string
+  message: string
+  status: 'pending' | 'approved' | 'denied'
+  ip?: string
+  created_at: string
+  reviewed_at?: string
+  reviewed_by?: string
+  invite_code_id?: string
+}
+
 function InviteCodesPanel() {
+  const [subTab, setSubTab]       = useState<'codes' | 'requests'>('codes')
+
+  // ── Codes state ──────────────────────────────────────────────────────────
   const [codes, setCodes]         = useState<InviteCode[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
@@ -4715,6 +4732,13 @@ function InviteCodesPanel() {
   const [formError, setFormError] = useState<string | null>(null)
   const [newCode, setNewCode]     = useState<string | null>(null)
   const [copied, setCopied]       = useState<string | null>(null)
+
+  // ── Requests state ───────────────────────────────────────────────────────
+  const [requests, setRequests]     = useState<InviteRequest[]>([])
+  const [reqLoading, setReqLoading] = useState(false)
+  const [reqError, setReqError]     = useState<string | null>(null)
+  const [reqFilter, setReqFilter]   = useState<'all' | 'pending' | 'approved' | 'denied'>('pending')
+  const [reqActing, setReqActing]   = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
@@ -4728,7 +4752,21 @@ function InviteCodesPanel() {
     } finally { setLoading(false) }
   }, [])
 
+  const loadRequests = useCallback(async () => {
+    setReqLoading(true); setReqError(null)
+    try {
+      const qs = reqFilter !== 'all' ? `?status=${reqFilter}` : ''
+      const res = await fetch(`/api/invite/requests${qs}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setRequests(data.requests ?? [])
+    } catch (err) {
+      setReqError(err instanceof Error ? err.message : 'Failed to load')
+    } finally { setReqLoading(false) }
+  }, [reqFilter])
+
   useEffect(() => { load() }, [load])
+  useEffect(() => { if (subTab === 'requests') loadRequests() }, [subTab, loadRequests])
 
   async function create() {
     if (!formLabel.trim()) { setFormError('Label is required'); return }
@@ -4762,6 +4800,30 @@ function InviteCodesPanel() {
     load()
   }
 
+  async function approveRequest(id: string) {
+    setReqActing(prev => ({ ...prev, [id]: true }))
+    try {
+      const res = await fetch(`/api/invite/requests/${id}/approve`, { method: 'POST' })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Approve failed') }
+      loadRequests()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Approve failed')
+    } finally {
+      setReqActing(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
+  async function denyRequest(id: string, email: string) {
+    if (!confirm(`Deny invite request from ${email}?`)) return
+    setReqActing(prev => ({ ...prev, [id]: true }))
+    try {
+      await fetch(`/api/invite/requests/${id}/deny`, { method: 'POST' })
+      loadRequests()
+    } finally {
+      setReqActing(prev => ({ ...prev, [id]: false }))
+    }
+  }
+
   function copy(text: string, key: string) {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(key)
@@ -4776,7 +4838,127 @@ function InviteCodesPanel() {
 
   return (
     <div className="routing-panel">
-      <div className="routing-section">
+      {/* Sub-tab switcher */}
+      <div style={{ display: 'flex', gap: '4px', padding: '0 0 16px 0', borderBottom: '1px solid #e2e8f0', marginBottom: '16px' }}>
+        {(['codes', 'requests'] as const).map(t => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setSubTab(t)}
+            style={{
+              padding: '6px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+              background: subTab === t ? '#0d9488' : 'transparent',
+              color: subTab === t ? '#fff' : '#64748b',
+            }}
+          >
+            {t === 'codes' ? 'Invite Codes' : 'Access Requests'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Access Requests tab ──────────────────────────────────────────── */}
+      {subTab === 'requests' && (
+        <div className="routing-section">
+          <div className="routing-section-header">
+            <div>
+              <div className="routing-section-title">Access Requests</div>
+              <div className="routing-section-sub">
+                Users who submitted an access request form. Approve to generate and email an invite code; deny to reject.
+              </div>
+            </div>
+            <div className="actions-cell">
+              <select
+                value={reqFilter}
+                onChange={e => setReqFilter(e.target.value as typeof reqFilter)}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+              >
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="denied">Denied</option>
+                <option value="all">All</option>
+              </select>
+              <button type="button" className="btn-refresh" onClick={loadRequests}>Refresh</button>
+            </div>
+          </div>
+
+          {reqLoading && <div className="state-loading">Loading…</div>}
+          {reqError   && <div className="state-error">{reqError}</div>}
+          {!reqLoading && !reqError && requests.length === 0 && (
+            <div className="state-empty">No {reqFilter !== 'all' ? reqFilter : ''} requests.</div>
+          )}
+          {!reqLoading && !reqError && requests.length > 0 && (
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>Requester</th>
+                  <th>Org</th>
+                  <th>Message</th>
+                  <th>Submitted</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map(req => (
+                  <tr key={req.id}>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{req.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{req.email}</div>
+                    </td>
+                    <td style={{ fontSize: '0.85rem' }}>{req.org || <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                    <td style={{ fontSize: '0.8rem', maxWidth: 220, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {req.message || <span style={{ color: '#94a3b8' }}>—</span>}
+                    </td>
+                    <td style={{ fontSize: '0.8rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </td>
+                    <td>
+                      <span style={{
+                        display: 'inline-block', padding: '2px 8px', borderRadius: '12px',
+                        fontSize: '0.75rem', fontWeight: 600,
+                        background: req.status === 'approved' ? '#ccfbf1' : req.status === 'denied' ? '#ffedd5' : '#f1f5f9',
+                        color:      req.status === 'approved' ? '#0f766e' : req.status === 'denied' ? '#9a3412' : '#475569',
+                      }}>
+                        {req.status}
+                      </span>
+                    </td>
+                    <td>
+                      {req.status === 'pending' ? (
+                        <div className="actions-cell">
+                          <button
+                            type="button"
+                            className="btn-sm"
+                            disabled={reqActing[req.id]}
+                            onClick={() => approveRequest(req.id)}
+                            style={{ background: '#0d9488', color: '#fff', border: 'none' }}
+                          >
+                            {reqActing[req.id] ? '…' : 'Approve'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-sm btn-warning"
+                            disabled={reqActing[req.id]}
+                            onClick={() => denyRequest(req.id, req.email)}
+                          >
+                            Deny
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                          {req.reviewed_at ? new Date(req.reviewed_at).toLocaleDateString() : '—'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ── Invite Codes tab ─────────────────────────────────────────────── */}
+      {subTab === 'codes' && <div className="routing-section">
         <div className="routing-section-header">
           <div>
             <div className="routing-section-title">Invite Codes</div>
@@ -4817,10 +4999,10 @@ function InviteCodesPanel() {
         )}
 
         {newCode && (
-          <div className="routing-form" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-            <strong style={{ color: '#166534' }}>New invite code — share with your recipient:</strong>
+          <div className="routing-form" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
+            <strong style={{ color: '#0f766e' }}>New invite code — share with your recipient:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-              <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.95rem', letterSpacing: '0.1em', flex: 1 }}>
+              <code style={{ background: '#ccfbf1', padding: '6px 12px', borderRadius: '6px', fontSize: '0.95rem', letterSpacing: '0.1em', flex: 1 }}>
                 {newCode}
               </code>
               <button type="button" className="btn-secondary" onClick={() => copy(newCode, 'code')}>
@@ -4881,8 +5063,8 @@ function InviteCodesPanel() {
                       borderRadius: '12px',
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      background: ic.enabled ? '#dcfce7' : '#fee2e2',
-                      color: ic.enabled ? '#166534' : '#991b1b',
+                      background: ic.enabled ? '#ccfbf1' : '#ffedd5',
+                      color: ic.enabled ? '#0f766e' : '#9a3412',
                     }}>
                       {ic.enabled ? 'Active' : 'Revoked'}
                     </span>
@@ -4912,7 +5094,7 @@ function InviteCodesPanel() {
             </tbody>
           </table>
         )}
-      </div>
+      </div>}
     </div>
   )
 }
