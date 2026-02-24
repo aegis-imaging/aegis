@@ -604,7 +604,7 @@ resource "aws_lb_target_group" "admin" {
 
 resource "aws_lb_target_group" "weasis" {
   name        = "${var.project_name}-weasis"
-  port        = 3005
+  port        = 8080
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = aws_vpc.main.id
@@ -1090,10 +1090,13 @@ resource "aws_ecs_task_definition" "weasis" {
       essential = true
       portMappings = [
         {
-          containerPort = 3005
-          hostPort      = 3005
+          containerPort = 8080
+          hostPort      = 8080
           protocol      = "tcp"
         }
+      ]
+      environment = [
+        { name = "API_URL", value = "https://${local.api_fqdn}" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -1128,7 +1131,7 @@ resource "aws_ecs_service" "weasis" {
   load_balancer {
     target_group_arn = aws_lb_target_group.weasis.arn
     container_name   = "weasis"
-    container_port   = 3005
+    container_port   = 8080
   }
 
   depends_on = [aws_lb_listener.https]
