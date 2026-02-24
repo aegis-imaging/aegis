@@ -30,9 +30,8 @@ type Project = {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const COLLECTIONS = [
-  { value: 'TCGA-GBM', label: 'TCGA-GBM — Glioblastoma Brain MRI' },
-  { value: 'TCGA-LGG', label: 'TCGA-LGG — Lower Grade Glioma Brain MRI' },
-  { value: 'RIDER Brain MRI', label: 'RIDER Brain MRI — Test/Retest' },
+  { value: 'UPENN-GBM', label: 'UPENN-GBM — University of Pennsylvania Glioblastoma Brain MRI' },
+  { value: 'GBM-DSC-MRI-DRO', label: 'GBM-DSC-MRI-DRO — GBM DSC-MRI Digital Reference Objects' },
 ]
 
 // ── Component ─────────────────────────────────────────────────────────────────
