@@ -165,9 +165,10 @@ resource "aws_security_group" "dimse" {
 resource "aws_ssm_parameter" "dimse_image" {
   count = local.dimse_enabled ? 1 : 0
 
-  name  = "/aegis/dimse-image"
-  type  = "String"
-  value = var.dimse_receiver_image
+  name      = "/aegis/dimse-image"
+  type      = "String"
+  value     = var.dimse_receiver_image
+  overwrite = true
 
   # GitHub Actions writes a new value here on each deploy without running
   # terraform apply. Ignore so terraform plan doesn't flag it as drift.
