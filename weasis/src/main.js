@@ -26,6 +26,7 @@ function showError(msg) {
 // ── Toolbar tool-switching ────────────────────────────────────────────────────
 
 let app = null
+let defaultToolSet = false  // guard: only initialise the default tool once
 
 function syncToolbar(activeTool) {
   document.querySelectorAll('.tool-btn').forEach((btn) => {
@@ -36,7 +37,12 @@ function syncToolbar(activeTool) {
 document.querySelectorAll('.tool-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (app) {
-      app.setTool(btn.dataset.tool)
+      try {
+        app.setTool(btn.dataset.tool)
+      } catch (err) {
+        console.error('[DWV] setTool failed:', btn.dataset.tool, err)
+      }
+      // Always update visual state regardless of whether setTool succeeded.
       syncToolbar(btn.dataset.tool)
     }
   })
@@ -59,6 +65,23 @@ if (!studyUID) {
   app = new App()
   app.init(options)
 
+  // 'load' fires once per loaded data item, AFTER DWV has set up the layer
+  // group's active layer — the correct place to call setTool(). Using 'loadend'
+  // instead causes getActiveLayer() to return undefined so bindLayerGroup() is
+  // silently skipped and no canvas events are ever bound (DWV source:
+  // `void 0 !== n && this.#Fl.bindLayerGroup(t, n)`).
+  app.addEventListener('load', () => {
+    if (!defaultToolSet) {
+      defaultToolSet = true
+      try {
+        app.setTool('Scroll')
+      } catch (err) {
+        console.error('[DWV] initial setTool failed:', err)
+      }
+      syncToolbar('Scroll')
+    }
+  })
+
   app.addEventListener('loadprogress', (e) => {
     if (e.loaded < e.total) {
       setStatus(`Loading ${e.loaded} / ${e.total}…`)
@@ -67,10 +90,6 @@ if (!studyUID) {
 
   app.addEventListener('loadend', () => {
     setStatus('Ready', 'ready')
-    // Activate Scroll as the default tool so users can immediately navigate slices.
-    // Without setTool(), DWV renders images but mouse/keyboard events do nothing.
-    app.setTool('Scroll')
-    syncToolbar('Scroll')
   })
 
   app.addEventListener('loaderror', (e) => {
