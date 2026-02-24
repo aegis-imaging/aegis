@@ -187,3 +187,50 @@ func TestGetWebhookDeliveries_Empty(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
+
+func TestGetWebhookStats_OK(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	// Create a subscription.
+	createBody, _ := json.Marshal(map[string]any{
+		"url":    "https://example.com/hook",
+		"events": []string{"study.approved"},
+		"secret": "",
+	})
+	createReq := httptest.NewRequest("POST", "/api/webhook-subscriptions", bytes.NewBuffer(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRR := httptest.NewRecorder()
+	srv.CreateWebhook(createRR, createReq)
+	require.Equal(t, http.StatusCreated, createRR.Code)
+	var created model.WebhookSubscription
+	require.NoError(t, json.NewDecoder(createRR.Body).Decode(&created))
+
+	// Get stats (no deliveries yet — should return zero counts).
+	req := httptest.NewRequest("GET", "/api/webhook-subscriptions/"+created.ID+"/stats", nil)
+	req.SetPathValue("id", created.ID)
+	rr := httptest.NewRecorder()
+	srv.GetWebhookStats(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var stats model.WebhookStats
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&stats))
+	assert.Equal(t, created.ID, stats.SubscriptionID)
+	assert.Equal(t, 0, stats.TotalDeliveries)
+	assert.Equal(t, 0, stats.Successful)
+	assert.Equal(t, 0, stats.Failed)
+}
+
+func TestListAllDeliveries_Empty(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	req := httptest.NewRequest("GET", "/api/webhook-deliveries", nil)
+	rr := httptest.NewRecorder()
+	srv.ListAllDeliveries(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	assert.Equal(t, float64(0), resp["total"])
+}

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -201,6 +202,118 @@ func (s *Server) TestWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 		resp["error"] = deliveryErr.Error()
 	}
 	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// GetWebhookStats GET /api/webhook-subscriptions/{id}/stats
+func (s *Server) GetWebhookStats(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := model.GetWebhookSubscription(r.Context(), s.db, id); err != nil {
+		s.writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	stats, err := model.GetWebhookStats(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "stats query failed")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, stats)
+}
+
+// ListAllDeliveries GET /api/webhook-deliveries
+func (s *Server) ListAllDeliveries(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	subID := q.Get("subscription_id")
+
+	var successOnly *bool
+	if v := q.Get("success"); v == "true" {
+		t := true
+		successOnly = &t
+	} else if v == "false" {
+		f := false
+		successOnly = &f
+	}
+
+	limit, offset := 50, 0
+	if v := q.Get("limit"); v != "" {
+		if n, err := parseIntParam(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if v := q.Get("offset"); v != "" {
+		if n, err := parseIntParam(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	deliveries, total, err := model.ListAllWebhookDeliveries(r.Context(), s.db, subID, successOnly, limit, offset)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "query failed")
+		return
+	}
+	if deliveries == nil {
+		deliveries = []model.WebhookDelivery{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"deliveries": deliveries,
+		"total":      total,
+		"limit":      limit,
+		"offset":     offset,
+	})
+}
+
+// RetryDelivery POST /api/webhook-deliveries/{id}/retry
+// Re-sends the same event to the subscription's current URL with a fresh timestamp.
+func (s *Server) RetryDelivery(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	delivery, err := model.GetWebhookDelivery(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "delivery not found")
+		return
+	}
+
+	sub, err := model.GetWebhookSubscription(r.Context(), s.db, delivery.SubscriptionID)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "subscription not found")
+		return
+	}
+
+	payload := webhook.Payload{
+		Event:     delivery.Event,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	statusCode, deliveryErr := webhook.PostTest(*sub, payload)
+
+	success := deliveryErr == nil
+	rec := &model.WebhookDelivery{
+		SubscriptionID: sub.ID,
+		Event:          delivery.Event,
+		URL:            sub.URL,
+		Attempt:        1,
+		Success:        success,
+	}
+	if statusCode != 0 {
+		rec.StatusCode = &statusCode
+	}
+	if deliveryErr != nil {
+		msg := deliveryErr.Error()
+		rec.ErrorMessage = &msg
+	}
+	model.RecordWebhookDelivery(r.Context(), s.db, rec)
+	model.CreateAuditEntry(r.Context(), s.db, "webhook.delivery_retried", actorEmail(r), "webhook", sub.ID, clientIP(r), map[string]any{
+		"original_delivery_id": id, "success": success,
+	})
+
+	resp := map[string]any{"success": success, "status_code": statusCode}
+	if deliveryErr != nil {
+		resp["error"] = deliveryErr.Error()
+	}
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+func parseIntParam(s string) (int, error) {
+	var n int
+	_, err := fmt.Sscanf(s, "%d", &n)
+	return n, err
 }
 
 func validateWebhookRequest(req webhookRequest) error {
