@@ -2,10 +2,12 @@
 
 This module is used when Go routing forwards a study to a DIMSE destination.
 It reads stored DICOM files from shared storage and sends them via C-STORE.
+Also provides send_echo() for C-ECHO connectivity checks.
 """
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 import logging
 
@@ -122,4 +124,39 @@ def forward_study(
         ae_title,
     )
     return {"files_total": len(datasets), "files_sent": sent, "files_failed": failed}
+
+
+def send_echo(host: str, port: int, ae_title: str) -> dict:
+    """Send C-ECHO to a remote DIMSE destination and return latency.
+
+    Returns:
+        dict with keys: success (bool), latency_ms (float)
+
+    Raises:
+        RuntimeError: if association fails or C-ECHO response is not success.
+    """
+    from pynetdicom.sop_class import Verification  # type: ignore[import]
+
+    AE = _load_pynetdicom_ae()
+    ae = AE(ae_title=config.DIMSE_AE_TITLE)
+    ae.add_requested_context(Verification)
+
+    t0 = time.monotonic()
+    assoc = ae.associate(host, int(port), ae_title=ae_title)
+    if not assoc.is_established:
+        raise RuntimeError(
+            f"DIMSE association failed to {host}:{port} (AE={ae_title})"
+        )
+
+    try:
+        status = assoc.send_c_echo()
+        latency_ms = round((time.monotonic() - t0) * 1000, 1)
+        code = getattr(status, "Status", None) if status is not None else None
+        if code != 0x0000:
+            raise RuntimeError(f"C-ECHO returned non-success status: {code!r}")
+    finally:
+        assoc.release()
+
+    log.info("C-ECHO success: host=%s port=%d ae=%s latency_ms=%.1f", host, port, ae_title, latency_ms)
+    return {"success": True, "latency_ms": latency_ms}
 

@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/routing"
@@ -296,4 +299,117 @@ func validateDestination(d *model.Destination) error {
 		return nil
 	}
 	return fmt.Errorf("type must be dicomweb or dimse")
+}
+
+type destinationTestResult struct {
+	DestinationID string   `json:"destination_id"`
+	Type          string   `json:"type"`
+	Success       bool     `json:"success"`
+	LatencyMs     float64  `json:"latency_ms"`
+	StatusCode    *int     `json:"status_code,omitempty"`
+	Error         string   `json:"error,omitempty"`
+}
+
+// TestDestination probes an external DICOM destination to verify connectivity.
+// DICOMweb: sends GET {dicomweb_url}/studies?limit=1 and checks for a non-4xx response.
+// DIMSE: sends C-ECHO via the dimse-receiver /echo endpoint.
+func (s *Server) TestDestination(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	dest, err := model.GetDestinationByID(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "destination not found")
+		return
+	}
+
+	result := destinationTestResult{
+		DestinationID: dest.ID,
+		Type:          dest.Type,
+	}
+
+	switch dest.Type {
+	case "dicomweb":
+		testURL := strings.TrimRight(dest.DicomwebURL, "/") + "/studies?limit=1"
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, nil)
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to build request: %v", err)
+			break
+		}
+		if dest.DicomwebAuthHeader != "" {
+			req.Header.Set("Authorization", dest.DicomwebAuthHeader)
+		}
+		req.Header.Set("Accept", "application/dicom+json")
+
+		t0 := time.Now()
+		resp, err := s.httpClient.Do(req)
+		result.LatencyMs = float64(time.Since(t0).Milliseconds())
+
+		if err != nil {
+			result.Error = fmt.Sprintf("request failed: %v", err)
+		} else {
+			resp.Body.Close()
+			code := resp.StatusCode
+			result.StatusCode = &code
+			result.Success = resp.StatusCode < 400
+			if !result.Success {
+				result.Error = fmt.Sprintf("unexpected status %d", resp.StatusCode)
+			}
+		}
+
+	case "dimse":
+		if strings.TrimSpace(s.cfg.DimseReceiverURL) == "" {
+			result.Error = "dimse receiver service not configured"
+			break
+		}
+		echoURL := strings.TrimRight(s.cfg.DimseReceiverURL, "/") + "/echo"
+		payload, _ := json.Marshal(map[string]any{
+			"ae_title": dest.AETitle,
+			"host":     dest.Host,
+			"port":     dest.Port,
+		})
+
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, echoURL, bytes.NewReader(payload))
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to build echo request: %v", err)
+			break
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+
+		t0 := time.Now()
+		resp, err := s.httpClient.Do(req)
+		result.LatencyMs = float64(time.Since(t0).Milliseconds())
+
+		if err != nil {
+			result.Error = fmt.Sprintf("dimse echo request failed: %v", err)
+		} else {
+			defer resp.Body.Close()
+			var echoResp struct {
+				Success   bool    `json:"success"`
+				LatencyMs float64 `json:"latency_ms"`
+				Detail    string  `json:"detail"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&echoResp); err == nil && resp.StatusCode == http.StatusOK {
+				result.Success = echoResp.Success
+				result.LatencyMs = echoResp.LatencyMs
+				if !echoResp.Success {
+					result.Error = echoResp.Detail
+				}
+			} else {
+				result.Error = fmt.Sprintf("dimse echo returned status %d", resp.StatusCode)
+			}
+		}
+	}
+
+	meta := map[string]any{"type": dest.Type, "success": result.Success}
+	if result.Error != "" {
+		meta["error"] = result.Error
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "destination.tested", actorEmail(r), "destination", id, clientIP(r), meta)
+	s.writeJSON(w, http.StatusOK, result)
 }

@@ -83,7 +83,8 @@ const allowedPostPathPatterns = [
   /^\/api\/projects\/[0-9a-fA-F-]{36}\/export-batch$/,
   /^\/api\/routing-rules\/evaluate\/[0-9a-fA-F-]{36}$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/reactivate$/,
-  /^\/api\/webhook-subscriptions\/[0-9a-fA-F-]{36}\/test$/
+  /^\/api\/webhook-subscriptions\/[0-9a-fA-F-]{36}\/test$/,
+  /^\/api\/destinations\/[0-9a-fA-F-]{36}\/test$/
 ] as const;
 
 const allowedDeletePathPatterns = [
