@@ -156,6 +156,7 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   # Expected: aegis-prod-pipeline-failures, aegis-prod-study-stuck
   ```
 - [ ] See `terraform/monitoring/README.md` for full metric reference and runbook links.
+- [ ] See `docs/runbooks/alert-response.md` for per-alert incident response procedures (triage steps, remediation commands, escalation paths for all 9 alert policies).
 
 ## 4x. DIMSE Receiver — Compute Engine VM
 
@@ -976,6 +977,7 @@ docker compose down -v           # stop + destroy volumes (fresh start)
 
 Runbook:
 - `docs/planning/dimse-pacs-e2e-validation-runbook.md`
+- `docs/dicom-conformance.md` — DICOM conformance statement (SOP classes, transfer syntaxes, DICOMweb services, DIMSE services, de-identification profile)
 
 ## 8ab. DICOM File Retention & Cleanup Policy
 
@@ -1225,4 +1227,4 @@ Use GitHub Organizations to separate codebases by company.
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-23. See AEGIS_Architecture.md for the full system design. DIMSE receiver Compute Engine VM, Cloud Build CI/CD triggers, and IAM hardening reflected through 2026-02-23.*
+*Generated 2026-02-18. Updated 2026-02-23. See AEGIS_Architecture.md for the full system design. DIMSE receiver Compute Engine VM, Cloud Build CI/CD triggers, IAM hardening, DICOM conformance statement, and alert runbooks reflected through 2026-02-23.*
