@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import './App.css'
 import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
@@ -5187,6 +5187,11 @@ function InviteCodesPanel() {
   const [formError, setFormError] = useState<string | null>(null)
   const [newCode, setNewCode]     = useState<string | null>(null)
   const [copied, setCopied]       = useState<string | null>(null)
+  const [sendId, setSendId]         = useState<string | null>(null)
+  const [sendEmail, setSendEmail]   = useState('')
+  const [sendName, setSendName]     = useState('')
+  const [sending, setSending]       = useState(false)
+  const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   // ── Requests state ───────────────────────────────────────────────────────
   const [requests, setRequests]     = useState<InviteRequest[]>([])
@@ -5284,6 +5289,29 @@ function InviteCodesPanel() {
       setCopied(key)
       setTimeout(() => setCopied(null), 2000)
     })
+  }
+
+  async function sendCode(ic: InviteCode) {
+    if (!sendEmail.trim() || !sendEmail.includes('@')) {
+      setSendResult({ ok: false, msg: 'Enter a valid email address' })
+      return
+    }
+    setSending(true); setSendResult(null)
+    try {
+      const res = await fetch(`/api/invite-codes/${ic.id}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: sendEmail.trim(), name: sendName.trim() || ic.label }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || `HTTP ${res.status}`)
+      }
+      setSendResult({ ok: true, msg: `Sent to ${sendEmail.trim()}` })
+      setTimeout(() => { setSendId(null); setSendEmail(''); setSendName(''); setSendResult(null) }, 2500)
+    } catch (err) {
+      setSendResult({ ok: false, msg: err instanceof Error ? err.message : 'Failed to send' })
+    } finally { setSending(false) }
   }
 
   const SITE = 'https://aegisimaging.ai'
@@ -5486,7 +5514,8 @@ function InviteCodesPanel() {
             </thead>
             <tbody>
               {codes.map(ic => (
-                <tr key={ic.id}>
+                <Fragment key={ic.id}>
+                <tr>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <code style={{ fontSize: '0.85rem', letterSpacing: '0.08em' }}>{ic.code}</code>
@@ -5508,6 +5537,17 @@ function InviteCodesPanel() {
                       >
                         {copied === ic.id + '-link' ? '✓' : 'Link'}
                       </button>
+                      {ic.enabled && (
+                        <button
+                          type="button"
+                          className="btn-sm"
+                          title="Email this invite code"
+                          onClick={() => { setSendId(ic.id); setSendEmail(''); setSendName(''); setSendResult(null) }}
+                          style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                        >
+                          ✉ Send
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td>{ic.label || <span style={{ color: '#64748b' }}>—</span>}</td>
@@ -5545,6 +5585,50 @@ function InviteCodesPanel() {
                     </div>
                   </td>
                 </tr>
+                {sendId === ic.id && (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '8px 12px', background: '#0f172a' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          type="email"
+                          placeholder="recipient@example.com"
+                          value={sendEmail}
+                          onChange={e => setSendEmail(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && sendCode(ic)}
+                          style={{ flex: '1 1 200px', padding: '4px 8px', borderRadius: 4,
+                                   border: '1px solid #374151', background: '#1f2937', color: '#f9fafb' }}
+                          autoFocus
+                        />
+                        <input
+                          type="text"
+                          placeholder={`Name (default: ${ic.label})`}
+                          value={sendName}
+                          onChange={e => setSendName(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && sendCode(ic)}
+                          style={{ flex: '1 1 160px', padding: '4px 8px', borderRadius: 4,
+                                   border: '1px solid #374151', background: '#1f2937', color: '#f9fafb' }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={() => sendCode(ic)}
+                          disabled={sending}
+                        >{sending ? 'Sending…' : 'Send'}</button>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => { setSendId(null); setSendResult(null) }}
+                        >Cancel</button>
+                        {sendResult && (
+                          <span style={{ fontSize: 12, color: sendResult.ok ? '#0d9488' : '#ea580c' }}>
+                            {sendResult.msg}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
