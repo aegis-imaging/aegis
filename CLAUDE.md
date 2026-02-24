@@ -317,8 +317,9 @@ OHIF Viewer runs as a Docker container on `:3002`, configured to load DICOM imag
 - `GET /dicomweb/studies/{studyUID}/series` — single fake series per study
 - `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances` — enumerate instances by file count
 - `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}` — stream DICOM bytes from `dicom_store`
+- `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata` — WADO-RS instance metadata (DICOMweb JSON, no pixel data); required by OHIF v3 to build its image manifest before loading pixels
 
-**Raw DICOMweb proxy** — same routes under `/dicomweb-raw/*`, but WADO-RS always reads from `dicom/raw/` regardless of `dicom_store`. Used by OHIF's `dicomweb-raw` data source for defacing review.
+**Raw DICOMweb proxy** — same routes under `/dicomweb-raw/*`, but WADO-RS always reads from `dicom/raw/` regardless of `dicom_store`. Used by OHIF's `dicomweb-raw` data source for defacing review. Includes `/metadata` route.
 
 SOPInstanceUID format: `{studyUID}.1.{fileIndex}` (index maps to `dicom/{store}/{studyUID}/{index}.dcm`).
 
