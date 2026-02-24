@@ -1,10 +1,12 @@
 #!/bin/sh
 set -e
 
-# Substitute API_URL into the OHIF app config.
-# Default to localhost for local Docker Compose usage.
-API_URL="${API_URL:-http://localhost:8080}"
+# Default API backend for local Docker Compose (internal network hostname).
+# Override with API_URL env var when deploying (e.g. https://api.aegisimaging.ai).
+API_URL="${API_URL:-http://api:8080}"
 
-envsubst < /app-config.js.template > /usr/share/nginx/html/app-config.js
+# Substitute ${API_URL} in the nginx template.
+# Specifying the variable name prevents envsubst from mangling nginx's own $variables.
+envsubst '${API_URL}' < /nginx.conf.template > /etc/nginx/conf.d/default.conf
 
 exec "$@"
