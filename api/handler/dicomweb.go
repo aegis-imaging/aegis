@@ -43,16 +43,18 @@ func dicomTagPN(name string) map[string]any {
 // All patient-identifying fields are omitted — only anonymized UIDs and counts.
 func studyQIDO(s model.Study) map[string]any {
 	return map[string]any{
-		"0020000D": dicomTag("UI", s.StudyInstanceUID), // StudyInstanceUID
-		"00080020": dicomTag("DA", ""),                 // StudyDate — anonymized
-		"00080030": dicomTag("TM", ""),                 // StudyTime — anonymized
-		"00080050": dicomTag("SH", ""),                 // AccessionNumber — anonymized
-		"00100010": dicomTagPN(""),                     // PatientName — anonymized
-		"00100020": dicomTag("LO", ""),                 // PatientID — anonymized
-		"00080060": dicomTag("CS", s.Modality),         // Modality
-		"00200010": dicomTag("SH", ""),                 // StudyID
-		"00201206": dicomTagInt("IS", 1),               // NumberOfStudyRelatedSeries
-		"00201208": dicomTagInt("IS", s.InstanceCount), // NumberOfStudyRelatedInstances
+		"0020000D": dicomTag("UI", s.StudyInstanceUID),   // StudyInstanceUID
+		"00080020": dicomTag("DA", ""),                   // StudyDate — anonymized
+		"00080030": dicomTag("TM", ""),                   // StudyTime — anonymized
+		"00080050": dicomTag("SH", ""),                   // AccessionNumber — anonymized
+		"00100010": dicomTagPN(""),                       // PatientName — anonymized
+		"00100020": dicomTag("LO", ""),                   // PatientID — anonymized
+		"00080060": dicomTag("CS", s.Modality),           // Modality
+		"00080061": dicomTag("CS", s.Modality),           // ModalitiesInStudy — required by OHIF v3 to select viewer mode
+		"00081030": dicomTag("LO", s.StudyDescription),   // StudyDescription
+		"00200010": dicomTag("SH", ""),                   // StudyID
+		"00201206": dicomTagInt("IS", 1),                 // NumberOfStudyRelatedSeries
+		"00201208": dicomTagInt("IS", s.InstanceCount),   // NumberOfStudyRelatedInstances
 	}
 }
 
