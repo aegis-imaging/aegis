@@ -170,12 +170,6 @@ variable "landing_image" {
   default     = ""
 }
 
-variable "ohif_image" {
-  description = "Container image URI for the OHIF viewer (empty = disabled)"
-  type        = string
-  default     = ""
-}
-
 variable "synth_service_image" {
   description = "Container image URI for the synthetic MRI sidecar (empty = service not deployed)"
   type        = string
@@ -197,12 +191,6 @@ variable "mcp_server_aegis_api_token" {
 
 variable "synth_service_url" {
   description = "Direct HTTPS URL for the synthetic MRI service when managed outside Terraform (e.g. a manually-deployed Cloud Run service). Takes precedence over the synth_service_image-derived URL."
-  type        = string
-  default     = ""
-}
-
-variable "ohif_domain" {
-  description = "FQDN for the public OHIF viewer used by the landing page demo (e.g. ohif.aegisimaging.ai). Leave empty to skip."
   type        = string
   default     = ""
 }
@@ -399,7 +387,7 @@ variable "gate_secret" {
 }
 
 variable "allowed_origins" {
-  description = "Optional CORS origins override. If empty, defaults to API + admin domains. Must include OHIF Cloud Run URL (e.g. https://ohif-<hash>-uc.a.run.app) so OHIF can make cross-origin DICOMweb requests to the API."
+  description = "Optional CORS origins override. If empty, defaults to API + admin domains."
   type        = list(string)
   default     = []
 }
@@ -478,7 +466,6 @@ locals {
     var.admin_domain,
     var.landing_domain,
     var.landing_domain != "" ? "www.${var.landing_domain}" : "",
-    var.ohif_domain,
   ]))
 
   resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : [
@@ -867,61 +854,6 @@ resource "google_cloud_run_service_iam_member" "sidecar_invoker" {
   member   = "allUsers"
 }
 
-# --- Cloud Run OHIF Viewer ---
-
-resource "google_cloud_run_v2_service" "ohif" {
-  count    = var.ohif_image != "" ? 1 : 0
-  name     = "ohif"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
-
-  deletion_protection = var.deletion_protection
-
-  template {
-    service_account = google_service_account.sidecars.email
-
-    scaling {
-      min_instance_count = 0
-      max_instance_count = 2
-    }
-
-    containers {
-      image = var.ohif_image
-
-      env {
-        name  = "API_URL"
-        value = "https://${var.api_domain}"
-      }
-
-      resources {
-        limits = {
-          cpu    = "1000m"
-          memory = "512Mi"
-        }
-      }
-
-      liveness_probe {
-        failure_threshold     = 3
-        initial_delay_seconds = 10
-        timeout_seconds       = 5
-        period_seconds        = 30
-
-        http_get {
-          path = "/health"
-        }
-      }
-    }
-  }
-}
-
-resource "google_cloud_run_service_iam_member" "ohif_invoker" {
-  count    = var.ohif_image != "" ? 1 : 0
-  location = var.region
-  service  = google_cloud_run_v2_service.ohif[0].name
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
-
 # --- Cloud Run DWV (WEASIS) Viewer ---
 
 resource "google_cloud_run_v2_service" "weasis" {
@@ -975,34 +907,6 @@ resource "google_cloud_run_service_iam_member" "weasis_invoker" {
   service  = google_cloud_run_v2_service.weasis[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
-}
-
-# Public OHIF domain (ohif.aegisimaging.ai) — LB routes to the existing OHIF Cloud Run
-# service without IAP, enabling the landing page demo to embed OHIF in iframes.
-resource "google_compute_region_network_endpoint_group" "ohif_public_neg" {
-  count                 = var.ohif_image != "" && var.ohif_domain != "" ? 1 : 0
-  name                  = "${local.name_prefix}-ohif-public-neg"
-  region                = var.region
-  network_endpoint_type = "SERVERLESS"
-  cloud_run {
-    service = google_cloud_run_v2_service.ohif[0].name
-  }
-}
-
-resource "google_compute_backend_service" "ohif_public" {
-  count                 = var.ohif_image != "" && var.ohif_domain != "" ? 1 : 0
-  name                  = "${local.name_prefix}-ohif-public-backend"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  protocol              = "HTTP"
-
-  log_config {
-    enable      = true
-    sample_rate = 0.1
-  }
-
-  backend {
-    group = google_compute_region_network_endpoint_group.ohif_public_neg[0].id
-  }
 }
 
 # --- Cloud Run API ---
@@ -1644,14 +1548,6 @@ resource "google_compute_url_map" "https" {
     path_matcher = "admin"
   }
 
-  dynamic "host_rule" {
-    for_each = var.ohif_image != "" && var.ohif_domain != "" ? [1] : []
-    content {
-      hosts        = [var.ohif_domain]
-      path_matcher = "ohif-public"
-    }
-  }
-
   dynamic "path_matcher" {
     for_each = var.landing_image != "" ? [1] : []
     content {
@@ -1671,13 +1567,6 @@ resource "google_compute_url_map" "https" {
     # No path rules needed — nginx proxies /api/* to the API backend internally.
   }
 
-  dynamic "path_matcher" {
-    for_each = var.ohif_image != "" && var.ohif_domain != "" ? [1] : []
-    content {
-      name            = "ohif-public"
-      default_service = google_compute_backend_service.ohif_public[0].id
-    }
-  }
 }
 
 resource "google_compute_target_https_proxy" "https" {
@@ -2200,14 +2089,6 @@ output "admin_service_uri" {
 
 output "sidecar_service_uris" {
   value = { for name, svc in google_cloud_run_v2_service.sidecars : name => svc.uri }
-}
-
-output "ohif_service_uri" {
-  value = var.ohif_image != "" ? google_cloud_run_v2_service.ohif[0].uri : ""
-}
-
-output "ohif_public_url" {
-  value = var.ohif_domain != "" ? "https://${var.ohif_domain}" : ""
 }
 
 output "weasis_service_uri" {

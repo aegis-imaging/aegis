@@ -50,7 +50,7 @@ func studyQIDO(s model.Study) map[string]any {
 		"00100010": dicomTagPN(""),                       // PatientName — anonymized
 		"00100020": dicomTag("LO", ""),                   // PatientID — anonymized
 		"00080060": dicomTag("CS", s.Modality),           // Modality
-		"00080061": dicomTag("CS", s.Modality),           // ModalitiesInStudy — required by OHIF v3 to select viewer mode
+		"00080061": dicomTag("CS", s.Modality),           // ModalitiesInStudy
 		"00081030": dicomTag("LO", s.StudyDescription),   // StudyDescription
 		"00200010": dicomTag("SH", ""),                   // StudyID
 		"00201206": dicomTagInt("IS", 1),                 // NumberOfStudyRelatedSeries
@@ -69,8 +69,8 @@ func seriesQIDO(s model.Study) map[string]any {
 }
 
 // modalitySOPClass maps DICOM modality codes to their primary SOP Class UID.
-// OHIF requires SOPClassUID in the instance QIDO response to select the right
-// image loader. Defaults to MR Image Storage when modality is unknown.
+// SOPClassUID is included in the instance QIDO response so DICOMweb viewers
+// can select the right image loader. Defaults to MR Image Storage when modality is unknown.
 func modalitySOPClass(modality string) string {
 	switch modality {
 	case "CT":
@@ -92,7 +92,7 @@ func instanceQIDO(studyUID, modality string, index int) map[string]any {
 	return map[string]any{
 		"0020000D": dicomTag("UI", studyUID),                                // StudyInstanceUID
 		"0020000E": dicomTag("UI", studyUID+".1"),                           // SeriesInstanceUID
-		"00080016": dicomTag("UI", modalitySOPClass(modality)),              // SOPClassUID — required by OHIF
+		"00080016": dicomTag("UI", modalitySOPClass(modality)),              // SOPClassUID — required by DICOMweb viewers
 		"00080018": dicomTag("UI", fmt.Sprintf("%s.1.%d", studyUID, index)), // SOPInstanceUID
 		"00200013": dicomTagInt("IS", index+1),                              // InstanceNumber
 	}
@@ -104,7 +104,7 @@ func instanceQIDO(studyUID, modality string, index int) map[string]any {
 func (s *Server) DicomwebStudies(w http.ResponseWriter, r *http.Request) {
 	// Accept all standard QIDO-RS filter forms for StudyInstanceUID:
 	//   "StudyInstanceUIDs" — plural form (legacy / our original)
-	//   "StudyInstanceUID"  — singular, DICOM PS 3.18 keyword (what OHIF v3 sends)
+	//   "StudyInstanceUID"  — singular, DICOM PS 3.18 keyword
 	//   "0020000D"          — DICOM tag number form (some DICOMweb clients)
 	studyUID := r.URL.Query().Get("StudyInstanceUIDs")
 	if studyUID == "" {
@@ -228,10 +228,9 @@ func (s *Server) dicomwebRetrieve(w http.ResponseWriter, r *http.Request, storeO
 	}
 	defer rc.Close()
 
-	// If the client explicitly requests multipart/related (OHIF does), wrap in a
-	// multipart envelope.  Otherwise (plain fetch, Accept: */*) return raw bytes
-	// so browser-side DICOM parsers (dicom-parser, cornerstoneWADOImageLoader) can
-	// consume the response directly without stripping the multipart wrapper.
+	// If the client explicitly requests multipart/related, wrap in a multipart
+	// envelope. Otherwise (plain fetch, Accept: */*) return raw bytes so
+	// browser-side DICOM parsers can consume the response directly.
 	if strings.Contains(r.Header.Get("Accept"), "multipart/related") {
 		mw := multipart.NewWriter(w)
 		w.Header().Set("Content-Type",
@@ -258,7 +257,7 @@ func (s *Server) dicomwebRetrieve(w http.ResponseWriter, r *http.Request, storeO
 
 // DicomwebInstanceMetadata handles GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata
 // Returns DICOM tag metadata in DICOMweb JSON format without pixel data.
-// OHIF v3 requires this endpoint to build the image manifest before loading pixels.
+// Required by DICOMweb viewers to build the image manifest before loading pixels.
 func (s *Server) DicomwebInstanceMetadata(w http.ResponseWriter, r *http.Request) {
 	s.dicomwebMetadata(w, r, "")
 }
@@ -329,7 +328,7 @@ func datasetToDICOMwebJSON(dataset dicomlib.Dataset) map[string]any {
 
 		switch vr {
 		case "OB", "OD", "OF", "OL", "OV", "OW", "UN":
-			// Binary VRs — omit inline; OHIF won't need them for metadata
+			// Binary VRs — omit inline (not needed for metadata)
 			obj[tagKey] = map[string]any{"vr": vr}
 
 		case "SQ":
