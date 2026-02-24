@@ -345,6 +345,10 @@ func main() {
 	mux.HandleFunc("POST /api/invite-codes", adminOnly(srv.CreateInviteCode))
 	mux.HandleFunc("POST /api/invite-codes/{id}/revoke", adminOnly(srv.RevokeInviteCode))
 	mux.HandleFunc("DELETE /api/invite-codes/{id}", adminOnly(srv.DeleteInviteCode))
+	// Invite requests — stored in DB, manageable from admin dashboard.
+	mux.HandleFunc("GET /api/invite/requests", auth(srv.ListInviteRequestsAdmin))
+	mux.HandleFunc("POST /api/invite/requests/{id}/approve", adminOnly(srv.ApproveInviteRequestAdmin))
+	mux.HandleFunc("POST /api/invite/requests/{id}/deny", adminOnly(srv.DenyInviteRequestAdmin))
 
 	var h http.Handler = mux
 	h = middleware.Recover(h)
