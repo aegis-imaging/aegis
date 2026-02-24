@@ -334,10 +334,10 @@ def build_html():
         "distroless image — minimal CVE surface",
     ], "go")
 
-    dashboard = card("Admin Dashboard + OHIF  (React / Cloud Run)", [
+    dashboard = card("Admin Dashboard + Weasis DWV  (React / Cloud Run)", [
         "Behind Identity-Aware Proxy (IAP)",
         "Study browser: filter, search, paginate, bulk ops",
-        "OHIF Viewer — before/after defacing side-by-side",
+        "Weasis DWV — yoked before/after defacing review",
         "7-stage pipeline visualization per study",
         "RBAC: admin (write) + viewer (read-only)",
         "Routing rules, institutions, anon profiles",
@@ -511,8 +511,8 @@ def build_html():
         ("Phase 4: Production  ✓",
          "GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC",
          "#7C3AED"),
-        ("Phase 5: Enterprise  🚧",
-         "AEGIS AI Agent · Observability dashboard · Multi-tenant federation · Repo split",
+        ("Phase 5: Beta → GA  🚧",
+         "Private beta · AWS deployment (Q2) · Azure + SOC 2 (Q3) · Enterprise GA (Q4)",
          "#DC2626"),
     ]
     phases_html = "\n".join(
@@ -526,7 +526,7 @@ def build_html():
     # ── Tech stack ───────────────────────────────────────────────────────────
     deps = [
         ("Go:",       "suyashkumar/dicom · pgx · testcontainers-go · testify",          "go"),
-        ("Browser:",  "dcmjs · dicomParser · OHIF Viewer (MIT) · React 19 · Vite",      "react"),
+        ("Browser:",  "dcmjs · dicomParser · Weasis DWV (MIT) · React 19 · Vite",       "react"),
         ("Defacing:", "mri_reface · DeepDefacer · mri_deface · dcm2niix · nibabel",     "py"),
         ("PHI/OCR:",  "pytesseract · Google Cloud Vision · AWS Textract · Pillow",      "py"),
         ("QC/BIDS:",  "pydicom · numpy · dcm2niix · pynetdicom (C-STORE SCP)",          "py"),
@@ -540,7 +540,7 @@ def build_html():
         ("Local:",   "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem",        "slate"),
         ("Auth:",    "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth",     "orange"),
         ("Storage:", "STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes",    "go"),
-        ("CI/CD:",   "GitHub Actions: Go (273+) · Python (244+) · TS · Docker (9) · Cloud Build auto-deploy", "green"),
+        ("CI/CD:",   "GitHub Actions: Go (120+) · Python (252+) · TS · Docker (9) · Cloud Build auto-deploy", "green"),
         ("Domains:", "aegisimaging.ai · www · api · admin  —  SSL cert v3",               "py"),
     ]
 

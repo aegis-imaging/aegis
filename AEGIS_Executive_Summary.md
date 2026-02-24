@@ -38,7 +38,7 @@ css: |
   <p style="font-size: 16px; color: #6b7280; margin: 0.5em 0;">A multi-cloud platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
   <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
   <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
-  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 23, 2026</p>
+  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 24, 2026</p>
 </div>
 
 ---
@@ -90,7 +90,7 @@ The medical image exchange market is growing, driven by federal data sharing man
 | **Supports all DICOM modalities** | MRI, CT, PET, PET/CT, ultrasound, X-ray, mammography, nuclear medicine, and more — using the same upload and anonymization workflow. |
 | **MRI protocol compliance** | Automated verification that acquisition parameters (TR, TE, flip angle, resolution) match site-specific templates per scanner manufacturer, model, and software version — catching the 0.19–64% non-compliance rates found across multi-site studies.<sup><a href="#ref-10">[10]</a></sup> |
 | **Centralized audit trail** | Every upload, approval, rejection, and data export is logged with a timestamp and actor. Institutions can demonstrate HIPAA compliance from a single dashboard. |
-| **Clinician review before release** | Administrators review anonymized images in a web-based DICOM viewer (OHIF) before approving studies for sharing. Nothing is shared automatically without human sign-off. |
+| **Clinician review before release** | Administrators review anonymized images in a web-based DICOM viewer (Weasis DWV) before approving studies for sharing. Side-by-side before/after defacing review is built in. Nothing is shared automatically without human sign-off. |
 
 ---
 
@@ -161,9 +161,9 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 | **DICOM Storage** | Cloud-neutral (GCS, S3, or local filesystem) | Abstracted behind a pluggable storage interface |
 | **OCR / PHI Detection** | Tesseract OCR (local) / cloud AI (pluggable) | Detects burned-in text in image pixels |
 | **Defacing** | DeepDefacer (default), mri_deface, mri_reface | Multiple backends with automatic fallback; see `docs/research/mri-defacing-tools-comparison.md` |
-| **DICOM Viewer** | OHIF Viewer (v3) | Open-source, browser-based, supports all modalities |
+| **DICOM Viewer** | Weasis DWV (browser-based) | Lightweight, open-source; supports QIDO-RS/WADO-RS; built-in side-by-side defacing review |
 | **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
-| **Processing Pipeline** | 6 Python processing services (Cloud Run) + DIMSE receiver (Compute Engine VM) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion auto-dispatched in dependency order; DIMSE C-STORE SCP on dedicated GCE VM (static IP, port 11112) |
+| **Processing Pipeline** | 7 Python processing services (Cloud Run) + DIMSE receiver (Compute Engine VM) + MCP server (Cloud Run) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation — auto-dispatched in dependency order; DIMSE C-STORE SCP on dedicated GCE VM (static IP, port 11112); MCP server exposes 30+ AI agent tools |
 | **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
 
 **On the use of automated tools:** AEGIS uses automated tools to assist with — not replace — human review. Automated de-identification flags potential issues; a trained administrator reviews and approves every study before it is shared. Automated defacing quality is reviewed side-by-side against the original in the admin interface.
@@ -213,65 +213,65 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ---
 
+## Development Velocity
+
+AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. The resulting platform is production-grade: version-controlled infrastructure, automated CI/CD, 370+ tests, and all services deployed and monitored on GCP.
+
+| Metric | Value |
+|--------|-------|
+| Days from first commit to GCP production | **7** |
+| Git commits in the first week | **846+** |
+| API routes (Go) | **122** |
+| Automated tests (Go + Python) | **370+** |
+| Cloud Run services deployed | **11** |
+
+---
+
 ## Phased Roadmap
 
-> **Production status:** Phases 1–4 are **deployed and running** on GCP (project `aegis-prod-488120`, region `us-central1`). The full platform stack — Go API, admin dashboard with OHIF viewer, all 6 Python processing sidecars (Cloud Run), and DIMSE receiver (Compute Engine VM `aegis-prod-dimse-receiver`, static IP `35.232.172.221`, port 11112) — is live at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. Infrastructure is managed by Terraform (Cloud Run, Cloud SQL, GCS, Cloud Armor, IAP, GCE). Cloud Build CI/CD triggers automatically deploy all services on merge to `develop`. Recent hardening includes DIMSE C-STORE ingress with durable retry/dead-letter, Cloud Build CD pipeline, operator tooling (bulk study approve/reject, CSV export, study notes, diagnostics panel), and an MCP server for AI-assisted operations.
+> **Production status:** The full platform — Go API, admin dashboard with Weasis DWV viewer, 7 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM `aegis-prod-dimse-receiver`, static IP `35.232.172.221`, port 11112), and MCP server — is **live** at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. Infrastructure is managed by Terraform. Cloud Build CI/CD auto-deploys all services on merge to `develop`.
 
-### Phase 1 — Foundation (Code Complete)
-- Cloud infrastructure (Terraform for GCP and AWS)
-- Browser-based upload portal with DICOM tag anonymization and before/after preview
-- Go API with DICOM ingest and PostgreSQL audit trail
-- Admin dashboard with OHIF viewer for QC, approve/reject workflow
+### ✓ Milestone 1 — Foundation + GCP Production (February 17–24, 2026)
 
-### Phase 2 — Defacing + Notifications (Code Complete)
-- Automated mri_deface pipeline for head imaging
-- Side-by-side before/after defacing review in admin interface
-- Email notifications for upload confirmation, approval, and rejection
+Everything listed below was built and deployed to GCP production within 7 days of the first commit:
 
-### Phase 3 — Operations (Code Complete)
-- Multi-project routing engine with configurable rules by modality, source, and anatomy
-- Institution management with project-scoped roles
-- Configurable anonymization profiles per project (which tags to retain for research)
-- Audit log viewer with filtering
-- Admin user management, RBAC enforcement (admin/viewer roles), authentication middleware
+- Browser-based upload portal with DICOM tag anonymization (PS3.15 Basic Profile, 18 HIPAA identifiers) and before/after tag diff preview
+- Go API with 122 routes: DICOM ingest, routing engine, DICOMweb proxy, export shares, audit trail, webhook subscriptions, API keys
+- Admin dashboard: study browser, RBAC (admin/viewer), protocol templates, routing rules, institutions, 17 management tabs
+- Weasis DWV viewer with side-by-side before/after defacing review (yoked scroll synchronization)
+- 7 Python processing services on Cloud Run: classification, PHI scan (OCR), protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation
+- DIMSE C-STORE SCP on dedicated Compute Engine VM (port 11112) — durable retry queue, dead-letter, exponential backoff
+- MCP server (30+ AI agent tools for admin operations via Claude / Cursor)
+- Terraform IaC (GCP + AWS modules), GitHub Actions CI, Cloud Build CD (auto-deploy on push to `develop`)
+- 370+ automated tests (120 Go integration tests, 244+ Python pytest tests across 8 sidecars)
 
-### Phase 4 — Advanced Processing (Code Complete)
-- Burned-in PHI detection using OCR on image pixels (addresses gap identified in <a href="#ref-3">[3]</a>, <a href="#ref-7">[7]</a>)
-- Automated image quality assessment (motion artifact detection, coverage completeness)
-- MRI protocol compliance — per-scanner, per-sequence parameter validation against configurable templates with tolerances, following the approach used by ADNI<sup><a href="#ref-11">[11]</a></sup> and tools like mrQA<sup><a href="#ref-10">[10]</a></sup>
-- BIDS format conversion for neuroimaging research output
-- Batch import tools for historical data migration
-- Multi-cloud support — AWS S3 storage backend, ALB + Cognito auth, Terraform AWS module
+### → Milestone 2 — Private Beta (Q1 2026)
 
-### GCP Production Deployment (Complete, February 2026)
-- Full platform deployed to GCP via Terraform (`aegis-prod-488120`, `us-central1`)
-- All 10 services live on Cloud Run with private VPC, Cloud SQL, GCS, Cloud Armor
-- IAP-protected admin dashboard at `admin.aegisimaging.ai`
-- API at `api.aegisimaging.ai` with HTTPS load balancer
-- CI/CD: GitHub Actions (Go/Python/TS/Docker CI checks) + Cloud Build (automated deploy to Cloud Run + GCE on push to `develop`); all 9 service images in Artifact Registry
+- First enterprise pilot customers (research institutions + radiology departments)
+- Business Associate Agreement (BAA) finalized; SOC 2 Type I audit initiated
+- DIMSE C-MOVE / C-FIND workflows for active PACS pull integration
+- Enterprise onboarding documentation and SLA monitoring
 
-### DIMSE Receiver + Cloud Build CI/CD (Complete, February 2026)
-- DIMSE C-STORE SCP deployed on dedicated Compute Engine VM (`aegis-prod-dimse-receiver`, `us-central1-a`, `e2-small`, static IP `35.232.172.221`) — the only deployment path that can expose raw TCP port 11112 for legacy PACS integration
-- VM boots from a startup script that mounts the shared GCS staging bucket via gcsfuse, pulls the latest Docker image from Artifact Registry, and starts the DIMSE receiver container
-- Cloud Build CD triggers (`deploy-on-develop` + `terraform-apply-on-develop`) fire automatically on merge to `develop` — deploy step updates the GCE VM metadata key and resets the instance to hot-swap the image
-- Cloud Build service account has all required IAM roles (`roles/run.admin`, `roles/compute.admin`, `roles/iap.admin`, `roles/resourcemanager.projectIamAdmin`, `roles/artifactregistry.admin`, `roles/editor`) — all tracked in Terraform and setup script
+### → Milestone 3 — AWS Deployment (Q2 2026)
 
-### Operator Tooling (Complete, February 2026)
-- Bulk study approve/reject (`POST /api/studies/bulk`) with multi-select dashboard UI
-- Study CSV export (`GET /api/studies.csv`) with active-filter propagation
-- Admin internal study notes stored as audit trail entries
-- Study diagnostics panel ("why stuck?") in study detail view
-- Shares tab enhancements: email search, countdown display, note column
-- OHIF Viewer fully deployed to Cloud Run; docker-compose uses local build
-- Export portal enriched with modality badges, study UID, and instance count
+- Full AWS deployment: ECS Fargate, RDS PostgreSQL, S3 storage, ALB + Cognito auth
+- AWS Terraform module already written; deployment is config, not code
+- Multi-cloud data federation — studies routable between GCP and AWS tenants
+- AWS Marketplace listing for enterprise procurement
 
-### Phase 5 — Enterprise Radiology
-- DIMSE service-class expansion — add C-FIND/C-MOVE workflows beyond current C-STORE ingest
-- DICOM tag standardization — normalize study/series descriptions across sites and scanners for consistent downstream processing
-- HL7 FHIR notifications — notify hospital EMR/RIS systems when studies are de-identified, approved, or exported
-- Reversible de-identification — organization-owned keys for internal use cases where re-identification may be required
-- PACS/VNA query-retrieve — pull studies from hospital archives on demand rather than waiting for push
-- Multi-tenant SaaS deployment — shared infrastructure with per-organization data isolation for radiology groups managing multiple facilities
+### → Milestone 4 — Azure + SOC 2 Type II (Q3 2026)
+
+- Azure Container Apps deployment — full three-cloud feature parity
+- SOC 2 Type II certification
+- HL7 FHIR notifications — integrate with hospital EMR/RIS systems
+- Cross-tenant federated sharing — peer AEGIS instances can exchange approved studies
+
+### → Milestone 5 — Enterprise GA (Q4 2026)
+
+- On-premises deployment option for institutions with strict data residency requirements
+- PACS/VNA native query-retrieve — pull studies on demand rather than waiting for push
+- Multi-tenant SaaS with per-organization data isolation for radiology groups
+- Imaging data consortium marketplace — connect research networks to curated data sources
 
 ---
 
