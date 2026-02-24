@@ -114,12 +114,16 @@ echo ""
 
 # Grant IAM roles to BOTH the default SA and the BYOSA (idempotent — safe to re-run)
 ROLES=(
-  "roles/artifactregistry.writer"   # push images to Artifact Registry
-  "roles/run.admin"                 # deploy / update Cloud Run services
-  "roles/iam.serviceAccountUser"    # impersonate Cloud Run SA during deploy
-  "roles/editor"                    # terraform apply (create/update GCP resources)
-  "roles/secretmanager.secretAccessor"  # read terraform.tfvars secret
-  "roles/storage.admin"             # manage Terraform state GCS bucket
+  "roles/artifactregistry.writer"              # push images to Artifact Registry
+  "roles/artifactregistry.admin"               # set IAM on Artifact Registry repos
+  "roles/run.admin"                            # deploy / update Cloud Run services
+  "roles/iam.serviceAccountUser"               # impersonate Cloud Run SA during deploy
+  "roles/editor"                               # terraform apply (create/update GCP resources)
+  "roles/secretmanager.secretAccessor"         # read terraform.tfvars secret
+  "roles/storage.admin"                        # manage Terraform state GCS bucket
+  "roles/compute.admin"                        # manage GCE instances (dimse-receiver)
+  "roles/resourcemanager.projectIamAdmin"      # set project-level IAM (e.g. dimse SA bindings)
+  "roles/iap.admin"                            # manage IAP backend service IAM bindings
 )
 
 for sa in "$CB_SA" "$CB_BYOSA"; do
