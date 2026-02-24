@@ -446,23 +446,23 @@ steps:
         PROJECT="${_PROJECT_ID}"
 
         # Check if the instance exists; skip gracefully if not yet created by Terraform.
-        if ! gcloud compute instances describe "$INSTANCE" \
-            --zone="$ZONE" --project="$PROJECT" --quiet &>/dev/null; then
-          echo "==> dimse-receiver instance '$INSTANCE' not found — skipping deploy."
+        if ! gcloud compute instances describe "$$INSTANCE" \
+            --zone="$$ZONE" --project="$$PROJECT" --quiet &>/dev/null; then
+          echo "==> dimse-receiver instance '$$INSTANCE' not found — skipping deploy."
           echo "    Run 'terraform apply' with dimse_receiver_image set to create it."
           exit 0
         fi
 
-        echo "==> Updating dimse-image metadata to: $IMAGE"
-        gcloud compute instances add-metadata "$INSTANCE" \
-          --zone="$ZONE" \
-          --project="$PROJECT" \
-          --metadata="dimse-image=$IMAGE"
+        echo "==> Updating dimse-image metadata to: $$IMAGE"
+        gcloud compute instances add-metadata "$$INSTANCE" \
+          --zone="$$ZONE" \
+          --project="$$PROJECT" \
+          --metadata="dimse-image=$$IMAGE"
 
         echo "==> Resetting instance to apply new image..."
-        gcloud compute instances reset "$INSTANCE" \
-          --zone="$ZONE" \
-          --project="$PROJECT" \
+        gcloud compute instances reset "$$INSTANCE" \
+          --zone="$$ZONE" \
+          --project="$$PROJECT" \
           --quiet
 
         echo "==> dimse-receiver deploy complete."
