@@ -1,4 +1,5 @@
 # AEGIS — DIMSE Receiver Compute Engine Instance
+# Activated: dimse_receiver_image set in tfvars (Secret Manager version 2).
 #
 # DICOM C-STORE SCP requires raw TCP port 11112, which Cloud Run cannot expose.
 # This module deploys dimse-receiver to a Compute Engine VM (Debian 12) that:
