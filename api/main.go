@@ -174,6 +174,8 @@ func main() {
 	mux.HandleFunc("PUT /api/projects/{id}", adminOnly(srv.UpdateProject))
 	mux.HandleFunc("PUT /api/projects/{id}/retention", adminOnly(srv.SetProjectRetention))
 	mux.HandleFunc("PUT /api/projects/{id}/sla-threshold", adminOnly(srv.SetProjectSLAThreshold))
+	mux.HandleFunc("PUT /api/projects/{id}/storage-quota", adminOnly(srv.SetStorageQuota))
+	mux.HandleFunc("GET /api/projects/{id}/storage-usage", auth(srv.GetStorageUsage))
 	mux.HandleFunc("POST /api/projects/{id}/clone", adminOnly(srv.CloneProject))
 	mux.HandleFunc("POST /api/projects/{id}/archive", adminOnly(srv.ArchiveProject))
 	mux.HandleFunc("POST /api/projects/{id}/restore", adminOnly(srv.RestoreProject))
