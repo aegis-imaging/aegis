@@ -12,7 +12,7 @@ func clearEnvVars(t *testing.T) {
 		"PORT", "DATABASE_URL", "STORAGE_MODE", "LOCAL_STORAGE_DIR", "API_BASE_URL",
 		"DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD",
 		"APP_TIMEZONE",
-		"AUTH_ENABLED", "AUTH_PROVIDER", "DEV_USER_EMAIL",
+		"AUTH_ENABLED", "AUTH_PROVIDER", "DEV_USER_EMAIL", "AWS_REGION", "AWS_DEFAULT_REGION",
 		"SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USERNAME", "SMTP_PASSWORD",
 		"PIPELINE_AUTO", "ALLOWED_ORIGINS",
 		"DEFACING_SERVICE_URL", "PHI_DETECTION_SERVICE_URL", "QC_SERVICE_URL",
@@ -38,7 +38,8 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, "UTC", cfg.AppTimezone)
 	assert.False(t, cfg.AuthEnabled)
 	assert.Equal(t, "auto", cfg.AuthProvider)
-	assert.Equal(t, "dev@aegis.local", cfg.DevUserEmail)
+	assert.Equal(t, "ai@aegisimaging.ai", cfg.DevUserEmail)
+	assert.Equal(t, "us-east-1", cfg.AWSALBRegion)
 	assert.True(t, cfg.PipelineAuto)
 }
 
