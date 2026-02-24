@@ -6,6 +6,7 @@ import { TCIAPanel } from './components/TCIAPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
+import { useStudyEvents } from './hooks/useStudyEvents'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -6227,6 +6228,13 @@ export function App() {
   const [filterFlagged,  setFilterFlagged]  = useState(false)
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
+
+  // Real-time SSE updates — bump refreshTick on any study change so the list
+  // re-fetches automatically without requiring a manual refresh.
+  useStudyEvents({
+    projectId: globalProjectId || undefined,
+    onEvent: () => setRefreshTick(t => t + 1),
+  })
 
   // Persist global project selection to localStorage and sync to filterProject.
   useEffect(() => {
