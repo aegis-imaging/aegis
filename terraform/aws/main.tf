@@ -134,6 +134,18 @@ variable "admin_memory" {
   default     = 1024
 }
 
+variable "sidecar_image_tag" {
+  description = "Container image tag used for all sidecar ECS tasks"
+  type        = string
+  default     = "latest"
+}
+
+variable "dimse_receiver_image" {
+  description = "Full ECR image URI for the DIMSE receiver EC2 instance (empty = skip all DIMSE resources)"
+  type        = string
+  default     = ""
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -360,7 +372,7 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "dimse-receiver"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver"]
 
   api_image   = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
   admin_image = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
@@ -802,8 +814,17 @@ resource "aws_ecs_task_definition" "api" {
         { name = "API_BASE_URL", value = "https://${aws_lb.main.dns_name}" },
         { name = "APP_TIMEZONE", value = "UTC" },
         { name = "ALLOWED_ORIGINS", value = join(",", local.resolved_api_allowed_origins) },
-        { name = "AUTH_ENABLED", value = "true" },
-        { name = "AUTH_PROVIDER", value = "aws" }
+        { name = "AUTH_ENABLED",                value = "true" },
+        { name = "AUTH_PROVIDER",               value = "aws" },
+        { name = "PIPELINE_AUTO",               value = "true" },
+        { name = "DEFACING_SERVICE_URL",        value = "http://defacing.aegis.local:8080" },
+        { name = "PHI_DETECTION_SERVICE_URL",   value = "http://phi-detection.aegis.local:8080" },
+        { name = "QC_SERVICE_URL",              value = "http://qc-service.aegis.local:8080" },
+        { name = "BIDS_SERVICE_URL",            value = "http://bids-service.aegis.local:8080" },
+        { name = "CLASSIFICATION_SERVICE_URL",  value = "http://classification-service.aegis.local:8080" },
+        { name = "PROTOCOL_SERVICE_URL",        value = "http://protocol-service.aegis.local:8080" },
+        { name = "SYNTH_SERVICE_URL",           value = "http://synth-service.aegis.local:8080" },
+        { name = "DIMSE_RECEIVER_URL",          value = "http://dimse-receiver.aegis.local:8080" }
       ]
       secrets = [
         { name = "DB_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" }
@@ -843,6 +864,10 @@ resource "aws_ecs_service" "api" {
     target_group_arn = aws_lb_target_group.api.arn
     container_name   = "api"
     container_port   = 8080
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.sidecars["api"].arn
   }
 
   depends_on = [aws_lb_listener.https]
