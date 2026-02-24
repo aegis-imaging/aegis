@@ -181,7 +181,7 @@ func Load() *Config {
 
 		SMTPHost:     smtpHost,
 		SMTPPort:     envOr("SMTP_PORT", "587"),
-		SMTPFrom:     envOr("SMTP_FROM", "noreply@aegis.local"),
+		SMTPFrom:     envOr("SMTP_FROM", "noreply@aegisimaging.ai"),
 		SMTPUsername: os.Getenv("SMTP_USERNAME"),
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
 		EmailEnabled: smtpHost != "",

@@ -562,15 +562,15 @@ Manual trigger via GitHub Actions:
 
 ## 7n. Authentication Middleware
 
-Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-authenticate as `dev@aegis.local`.
+Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-authenticate as `ai@aegisimaging.ai`.
 
 ### Dev mode (default)
 
 - [ ] Start the API: `cd api && go run .`
-- [ ] Verify auth identity: `curl -s http://localhost:8080/api/auth/me | jq .` → shows `dev@aegis.local`, role `admin`
+- [ ] Verify auth identity: `curl -s http://localhost:8080/api/auth/me | jq .` → shows `ai@aegisimaging.ai`, role `admin`
 - [ ] Verify public routes work without auth: `curl -s http://localhost:8080/healthz` → `ok`
 - [ ] Verify admin routes work without auth headers: `curl -s http://localhost:8080/api/studies | jq .total`
-- [ ] Check Audit Log tab → audit entries show `dev@aegis.local` as the actor (not `admin`)
+- [ ] Check Audit Log tab → audit entries show `ai@aegisimaging.ai` as the actor (not `admin`)
 
 ### Production mode (GCP IAP)
 
@@ -684,9 +684,9 @@ The viewer role is read-only — viewers can browse all data but cannot create, 
   ```bash
   curl -s -X POST http://localhost:8080/api/admin-users \
     -H "Content-Type: application/json" \
-    -d '{"email":"viewer@aegis.local","name":"Test Viewer","role":"viewer","enabled":true}'
+    -d '{"email":"viewer@aegisimaging.ai","name":"Test Viewer","role":"viewer","enabled":true}'
   ```
-- [ ] Restart API as viewer: `cd api && DEV_USER_EMAIL=viewer@aegis.local go run .`
+- [ ] Restart API as viewer: `cd api && DEV_USER_EMAIL=viewer@aegisimaging.ai go run .`
 - [ ] Verify read endpoints work:
   ```bash
   curl -s http://localhost:8080/api/studies | jq .total   # → 200 OK
@@ -709,7 +709,7 @@ The viewer role is read-only — viewers can browse all data but cannot create, 
 - [ ] Verify Routing tab: data visible; Add/Edit/Delete/Toggle buttons hidden
 - [ ] Verify Institutions tab: data visible; Add/Edit/Delete/Toggle/Link/Unlink hidden; Projects view button visible
 - [ ] Verify Profiles, Protocol Templates, Notifications, Projects tabs: data visible; create/edit/delete buttons hidden
-- [ ] Switch back to admin: restart API with `DEV_USER_EMAIL=dev@aegis.local` (or default) — all buttons return
+- [ ] Switch back to admin: restart API with `DEV_USER_EMAIL=ai@aegisimaging.ai` (or default) — all buttons return
 
 ## 7p. Defacing Service Backends
 

@@ -364,7 +364,7 @@ variable "smtp_relay_port" {
 variable "smtp_from" {
   description = "SMTP FROM address used by AEGIS"
   type        = string
-  default     = "noreply@aegis.local"
+  default     = "noreply@aegisimaging.ai"
 }
 
 variable "contact_email" {

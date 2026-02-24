@@ -182,6 +182,18 @@ variable "weasis_memory" {
   default     = 512
 }
 
+variable "smtp_from" {
+  description = "SMTP FROM address for AEGIS transactional email"
+  type        = string
+  default     = "noreply@aegisimaging.ai"
+}
+
+variable "ses_smtp_region" {
+  description = "AWS region for the SES SMTP endpoint. Defaults to var.aws_region."
+  type        = string
+  default     = ""
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -415,8 +427,8 @@ locals {
   weasis_image = "${aws_ecr_repository.services["weasis"].repository_url}:${var.weasis_image_tag}"
 
   # Friendly FQDNs — use custom domains when set, fall back to raw ALB DNS.
-  api_fqdn    = var.api_domain    != "" ? var.api_domain    : aws_lb.main.dns_name
-  admin_fqdn  = var.admin_domain  != "" ? var.admin_domain  : aws_lb.main.dns_name
+  api_fqdn    = var.api_domain != "" ? var.api_domain : aws_lb.main.dns_name
+  admin_fqdn  = var.admin_domain != "" ? var.admin_domain : aws_lb.main.dns_name
   weasis_fqdn = var.weasis_domain != "" ? var.weasis_domain : aws_lb.main.dns_name
 
   cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
@@ -431,6 +443,11 @@ locals {
     "https://${local.admin_fqdn}",
     "https://${local.weasis_fqdn}",
   ]
+
+  # SES SMTP endpoint — region-specific. Use ses_smtp_region override when set,
+  # otherwise fall back to the primary deployment region.
+  ses_smtp_region   = var.ses_smtp_region != "" ? var.ses_smtp_region : var.aws_region
+  ses_smtp_hostname = "email-smtp.${local.ses_smtp_region}.amazonaws.com"
 
   public_path_rules = {
     healthz = {
@@ -865,6 +882,7 @@ data "aws_iam_policy_document" "ecs_task_execution_secrets" {
     ]
     resources = [
       aws_db_instance.main.master_user_secret[0].secret_arn,
+      aws_secretsmanager_secret.smtp_password.arn,
       aws_kms_key.main.arn
     ]
   }
@@ -948,20 +966,25 @@ resource "aws_ecs_task_definition" "api" {
         { name = "API_BASE_URL", value = "https://${local.api_fqdn}" },
         { name = "APP_TIMEZONE", value = "UTC" },
         { name = "ALLOWED_ORIGINS", value = join(",", local.resolved_api_allowed_origins) },
-        { name = "AUTH_ENABLED",                value = "true" },
-        { name = "AUTH_PROVIDER",               value = "aws" },
-        { name = "PIPELINE_AUTO",               value = "true" },
-        { name = "DEFACING_SERVICE_URL",        value = "http://defacing.aegis.local:8080" },
-        { name = "PHI_DETECTION_SERVICE_URL",   value = "http://phi-detection.aegis.local:8080" },
-        { name = "QC_SERVICE_URL",              value = "http://qc-service.aegis.local:8080" },
-        { name = "BIDS_SERVICE_URL",            value = "http://bids-service.aegis.local:8080" },
-        { name = "CLASSIFICATION_SERVICE_URL",  value = "http://classification-service.aegis.local:8080" },
-        { name = "PROTOCOL_SERVICE_URL",        value = "http://protocol-service.aegis.local:8080" },
-        { name = "SYNTH_SERVICE_URL",           value = "http://synth-service.aegis.local:8080" },
-        { name = "DIMSE_RECEIVER_URL",          value = "http://dimse-receiver.aegis.local:8080" }
+        { name = "AUTH_ENABLED", value = "true" },
+        { name = "AUTH_PROVIDER", value = "aws" },
+        { name = "PIPELINE_AUTO", value = "true" },
+        { name = "DEFACING_SERVICE_URL", value = "http://defacing.aegis.local:8080" },
+        { name = "PHI_DETECTION_SERVICE_URL", value = "http://phi-detection.aegis.local:8080" },
+        { name = "QC_SERVICE_URL", value = "http://qc-service.aegis.local:8080" },
+        { name = "BIDS_SERVICE_URL", value = "http://bids-service.aegis.local:8080" },
+        { name = "CLASSIFICATION_SERVICE_URL", value = "http://classification-service.aegis.local:8080" },
+        { name = "PROTOCOL_SERVICE_URL", value = "http://protocol-service.aegis.local:8080" },
+        { name = "SYNTH_SERVICE_URL", value = "http://synth-service.aegis.local:8080" },
+        { name = "DIMSE_RECEIVER_URL", value = "http://dimse-receiver.aegis.local:8080" },
+        { name = "SMTP_HOST", value = local.ses_smtp_hostname },
+        { name = "SMTP_PORT", value = "587" },
+        { name = "SMTP_FROM", value = var.smtp_from },
+        { name = "SMTP_USERNAME", value = aws_iam_access_key.ses_smtp.id }
       ]
       secrets = [
-        { name = "DB_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" }
+        { name = "DB_PASSWORD", valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::" },
+        { name = "SMTP_PASSWORD", valueFrom = aws_secretsmanager_secret.smtp_password.arn }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -1263,4 +1286,21 @@ output "weasis_base_url" {
 
 output "ecr_repositories" {
   value = { for k, v in aws_ecr_repository.services : k => v.repository_url }
+}
+
+# ── SES outputs — DNS records required after apply ───────────────────────────
+
+output "ses_domain_verification_token" {
+  description = "Add TXT record: _amazonses.aegisimaging.ai → this value"
+  value       = aws_ses_domain_identity.main.verification_token
+}
+
+output "ses_dkim_tokens" {
+  description = "Add 3 CNAME records: <token>._domainkey.aegisimaging.ai → <token>.dkim.amazonses.com"
+  value       = aws_ses_domain_dkim.main.dkim_tokens
+}
+
+output "ses_smtp_username" {
+  description = "SES SMTP username (IAM access key ID)"
+  value       = aws_iam_access_key.ses_smtp.id
 }
