@@ -876,6 +876,7 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DB_PORT", value = "5432" },
         { name = "DB_NAME", value = "aegis" },
         { name = "DB_USER", value = var.db_master_username },
+        { name = "DB_SSLMODE", value = "require" },
         { name = "STORAGE_MODE", value = "s3" },
         { name = "S3_BUCKET", value = aws_s3_bucket.dicom.bucket },
         { name = "S3_REGION", value = var.aws_region },

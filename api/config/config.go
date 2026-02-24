@@ -124,13 +124,15 @@ func Load() *Config {
 		dbName := envOr("DB_NAME", "aegis")
 		dbUser := envOr("DB_USER", "aegis")
 		dbPassword := envOr("DB_PASSWORD", "aegis")
+		dbSSLMode := envOr("DB_SSLMODE", "disable")
 		databaseURL = fmt.Sprintf(
-			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			"postgres://%s:%s@%s:%s/%s?sslmode=%s",
 			url.QueryEscape(dbUser),
 			url.QueryEscape(dbPassword),
 			dbHost,
 			dbPort,
 			dbName,
+			dbSSLMode,
 		)
 	}
 
