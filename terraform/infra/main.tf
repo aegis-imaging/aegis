@@ -393,7 +393,7 @@ variable "gate_secret" {
 }
 
 variable "allowed_origins" {
-  description = "Optional CORS origins override. If empty, defaults to API + admin domains."
+  description = "Optional CORS origins override. If empty, defaults to API + admin domains. Must include OHIF Cloud Run URL (e.g. https://ohif-<hash>-uc.a.run.app) so OHIF can make cross-origin DICOMweb requests to the API."
   type        = list(string)
   default     = []
 }
