@@ -77,6 +77,7 @@ type Study = {
   dicom_store: string
   instance_count: number
   study_size_bytes: number
+  priority_flag: boolean
   deface_qa_score?: number
   subject_id?: string
   rejection_reason?: string
@@ -1685,6 +1686,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           <h2 className="study-detail__title">{study.study_instance_uid}</h2>
           <Badge label={study.status} prefix="status" />
           <Badge label={study.source} prefix="source" />
+          {study.priority_flag && <span className="badge badge--flagged">★ Priority</span>}
         </div>
         {study.study_description && <p className="study-detail__description">{study.study_description}</p>}
       </div>
@@ -2270,10 +2272,30 @@ function StudyRow({
     onAction()
   }
 
+  const handleToggleFlag = async () => {
+    await fetch(`/api/studies/${study.id}/flag`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flagged: !study.priority_flag }),
+    })
+    onAction()
+  }
+
   return (
     <>
-      <tr className={checked ? 'tr--selected' : ''}>
+      <tr className={`${checked ? 'tr--selected' : ''}${study.priority_flag ? ' tr--flagged' : ''}`}>
         <td className="td-check"><input type="checkbox" checked={checked} onChange={onToggle} aria-label="Select study" /></td>
+        <td className="td-flag">
+          <button
+            type="button"
+            className={`btn-flag${study.priority_flag ? ' btn-flag--on' : ''}`}
+            onClick={isAdmin ? handleToggleFlag : undefined}
+            title={isAdmin ? (study.priority_flag ? 'Remove priority flag' : 'Mark as priority') : (study.priority_flag ? 'Priority' : '')}
+            style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+          >
+            {study.priority_flag ? '★' : '☆'}
+          </button>
+        </td>
         <td className="td-uid"><button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button></td>
         <td>{study.modality || '—'}</td>
         <td>{study.body_part || '—'}</td>
@@ -5717,6 +5739,7 @@ export function App() {
   const [filterLabel,    setFilterLabel]    = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo,   setFilterDateTo]   = useState('')
+  const [filterFlagged,  setFilterFlagged]  = useState(false)
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -5898,6 +5921,7 @@ export function App() {
     if (filterLabel)    params.set('label',      filterLabel)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
+    if (filterFlagged)  params.set('flagged',    'true')
 
     fetch(`/api/studies?${params}`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
@@ -5913,7 +5937,7 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterDateFrom, filterDateTo, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterDateFrom, filterDateTo, filterFlagged, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
@@ -5926,13 +5950,15 @@ export function App() {
   function setLabelF(v: string)     { setFilterLabel(v);     setPage(0); setBulkSelected(new Set()) }
   function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
   function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
+  function setFlaggedF(v: boolean)  { setFilterFlagged(v);   setPage(0); setBulkSelected(new Set()) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterDateFrom || filterDateTo)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterDateFrom || filterDateTo || filterFlagged)
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
     setFilterSource(''); setFilterProject(''); setFilterSearch('')
-    setFilterSubject(''); setFilterLabel(''); setFilterDateFrom(''); setFilterDateTo(''); setPage(0)
+    setFilterSubject(''); setFilterLabel(''); setFilterDateFrom(''); setFilterDateTo('')
+    setFilterFlagged(false); setPage(0)
     setBulkSelected(new Set())
   }
 
@@ -6012,6 +6038,7 @@ export function App() {
     if (filterLabel)    params.set('label',      filterLabel)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
+    if (filterFlagged)  params.set('flagged',    'true')
     const qs = params.toString()
     return `/api/studies.csv${qs ? '?' + qs : ''}`
   })()
@@ -6464,6 +6491,14 @@ export function App() {
               value={filterLabel}
               onChange={e => setLabelF(e.target.value)}
             />
+            <label className="filter-flagged-label" title="Show flagged studies only">
+              <input
+                type="checkbox"
+                checked={filterFlagged}
+                onChange={e => setFlaggedF(e.target.checked)}
+              />
+              {' '}Priority only
+            </label>
             <input
               type="date"
               className="filter-date"
@@ -6542,6 +6577,7 @@ export function App() {
                         aria-label="Select all on page"
                       />
                     </th>
+                    <th className="th-flag" title="Priority flag">★</th>
                     <th>Study UID</th>
                     <th>Modality</th>
                     <th>Body Part</th>

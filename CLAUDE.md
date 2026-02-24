@@ -351,6 +351,7 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 | `search` | Substring match on `study_instance_uid` or `study_description` |
 | `label` | Case-insensitive substring match on any `study_labels.label` for the study |
 | `subject_id` | Exact match on `subject_id` field |
+| `flagged` | `true` to return only priority-flagged studies |
 
 ### Study Detail (`GET /api/studies/{id}`)
 
@@ -1507,6 +1508,7 @@ cd mcp-server && npm install && npm run build
 | `revoke_share` | Revoke an export share |
 | `create_share` | Create a new export share |
 | `re_evaluate_routing` | Re-evaluate routing rules for a study |
+| `toggle_study_flag` | Set or clear the priority flag (★) on a study |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 

@@ -194,6 +194,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-tags", auth(srv.InspectDicomTags))
 	mux.HandleFunc("POST /api/studies/bulk", adminOnly(srv.BulkStudyAction))
 	mux.HandleFunc("POST /api/studies/{id}/notes", adminOnly(srv.AddStudyNote))
+	mux.HandleFunc("PATCH /api/studies/{id}/flag", adminOnly(srv.PatchStudyFlag))
 	mux.HandleFunc("POST /api/studies/{id}/reset-pipeline-step", adminOnly(srv.ResetPipelineStep))
 	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
 	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
