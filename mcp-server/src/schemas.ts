@@ -284,6 +284,11 @@ export const generateSyntheticStudyArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const testDestinationArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  destination_id: z.string().uuid()
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -319,7 +324,8 @@ export const readToolNames = [
   "list_federation_peers",
   "get_phi_config",
   "list_anon_profiles",
-  "list_api_keys"
+  "list_api_keys",
+  "test_destination"
 ] as const;
 
 export const writeToolNames = [

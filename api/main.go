@@ -238,6 +238,7 @@ func main() {
 	mux.HandleFunc("POST /api/destinations", adminOnly(srv.CreateDestination))
 	mux.HandleFunc("PUT /api/destinations/{id}", adminOnly(srv.UpdateDestination))
 	mux.HandleFunc("DELETE /api/destinations/{id}", adminOnly(srv.DeleteDestination))
+	mux.HandleFunc("POST /api/destinations/{id}/test", adminOnly(srv.TestDestination))
 
 	// Routing rules — condition → action mappings evaluated on study ingest.
 	mux.HandleFunc("GET /api/routing-rules", auth(srv.ListRoutingRules))

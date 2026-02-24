@@ -2499,6 +2499,11 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   const [destSaving, setDestSaving]     = useState(false)
   const [destError, setDestError]       = useState<string | null>(null)
 
+  // Destination connectivity test
+  type DestTestResult = { success: boolean; latency_ms: number; error?: string; status_code?: number }
+  const [destTestResults, setDestTestResults] = useState<Record<string, DestTestResult>>({})
+  const [destTesting, setDestTesting]         = useState<Record<string, boolean>>({})
+
   // Rule form
   const [ruleForm, setRuleForm]         = useState<Omit<RoutingRule, 'id' | 'created_at'>>(EMPTY_RULE)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
@@ -2567,6 +2572,20 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
     if (!confirm(`Delete destination "${name}"? Rules using it will lose their target.`)) return
     await fetch(`/api/destinations/${id}`, { method: 'DELETE' })
     fetchAll()
+  }
+
+  async function testDest(id: string) {
+    setDestTesting(prev => ({ ...prev, [id]: true }))
+    setDestTestResults(prev => { const next = { ...prev }; delete next[id]; return next })
+    try {
+      const res = await fetch(`/api/destinations/${id}/test`, { method: 'POST' })
+      const data = await res.json()
+      setDestTestResults(prev => ({ ...prev, [id]: data }))
+    } catch {
+      setDestTestResults(prev => ({ ...prev, [id]: { success: false, latency_ms: 0, error: 'Request failed' } }))
+    } finally {
+      setDestTesting(prev => ({ ...prev, [id]: false }))
+    }
   }
 
   // ── Routing Rule CRUD ───────────────────────────────────────────────────────
@@ -2699,31 +2718,56 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               </tr>
             </thead>
             <tbody>
-              {destinations.map(d => (
-                <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
-                  <td>
-                    <div className="routing-name">{d.name}</div>
-                    {d.description && <div className="routing-desc">{d.description}</div>}
-                  </td>
-                  <td><code>{d.type}</code></td>
-                  <td className="routing-target">
-                    {d.type === 'dicomweb' ? (d.dicomweb_url || '—') : `${d.ae_title}@${d.host}:${d.port}`}
-                  </td>
-                  <td>
-                    <span className={`badge badge--${d.enabled ? 'enabled' : 'disabled'}`}>
-                      {d.enabled ? 'enabled' : 'disabled'}
-                    </span>
-                  </td>
-                  <td>
-                    {isAdmin && (
+              {destinations.map(d => {
+                const testResult = destTestResults[d.id]
+                const testing = destTesting[d.id]
+                return (
+                  <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
+                    <td>
+                      <div className="routing-name">{d.name}</div>
+                      {d.description && <div className="routing-desc">{d.description}</div>}
+                      {testResult && (
+                        <div style={{
+                          marginTop: 4,
+                          fontSize: 12,
+                          padding: '3px 7px',
+                          borderRadius: 4,
+                          display: 'inline-block',
+                          background: testResult.success ? '#ccfbf1' : '#ffedd5',
+                          color: testResult.success ? '#0f766e' : '#9a3412',
+                          border: `1px solid ${testResult.success ? '#5eead4' : '#fed7aa'}`,
+                        }}>
+                          {testResult.success
+                            ? `✓ reachable — ${testResult.latency_ms}ms${testResult.status_code ? ` (HTTP ${testResult.status_code})` : ''}`
+                            : `✗ ${testResult.error || 'unreachable'}`}
+                        </div>
+                      )}
+                    </td>
+                    <td><code>{d.type}</code></td>
+                    <td className="routing-target">
+                      {d.type === 'dicomweb' ? (d.dicomweb_url || '—') : `${d.ae_title}@${d.host}:${d.port}`}
+                    </td>
+                    <td>
+                      <span className={`badge badge--${d.enabled ? 'enabled' : 'disabled'}`}>
+                        {d.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </td>
+                    <td>
                       <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
-                        <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                        <button type="button" className="btn btn--secondary" onClick={() => testDest(d.id)} disabled={testing}>
+                          {testing ? 'Testing…' : 'Test'}
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
+                            <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                          </>
+                        )}
                       </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

@@ -33,7 +33,7 @@ from app.ingest import (
 from app.operator_audit import get_actions, record_action
 from app.retry_alerts import evaluate_retry_alerts, get_alerts
 from app.scp import create_scp, start_scp
-from app.sender import forward_study
+from app.sender import forward_study, send_echo
 
 logging.basicConfig(
     level=logging.INFO,
@@ -367,3 +367,23 @@ def forward(request: ForwardRequest):
         raise HTTPException(status_code=502, detail=str(e))
 
     return {"status": "complete", **result}
+
+
+class EchoRequest(BaseModel):
+    ae_title: str = Field(min_length=1)
+    host: str = Field(min_length=1)
+    port: int = Field(gt=0)
+
+
+@app.post("/echo")
+def echo(request: EchoRequest):
+    """Send C-ECHO to a remote DIMSE AE to verify connectivity."""
+    try:
+        result = send_echo(
+            host=request.host,
+            port=request.port,
+            ae_title=request.ae_title,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
