@@ -890,6 +890,8 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
   const [downloads, setDownloads] = useState<Record<string, DownloadRecord[]>>({})
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [analytics, setAnalytics] = useState<DownloadAnalytics | null>(null)
+  const [revokeModalId, setRevokeModalId] = useState<string | null>(null)
+  const [revokeModalReason, setRevokeModalReason] = useState('')
 
   useEffect(() => {
     fetch('/api/export-analytics')
@@ -937,11 +939,22 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
 
   const setStatusF = (v: string) => { setStatusFilter(v); setPage(0) }
 
-  const revokeShare = async (id: string) => {
-    if (!window.confirm('Revoke this share link? Recipients will lose access immediately.')) return
+  const revokeShare = (id: string) => {
+    setRevokeModalReason('')
+    setRevokeModalId(id)
+  }
+
+  const confirmRevoke = async () => {
+    const id = revokeModalId
+    if (!id) return
+    setRevokeModalId(null)
     setRevoking(id)
     try {
-      const res = await fetch(`/api/shares/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/shares/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: revokeModalReason.trim() }),
+      })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       fetchShares(statusFilter, page)
     } catch (err) {
@@ -1163,6 +1176,23 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
           </div>
         </div>
       )}
+      {revokeModalId && (
+        <div style={{ marginTop: 12, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px' }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#9a3412' }}>Revoke share link</p>
+          <p style={{ margin: '0 0 8px', fontSize: 13, color: '#78350f' }}>Recipients will lose access immediately.</p>
+          <textarea
+            style={{ width: '100%', minHeight: 60, resize: 'vertical', borderRadius: 4, border: '1px solid #fdba74', padding: '6px 8px', fontFamily: 'inherit', fontSize: 13, boxSizing: 'border-box' }}
+            maxLength={500}
+            placeholder="Reason for revocation (optional)"
+            value={revokeModalReason}
+            onChange={e => setRevokeModalReason(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button type="button" className="btn btn--reject" onClick={confirmRevoke}>Confirm Revoke</button>
+            <button type="button" className="btn btn--secondary" onClick={() => setRevokeModalId(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1216,6 +1246,8 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [revokeModalId, setRevokeModalId] = useState<string | null>(null)
+  const [revokeModalReason, setRevokeModalReason] = useState('')
 
   const fetchShares = useCallback(async () => {
     try {
@@ -1275,11 +1307,22 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
     }
   }
 
-  const handleRevoke = async (shareId: string) => {
-    if (!confirm('Revoke this share? The recipient will lose access immediately.')) return
-    await fetch(`/api/shares/${shareId}`, { method: 'DELETE' })
+  const handleRevoke = (shareId: string) => {
+    setRevokeModalReason('')
+    setRevokeModalId(shareId)
+  }
+
+  const confirmRevoke = async () => {
+    const id = revokeModalId
+    if (!id) return
+    setRevokeModalId(null)
+    await fetch(`/api/shares/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: revokeModalReason.trim() }),
+    })
     fetchShares()
-    if (newShare?.id === shareId) setNewShare(null)
+    if (newShare?.id === id) setNewShare(null)
   }
 
   const handleExtend = async (shareId: string) => {
@@ -1416,6 +1459,23 @@ function SharePanel({ study, onClose }: { study: Study; onClose: () => void }) {
             })}
           </tbody>
         </table>
+      )}
+      {revokeModalId && (
+        <div style={{ marginTop: 12, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px' }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#9a3412' }}>Revoke share link</p>
+          <p style={{ margin: '0 0 8px', fontSize: 13, color: '#78350f' }}>The recipient will lose access immediately.</p>
+          <textarea
+            style={{ width: '100%', minHeight: 60, resize: 'vertical', borderRadius: 4, border: '1px solid #fdba74', padding: '6px 8px', fontFamily: 'inherit', fontSize: 13, boxSizing: 'border-box' }}
+            maxLength={500}
+            placeholder="Reason for revocation (optional)"
+            value={revokeModalReason}
+            onChange={e => setRevokeModalReason(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button type="button" className="btn btn--reject" onClick={confirmRevoke}>Confirm Revoke</button>
+            <button type="button" className="btn btn--secondary" onClick={() => setRevokeModalId(null)}>Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   )

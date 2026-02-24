@@ -464,13 +464,14 @@ const tools: Tool[] = [
   },
   {
     name: "revoke_share",
-    description: "Immediately revoke an export share link by share UUID. Recipients lose access immediately. Requires confirm=true and a reason.",
+    description: "Immediately revoke an export share link by share UUID. Recipients lose access immediately. Optionally supply a revocation_reason (stored in DB and audit). Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["share_id", "reason", "confirm"],
       properties: {
         request_id: { type: "string" },
         share_id: { type: "string", format: "uuid" },
+        revocation_reason: { type: "string", maxLength: 500, description: "Optional reason stored in the database and audit trail" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -2435,7 +2436,7 @@ async function handleRejectStudy(
 
 async function handleRevokeShare(
   requestId: string,
-  parsed: { share_id: string; reason: string; confirm: true }
+  parsed: { share_id: string; revocation_reason?: string; reason: string; confirm: true }
 ) {
   if (config.mcpMode !== "operator") {
     return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "revoke_share");
@@ -2444,10 +2445,12 @@ async function handleRevokeShare(
     return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow revoke_share", false, "revoke_share");
   }
 
-  const data = await client.delete(`/api/shares/${encodeURIComponent(parsed.share_id)}`);
+  const body = parsed.revocation_reason ? { reason: parsed.revocation_reason } : {};
+  const data = await client.delete(`/api/shares/${encodeURIComponent(parsed.share_id)}`, body);
   return formatSuccess(requestId, "revoke_share", {
     accepted: true,
     share_id: parsed.share_id,
+    revocation_reason: parsed.revocation_reason ?? null,
     reason: parsed.reason,
     result: data
   });

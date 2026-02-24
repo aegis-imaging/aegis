@@ -1446,6 +1446,19 @@ Extends the expiry of an active or already-expired export share without revoking
 
 **Admin dashboard:** "Extend" button in the Shares tab for active and expired (but not revoked) shares.
 
+### Share Revocation Reason (`api/handler/export.go`, migration 038)
+
+Stores an optional free-text reason when revoking an export share. Visible in the audit trail.
+
+**API:**
+- `DELETE /api/shares/{shareID}` — body: `{"reason": "optional text (max 500 chars)"}` (body is optional; omitting it revokes with no reason)
+- Reason stored in `export_shares.revocation_reason` column (migration 038)
+- Included in `share.revoked` audit entry metadata when provided
+
+**Admin dashboard:** Revoke button opens an inline modal with an optional reason textarea (max 500 chars) before confirming. Present in both the global Shares tab and the per-study share panel.
+
+**MCP `revoke_share` tool:** Accepts optional `revocation_reason` field (stored in DB) in addition to the required `reason` field (audit justification only).
+
 ### Per-IP Rate Limiting (`api/middleware/`)
 
 Token-bucket rate limiting on public upload endpoints prevents abuse without affecting authenticated admin traffic.

@@ -401,14 +401,28 @@ func (s *Server) ExtendShare(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// RevokeShare immediately revokes an export share.
+type revokeShareRequest struct {
+	Reason string `json:"reason"`
+}
+
+// RevokeShare immediately revokes an export share with an optional reason.
 func (s *Server) RevokeShare(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareID")
-	if err := model.RevokeExportShare(r.Context(), s.db, shareID); err != nil {
+
+	var req revokeShareRequest
+	// Decode is best-effort — omitting the body is allowed (reason stays empty).
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
+
+	if err := model.RevokeExportShare(r.Context(), s.db, shareID, req.Reason); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to revoke share")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "share.revoked", actorEmail(r), "export_share", shareID, clientIP(r), nil)
+
+	meta := map[string]any{"revoked": true}
+	if req.Reason != "" {
+		meta["reason"] = req.Reason
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "share.revoked", actorEmail(r), "export_share", shareID, clientIP(r), meta)
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
