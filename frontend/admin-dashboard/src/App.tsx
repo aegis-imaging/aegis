@@ -1544,6 +1544,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [allProjects, setAllProjects] = useState<{ id: string; name: string }[]>([])
   const [reassignTarget, setReassignTarget] = useState('')
 
+  // Reject reason modal state
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+  const [rejectReasonText, setRejectReasonText] = useState('')
+
   const loadData = useCallback(() => {
     setLoading(true)
     Promise.all([
@@ -1613,14 +1617,18 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     onAction()
   }
 
-  const handleReject = async () => {
-    const reason = prompt('Rejection reason (optional — shown to uploader):') ?? null
-    if (reason === null) return
+  const handleReject = () => {
+    setRejectReasonText('')
+    setRejectModalOpen(true)
+  }
+
+  const confirmReject = async () => {
     await fetch(`/api/studies/${study.id}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: reason.trim() }),
+      body: JSON.stringify({ reason: rejectReasonText.trim() }),
     })
+    setRejectModalOpen(false)
     loadData()
     onAction()
   }
@@ -1738,7 +1746,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       {study.status === 'rejected' && study.rejection_reason && (
         <div className="study-detail__meta-item">
           <strong>Rejection Reason</strong>
-          <span style={{ color: '#dc2626' }}>{study.rejection_reason}</span>
+          <span style={{ color: '#9a3412', background: '#ffedd5', padding: '2px 6px', borderRadius: 4 }}>{study.rejection_reason}</span>
         </div>
       )}
 
@@ -1791,6 +1799,22 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             </select>
             <button type="button" className="btn btn--approve" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
             <button type="button" className="btn btn--secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
+          </div>
+        )}
+        {isAdmin && rejectModalOpen && (
+          <div style={{ marginTop: 12, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px' }}>
+            <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#9a3412' }}>Reject study</p>
+            <textarea
+              style={{ width: '100%', minHeight: 72, resize: 'vertical', borderRadius: 4, border: '1px solid #fdba74', padding: '6px 8px', fontFamily: 'inherit', fontSize: 13 }}
+              maxLength={500}
+              placeholder="Rejection reason (optional — shown to uploader)"
+              value={rejectReasonText}
+              onChange={e => setRejectReasonText(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button type="button" className="btn btn--reject" onClick={confirmReject}>Confirm Reject</button>
+              <button type="button" className="btn btn--secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
+            </div>
           </div>
         )}
       </div>
@@ -2170,23 +2194,29 @@ function StudyRow({
   checked: boolean
   onToggle: () => void
 }) {
-  const [shareOpen,  setShareOpen]  = useState(false)
-  const [viewOpen,   setViewOpen]   = useState(false)
-  const [defaceOpen, setDefaceOpen] = useState(false)
+  const [shareOpen,      setShareOpen]      = useState(false)
+  const [viewOpen,       setViewOpen]       = useState(false)
+  const [defaceOpen,     setDefaceOpen]     = useState(false)
+  const [rejectRowOpen,  setRejectRowOpen]  = useState(false)
+  const [rejectRowText,  setRejectRowText]  = useState('')
 
   const handleApprove = async () => {
     await fetch(`/api/studies/${study.id}/approve`, { method: 'POST' })
     onAction()
   }
 
-  const handleReject = async () => {
-    const reason = prompt('Rejection reason (optional — shown to uploader):') ?? null
-    if (reason === null) return  // cancelled
+  const handleReject = () => {
+    setRejectRowText('')
+    setRejectRowOpen(true)
+  }
+
+  const confirmRejectRow = async () => {
     await fetch(`/api/studies/${study.id}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: reason.trim() }),
+      body: JSON.stringify({ reason: rejectRowText.trim() }),
     })
+    setRejectRowOpen(false)
     onAction()
   }
 
@@ -2333,6 +2363,26 @@ function StudyRow({
         <tr>
           <td colSpan={14}>
             <ViewerPanel studyUID={study.study_instance_uid} onClose={() => setViewOpen(false)} />
+          </td>
+        </tr>
+      )}
+      {rejectRowOpen && (
+        <tr>
+          <td colSpan={14}>
+            <div style={{ background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px', margin: '4px 0' }}>
+              <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#9a3412' }}>Reject study</p>
+              <textarea
+                style={{ width: '100%', minHeight: 64, resize: 'vertical', borderRadius: 4, border: '1px solid #fdba74', padding: '6px 8px', fontFamily: 'inherit', fontSize: 13 }}
+                maxLength={500}
+                placeholder="Rejection reason (optional — shown to uploader)"
+                value={rejectRowText}
+                onChange={e => setRejectRowText(e.target.value)}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="button" className="btn btn--reject" onClick={confirmRejectRow}>Confirm Reject</button>
+                <button type="button" className="btn btn--secondary" onClick={() => setRejectRowOpen(false)}>Cancel</button>
+              </div>
+            </div>
           </td>
         </tr>
       )}
