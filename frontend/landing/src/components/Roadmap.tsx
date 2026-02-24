@@ -15,6 +15,7 @@ interface Milestone {
   title: string
   items: string[]
   tags: { label: string; style: 'done' | 'active' | 'cloud' | 'neutral' }[]
+  liveUrl?: string
 }
 
 const MILESTONES: Milestone[] = [
@@ -23,7 +24,7 @@ const MILESTONES: Milestone[] = [
     date: 'Feb 17–24, 2026',
     title: 'Foundation — GCP Production',
     items: [
-      '10+ services deployed: Go API, 7 Python processing sidecars, DIMSE C-STORE SCP, MCP server',
+      'Microservices architecture: Go API + 7 Python microservices, DIMSE C-STORE SCP, MCP server — 10+ services total',
       'Full HIPAA pipeline: tag de-identification, defacing, PHI scan, QC, BIDS, protocol compliance',
       'Terraform IaC + Cloud Build CI/CD — every merge to develop auto-deploys all services',
       'Admin dashboard with Weasis DWV viewer, RBAC, audit trail, routing rules engine',
@@ -33,6 +34,7 @@ const MILESTONES: Milestone[] = [
       { label: 'GCP', style: 'cloud' },
       { label: 'Open Beta', style: 'neutral' },
     ],
+    liveUrl: 'https://api.aegisimaging.ai/healthz',
   },
   {
     status: 'active',
@@ -55,16 +57,17 @@ const MILESTONES: Milestone[] = [
     date: 'Q1 2026',
     title: 'AWS Deployment',
     items: [
-      'ECS Fargate (9 services), RDS PostgreSQL, S3, ALB + Cognito — deploying now',
+      'ECS Fargate (9 microservices), RDS PostgreSQL, S3, ALB + Cognito — live now',
       'GitHub Actions CI/CD mirrors GCP Cloud Build — auto-deploy on every push to develop',
       'DIMSE receiver on EC2 with Elastic IP — same static-IP PACS pattern as GCP',
       'Multi-cloud data federation — studies routable between GCP and AWS tenants',
     ],
     tags: [
-      { label: '● Deploying', style: 'active' },
+      { label: '✓ Live', style: 'done' },
       { label: 'AWS', style: 'cloud' },
       { label: 'Multi-Cloud', style: 'neutral' },
     ],
+    liveUrl: 'https://aws.api.aegisimaging.ai/healthz',
   },
   {
     status: 'planned',
@@ -159,6 +162,16 @@ export function Roadmap() {
                       {tag.label}
                     </span>
                   ))}
+                  {m.liveUrl && (
+                    <a
+                      href={m.liveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="roadmap__tag roadmap__tag--done"
+                    >
+                      View live ↗
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
