@@ -4,10 +4,11 @@ import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
 import { TCIAPanel } from './components/TCIAPanel'
 import { SynthPanel } from './components/SynthPanel'
+import { SystemHealthPanel } from './components/SystemHealthPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'system'
 
 type APIKey = {
   id: string
@@ -6301,6 +6302,7 @@ export function App() {
     { kind: 'nav', label: 'Projects',              tab: 'projects',           icon: '📁' },
     { kind: 'nav', label: 'Federation Peers',      tab: 'federation',         icon: '🌐' },
     { kind: 'nav', label: 'TCIA Import',           tab: 'tcia_import',        icon: '🔬' },
+    { kind: 'nav', label: 'System Health',         tab: 'system',             icon: '⚙️' },
     ...(isAdmin ? [
       { kind: 'nav' as const, label: 'Users',        tab: 'users' as AppTab,         icon: '👤' },
       { kind: 'nav' as const, label: 'API Keys',     tab: 'api_keys' as AppTab,      icon: '🔑' },
@@ -6753,6 +6755,13 @@ export function App() {
         >
           TCIA Import
         </button>
+        <button
+          type="button"
+          className={`tab-btn${tab === 'system' ? ' tab-btn--active' : ''}`}
+          onClick={() => setTab('system')}
+        >
+          System
+        </button>
         {isAdmin && (
           <button
             type="button"
@@ -7156,6 +7165,9 @@ export function App() {
 
       {/* Invite Codes tab — admin only */}
       {tab === 'invite_codes' && isAdmin && <InviteCodesPanel />}
+
+      {/* System Health tab */}
+      {tab === 'system' && <SystemHealthPanel />}
     </div>
   )
 }
