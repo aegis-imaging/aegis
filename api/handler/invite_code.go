@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
+	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -93,6 +95,65 @@ func (s *Server) RevokeInviteCode(w http.ResponseWriter, r *http.Request) {
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "invite_code.revoked", actorEmail(r), "invite_code", id, clientIP(r), nil)
 	s.writeJSON(w, http.StatusOK, map[string]any{"status": "revoked"})
+}
+
+// SendInviteCode emails an invite code to a specified recipient. Admin-only.
+//
+// POST /api/invite-codes/{id}/send
+func (s *Server) SendInviteCode(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.SMTPHost == "" {
+		s.writeError(w, http.StatusServiceUnavailable,
+			"email is not configured on this server (set SMTP_HOST)")
+		return
+	}
+
+	id := r.PathValue("id")
+	ic, err := model.GetInviteCode(r.Context(), s.db, id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			s.writeError(w, http.StatusNotFound, "invite code not found")
+			return
+		}
+		log.Printf("send invite code %s: db: %v", id, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to look up invite code")
+		return
+	}
+	if !ic.Enabled {
+		s.writeError(w, http.StatusConflict, "invite code is revoked")
+		return
+	}
+
+	var req struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	req.Email = strings.TrimSpace(req.Email)
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Email == "" || !strings.Contains(req.Email, "@") {
+		s.writeError(w, http.StatusBadRequest, "valid email is required")
+		return
+	}
+	if req.Name == "" {
+		req.Name = ic.Label
+	}
+
+	inviteURL := s.cfg.LandingBaseURL + "/?invite=" + ic.Code
+	subject, body := email.InviteCodeIssued(req.Name, ic.Code, inviteURL, s.cfg.LandingBaseURL)
+	if err := s.mailer.Send(r.Context(), req.Email, subject, body); err != nil {
+		log.Printf("send invite code %s to %s: %v", id, req.Email, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to send email")
+		return
+	}
+
+	model.CreateAuditEntry(r.Context(), s.db, "invite_code.sent", actorEmail(r),
+		"invite_code", id, clientIP(r),
+		map[string]any{"to": req.Email, "name": req.Name, "code": ic.Code})
+
+	s.writeJSON(w, http.StatusOK, map[string]any{"status": "sent"})
 }
 
 // DeleteInviteCode permanently removes an invite code. Admin-only.
