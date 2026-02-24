@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,9 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+
+	dicomlib "github.com/suyashkumar/dicom"
+	"github.com/suyashkumar/dicom/pkg/tag"
 
 	"github.com/aegis-imaging/aegis/api/model"
 )
@@ -236,4 +240,195 @@ func (s *Server) dicomwebRetrieve(w http.ResponseWriter, r *http.Request, storeO
 	// Raw DICOM bytes — consumed directly by browser-side parsers.
 	w.Header().Set("Content-Type", "application/dicom")
 	io.Copy(w, rc)
+}
+
+// ── WADO-RS: Instance Metadata ────────────────────────────────────────────────
+
+// DicomwebInstanceMetadata handles GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata
+// Returns DICOM tag metadata in DICOMweb JSON format without pixel data.
+// OHIF v3 requires this endpoint to build the image manifest before loading pixels.
+func (s *Server) DicomwebInstanceMetadata(w http.ResponseWriter, r *http.Request) {
+	s.dicomwebMetadata(w, r, "")
+}
+
+// DicomwebRawInstanceMetadata is identical but forces the "raw" DICOM store.
+func (s *Server) DicomwebRawInstanceMetadata(w http.ResponseWriter, r *http.Request) {
+	s.dicomwebMetadata(w, r, "raw")
+}
+
+func (s *Server) dicomwebMetadata(w http.ResponseWriter, r *http.Request, storeOverride string) {
+	studyUID := r.PathValue("studyUID")
+	sopUID := r.PathValue("sopUID")
+
+	parts := strings.Split(sopUID, ".")
+	index, err := strconv.Atoi(parts[len(parts)-1])
+	if err != nil || index < 0 {
+		http.Error(w, "invalid SOP UID", http.StatusBadRequest)
+		return
+	}
+
+	st, err := model.GetStudyByUID(r.Context(), s.db, studyUID)
+	if err != nil {
+		http.Error(w, "study not found", http.StatusNotFound)
+		return
+	}
+
+	dicomStore := st.DicomStore
+	if storeOverride != "" {
+		dicomStore = storeOverride
+	}
+
+	key := fmt.Sprintf("dicom/%s/%s/%d.dcm", dicomStore, studyUID, index)
+	rc, err := s.store.Retrieve(r.Context(), key)
+	if err != nil {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+	defer rc.Close()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		http.Error(w, "failed to read DICOM file", http.StatusInternalServerError)
+		return
+	}
+
+	dataset, err := dicomlib.Parse(bytes.NewReader(data), int64(len(data)), nil, dicomlib.SkipPixelData())
+	if err != nil {
+		log.Printf("dicomweb metadata parse %s: %v", key, err)
+		http.Error(w, "failed to parse DICOM file", http.StatusUnprocessableEntity)
+		return
+	}
+
+	obj := datasetToDICOMwebJSON(dataset)
+	w.Header().Set("Content-Type", "application/dicom+json")
+	json.NewEncoder(w).Encode([]map[string]any{obj})
+}
+
+// datasetToDICOMwebJSON converts a parsed DICOM dataset to a DICOMweb JSON object.
+// Pixel data (7FE0,0010) is excluded. Binary VRs use BulkDataURI placeholders.
+func datasetToDICOMwebJSON(dataset dicomlib.Dataset) map[string]any {
+	obj := make(map[string]any, len(dataset.Elements))
+	for _, el := range dataset.Elements {
+		if el.Tag == tag.PixelData {
+			continue
+		}
+		tagKey := fmt.Sprintf("%08X", uint32(el.Tag.Group)<<16|uint32(el.Tag.Element))
+		vr := el.RawValueRepresentation
+
+		switch vr {
+		case "OB", "OD", "OF", "OL", "OV", "OW", "UN":
+			// Binary VRs — omit inline; OHIF won't need them for metadata
+			obj[tagKey] = map[string]any{"vr": vr}
+
+		case "SQ":
+			// Sequence — emit as empty array for simplicity
+			obj[tagKey] = map[string]any{"vr": vr, "Value": []any{}}
+
+		case "PN":
+			values := []any{}
+			if el.Value != nil {
+				for _, v := range toStringSlice(el) {
+					values = append(values, map[string]any{"Alphabetic": v})
+				}
+			}
+			if len(values) == 0 {
+				obj[tagKey] = map[string]any{"vr": vr}
+			} else {
+				obj[tagKey] = map[string]any{"vr": vr, "Value": values}
+			}
+
+		case "FL", "FD":
+			values := toFloatSlice(el)
+			if len(values) == 0 {
+				obj[tagKey] = map[string]any{"vr": vr}
+			} else {
+				obj[tagKey] = map[string]any{"vr": vr, "Value": values}
+			}
+
+		case "SL", "SS", "UL", "US", "AT":
+			values := toIntSlice(el)
+			if len(values) == 0 {
+				obj[tagKey] = map[string]any{"vr": vr}
+			} else {
+				obj[tagKey] = map[string]any{"vr": vr, "Value": values}
+			}
+
+		default:
+			// All string VRs (AE, AS, CS, DA, DS, DT, IS, LO, LT, SH, ST, TM, UC, UI, UR, UT)
+			values := toStringSlice(el)
+			if len(values) == 0 {
+				obj[tagKey] = map[string]any{"vr": vr}
+			} else {
+				anyValues := make([]any, len(values))
+				for i, v := range values {
+					anyValues[i] = v
+				}
+				obj[tagKey] = map[string]any{"vr": vr, "Value": anyValues}
+			}
+		}
+	}
+	return obj
+}
+
+func toStringSlice(el *dicomlib.Element) []string {
+	if el.Value == nil {
+		return nil
+	}
+	v := el.Value.GetValue()
+	switch val := v.(type) {
+	case []string:
+		return val
+	case []int:
+		out := make([]string, len(val))
+		for i, n := range val {
+			out[i] = fmt.Sprintf("%d", n)
+		}
+		return out
+	case []float64:
+		out := make([]string, len(val))
+		for i, f := range val {
+			out[i] = fmt.Sprintf("%g", f)
+		}
+		return out
+	default:
+		s := fmt.Sprintf("%v", val)
+		if s == "" || s == "[]" {
+			return nil
+		}
+		return []string{s}
+	}
+}
+
+func toIntSlice(el *dicomlib.Element) []any {
+	if el.Value == nil {
+		return nil
+	}
+	v := el.Value.GetValue()
+	switch val := v.(type) {
+	case []int:
+		out := make([]any, len(val))
+		for i, n := range val {
+			out[i] = n
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func toFloatSlice(el *dicomlib.Element) []any {
+	if el.Value == nil {
+		return nil
+	}
+	v := el.Value.GetValue()
+	switch val := v.(type) {
+	case []float64:
+		out := make([]any, len(val))
+		for i, f := range val {
+			out[i] = f
+		}
+		return out
+	default:
+		return nil
+	}
 }

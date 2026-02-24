@@ -143,6 +143,7 @@ func main() {
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series", srv.DicomwebSeries)
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances", srv.DicomwebInstances)
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}", srv.DicomwebRetrieveInstance)
+	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata", srv.DicomwebInstanceMetadata)
 
 	// Raw DICOMweb proxy — identical to /dicomweb but WADO-RS always reads from the
 	// pre-defacing "raw" store. Used by OHIF's "dicomweb-raw" data source for
@@ -151,6 +152,7 @@ func main() {
 	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series", srv.DicomwebSeries)
 	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series/{seriesUID}/instances", srv.DicomwebInstances)
 	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}", srv.DicomwebRawRetrieveInstance)
+	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata", srv.DicomwebRawInstanceMetadata)
 
 	// ── Admin-protected routes (require auth) ────────────────────────
 
