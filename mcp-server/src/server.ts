@@ -1811,7 +1811,9 @@ async function main(): Promise<void> {
       llmTemperature: config.agentLlmTemperature,
       llmMaxTokens: config.agentLlmMaxTokens,
       llmUseGcpAuth: config.agentLlmUseGcpAuth,
-      llmGcpProject: config.agentLlmGcpProject
+      llmGcpProject: config.agentLlmGcpProject,
+      llmUseAwsBedrock: config.agentLlmUseAwsBedrock,
+      llmAwsRegion: config.agentLlmAwsRegion
     });
   }
   const transport = new StdioServerTransport();

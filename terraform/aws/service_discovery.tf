@@ -31,6 +31,7 @@ locals {
     "protocol-service",
     "synth-service",
     "dimse-receiver",
+    "mcp-server",
     "api",
   ]
 }
