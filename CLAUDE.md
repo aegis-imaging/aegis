@@ -1183,9 +1183,13 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 
 **SLA / stuck studies** (`GET /api/studies/stuck`, admin-read):
 - Returns studies that have not advanced beyond a non-terminal state within a configurable idle window
-- Query params: `minutes` (default 60), `project_id` (optional)
+- Query params: `minutes` (default 60, or project's `stuck_threshold_minutes` if set), `project_id` (optional)
 - Response: `{stuck: [], total, minutes}`
 - Alerts are stored in `study_sla_alerts` table (migration 020); admin dashboard highlights stuck studies
+- Per-project SLA threshold: `PUT /api/projects/{id}/sla-threshold` — body `{"stuck_threshold_minutes": 120}` or `null` to reset to global default; emits `project.sla_threshold_updated` audit entry
+- `stuck_threshold_minutes` is stored on the `projects` table (migration 039); when `project_id` is scoped and that project has a non-null value, it is used as the default threshold (still overridable by explicit `?minutes=` param)
+- Admin dashboard: "SLA" button per project in Projects tab opens an inline editor (same pattern as Retention); shows current threshold as badge (e.g. `120m`) or `60m` for global default
+- MCP `list_projects`: now returns `stuck_threshold_minutes` field
 
 **Pipeline step reset / re-processing** (`POST /api/studies/{id}/reset-pipeline-step`, admin-only):
 - Body: `{"step": "deface"|"phi_scan"|"qc"|"bids"|"classify"|"protocol"|"export"}`

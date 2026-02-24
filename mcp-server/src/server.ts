@@ -530,7 +530,7 @@ const tools: Tool[] = [
   },
   {
     name: "list_projects",
-    description: "List all AEGIS projects. Returns array of {id, name, slug, description, archived, retention_days, created_at}. Use project IDs to scope other tools (list_studies, get_pipeline_stats, get_stuck_studies, etc.) to a specific project.",
+    description: "List all AEGIS projects. Returns array of {id, name, slug, description, archived, retention_days, stuck_threshold_minutes, created_at}. stuck_threshold_minutes is the per-project SLA threshold for get_stuck_studies (null = global default of 60 min). Use project IDs to scope other tools (list_studies, get_pipeline_stats, get_stuck_studies, etc.) to a specific project.",
     inputSchema: {
       type: "object",
       properties: {

@@ -7,21 +7,22 @@ import (
 )
 
 type Project struct {
-	ID                   string    `json:"id"`
-	Name                 string    `json:"name"`
-	Slug                 string    `json:"slug"`
-	Description          string    `json:"description"`
-	DefaultAnonProfileID *string   `json:"default_anon_profile_id,omitempty"`
-	RetentionDays        *int      `json:"retention_days,omitempty"` // nil = keep indefinitely
-	Archived             bool      `json:"archived"`
-	CreatedAt            time.Time `json:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	ID                    string    `json:"id"`
+	Name                  string    `json:"name"`
+	Slug                  string    `json:"slug"`
+	Description           string    `json:"description"`
+	DefaultAnonProfileID  *string   `json:"default_anon_profile_id,omitempty"`
+	RetentionDays         *int      `json:"retention_days,omitempty"`          // nil = keep indefinitely
+	StuckThresholdMinutes *int      `json:"stuck_threshold_minutes,omitempty"` // nil = use request default (60)
+	Archived              bool      `json:"archived"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 
-const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, archived, created_at, updated_at`
+const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, stuck_threshold_minutes, archived, created_at, updated_at`
 
 func scanProject(row scannable, p *Project) error {
-	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.Archived, &p.CreatedAt, &p.UpdatedAt)
+	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.StuckThresholdMinutes, &p.Archived, &p.CreatedAt, &p.UpdatedAt)
 }
 
 func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
@@ -74,6 +75,14 @@ func UpdateProject(ctx context.Context, db *sql.DB, id, name, slug, description 
 		return nil, err
 	}
 	return &p, nil
+}
+
+// UpdateProjectSLAThreshold sets or clears (nil) the per-project stuck threshold.
+func UpdateProjectSLAThreshold(ctx context.Context, db *sql.DB, projectID string, minutes *int) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE projects SET stuck_threshold_minutes = $1, updated_at = now() WHERE id = $2`,
+		minutes, projectID)
+	return err
 }
 
 // UpdateProjectRetentionDays sets or clears (nil) the retention policy for a project.
