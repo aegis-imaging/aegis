@@ -883,7 +883,7 @@ resource "google_cloud_run_v2_service" "weasis" {
       resources {
         limits = {
           cpu    = "1000m"
-          memory = "256Mi"
+          memory = "512Mi"
         }
       }
 
