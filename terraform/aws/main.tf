@@ -110,6 +110,18 @@ variable "api_allowed_origins" {
   default     = []
 }
 
+variable "api_domain" {
+  description = "Custom FQDN for the API (e.g. aws.api.aegisimaging.ai). Empty = use raw ALB DNS."
+  type        = string
+  default     = ""
+}
+
+variable "admin_domain" {
+  description = "Custom FQDN for the admin dashboard (e.g. aws.admin.aegisimaging.ai). Empty = use raw ALB DNS."
+  type        = string
+  default     = ""
+}
+
 variable "admin_image_tag" {
   description = "Container image tag used for the admin dashboard ECS task"
   type        = string
@@ -377,16 +389,20 @@ locals {
   api_image   = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
   admin_image = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
 
+  # Friendly FQDNs — use custom domains when set, fall back to raw ALB DNS.
+  api_fqdn   = var.api_domain   != "" ? var.api_domain   : aws_lb.main.dns_name
+  admin_fqdn = var.admin_domain != "" ? var.admin_domain : aws_lb.main.dns_name
+
   cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
-    "https://${aws_lb.main.dns_name}/oauth2/idpresponse"
+    "https://${local.admin_fqdn}/oauth2/idpresponse"
   ]
 
   cognito_logout_urls = length(var.cognito_logout_urls) > 0 ? var.cognito_logout_urls : [
-    "https://${aws_lb.main.dns_name}/logout"
+    "https://${local.admin_fqdn}/logout"
   ]
 
   resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : [
-    "https://${aws_lb.main.dns_name}"
+    "https://${local.admin_fqdn}"
   ]
 
   public_path_rules = {
@@ -700,6 +716,58 @@ resource "aws_lb_listener_rule" "https_api_authenticated" {
   }
 }
 
+# ── Host-based routing — custom subdomains (e.g. aws.api.aegisimaging.ai) ──────
+# Created only when api_domain / admin_domain are set in terraform.tfvars.
+# Priorities 1 and 2 fire before all path-based rules.
+# api_domain → forwards directly to API target group (Go API handles its own auth).
+# admin_domain → Cognito authenticate-cognito + forward to admin target group.
+
+resource "aws_lb_listener_rule" "api_subdomain" {
+  count        = var.api_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 1
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.api_domain]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "admin_subdomain" {
+  count        = var.admin_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 2
+
+  action {
+    type = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn              = aws_cognito_user_pool.admin.arn
+      user_pool_client_id        = aws_cognito_user_pool_client.admin.id
+      user_pool_domain           = aws_cognito_user_pool_domain.admin.domain
+      on_unauthenticated_request = "authenticate"
+      scope                      = join(" ", var.cognito_allowed_oauth_scopes)
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.admin.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.admin_domain]
+    }
+  }
+}
+
 # --- ECS API runtime ---
 
 data "aws_iam_policy_document" "ecs_task_execution_assume_role" {
@@ -811,7 +879,7 @@ resource "aws_ecs_task_definition" "api" {
         { name = "STORAGE_MODE", value = "s3" },
         { name = "S3_BUCKET", value = aws_s3_bucket.dicom.bucket },
         { name = "S3_REGION", value = var.aws_region },
-        { name = "API_BASE_URL", value = "https://${aws_lb.main.dns_name}" },
+        { name = "API_BASE_URL", value = "https://${local.api_fqdn}" },
         { name = "APP_TIMEZONE", value = "UTC" },
         { name = "ALLOWED_ORIGINS", value = join(",", local.resolved_api_allowed_origins) },
         { name = "AUTH_ENABLED",                value = "true" },
@@ -1011,15 +1079,15 @@ output "alb_dns" {
 }
 
 output "api_base_url" {
-  value = "https://${aws_lb.main.dns_name}"
+  value = "https://${local.api_fqdn}"
 }
 
 output "api_healthz_url" {
-  value = "https://${aws_lb.main.dns_name}/healthz"
+  value = "https://${local.api_fqdn}/healthz"
 }
 
 output "admin_base_url" {
-  value = "https://${aws_lb.main.dns_name}/"
+  value = "https://${local.admin_fqdn}/"
 }
 
 output "alb_https_listener_arn" {
