@@ -194,6 +194,12 @@ variable "ses_smtp_region" {
   default     = ""
 }
 
+variable "first_admin_email" {
+  description = "Seeds the first admin user in admin_users on startup (idempotent). Set to ops email."
+  type        = string
+  default     = ""
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -976,7 +982,8 @@ resource "aws_ecs_task_definition" "api" {
         { name = "CLASSIFICATION_SERVICE_URL", value = "http://classification-service.aegis.local:8080" },
         { name = "PROTOCOL_SERVICE_URL", value = "http://protocol-service.aegis.local:8080" },
         { name = "SYNTH_SERVICE_URL", value = "http://synth-service.aegis.local:8080" },
-        { name = "DIMSE_RECEIVER_URL", value = "http://dimse-receiver.aegis.local:8080" },
+        { name = "DIMSE_RECEIVER_URL", value = "" },
+        { name = "FIRST_ADMIN_EMAIL", value = var.first_admin_email },
         { name = "SMTP_HOST", value = local.ses_smtp_hostname },
         { name = "SMTP_PORT", value = "587" },
         { name = "SMTP_FROM", value = var.smtp_from },

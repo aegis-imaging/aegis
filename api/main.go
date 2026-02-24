@@ -222,6 +222,9 @@ func main() {
 	mux.HandleFunc("DELETE /api/shares/{shareID}", adminOnly(srv.RevokeShare))
 	mux.HandleFunc("PATCH /api/shares/{shareID}/extend", adminOnly(srv.ExtendShare))
 
+	// DICOMweb STOW-RS receiver — cross-cloud ingest endpoint, API-key authenticated.
+	mux.Handle("POST /api/stow", rateLimit(srv.StowReceiver))
+
 	// Internal enterprise ingestion path.
 	mux.HandleFunc("POST /api/ingest", adminOnly(srv.InternalIngest))
 
