@@ -12,6 +12,7 @@ Endpoints:
 Environment variables:
   SYNTH_DATA_DIR        -- shared data volume root (default: /app/data)
   SYNTH_USE_GPU         -- enable MONAI LDM GPU backend (default: false)
+  SYNTH_USE_GEMINI      -- enable Vertex AI Imagen backend (default: false)
   SYNTH_MAX_SLICES      -- maximum slices per request (default: 200)
   SYNTH_MAX_SIZE        -- maximum image size in pixels (default: 512)
 """
@@ -44,6 +45,7 @@ class GenerateRequest(BaseModel):
     seed: int = 42
     with_face: bool = False
     use_gpu: bool = False
+    use_gemini: bool = False
     # Optional override for the output base directory (default: cfg.data_dir).
     output_base_dir: str | None = None
 
@@ -65,14 +67,20 @@ def healthz() -> dict:
         import pydicom  # noqa: F401
 
         tool = "phantom"
-        if cfg.use_gpu:
+        if cfg.use_gemini:
+            try:
+                from .gemini_backend import _imagen_available
+                tool = "gemini" if _imagen_available() else "phantom (gemini unavailable)"
+            except ImportError:
+                tool = "phantom (gemini unavailable)"
+        elif cfg.use_gpu:
             try:
                 from .monai_backend import generate_monai_slices  # noqa: F401
                 tool = "monai"
             except ImportError:
                 tool = "phantom (monai unavailable)"
 
-        return {"status": "ok", "tool": tool, "gpu": cfg.use_gpu}
+        return {"status": "ok", "tool": tool, "gpu": cfg.use_gpu, "gemini": cfg.use_gemini}
     except Exception as exc:
         return {"status": "degraded", "error": str(exc)}
 
@@ -86,8 +94,14 @@ def generate(req: GenerateRequest) -> GenerateResponse:
 
     start = time.monotonic()
     try:
-        use_gpu = req.use_gpu and cfg.use_gpu
-        if use_gpu:
+        use_gemini = req.use_gemini and cfg.use_gemini
+        use_gpu = req.use_gpu and cfg.use_gpu and not use_gemini
+
+        if use_gemini:
+            from .gemini_backend import generate_gemini_slices
+            tool_used = "gemini"
+            slice_data = generate_gemini_slices(n_slices=n_slices, size=size, seed=req.seed)
+        elif use_gpu:
             from .monai_backend import generate_monai_slices
             tool_used = "monai"
             slice_data = generate_monai_slices(n_slices=n_slices, size=size)

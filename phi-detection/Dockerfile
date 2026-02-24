@@ -1,12 +1,14 @@
 # AEGIS PHI Detection Service
 #
 # Backend is controlled by PHI_TOOL env var:
-#   "auto" (default): google_vision > aws_textract > tesseract
+#   "auto" (default): gemini > google_vision > aws_textract > tesseract
+#   "gemini":         Vertex AI Gemini multimodal (ADC / Workload Identity)
 #   "google_vision":  Google Cloud Vision text_detection
 #   "aws_textract":   AWS Textract detect_document_text
 #   "tesseract":      local Tesseract OCR (no cloud dependencies)
 #
 # Cloud backends are optional — build with:
+#   --build-arg INCLUDE_GEMINI=true
 #   --build-arg INCLUDE_GOOGLE_VISION=true
 #   --build-arg INCLUDE_AWS_TEXTRACT=true
 
@@ -21,6 +23,13 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Vertex AI / Gemini multimodal backend (optional, ~120 MB)
+# Uses Application Default Credentials — no API key needed on GCP Cloud Run.
+ARG INCLUDE_GEMINI=false
+RUN if [ "$INCLUDE_GEMINI" = "true" ]; then \
+    pip install --no-cache-dir "google-cloud-aiplatform>=1.40.0"; \
+fi
 
 # Google Cloud Vision (optional, ~50 MB)
 ARG INCLUDE_GOOGLE_VISION=false
