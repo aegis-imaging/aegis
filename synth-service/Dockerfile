@@ -19,10 +19,22 @@ RUN if [ "$INCLUDE_MONAI" = "true" ]; then \
         "scikit-image>=0.21"; \
     fi
 
+# ── Optional: Vertex AI Imagen backend ────────────────────────────────────────
+# Build with: docker build --build-arg INCLUDE_GEMINI=true ...
+# Adds ~120 MB (google-cloud-aiplatform + Pillow).
+# Uses Application Default Credentials — no API key needed on GCP Cloud Run.
+ARG INCLUDE_GEMINI=false
+RUN if [ "$INCLUDE_GEMINI" = "true" ]; then \
+      pip install --no-cache-dir \
+        "google-cloud-aiplatform>=1.40.0" \
+        Pillow; \
+    fi
+
 COPY app/ ./app/
 
 ENV SYNTH_DATA_DIR=/app/data
 ENV SYNTH_USE_GPU=false
+ENV SYNTH_USE_GEMINI=false
 ENV SYNTH_MAX_SLICES=200
 ENV SYNTH_MAX_SIZE=512
 

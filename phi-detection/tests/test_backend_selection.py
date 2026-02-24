@@ -10,17 +10,25 @@ from unittest.mock import patch
 from app.backends.tesseract import TesseractBackend
 from app.backends.google_vision import GoogleVisionBackend
 from app.backends.aws_textract import AWSTextractBackend
+from app.backends.gemini import GeminiBackend
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _run_select_backend(phi_tool="auto", gv_avail=False, at_avail=False, ts_avail=False):
+def _run_select_backend(
+    phi_tool="auto",
+    gem_avail=False,
+    gv_avail=False,
+    at_avail=False,
+    ts_avail=False,
+):
     """Invoke _select_backend with controlled backend availability."""
     from app.main import _select_backend
 
     with patch("app.main.cfg") as mock_cfg, \
+         patch.object(GeminiBackend, "available", return_value=gem_avail), \
          patch.object(GoogleVisionBackend, "available", return_value=gv_avail), \
          patch.object(AWSTextractBackend, "available", return_value=at_avail), \
          patch.object(TesseractBackend, "available", return_value=ts_avail):
@@ -35,25 +43,30 @@ def _run_select_backend(phi_tool="auto", gv_avail=False, at_avail=False, ts_avai
 # ---------------------------------------------------------------------------
 
 class TestSelectBackendAuto:
-    def test_auto_selects_google_vision_first(self):
-        """With all backends available, auto picks google_vision."""
-        backend = _run_select_backend(phi_tool="auto", gv_avail=True, at_avail=True, ts_avail=True)
+    def test_auto_selects_gemini_first(self):
+        """With all backends available, auto picks gemini (highest priority)."""
+        backend = _run_select_backend(phi_tool="auto", gem_avail=True, gv_avail=True, at_avail=True, ts_avail=True)
+        assert backend.name == "gemini"
+
+    def test_auto_selects_google_vision_when_gemini_unavailable(self):
+        """When gemini is unavailable, auto picks google_vision."""
+        backend = _run_select_backend(phi_tool="auto", gem_avail=False, gv_avail=True, at_avail=True, ts_avail=True)
         assert backend.name == "google_vision"
 
     def test_auto_selects_textract_when_vision_unavailable(self):
-        """When google_vision is unavailable, auto picks aws_textract."""
-        backend = _run_select_backend(phi_tool="auto", gv_avail=False, at_avail=True, ts_avail=True)
+        """When gemini and google_vision are unavailable, auto picks aws_textract."""
+        backend = _run_select_backend(phi_tool="auto", gem_avail=False, gv_avail=False, at_avail=True, ts_avail=True)
         assert backend.name == "aws_textract"
 
     def test_auto_selects_tesseract_as_last_resort(self):
-        """When both cloud backends are unavailable, auto falls back to tesseract."""
-        backend = _run_select_backend(phi_tool="auto", gv_avail=False, at_avail=False, ts_avail=True)
+        """When all cloud backends are unavailable, auto falls back to tesseract."""
+        backend = _run_select_backend(phi_tool="auto", gem_avail=False, gv_avail=False, at_avail=False, ts_avail=True)
         assert backend.name == "tesseract"
 
     def test_auto_raises_when_all_unavailable(self):
         """RuntimeError when no backend is available."""
         with pytest.raises(RuntimeError, match="No PHI detection backend"):
-            _run_select_backend(phi_tool="auto", gv_avail=False, at_avail=False, ts_avail=False)
+            _run_select_backend(phi_tool="auto", gem_avail=False, gv_avail=False, at_avail=False, ts_avail=False)
 
 
 # ---------------------------------------------------------------------------
@@ -61,14 +74,19 @@ class TestSelectBackendAuto:
 # ---------------------------------------------------------------------------
 
 class TestSelectBackendExplicit:
+    def test_phi_tool_forces_gemini(self):
+        """PHI_TOOL=gemini returns GeminiBackend even when others are available."""
+        backend = _run_select_backend(phi_tool="gemini", gem_avail=True, gv_avail=True, at_avail=True, ts_avail=True)
+        assert backend.name == "gemini"
+
     def test_phi_tool_forces_tesseract(self):
         """PHI_TOOL=tesseract returns TesseractBackend even when others are available."""
-        backend = _run_select_backend(phi_tool="tesseract", gv_avail=True, at_avail=True, ts_avail=True)
+        backend = _run_select_backend(phi_tool="tesseract", gem_avail=True, gv_avail=True, at_avail=True, ts_avail=True)
         assert backend.name == "tesseract"
 
     def test_phi_tool_forces_google_vision(self):
         """PHI_TOOL=google_vision returns GoogleVisionBackend."""
-        backend = _run_select_backend(phi_tool="google_vision", gv_avail=True, ts_avail=True)
+        backend = _run_select_backend(phi_tool="google_vision", gem_avail=True, gv_avail=True, ts_avail=True)
         assert backend.name == "google_vision"
 
     def test_phi_tool_forces_aws_textract(self):
@@ -96,7 +114,8 @@ class TestGetBackend:
         try:
             from app.main import get_backend
 
-            with patch.object(TesseractBackend, "available", return_value=True), \
+            with patch.object(GeminiBackend, "available", return_value=False), \
+                 patch.object(TesseractBackend, "available", return_value=True), \
                  patch.object(GoogleVisionBackend, "available", return_value=False), \
                  patch.object(AWSTextractBackend, "available", return_value=False), \
                  patch("app.main.cfg") as mock_cfg:
