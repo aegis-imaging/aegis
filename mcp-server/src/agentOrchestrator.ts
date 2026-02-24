@@ -46,10 +46,20 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
 // Allowed Gemini model overrides — must be models available on Vertex AI OpenAI-compatible endpoint.
 const ALLOWED_MODEL_OVERRIDES = new Set([
+  // Gemini 3 series (latest)
+  "google/gemini-3.1-pro-preview",
+  "google/gemini-3-pro-preview",
+  "google/gemini-3-flash-preview",
+  // Gemini 2.5 series
+  "google/gemini-2.5-pro",
+  "google/gemini-2.5-flash",
+  "google/gemini-2.5-flash-lite",
+  // Gemini 2.0 series
   "google/gemini-2.0-flash-001",
   "google/gemini-2.0-flash-lite-001",
+  // Gemini 1.5 series (legacy)
   "google/gemini-1.5-flash-001",
-  "google/gemini-1.5-pro-001"
+  "google/gemini-1.5-pro-001",
 ]);
 
 function resolveModel(requested: string | undefined, config: LlmConfig): string {
