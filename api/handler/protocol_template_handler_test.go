@@ -262,3 +262,140 @@ func TestDeleteProtocolTemplate_NotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "template not found")
 }
+
+// ── Import handler tests ──────────────────────────────────────────────────────
+
+func TestImportProtocolTemplates_ArrayFormat(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	payload := []map[string]any{
+		{"name": "T1w MPRAGE", "manufacturer": "SIEMENS", "sequence_type": "T1w_MPRAGE", "rules": json.RawMessage(`[]`)},
+		{"name": "FLAIR", "manufacturer": "PHILIPS", "sequence_type": "FLAIR", "rules": json.RawMessage(`[]`)},
+	}
+	b, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+proj.ID+"/protocol-templates/import", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("projectID", proj.ID)
+	rr := httptest.NewRecorder()
+
+	srv.ImportProtocolTemplates(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, float64(2), result["imported"])
+	assert.Equal(t, float64(0), result["skipped"])
+}
+
+func TestImportProtocolTemplates_ExportFormat(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	payload := map[string]any{
+		"project_id": proj.ID,
+		"count":      1,
+		"templates": []map[string]any{
+			{"name": "DWI Protocol", "manufacturer": "GE", "sequence_type": "DWI", "rules": json.RawMessage(`[]`)},
+		},
+	}
+	b, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+proj.ID+"/protocol-templates/import", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("projectID", proj.ID)
+	rr := httptest.NewRecorder()
+
+	srv.ImportProtocolTemplates(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, float64(1), result["imported"])
+	assert.Equal(t, float64(0), result["skipped"])
+}
+
+func TestImportProtocolTemplates_SkipsDuplicates(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	// Pre-create a template with the same name.
+	existing := &model.ProtocolTemplate{
+		ProjectID: proj.ID, Name: "T1w Existing", Enabled: true, Rules: json.RawMessage(`[]`),
+	}
+	require.NoError(t, model.CreateProtocolTemplate(t.Context(), db, existing))
+
+	payload := []map[string]any{
+		{"name": "T1w Existing", "manufacturer": "SIEMENS", "rules": json.RawMessage(`[]`)}, // should be skipped
+		{"name": "New Template", "manufacturer": "PHILIPS", "rules": json.RawMessage(`[]`)}, // should be imported
+	}
+	b, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+proj.ID+"/protocol-templates/import", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("projectID", proj.ID)
+	rr := httptest.NewRecorder()
+
+	srv.ImportProtocolTemplates(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, float64(1), result["imported"])
+	assert.Equal(t, float64(1), result["skipped"])
+}
+
+func TestImportProtocolTemplates_InvalidJSON(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+proj.ID+"/protocol-templates/import",
+		bytes.NewReader([]byte(`not valid json`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("projectID", proj.ID)
+	rr := httptest.NewRecorder()
+
+	srv.ImportProtocolTemplates(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid JSON")
+}
+
+func TestImportProtocolTemplates_EmptyArray(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+proj.ID+"/protocol-templates/import",
+		bytes.NewReader([]byte(`[]`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("projectID", proj.ID)
+	rr := httptest.NewRecorder()
+
+	srv.ImportProtocolTemplates(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, float64(0), result["imported"])
+	assert.Equal(t, float64(0), result["skipped"])
+}
+
+func TestImportProtocolTemplates_ProjectNotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	payload := []map[string]any{{"name": "Template"}}
+	b, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/nonexistent/protocol-templates/import", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("projectID", "nonexistent-project-id")
+	rr := httptest.NewRecorder()
+
+	srv.ImportProtocolTemplates(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}
