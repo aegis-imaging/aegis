@@ -35,6 +35,7 @@ import {
   listStudiesArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
+  cloneProjectArgsSchema,
   testDestinationArgsSchema,
   testWebhookArgsSchema,
   readToolNames,
@@ -801,6 +802,23 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "clone_project",
+    description: "Duplicate a project with all its settings: routing rules (project-scoped), anon profiles (with default profile pointer), protocol templates, PHI config, retention_days, stuck_threshold_minutes. Studies, audit entries, and invite codes are NOT copied. Returns the new project record. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        name: { type: "string", minLength: 1, maxLength: 128, description: "New project name (default: 'Copy of <source>')" },
+        slug: { type: "string", minLength: 1, maxLength: 128, description: "New project slug (auto-derived from name if omitted)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "extend_share",
     description: "Extend the expiry of an export share by N hours. Works on both active and already-expired (but not revoked) shares — the extension is computed from max(current_expires_at, now). Requires confirm=true and a reason.",
     inputSchema: {
@@ -1532,6 +1550,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleToggleStudyFlag(parsedFlag.request_id ?? buildRequestId(), parsedFlag);
       }
 
+      if (name === "clone_project") {
+        const parsed = cloneProjectArgsSchema.parse(args);
+        return handleCloneProject(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       if (name === "extend_share") {
         const parsedExtend = extendShareArgsSchema.parse(args);
         return handleExtendShare(parsedExtend.request_id ?? buildRequestId(), parsedExtend);
@@ -1715,7 +1738,7 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   if (name === "revoke_share" || name === "extend_share") {
     return typeof args.share_id === "string" ? args.share_id : null;
   }
-  if (name === "export_project_batch") {
+  if (name === "export_project_batch" || name === "clone_project") {
     return typeof args.project_id === "string" ? args.project_id : null;
   }
   if (name === "test_webhook") {
@@ -2617,6 +2640,28 @@ async function handleToggleStudyFlag(
     accepted: true,
     study_id: parsed.study_id,
     flagged: parsed.flagged,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleCloneProject(
+  requestId: string,
+  parsed: { project_id: string; name?: string; slug?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "clone_project");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow clone_project", false, "clone_project");
+  }
+  const body: Record<string, string> = {};
+  if (parsed.name) body.name = parsed.name;
+  if (parsed.slug) body.slug = parsed.slug;
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/clone`, body);
+  return formatSuccess(requestId, "clone_project", {
+    accepted: true,
+    source_project_id: parsed.project_id,
     reason: parsed.reason,
     result: data
   });

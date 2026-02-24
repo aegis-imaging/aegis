@@ -4384,6 +4384,26 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  const cloneProject = async (p: Project) => {
+    const name = prompt(`New project name (default: "Copy of ${p.name}"):`)
+    if (name === null) return // cancelled
+    const body: Record<string, string> = {}
+    if (name.trim()) body.name = name.trim()
+    try {
+      const res = await fetch(`/api/projects/${p.id}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      alert(`Project cloned successfully as "${data.name}"`)
+      fetchProjects()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Clone failed')
+    }
+  }
+
   const toggleArchive = async (p: Project) => {
     const action = p.archived ? 'restore' : 'archive'
     if (!confirm(`${p.archived ? 'Restore' : 'Archive'} project "${p.name}"?`)) return
@@ -4652,6 +4672,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           disabled={archiving === p.id}
                           onClick={() => toggleArchive(p)}>
                           {archiving === p.id ? '…' : p.archived ? 'Restore' : 'Archive'}
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Duplicate this project with all settings (routing rules, profiles, templates)"
+                          onClick={() => cloneProject(p)}>
+                          Clone
                         </button>
                       </div>
                     )}
