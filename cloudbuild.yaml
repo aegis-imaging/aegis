@@ -313,6 +313,7 @@ steps:
       - --image=${_REPO}/ohif:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
+      - --set-env-vars=API_URL=https://api.aegisimaging.ai
       - --quiet
 
   # --- deploy defacing ---
