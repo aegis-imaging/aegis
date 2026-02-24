@@ -195,7 +195,7 @@ variable "ses_smtp_region" {
 }
 
 variable "first_admin_email" {
-  description = "Email address of the first admin user created on initial deployment."
+  description = "Seeds the first admin user in admin_users on startup (idempotent). Set to ops email."
   type        = string
   default     = ""
 }
