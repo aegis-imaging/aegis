@@ -80,10 +80,6 @@ resource "aws_dynamodb_table" "tf_locks" {
     type = "S"
   }
 
-  server_side_encryption {
-    enabled = true
-  }
-
   lifecycle {
     prevent_destroy = true
   }
