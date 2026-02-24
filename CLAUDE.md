@@ -164,7 +164,7 @@ Email env vars (`api/email/client.go`, `api/config/config.go`):
 |-----|---------|-------|
 | `SMTP_HOST` | *(empty — disabled)* | Set to enable; empty = silent no-op |
 | `SMTP_PORT` | `587` | Use `1025` with Mailpit |
-| `SMTP_FROM` | `noreply@aegis.local` | Envelope sender address |
+| `SMTP_FROM` | `noreply@aegisimaging.ai` | Envelope sender address |
 | `SMTP_USERNAME` | *(empty)* | Omit for unauthenticated relays |
 | `SMTP_PASSWORD` | *(empty)* | |
 
@@ -536,14 +536,14 @@ Per-route authentication middleware that protects all admin endpoints. Supports 
 |-----|---------|-------|
 | `AUTH_ENABLED` | `false` | Enable authentication middleware; `false` = dev mode (auto-auth) |
 | `AUTH_PROVIDER` | `auto` | Identity provider: `auto` (try all), `iap` (GCP), `azure` (Azure AD), or `aws` (ALB + Cognito) |
-| `DEV_USER_EMAIL` | `dev@aegis.local` | Auto-authenticated email when `AUTH_ENABLED=false` |
+| `DEV_USER_EMAIL` | `ai@aegisimaging.ai` | Auto-authenticated email when `AUTH_ENABLED=false` |
 
 **How it works:**
 - `AUTH_ENABLED=false` (default, local dev): every request is auto-authenticated as `DEV_USER_EMAIL`. If that email exists in `admin_users`, uses that record; otherwise uses a synthetic admin user. Zero config needed to start developing.
 - `AUTH_ENABLED=true` (production): reads identity headers from the reverse proxy:
   - **GCP IAP**: `X-Goog-Authenticated-User-Email` (format: `accounts.google.com:user@example.com`)
   - **Azure AD Easy Auth**: `X-MS-CLIENT-PRINCIPAL-NAME` (user's email)
-  - **AWS ALB + Cognito**: `X-Amzn-Oidc-Data` (JWT — email extracted from payload, no signature verification needed since ALB guarantees integrity)
+  - **AWS ALB + Cognito**: `X-Amzn-Oidc-Data` (JWT — ES256 signature verified against ALB regional public key endpoint; email extracted from payload claims)
 - Looks up the email in `admin_users` table; rejects unknown or disabled users.
 - Injects `AuthUser` into request context; all audit entries now record the real user email.
 
@@ -579,8 +579,8 @@ The viewer role is read-only. All write endpoints (POST, PUT, DELETE) use `Requi
 - View, Download BIDS, and Review Defacing buttons remain visible for viewers (read-only actions)
 
 **Testing RBAC locally:**
-1. Create a viewer user: `curl -X POST http://localhost:8080/api/admin-users -H 'Content-Type: application/json' -d '{"email":"viewer@aegis.local","name":"Test Viewer","role":"viewer","enabled":true}'`
-2. Set `DEV_USER_EMAIL=viewer@aegis.local` when running the Go API
+1. Create a viewer user: `curl -X POST http://localhost:8080/api/admin-users -H 'Content-Type: application/json' -d '{"email":"viewer@aegisimaging.ai","name":"Test Viewer","role":"viewer","enabled":true}'`
+2. Set `DEV_USER_EMAIL=viewer@aegisimaging.ai` when running the Go API
 3. Verify: GET endpoints return 200; POST/PUT/DELETE return 403
 4. Open admin dashboard: write buttons hidden, Users tab hidden
 
