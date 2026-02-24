@@ -925,6 +925,35 @@ uvicorn app.main:app --port 8086
 - `require_protocol_check` option in routing rules action dropdown
 - **Protocol Templates tab** — full CRUD for per-project templates with rules editor
 
+### Synthetic MRI Service (`synth-service/`, `api/handler/synth_generate.go`)
+
+Generates synthetic DICOM brain MRI phantoms for pipeline testing, defacing demos, and
+protocol development. Runs as a separate Python FastAPI service (nibabel + NumPy).
+
+**Running locally:**
+```bash
+cd synth-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8088
+# Then set SYNTH_SERVICE_URL=http://localhost:8088 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `SYNTH_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = endpoint returns 503 |
+
+**API endpoint:**
+- `POST /api/studies/generate-synthetic` — generates a synthetic study and imports it into AEGIS
+- Body: `{"project_slug", "slices", "size", "seed", "with_face", "use_gpu"}`
+- Returns `{study_uid, study_ids, file_count, tool_used, duration_seconds, message}`
+- Auto-dispatches the processing pipeline on the generated study
+
+**Admin dashboard:** Synthetic MRI Generator panel in the Studies tab with controls for slices (10–200),
+size (64/128/256/512), seed (randomisable), with-face toggle, and project selector.
+Result shows study UID, file count, tool, and duration; triggers a study list refresh automatically.
+
 ### DIMSE Receiver Service (`dimse-receiver/`)
 
 Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
