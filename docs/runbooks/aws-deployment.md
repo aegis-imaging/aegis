@@ -362,6 +362,31 @@ cd terraform/aws && terraform output ecr_repositories
 
 ---
 
+## Known Gotchas
+
+### ALB Target Group Port vs Container Port
+Docker Compose `ports: "HOST:CONTAINER"` shows host-side mapping. ECS `containerPort` must be the
+**container** port (`8080`), not the host port. The Weasis docker-compose maps `3005:8080` — the
+container listens on `8080`.
+
+### `envsubst` Requires Exported Variables
+`docker-entrypoint.sh` in the Weasis container sets `API_URL` as a shell variable. If `API_URL` is
+not already in the container's exported environment, `envsubst` (a child process) sees it as unset
+and substitutes an empty string. The symptom is:
+```
+nginx: invalid number of arguments in "set" directive
+```
+Fix: always pass `API_URL` as an ECS task definition `environment` entry — the container runtime
+exports it automatically.
+
+### ALB Target Group Port Change Forces Replacement
+Changing `port` on `aws_lb_target_group` forces a resource replacement. Terraform will fail if an
+ALB listener rule still references the old target group when it tries to delete it. Workaround:
+manually delete the affected listener rule via AWS CLI first, then `terraform apply` will recreate
+both the target group (new port) and the listener rule (pointing to new ARN).
+
+---
+
 ## Adding CI/CD for AWS
 
 Currently AWS is deployed manually. To add automation (GitHub Actions recommended):
