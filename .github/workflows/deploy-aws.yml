@@ -8,8 +8,8 @@
 #   AWS_SECRET_ACCESS_KEY  — corresponding secret key
 #   AWS_ACCOUNT_ID         — 12-digit AWS account ID
 #
-# Phase 1: Build all 10 service images in parallel (matrix) and push to ECR.
-# Phase 2: Update all 9 ECS services (force new deployment) + reboot DIMSE EC2.
+# Phase 1: Build all 11 service images in parallel (matrix) and push to ECR.
+# Phase 2: Update all 10 ECS services (force new deployment) + reboot DIMSE EC2.
 
 name: Deploy to AWS
 
@@ -34,6 +34,10 @@ jobs:
           - service: admin-dashboard
             context: .
             dockerfile: frontend/admin-dashboard/Dockerfile
+            build_args: "--build-arg VITE_WEASIS_BASE_URL=https://aws.weasis.aegisimaging.ai"
+          - service: weasis
+            context: weasis
+            dockerfile: weasis/Dockerfile
           - service: defacing
             context: defacing
             dockerfile: defacing/Dockerfile
@@ -75,11 +79,12 @@ jobs:
 
       - name: Build and push
         env:
-          ECR_PREFIX: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/aegis
-          IMAGE_TAG:  ${{ github.sha }}
-          SERVICE:    ${{ matrix.service }}
-          DOCKERFILE: ${{ matrix.dockerfile }}
-          CTX:        ${{ matrix.context }}
+          ECR_PREFIX:  ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/aegis
+          IMAGE_TAG:   ${{ github.sha }}
+          SERVICE:     ${{ matrix.service }}
+          DOCKERFILE:  ${{ matrix.dockerfile }}
+          CTX:         ${{ matrix.context }}
+          BUILD_ARGS:  ${{ matrix.build_args }}
         run: |
           IMAGE="$ECR_PREFIX/$SERVICE"
           SHA_TAG="$IMAGE:$IMAGE_TAG"
@@ -90,6 +95,7 @@ jobs:
             --file "$DOCKERFILE" \
             --tag  "$SHA_TAG" \
             --tag  "$LATEST_TAG" \
+            ${BUILD_ARGS:+$BUILD_ARGS} \
             "$CTX"
 
           docker push "$SHA_TAG"
@@ -116,6 +122,7 @@ jobs:
           for SVC in \
             aegis-api \
             aegis-admin-dashboard \
+            aegis-weasis \
             aegis-defacing \
             aegis-phi-detection \
             aegis-qc-service \
