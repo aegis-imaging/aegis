@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -153,6 +154,132 @@ func ListWebhookDeliveries(ctx context.Context, db *sql.DB, subscriptionID strin
 		deliveries = append(deliveries, d)
 	}
 	return deliveries, rows.Err()
+}
+
+// GetWebhookDelivery returns a single delivery record by ID.
+func GetWebhookDelivery(ctx context.Context, db *sql.DB, id string) (*WebhookDelivery, error) {
+	var d WebhookDelivery
+	err := db.QueryRowContext(ctx, `
+		SELECT id, subscription_id, event, url, attempt, status_code, success, error_message, delivered_at
+		FROM webhook_deliveries WHERE id = $1`, id).
+		Scan(&d.ID, &d.SubscriptionID, &d.Event, &d.URL, &d.Attempt,
+			&d.StatusCode, &d.Success, &d.ErrorMessage, &d.DeliveredAt)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+// WebhookStats aggregates delivery metrics for a single webhook subscription.
+type WebhookStats struct {
+	SubscriptionID    string         `json:"subscription_id"`
+	TotalDeliveries   int            `json:"total_deliveries"`
+	Successful        int            `json:"successful"`
+	Failed            int            `json:"failed"`
+	SuccessRatePct    float64        `json:"success_rate_pct"`
+	LastDeliveryAt    *time.Time     `json:"last_delivery_at,omitempty"`
+	DeliveriesByEvent map[string]int `json:"deliveries_by_event"`
+}
+
+// GetWebhookStats computes aggregate delivery metrics for a subscription.
+func GetWebhookStats(ctx context.Context, db *sql.DB, subscriptionID string) (*WebhookStats, error) {
+	var total, successful int
+	var lastAt *time.Time
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*),
+		       COUNT(*) FILTER (WHERE success = true),
+		       MAX(delivered_at)
+		FROM webhook_deliveries
+		WHERE subscription_id = $1`, subscriptionID).
+		Scan(&total, &successful, &lastAt)
+	if err != nil {
+		return nil, err
+	}
+
+	eventRows, err := db.QueryContext(ctx, `
+		SELECT event, COUNT(*) FROM webhook_deliveries
+		WHERE subscription_id = $1
+		GROUP BY event`, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer eventRows.Close()
+	byEvent := make(map[string]int)
+	for eventRows.Next() {
+		var ev string
+		var cnt int
+		if err := eventRows.Scan(&ev, &cnt); err != nil {
+			return nil, err
+		}
+		byEvent[ev] = cnt
+	}
+	if err := eventRows.Err(); err != nil {
+		return nil, err
+	}
+
+	failed := total - successful
+	var rate float64
+	if total > 0 {
+		rate = float64(successful) / float64(total) * 100
+	}
+	return &WebhookStats{
+		SubscriptionID:    subscriptionID,
+		TotalDeliveries:   total,
+		Successful:        successful,
+		Failed:            failed,
+		SuccessRatePct:    rate,
+		LastDeliveryAt:    lastAt,
+		DeliveriesByEvent: byEvent,
+	}, nil
+}
+
+// ListAllWebhookDeliveries returns delivery records across all subscriptions with optional filters.
+func ListAllWebhookDeliveries(ctx context.Context, db *sql.DB, subscriptionID string, successOnly *bool, limit, offset int) ([]WebhookDelivery, int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	where := "1=1"
+	args := []any{}
+	argIdx := 1
+
+	if subscriptionID != "" {
+		where += fmt.Sprintf(" AND subscription_id = $%d", argIdx)
+		args = append(args, subscriptionID)
+		argIdx++
+	}
+	if successOnly != nil {
+		where += fmt.Sprintf(" AND success = $%d", argIdx)
+		args = append(args, *successOnly)
+		argIdx++
+	}
+
+	var total int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM webhook_deliveries WHERE "+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	args = append(args, limit, offset)
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, subscription_id, event, url, attempt, status_code, success, error_message, delivered_at
+		FROM webhook_deliveries
+		WHERE `+where+`
+		ORDER BY delivered_at DESC
+		LIMIT $`+fmt.Sprintf("%d", argIdx)+` OFFSET $`+fmt.Sprintf("%d", argIdx+1), args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var deliveries []WebhookDelivery
+	for rows.Next() {
+		var d WebhookDelivery
+		if err := rows.Scan(&d.ID, &d.SubscriptionID, &d.Event, &d.URL, &d.Attempt,
+			&d.StatusCode, &d.Success, &d.ErrorMessage, &d.DeliveredAt); err != nil {
+			return nil, 0, err
+		}
+		deliveries = append(deliveries, d)
+	}
+	return deliveries, total, rows.Err()
 }
 
 // ListEnabledWebhooksForEvent returns all enabled webhook subscriptions that
