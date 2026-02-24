@@ -273,11 +273,15 @@ resource "aws_instance" "dimse_receiver" {
     echo "==> Starting dimse-receiver container..."
     docker stop dimse-receiver 2>/dev/null || true
     docker rm   dimse-receiver 2>/dev/null || true
+    # Bind-mount /var/aegis-dimse on the host for retry/dead-letter state
+    # persistence across container restarts (DICOM files go directly to S3).
+    mkdir -p /var/aegis-dimse
     docker run -d \
       --name dimse-receiver \
       --restart unless-stopped \
       -p 11112:11112 \
       -p 8080:8080 \
+      -v /var/aegis-dimse:/app/data \
       -e DIMSE_DATA_DIR=/app/data \
       -e DIMSE_INGEST_DURABLE_STORE_PATH=/app/data/dimse-ingest-retry-state.json \
       -e API_URL="http://api.aegis.local:8080" \
