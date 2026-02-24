@@ -7,8 +7,8 @@ server {
 
     include /etc/nginx/mime.types;
 
-    # Cloud Run DNS resolver — ensures nginx re-resolves the upstream hostname at
-    # request time instead of caching a stale IP from startup.
+    # Cloud Run DNS resolver — ensures nginx re-resolves the upstream hostname
+    # at request time (required when using set $variable for proxy_pass).
     resolver 8.8.8.8 valid=300s ipv6=off;
 
     gzip on;
@@ -19,27 +19,12 @@ server {
                application/xml+rss text/javascript;
 
     # ── DICOMweb proxy ────────────────────────────────────────────────────────
-    # OHIF JS makes same-origin requests to /dicomweb/ and /dicomweb-raw/.
+    # DWV JS makes same-origin requests to /dicomweb/ (QIDO-RS + WADO-RS).
     # nginx forwards them server-side to the real API backend (${API_URL}).
-    # Using a set variable forces runtime DNS resolution (required when resolver
-    # is declared; literal proxy_pass would bypass the resolver directive).
 
     location /dicomweb/ {
         set $api_upstream ${API_URL};
         proxy_pass        $api_upstream/dicomweb/;
-        proxy_http_version 1.1;
-        proxy_set_header  Host              $proxy_host;
-        proxy_set_header  X-Real-IP         $remote_addr;
-        proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header  X-Forwarded-Proto $scheme;
-        proxy_ssl_server_name on;
-        proxy_read_timeout    120s;
-        proxy_send_timeout    120s;
-    }
-
-    location /dicomweb-raw/ {
-        set $api_raw_upstream ${API_URL};
-        proxy_pass        $api_raw_upstream/dicomweb-raw/;
         proxy_http_version 1.1;
         proxy_set_header  Host              $proxy_host;
         proxy_set_header  X-Real-IP         $remote_addr;
@@ -57,11 +42,9 @@ server {
     }
 
     # ── CSP: allow iframe embedding from the admin dashboard ─────────────────
-    # Includes both the custom domain and the Cloud Run URL pattern so OHIF can
-    # be embedded during staging / direct Cloud Run URL access as well.
-    add_header Content-Security-Policy "frame-ancestors https://admin.aegisimaging.ai https://aegisimaging.ai https://www.aegisimaging.ai https://*-uk5cvzf5nq-uc.a.run.app http://localhost:3001 http://localhost:3000 'self'" always;
+    add_header Content-Security-Policy "frame-ancestors https://admin.aegisimaging.ai https://aegisimaging.ai https://*-uk5cvzf5nq-uc.a.run.app http://localhost:3001 http://localhost:3000 'self'" always;
 
-    # ── SPA fallback — all client-side routes serve index.html ───────────────
+    # ── SPA fallback ──────────────────────────────────────────────────────────
     location / {
         try_files $uri $uri/ /index.html;
     }
