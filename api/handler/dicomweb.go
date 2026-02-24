@@ -100,7 +100,17 @@ func instanceQIDO(studyUID, modality string, index int) map[string]any {
 
 // DicomwebStudies handles GET /dicomweb/studies
 func (s *Server) DicomwebStudies(w http.ResponseWriter, r *http.Request) {
+	// Accept all standard QIDO-RS filter forms for StudyInstanceUID:
+	//   "StudyInstanceUIDs" — plural form (legacy / our original)
+	//   "StudyInstanceUID"  — singular, DICOM PS 3.18 keyword (what OHIF v3 sends)
+	//   "0020000D"          — DICOM tag number form (some DICOMweb clients)
 	studyUID := r.URL.Query().Get("StudyInstanceUIDs")
+	if studyUID == "" {
+		studyUID = r.URL.Query().Get("StudyInstanceUID")
+	}
+	if studyUID == "" {
+		studyUID = r.URL.Query().Get("0020000D")
+	}
 
 	var studies []model.Study
 	if studyUID != "" {

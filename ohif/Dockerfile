@@ -34,6 +34,12 @@ RUN apk add --no-cache gettext
 # Serve OHIF static files from the build output
 COPY --from=builder /ohif/platform/app/dist /usr/share/nginx/html
 
+# Guarantee our custom app-config.js is always served.
+# OHIF v3's Vite build may exclude or overwrite public/app-config.js in dist,
+# falling back to the default OHIF demo-server config. Copying here in Stage 2
+# ensures nginx always serves the AEGIS config (window.location.origin + /dicomweb).
+COPY app-config.js /usr/share/nginx/html/app-config.js
+
 # nginx config template — ${API_URL} is substituted at container startup by the entrypoint
 COPY nginx.conf.template /nginx.conf.template
 
