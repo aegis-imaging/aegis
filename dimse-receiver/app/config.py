@@ -20,6 +20,11 @@ DIMSE_MAX_ASSOCIATIONS: int = int(os.getenv("DIMSE_MAX_ASSOCIATIONS", "10"))
 # File storage — shared volume with Go API
 DIMSE_DATA_DIR: str = os.getenv("DIMSE_DATA_DIR", "/app/data")
 
+# Storage backend — "local" (filesystem / gcsfuse) or "s3" (AWS S3 direct writes)
+STORAGE_MODE: str = os.getenv("STORAGE_MODE", "local")
+S3_BUCKET: str = os.getenv("S3_BUCKET", "")
+S3_REGION: str = os.getenv("S3_REGION", "")
+
 # Go API endpoint for study ingest
 API_URL: str = os.getenv("API_URL", "http://api:8080")
 
