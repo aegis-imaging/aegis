@@ -17,6 +17,11 @@ RUN yarn config set workspaces-experimental true
 # Install dependencies — this layer is cached unless the lockfile changes
 RUN yarn install --frozen-lockfile
 
+# Bake our custom config in before the build so it ends up as dist/app-config.js.
+# Copying it here (into public/) means OHIF's Vite pipeline picks it up directly
+# rather than us racing a post-build COPY against whatever OHIF already put there.
+COPY app-config.js platform/app/public/app-config.js
+
 # Build production output → platform/app/dist/
 RUN yarn run build
 
@@ -28,10 +33,6 @@ RUN apk add --no-cache gettext
 
 # Serve OHIF static files from the build output
 COPY --from=builder /ohif/platform/app/dist /usr/share/nginx/html
-
-# Our app-config.js overwrites the built-in default config.
-# Uses window.location.origin so no env-var plumbing is needed in the JS config.
-COPY app-config.js /usr/share/nginx/html/app-config.js
 
 # nginx config template — ${API_URL} is substituted at container startup by the entrypoint
 COPY nginx.conf.template /nginx.conf.template

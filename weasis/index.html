@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AEGIS DICOM Viewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: system-ui, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #header {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      height: 40px;
+    }
+
+    #header h1 {
+      font-size: 13px;
+      font-weight: 500;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+
+    #status {
+      font-size: 12px;
+      color: #64748b;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    #status.loading { color: #0d9488; }
+    #status.ready   { color: #0d9488; }
+    #status.error   { color: #ea580c; }
+
+    #dwv-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* DWV styles */
+    #dwv-container .layerContainer {
+      width: 100%;
+      height: 100%;
+    }
+
+    #error-message {
+      padding: 24px;
+      font-size: 14px;
+      color: #ea580c;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>AEGIS DICOM Viewer</h1>
+    <span id="status" class="loading">Initialising…</span>
+  </div>
+  <div id="dwv-container"></div>
+  <p id="error-message"></p>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
