@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -60,6 +61,32 @@ func TestRevokeShare_VerifiesRevokedAtSet(t *testing.T) {
 	var resp allSharesResponse
 	require.NoError(t, json.NewDecoder(listRR.Body).Decode(&resp))
 	assert.Equal(t, 1, resp.Total)
+}
+
+func TestRevokeShare_WithReason(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	share, err := model.CreateExportShare(t.Context(), db, study.ID, "hash-revoke-reason",
+		"user@test.com", "", "admin@test.com", time.Now().Add(24*time.Hour), nil)
+	require.NoError(t, err)
+
+	body := bytes.NewBufferString(`{"reason":"share sent to wrong recipient"}`)
+	req := httptest.NewRequest("DELETE", "/api/shares/"+share.ID, body)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("shareID", share.ID)
+	rr := httptest.NewRecorder()
+	srv.RevokeShare(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	// Confirm revocation_reason was stored.
+	fetched, err := model.GetExportShareByID(t.Context(), db, share.ID)
+	require.NoError(t, err)
+	require.NotNil(t, fetched.RevocationReason)
+	assert.Equal(t, "share sent to wrong recipient", *fetched.RevocationReason)
 }
 
 func TestRevokeShare_IdempotentSecondRevoke(t *testing.T) {

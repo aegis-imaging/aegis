@@ -14,8 +14,9 @@ type ExportShare struct {
 	Note           string     `json:"note,omitempty"`
 	ExpiresAt      time.Time  `json:"expires_at"`
 	CreatedBy      string     `json:"created_by"`
-	RevokedAt      *time.Time `json:"revoked_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
+	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
+	RevocationReason *string    `json:"revocation_reason,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
 	MaxDownloads   *int       `json:"max_downloads,omitempty"`
 	DownloadCount  int        `json:"download_count"`
 	// Token is populated only when a new share is created; never read from DB.
@@ -23,21 +24,21 @@ type ExportShare struct {
 }
 
 const shareColumns = `
-	id, study_id, recipient_email, note, expires_at, created_by, revoked_at, created_at, max_downloads`
+	id, study_id, recipient_email, note, expires_at, created_by, revoked_at, revocation_reason, created_at, max_downloads`
 
 // shareColumnsWithCount extends shareColumns with a download_count subquery.
 const shareColumnsWithCount = `
-	es.id, es.study_id, es.recipient_email, es.note, es.expires_at, es.created_by, es.revoked_at, es.created_at, es.max_downloads,
+	es.id, es.study_id, es.recipient_email, es.note, es.expires_at, es.created_by, es.revoked_at, es.revocation_reason, es.created_at, es.max_downloads,
 	(SELECT count(*) FROM export_downloads ed WHERE ed.share_id = es.id)`
 
 func scanShare(row scannable, s *ExportShare) error {
 	return row.Scan(&s.ID, &s.StudyID, &s.RecipientEmail, &s.Note,
-		&s.ExpiresAt, &s.CreatedBy, &s.RevokedAt, &s.CreatedAt, &s.MaxDownloads)
+		&s.ExpiresAt, &s.CreatedBy, &s.RevokedAt, &s.RevocationReason, &s.CreatedAt, &s.MaxDownloads)
 }
 
 func scanShareWithCount(row scannable, s *ExportShare) error {
 	return row.Scan(&s.ID, &s.StudyID, &s.RecipientEmail, &s.Note,
-		&s.ExpiresAt, &s.CreatedBy, &s.RevokedAt, &s.CreatedAt, &s.MaxDownloads, &s.DownloadCount)
+		&s.ExpiresAt, &s.CreatedBy, &s.RevokedAt, &s.RevocationReason, &s.CreatedAt, &s.MaxDownloads, &s.DownloadCount)
 }
 
 func CreateExportShare(ctx context.Context, db *sql.DB, studyID, tokenHash, recipientEmail, note, createdBy string, expiresAt time.Time, maxDownloads *int) (*ExportShare, error) {
@@ -117,9 +118,14 @@ func ExtendExportShare(ctx context.Context, db *sql.DB, shareID string, newExpir
 	return nil
 }
 
-func RevokeExportShare(ctx context.Context, db *sql.DB, shareID string) error {
+func RevokeExportShare(ctx context.Context, db *sql.DB, shareID string, reason string) error {
+	var reasonVal *string
+	if reason != "" {
+		reasonVal = &reason
+	}
 	_, err := db.ExecContext(ctx, `
-		UPDATE export_shares SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, shareID)
+		UPDATE export_shares SET revoked_at = now(), revocation_reason = $1
+		WHERE id = $2 AND revoked_at IS NULL`, reasonVal, shareID)
 	return err
 }
 

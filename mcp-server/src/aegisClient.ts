@@ -243,15 +243,18 @@ export class AegisApiClient {
     }
   }
 
-  async delete(path: string): Promise<unknown> {
+  async delete(path: string, payload?: Record<string, unknown>): Promise<unknown> {
     assertAllowedPath("DELETE", path);
 
+    const hasBody = payload && Object.keys(payload).length > 0;
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: "DELETE",
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${this.token}`
-      }
+        Authorization: `Bearer ${this.token}`,
+        ...(hasBody ? { "Content-Type": "application/json" } : {})
+      },
+      ...(hasBody ? { body: JSON.stringify(payload) } : {})
     });
 
     const body = await response.text();
