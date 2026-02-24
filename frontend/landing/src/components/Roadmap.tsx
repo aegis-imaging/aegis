@@ -37,17 +37,17 @@ const MILESTONES: Milestone[] = [
   {
     status: 'active',
     date: 'Q1 2026',
-    title: 'Private Beta — First Enterprise Pilots',
+    title: 'Private Beta',
     items: [
-      'Onboard first enterprise pilot customers (research institutions + radiology departments)',
-      'Business Associate Agreement (BAA) finalized; SOC 2 Type I audit initiated',
-      'DIMSE C-MOVE / C-FIND workflows for active PACS pull integration',
-      'SLA monitoring, retention policies, and multi-project federation hardening',
+      'Invite-gated access for early adopters — research institutions and imaging centers welcome',
+      'Gathering feedback on de-identification workflows, PACS integration, and protocol compliance',
+      'DIMSE C-MOVE / C-FIND for active PACS pull integration',
+      'Hardening SLA monitoring, retention policies, and routing rules for production workloads',
     ],
     tags: [
-      { label: '● In Progress', style: 'active' },
+      { label: '● Active', style: 'active' },
       { label: 'GCP', style: 'cloud' },
-      { label: 'Enterprise', style: 'neutral' },
+      { label: 'Invite Only', style: 'neutral' },
     ],
   },
   {
