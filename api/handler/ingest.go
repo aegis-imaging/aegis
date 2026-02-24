@@ -78,6 +78,12 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		studyUID = fmt.Sprintf("2.25.%d", time.Now().UnixNano())
 	}
 
+	// Enforce per-project storage quota (if set).
+	if err := s.checkStorageQuota(r.Context(), project.ID); err != nil {
+		s.writeError(w, http.StatusRequestEntityTooLarge, err.Error())
+		return
+	}
+
 	bodyPart := strings.ToUpper(req.Metadata.BodyPart)
 	defacingRequired := bodyPart == "HEAD" || bodyPart == "BRAIN"
 

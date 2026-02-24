@@ -165,6 +165,12 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enforce per-project storage quota (if set).
+	if err := s.checkStorageQuota(r.Context(), session.ProjectID); err != nil {
+		s.writeError(w, http.StatusRequestEntityTooLarge, err.Error())
+		return
+	}
+
 	// Update status to ingesting
 	if err := model.UpdateUploadSessionStatus(r.Context(), s.db, session.ID, "ingesting"); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to update session status")

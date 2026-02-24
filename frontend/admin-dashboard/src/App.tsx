@@ -180,6 +180,7 @@ type Project = {
   default_anon_profile_id?: string | null
   retention_days?: number | null
   stuck_threshold_minutes?: number | null
+  storage_quota_bytes?: number | null
   archived?: boolean
   created_at: string
 }
@@ -4475,6 +4476,13 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [slaSaving, setSlaSaving]         = useState(false)
   const [slaError, setSlaError]           = useState<string | null>(null)
 
+  // Storage quota editor state
+  const [quotaProjectId, setQuotaProjectId] = useState<string | null>(null)
+  const [quotaDraft, setQuotaDraft]         = useState<string>('')
+  const [quotaSaving, setQuotaSaving]       = useState(false)
+  const [quotaError, setQuotaError]         = useState<string | null>(null)
+  const [quotaUsage, setQuotaUsage]         = useState<{used_bytes: number, quota_bytes: number | null, usage_pct: number | null} | null>(null)
+
   // Archive/restore state
   const [archiving, setArchiving] = useState<string | null>(null)
 
@@ -4570,6 +4578,41 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
       setSlaError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setSlaSaving(false)
+    }
+  }
+
+  async function openQuota(p: Project) {
+    setQuotaProjectId(p.id)
+    setQuotaDraft(p.storage_quota_bytes != null ? String((p.storage_quota_bytes / (1024 * 1024 * 1024)).toFixed(2)).replace(/\.?0+$/, '') : '')
+    setQuotaError(null)
+    setQuotaUsage(null)
+    const res = await fetch(`/api/projects/${p.id}/storage-usage`)
+    if (res.ok) setQuotaUsage(await res.json())
+  }
+
+  async function saveQuota() {
+    if (!quotaProjectId) return
+    const gb = quotaDraft.trim() === '' ? null : parseFloat(quotaDraft)
+    if (gb !== null && (isNaN(gb) || gb <= 0)) {
+      setQuotaError('Must be a positive number or leave blank to disable')
+      return
+    }
+    const bytes = gb !== null ? Math.round(gb * 1024 * 1024 * 1024) : null
+    setQuotaSaving(true)
+    setQuotaError(null)
+    try {
+      const res = await fetch(`/api/projects/${quotaProjectId}/storage-quota`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storage_quota_bytes: bytes }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setQuotaProjectId(null)
+      fetchProjects()
+    } catch (err) {
+      setQuotaError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setQuotaSaving(false)
     }
   }
 
@@ -4783,6 +4826,52 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
 
+        {/* Inline storage quota editor */}
+        {quotaProjectId && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>Storage Quota — {projects.find(p => p.id === quotaProjectId)?.name}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Maximum total storage for this project. Uploads are rejected when the quota is reached.
+              Leave blank to allow unlimited storage.
+            </div>
+            {quotaError && <div className="form-error">{quotaError}</div>}
+            {quotaUsage && (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  Current usage: {formatBytes(quotaUsage.used_bytes)}
+                  {quotaUsage.quota_bytes != null && ` / ${formatBytes(quotaUsage.quota_bytes)}`}
+                  {quotaUsage.usage_pct != null && ` (${quotaUsage.usage_pct.toFixed(1)}%)`}
+                </div>
+                {quotaUsage.quota_bytes != null && quotaUsage.quota_bytes > 0 && (
+                  <div style={{ height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.min(100, quotaUsage.usage_pct ?? 0)}%`,
+                      background: (quotaUsage.usage_pct ?? 0) >= 90 ? '#ea580c' : '#0d9488',
+                      borderRadius: '4px',
+                      transition: 'width 0.3s',
+                    }} />
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Storage limit (GB, blank = unlimited)
+                <input className="form-input" type="number" min="0.1" step="0.1" placeholder="e.g. 10"
+                  value={quotaDraft}
+                  onChange={e => setQuotaDraft(e.target.value)} />
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveQuota} disabled={quotaSaving}>
+                {quotaSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setQuotaProjectId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {projects.length === 0 && !showForm ? (
           <div className="state-empty">No projects yet.</div>
         ) : projects.length > 0 && (
@@ -4794,6 +4883,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Default profile</th>
                 <th>Retention</th>
                 <th>SLA</th>
+                <th>Quota</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -4823,6 +4913,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {p.stuck_threshold_minutes != null
                       ? <span className="badge badge--status">{p.stuck_threshold_minutes}m</span>
                       : <span className="routing-desc">60m</span>}
+                  </td>
+                  <td>
+                    {p.storage_quota_bytes != null
+                      ? <span className="badge badge--status">{formatBytes(p.storage_quota_bytes)}</span>
+                      : <span className="routing-desc">unlimited</span>}
                   </td>
                   <td className="td-date">{fmtDate(p.created_at)}</td>
                   <td>
@@ -4854,6 +4949,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           title="Set per-project SLA threshold for stuck studies"
                           onClick={() => openSla(p)}>
                           SLA
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Set per-project storage quota"
+                          onClick={() => openQuota(p)}>
+                          Quota
                         </button>
                         <button type="button"
                           className={p.archived ? 'btn btn--approve' : 'btn btn--action'}
