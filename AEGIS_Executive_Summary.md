@@ -164,8 +164,10 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 | **Defacing** | DeepDefacer (default), mri_deface, mri_reface | Multiple backends with automatic fallback; see `docs/research/mri-defacing-tools-comparison.md` |
 | **DICOM Viewer** | Weasis DWV (browser-based) | Lightweight, open-source; supports QIDO-RS/WADO-RS; built-in side-by-side defacing review |
 | **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
-| **Processing Pipeline** | 7 Python processing services (Cloud Run) + DIMSE receiver (Compute Engine VM) + MCP server (Cloud Run) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation — auto-dispatched in dependency order; DIMSE C-STORE SCP on dedicated GCE VM (static IP, port 11112); MCP server exposes 30+ AI agent tools |
+| **Processing Pipeline** | Microservices architecture — 7 Python microservices (Cloud Run / ECS Fargate) + DIMSE receiver (Compute Engine VM / EC2) + MCP server (Cloud Run) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation — auto-dispatched in dependency order; DIMSE C-STORE SCP on dedicated VM (static IP, port 11112); MCP server exposes 30+ AI agent tools |
 | **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
+
+**Live deployments:** GCP production at `api.aegisimaging.ai` · AWS production at `aws.api.aegisimaging.ai` · Azure planned Q3 2026.
 
 **On the use of automated tools:** AEGIS uses automated tools to assist with — not replace — human review. Automated de-identification flags potential issues; a trained administrator reviews and approves every study before it is shared. Automated defacing quality is reviewed side-by-side against the original in the admin interface.
 
