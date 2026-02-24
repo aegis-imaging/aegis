@@ -21,10 +21,14 @@ resource "aws_secretsmanager_secret" "mcp_aegis_api_token" {
 }
 
 resource "aws_secretsmanager_secret_version" "mcp_aegis_api_token" {
+  # Skip creating the version when no token is provided yet — set the value
+  # directly in Secrets Manager after creating an API key in the dashboard.
+  count = var.mcp_aegis_api_token != "" ? 1 : 0
+
   secret_id     = aws_secretsmanager_secret.mcp_aegis_api_token.id
   secret_string = var.mcp_aegis_api_token
 
-  # CI/CD rotates the token value without running terraform apply.
+  # CI/CD or manual Secrets Manager updates rotate the token without terraform apply.
   lifecycle {
     ignore_changes = [secret_string]
   }
