@@ -59,6 +59,8 @@ body {
 .z-src  .zone-hdr { color: #1D4ED8; }
 .z-gcp  { background: #F0FDFA; border-color: #0F766E; }
 .z-gcp  .zone-hdr { color: #0F766E; }
+.z-aws  { background: #FFF7ED; border-color: #EA580C; }
+.z-aws  .zone-hdr { color: #EA580C; }
 .z-pipe { background: #EFF6FF; border-color: #1D4ED8; }
 .z-pipe .zone-hdr { color: #1D4ED8; }
 .z-ph   { background: #FAF5FF; border-color: #7C3AED; }
@@ -278,6 +280,24 @@ body {
     </div>
   </div>
 
+  <!-- AWS ACCOUNT -->
+  <div class="zone" style="background:#FFF7ED;border-color:#EA580C;margin-bottom:6px">
+    <div class="zone-hdr" style="color:#EA580C">
+      AWS ACCOUNT
+      <span class="zone-sub" style="color:#9A3412">301691475234 &nbsp;·&nbsp; us-east-1 &nbsp;·&nbsp; Deploying Q1 2026 — same app layer as GCP, parallel infrastructure</span>
+    </div>
+    <div class="g3" style="margin-bottom:6px">
+      <div class="card" style="--c:#EA580C"><div class="card-hdr">ALB + Cognito  (Auth Layer)</div><ul><li>HTTPS listener on ACM certificate</li><li>Cognito hosted UI — admin-create-only user pool</li><li>authenticate-cognito default action</li><li>Public bypass rules: /healthz, upload, export</li></ul></div>
+      <div class="card" style="--c:#00ADD8"><div class="card-hdr">API + Admin  (ECS Fargate)</div><ul><li>Go API — same image as GCP (1 vCPU / 2 GB)</li><li>Admin Dashboard — React / nginx (0.5 vCPU / 1 GB)</li><li>Service discovery: api.aegis.local</li><li>Force-new-deployment via GitHub Actions</li></ul></div>
+      <div class="card" style="--c:#3776AB"><div class="card-hdr">7 Python Sidecars  (ECS Fargate)</div><ul><li>defacing · phi-detection · qc-service</li><li>bids-service · classification-service</li><li>protocol-service · synth-service</li><li>Cloud Map private DNS: svc.aegis.local:8080</li></ul></div>
+    </div>
+    <div class="g3">
+      <div class="card" style="--c:#D97706"><div class="card-hdr">RDS + S3  (Data Layer)</div><ul><li>RDS PostgreSQL 15 — private subnet</li><li>Secrets Manager — master credentials</li><li>S3 DICOM bucket — versioned, KMS-encrypted</li><li>Same STORAGE_MODE=s3 as GCP (same Go code)</li></ul></div>
+      <div class="card" style="--c:#3776AB"><div class="card-hdr">DIMSE EC2  (t3.small)</div><ul><li>Elastic IP — stable for PACS AE title registration</li><li>Amazon Linux 2023 — Docker + SSM agent</li><li>SSM Parameter Store → image URI on every boot</li><li>GitHub Actions: write SSM param + reboot instance</li></ul></div>
+      <div class="card" style="--c:#374151"><div class="card-hdr">GitHub Actions CI/CD</div><ul><li>Triggers on push to develop (same as GCP Cloud Build)</li><li>Matrix build: 10 services, --platform linux/amd64</li><li>Push SHA tag + latest tag to ECR</li><li>Force-new-deployment for 9 ECS services</li><li>Update SSM param + reboot DIMSE EC2</li></ul></div>
+    </div>
+  </div>
+
   <!-- PIPELINE -->
   <div class="zone z-pipe">
     <div class="zone-hdr">
@@ -300,7 +320,7 @@ body {
 <div class="phase" style="--c:#1D4ED8"><div class="phase-title">Phase 2: Processing  ✓</div><div class="phase-desc">Defacing · PHI Detection · QC · BIDS · Classification · Protocol · DIMSE Receiver</div></div>
 <div class="phase" style="--c:#D97706"><div class="phase-title">Phase 3: Operations  ✓</div><div class="phase-desc">Routing rules · Institutions · Audit · Export Portal · Shares · Email · MCP Server</div></div>
 <div class="phase" style="--c:#7C3AED"><div class="phase-title">Phase 4: Production  ✓</div><div class="phase-desc">GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC</div></div>
-<div class="phase" style="--c:#DC2626"><div class="phase-title">Phase 5: Beta → GA  🚧</div><div class="phase-desc">Private beta · AWS deployment (Q2) · Azure + SOC 2 (Q3) · Enterprise GA (Q4)</div></div></div>
+<div class="phase" style="--c:#DC2626"><div class="phase-title">Phase 5: Beta → GA  🚧</div><div class="phase-desc">Private beta · AWS deployment (Q1, deploying now) · Azure + SOC 2 (Q3) · Enterprise GA (Q4)</div></div></div>
   </div>
 
   <!-- TECH STACK + MULTI-CLOUD -->
