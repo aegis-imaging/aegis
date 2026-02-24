@@ -6169,6 +6169,7 @@ export function App() {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
   const [bulkLabelInput, setBulkLabelInput] = useState('')
+  const [bulkPipelineStep, setBulkPipelineStep] = useState('qc')
   const [stuckCount, setStuckCount] = useState(0)
 
   // Global project selector — persisted to localStorage.
@@ -6512,6 +6513,27 @@ export function App() {
         const count = action === 'add' ? d.applied : d.removed
         alert(`${verb} "${label}" on ${count} of ${ids.length} ${ids.length === 1 ? 'study' : 'studies'}`)
         setBulkLabelInput('')
+      }
+    } finally {
+      setBulkWorking(false)
+    }
+  }
+
+  async function doBulkPipelineTrigger() {
+    const ids = Array.from(bulkSelected)
+    if (ids.length === 0) return
+    if (!confirm(`Trigger "${bulkPipelineStep}" step for ${ids.length} selected ${ids.length === 1 ? 'study' : 'studies'}?`)) return
+    setBulkWorking(true)
+    try {
+      const res = await fetch('/api/studies/bulk-pipeline-trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ study_ids: ids, step: bulkPipelineStep }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        alert(`Triggered ${d.triggered} / Skipped ${d.skipped}${d.errors?.length ? ` / ${d.errors.length} error(s)` : ''}`)
+        setRefreshTick(t => t + 1)
       }
     } finally {
       setBulkWorking(false)
@@ -7060,6 +7082,23 @@ export function App() {
               />
               <button type="button" className="btn btn--action" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
               <button type="button" className="btn btn--secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
+              <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
+              <select
+                className="audit-actor-input"
+                value={bulkPipelineStep}
+                onChange={e => setBulkPipelineStep(e.target.value)}
+                disabled={bulkWorking}
+                style={{height:'28px'}}
+              >
+                <option value="classify">Classify</option>
+                <option value="phi_scan">PHI Scan</option>
+                <option value="protocol">Protocol Check</option>
+                <option value="deface">Deface</option>
+                <option value="qc">QC Check</option>
+                <option value="bids">BIDS Convert</option>
+                <option value="export">Export</option>
+              </select>
+              <button type="button" className="btn btn--action" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
               <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
             </div>
           )}
