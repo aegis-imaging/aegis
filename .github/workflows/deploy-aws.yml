@@ -32,7 +32,7 @@ jobs:
             context: api
             dockerfile: api/Dockerfile
           - service: admin-dashboard
-            context: .
+            context: frontend/admin-dashboard
             dockerfile: frontend/admin-dashboard/Dockerfile
             build_args: "--build-arg VITE_WEASIS_BASE_URL=https://aws.weasis.aegisimaging.ai"
           - service: weasis

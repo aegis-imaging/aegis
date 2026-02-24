@@ -13,6 +13,7 @@
     "test": "node --import tsx --test src/*.test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3",
     "@modelcontextprotocol/sdk": "^1.18.0",
     "zod": "^3.24.1"
   },

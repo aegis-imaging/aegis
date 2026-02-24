@@ -17,6 +17,8 @@ export type AgentHttpConfig = {
   llmMaxTokens: number;
   llmUseGcpAuth: boolean;
   llmGcpProject?: string;
+  llmUseAwsBedrock: boolean;
+  llmAwsRegion?: string;
 };
 
 type AgentRequest = {
@@ -126,7 +128,9 @@ export function startAgentHttpServer(client: AegisApiClient, config: AgentHttpCo
     llmTemperature,
     llmMaxTokens,
     llmUseGcpAuth,
-    llmGcpProject
+    llmGcpProject,
+    llmUseAwsBedrock,
+    llmAwsRegion
   } = config;
 
   if (requireAuth && !apiKey && !bearerToken) {
@@ -140,7 +144,9 @@ export function startAgentHttpServer(client: AegisApiClient, config: AgentHttpCo
     temperature: llmTemperature,
     maxTokens: llmMaxTokens,
     useGcpAuth: llmUseGcpAuth,
-    gcpProject: llmGcpProject
+    gcpProject: llmGcpProject,
+    useAwsBedrock: llmUseAwsBedrock,
+    awsRegion: llmAwsRegion
   });
 
   const server = http.createServer(async (req, res) => {

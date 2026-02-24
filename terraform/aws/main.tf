@@ -194,6 +194,25 @@ variable "ses_smtp_region" {
   default     = ""
 }
 
+variable "first_admin_email" {
+  description = "Email address of the first admin user created on initial deployment."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_image_tag" {
+  description = "Container image tag for the MCP server."
+  type        = string
+  default     = "latest"
+}
+
+variable "mcp_aegis_api_token" {
+  description = "AEGIS API bearer token for the MCP server (stored in Secrets Manager; sensitive)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -420,7 +439,7 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver", "weasis"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver", "weasis", "mcp-server"]
 
   api_image    = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
   admin_image  = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
@@ -1052,8 +1071,9 @@ resource "aws_ecs_task_definition" "admin" {
         }
       ]
       environment = [
-        # nginx uses this at startup (envsubst) to proxy /api/* to the correct cloud API.
-        { name = "API_URL", value = "https://${local.api_fqdn}" },
+        # nginx uses these at startup (envsubst) to configure backend proxies.
+        { name = "API_URL",        value = "https://${local.api_fqdn}" },
+        { name = "MCP_SERVER_URL", value = "http://mcp-server.aegis.local:8080" },
       ]
       logConfiguration = {
         logDriver = "awslogs"
