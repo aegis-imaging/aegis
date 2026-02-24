@@ -147,6 +147,17 @@ func (s *Server) DeleteStudy(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// RecordStudyView records that an authenticated user opened a study detail panel.
+// POST /api/studies/{id}/viewed
+// Fire-and-forget from the dashboard; creates a study.viewed audit entry.
+func (s *Server) RecordStudyView(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	actor := actorEmail(r)
+	ip := clientIP(r)
+	model.CreateAuditEntry(r.Context(), s.db, "study.viewed", actor, "study", id, ip, nil)
+	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // ListStudyAudit returns all audit entries for a specific study.
 func (s *Server) ListStudyAudit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

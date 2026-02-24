@@ -317,3 +317,33 @@ func TestDeleteStudy_NotFound(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
+
+func TestRecordStudyView_Handler(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/viewed", nil)
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.RecordStudyView(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var result map[string]string
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, "ok", result["status"])
+
+	// Verify audit entry was created.
+	entries, err := model.ListAuditEntriesForStudy(context.Background(), db, study.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range entries {
+		if e.Action == "study.viewed" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected study.viewed audit entry")
+}

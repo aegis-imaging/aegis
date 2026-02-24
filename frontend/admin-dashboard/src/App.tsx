@@ -6064,6 +6064,14 @@ export function App() {
   const [studiesTotal, setStudiesTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null)
+
+  // Fire-and-forget: record that the current user viewed this study (HIPAA access audit).
+  const selectStudy = (id: string | null) => {
+    setSelectedStudyId(id)
+    if (id) {
+      fetch(`/api/studies/${id}/viewed`, { method: 'POST' }).catch(() => {/* best-effort */})
+    }
+  }
   const [agentPrefill, setAgentPrefill] = useState<{ studyId: string; studyUid: string } | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
@@ -6277,7 +6285,7 @@ export function App() {
       setTab(item.tab)
     } else {
       setTab('studies')
-      setSelectedStudyId(item.id)
+      selectStudy(item.id)
     }
   }
 
@@ -6703,7 +6711,7 @@ export function App() {
       {tab === 'studies' && selectedStudyId && (
         <StudyDetailPanel
           studyId={selectedStudyId}
-          onBack={() => setSelectedStudyId(null)}
+          onBack={() => selectStudy(null)}
           onAction={() => setRefreshTick(t => t + 1)}
           isAdmin={isAdmin}
         />
@@ -6985,7 +6993,7 @@ export function App() {
                       key={study.id}
                       study={study}
                       onAction={() => setRefreshTick(t => t + 1)}
-                      onSelect={() => setSelectedStudyId(study.id)}
+                      onSelect={() => selectStudy(study.id)}
                       onAskAgent={() => {
                         setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
                         setTab('agent')
