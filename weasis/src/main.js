@@ -99,6 +99,44 @@ if (!studyUID) {
     console.error('[DWV loaderror]', e.error)
   })
 
+  // ── Yoke scrolling — bidirectional postMessage sync ──────────────────────────
+  // When embedded in the defacing review panel, relay slice position to the parent
+  // so it can synchronise the opposite (before/after) iframe.
+
+  let yokeReceiving = false  // prevent echo when we receive a dwv-goto command
+
+  app.addEventListener('positionchange', (e) => {
+    if (yokeReceiving) return
+    if (window.parent === window) return   // not embedded in an iframe
+    const pos = e.value?.[0]
+    if (!pos || typeof pos.get !== 'function') return
+    const k = pos.get(2)                   // k axis = scroll/slice dimension
+    if (typeof k !== 'number') return
+    window.parent.postMessage({ type: 'dwv-position', k }, '*')
+  })
+
+  window.addEventListener('message', (e) => {
+    if (!app || !e.data || e.data.type !== 'dwv-goto') return
+    const targetK = e.data.k
+    if (typeof targetK !== 'number') return
+    const layerGroup = app.getActiveLayerGroup()
+    if (!layerGroup) return
+    const viewLayer = layerGroup.getActiveViewLayer()
+    if (!viewLayer) return
+    const vc = viewLayer.getViewController()
+    if (!vc) return
+    const currentIdx = vc.getCurrentIndex()
+    if (!currentIdx || typeof currentIdx.get !== 'function') return
+    const currentK = currentIdx.get(2)
+    const delta = targetK - currentK
+    if (delta === 0) return
+    yokeReceiving = true
+    vc.incrementScrollIndex(delta)
+    // Reset after a brief delay — positionchange may fire synchronously or via
+    // microtask, so 100 ms is enough to swallow the echo without noticeable lag.
+    setTimeout(() => { yokeReceiving = false }, 100)
+  })
+
   // 1. Fetch series list via QIDO-RS
   setStatus('Fetching series…')
   fetch(`${apiBase}/studies/${studyUID}/series`)
