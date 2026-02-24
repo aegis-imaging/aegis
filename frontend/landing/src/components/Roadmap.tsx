@@ -51,17 +51,17 @@ const MILESTONES: Milestone[] = [
     ],
   },
   {
-    status: 'planned',
-    date: 'Q1–Q2 2026',
+    status: 'active',
+    date: 'Q1 2026',
     title: 'AWS Deployment',
     items: [
-      'Full AWS deployment: ECS Fargate, RDS PostgreSQL, S3 storage, ALB + Cognito auth',
+      'ECS Fargate (9 services), RDS PostgreSQL, S3, ALB + Cognito — deploying now',
+      'GitHub Actions CI/CD mirrors GCP Cloud Build — auto-deploy on every push to develop',
+      'DIMSE receiver on EC2 with Elastic IP — same static-IP PACS pattern as GCP',
       'Multi-cloud data federation — studies routable between GCP and AWS tenants',
-      'AWS Marketplace listing for enterprise procurement',
-      'Performance SLA dashboards and enhanced monitoring across both clouds',
     ],
     tags: [
-      { label: 'Planned', style: 'neutral' },
+      { label: '● Deploying', style: 'active' },
       { label: 'AWS', style: 'cloud' },
       { label: 'Multi-Cloud', style: 'neutral' },
     ],
