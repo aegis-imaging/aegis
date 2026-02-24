@@ -13,8 +13,15 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# gettext provides envsubst, used to hydrate API_URL into nginx config at startup.
+RUN apk add --no-cache gettext
+
+# Default: GCP API URL. Override with API_URL env var for other clouds (e.g. AWS ECS).
+ENV API_URL=https://api.aegisimaging.ai
+
+COPY nginx.conf /etc/nginx/conf.d/nginx.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+# Substitute ${API_URL} in the nginx config template, then start nginx.
+CMD ["/bin/sh", "-c", "envsubst '${API_URL}' < /etc/nginx/conf.d/nginx.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
