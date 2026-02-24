@@ -165,6 +165,9 @@ func main() {
 	mux.HandleFunc("GET /api/stats/timeline", auth(srv.GetTimeline))
 	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
+	// System health summary — aggregated operational status panel.
+	mux.HandleFunc("GET /api/system/health-summary", auth(srv.GetSystemHealthSummary))
+
 	// Projects — create/update require admin; list is public (upload portal).
 	mux.HandleFunc("POST /api/projects", adminOnly(srv.CreateProject))
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
