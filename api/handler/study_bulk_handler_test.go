@@ -69,7 +69,7 @@ func TestBulkStudyAction_InvalidAction(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	body, _ := json.Marshal(map[string]any{
-		"action":    "delete",
+		"action":    "archive",
 		"study_ids": []string{study.ID},
 	})
 	req := httptest.NewRequest("POST", "/api/studies/bulk", bytes.NewBuffer(body))

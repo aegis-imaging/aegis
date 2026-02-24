@@ -3049,6 +3049,10 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
   const [saving, setSaving]         = useState(false)
   const [formError, setFormError]   = useState<string | null>(null)
 
+  const [importMsg, setImportMsg]   = useState<string | null>(null)
+  const [importing, setImporting]   = useState(false)
+  const importRef = useRef<HTMLInputElement>(null)
+
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -3139,6 +3143,35 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const projectName = (id: string) => projects.find(p => p.id === id)?.name ?? id
 
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const targetProjectID = formProject || projects[0]?.id
+    if (!targetProjectID) return
+    setImporting(true)
+    setImportMsg(null)
+    try {
+      const text = await file.text()
+      const res = await fetch(`/api/projects/${targetProjectID}/protocol-templates/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: text,
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setImportMsg(`Import failed: ${data.error ?? res.status}`)
+      } else {
+        setImportMsg(`Imported ${data.imported}, skipped ${data.skipped} duplicate${data.skipped !== 1 ? 's' : ''}`)
+        if (data.imported > 0) fetchAll()
+      }
+    } catch {
+      setImportMsg('Import failed: could not read file')
+    } finally {
+      setImporting(false)
+      if (importRef.current) importRef.current.value = ''
+    }
+  }
+
   return (
     <div className="routing-panel">
       <div className="routing-section">
@@ -3161,9 +3194,34 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 Export JSON
               </a>
             )}
+            {isAdmin && projects.length > 0 && (
+              <>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleImport}
+                />
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => importRef.current?.click()}
+                  disabled={importing}
+                  title="Import templates from a JSON file"
+                >
+                  {importing ? 'Importing…' : 'Import JSON'}
+                </button>
+              </>
+            )}
             {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
           </div>
         </div>
+        {importMsg && (
+          <div style={{ padding: '6px 12px', fontSize: 13, color: importMsg.startsWith('Import failed') ? '#9a3412' : '#0f766e', background: importMsg.startsWith('Import failed') ? '#ffedd5' : '#ccfbf1', borderRadius: 4, marginTop: 4 }}>
+            {importMsg}
+          </div>
+        )}
 
         {isAdmin && showForm && (
           <div className="routing-form">

@@ -1135,10 +1135,11 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 
 ### Study Operations — Bulk, CSV, Notes, SLA, Re-processing, Expiry
 
-**Bulk approve/reject** (`POST /api/studies/bulk`, admin-only):
-- Body: `{"action": "approve"|"reject", "study_ids": ["<uuid>", ...]}` (max 200 IDs per call)
+**Bulk approve/reject/delete** (`POST /api/studies/bulk`, admin-only):
+- Body: `{"action": "approve"|"reject"|"delete", "study_ids": ["<uuid>", ...]}` (max 200 IDs per call)
 - Returns `{processed, errors[]}` — partial success supported; already-terminal studies are skipped with an error entry
 - Triggers export forwarding and uploader notification emails on bulk approve (same as single approve)
+- `action: "delete"` permanently removes the study record and all DICOM files from storage
 
 **Studies CSV export** (`GET /api/studies.csv`, admin-read):
 - Accepts same filter params as `GET /api/studies` (`project_id`, `status`, `modality`, `body_part`, `source`, `search`, plus `date_from`/`date_to` in RFC3339)
@@ -1387,15 +1388,21 @@ Per-institution aggregate statistics derived from the studies table.
 - Query params: `days` (1–365), `project_id` (UUID, optional)
 - **Admin dashboard:** collapsible "Daily ingestion (last 30 days)" table showing received and approved counts per day; respects global project selector; resets when project changes
 
-### Protocol Template Export (`api/handler/protocol_template.go`)
+### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
-Exports all protocol templates for a project as a formatted JSON file.
+Export and import protocol templates for a project as a JSON file.
 
-**API:**
+**Export API:**
 - `GET /api/projects/{projectID}/protocol-templates/export` — returns `Content-Disposition: attachment; filename="protocol-templates.json"` with `{"project_id", "templates": [...], "count"}` indented JSON
 - Emits `protocol_template.exported` audit entry with count
 
-**Admin dashboard:** "Export JSON" download link in the Protocol Templates section header.
+**Import API** (admin-only):
+- `POST /api/projects/{projectID}/protocol-templates/import` — body: either a raw JSON array `[{name, manufacturer, ...}]` or the export format `{"templates":[...]}`
+- Skips templates whose name already exists in the project (no overwrite)
+- Returns `{imported: N, skipped: M, errors: []}` — partial success supported
+- Emits `protocol_template.imported` audit entry with imported/skipped counts
+
+**Admin dashboard:** "Export JSON" and "Import JSON" buttons in the Protocol Templates section header. Import shows a success/error toast after file selection.
 
 ### Export Share Extension (`api/handler/export.go`)
 
