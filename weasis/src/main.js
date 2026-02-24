@@ -23,6 +23,27 @@ function showError(msg) {
   setStatus('Error', 'error')
 }
 
+// ── Toolbar tool-switching ────────────────────────────────────────────────────
+
+let app = null
+
+function syncToolbar(activeTool) {
+  document.querySelectorAll('.tool-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tool === activeTool)
+  })
+}
+
+document.querySelectorAll('.tool-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (app) {
+      app.setTool(btn.dataset.tool)
+      syncToolbar(btn.dataset.tool)
+    }
+  })
+})
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 if (!studyUID) {
   showError('No studyUID provided. Append ?studyUID=<DICOM StudyInstanceUID> to the URL.')
 } else {
@@ -35,7 +56,7 @@ if (!studyUID) {
     WindowLevel: {},
   }
 
-  const app = new App()
+  app = new App()
   app.init(options)
 
   app.addEventListener('loadprogress', (e) => {
@@ -46,6 +67,10 @@ if (!studyUID) {
 
   app.addEventListener('loadend', () => {
     setStatus('Ready', 'ready')
+    // Activate Scroll as the default tool so users can immediately navigate slices.
+    // Without setTool(), DWV renders images but mouse/keyboard events do nothing.
+    app.setTool('Scroll')
+    syncToolbar('Scroll')
   })
 
   app.addEventListener('loaderror', (e) => {
