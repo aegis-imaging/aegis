@@ -1228,6 +1228,25 @@ const WEASIS_BASE_DEFACE = import.meta.env.VITE_WEASIS_BASE_URL || 'http://local
 function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const beforeUrl = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=raw`
   const afterUrl  = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=clean`
+  const [yokeEnabled, setYokeEnabled] = useState(true)
+  const beforeRef = useRef<HTMLIFrameElement>(null)
+  const afterRef  = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    if (!yokeEnabled) return
+    const handler = (e: MessageEvent) => {
+      if (!e.data || e.data.type !== 'dwv-position') return
+      if (typeof e.data.k !== 'number') return
+      const cmd = { type: 'dwv-goto', k: e.data.k }
+      if (e.source === beforeRef.current?.contentWindow) {
+        afterRef.current?.contentWindow?.postMessage(cmd, '*')
+      } else if (e.source === afterRef.current?.contentWindow) {
+        beforeRef.current?.contentWindow?.postMessage(cmd, '*')
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [yokeEnabled])
 
   return (
     <div className="deface-panel">
@@ -1236,7 +1255,17 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
           <span className="deface-panel-title">Defacing Review</span>
           <span className="deface-panel-uid">{uidShort(study.study_instance_uid)}</span>
         </div>
-        <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">×</button>
+        <div className="deface-header-actions">
+          <button
+            type="button"
+            className={`deface-yoke-btn${yokeEnabled ? ' deface-yoke-btn--on' : ''}`}
+            onClick={() => setYokeEnabled(y => !y)}
+            title={yokeEnabled ? 'Scroll is yoked — click to scroll independently' : 'Scroll is independent — click to yoke'}
+          >
+            {yokeEnabled ? '⛓ Yoked' : '⛓ Free'}
+          </button>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">×</button>
+        </div>
       </div>
       <p className="deface-panel-hint">
         Verify that facial features have been removed. Approve only if the right panel (defaced) shows no identifiable face.
@@ -1245,12 +1274,12 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
         <div className="deface-viewer-col">
           <div className="deface-viewer-label deface-viewer-label--before">Before (raw)</div>
           <a href={beforeUrl} target="_blank" rel="noreferrer" className="viewer-open-tab deface-open-tab">Open ↗</a>
-          <iframe src={beforeUrl} className="deface-iframe" title="Pre-defacing DICOM" allow="fullscreen" />
+          <iframe ref={beforeRef} src={beforeUrl} className="deface-iframe" title="Pre-defacing DICOM" allow="fullscreen" />
         </div>
         <div className="deface-viewer-col">
           <div className="deface-viewer-label deface-viewer-label--after">After (defaced)</div>
           <a href={afterUrl} target="_blank" rel="noreferrer" className="viewer-open-tab deface-open-tab">Open ↗</a>
-          <iframe src={afterUrl} className="deface-iframe" title="Defaced DICOM" allow="fullscreen" />
+          <iframe ref={afterRef} src={afterUrl} className="deface-iframe" title="Defaced DICOM" allow="fullscreen" />
         </div>
       </div>
     </div>
