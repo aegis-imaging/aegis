@@ -288,6 +288,11 @@ func main() {
 	mux.HandleFunc("DELETE /api/studies/{id}/labels/{labelID}", adminOnly(srv.DeleteStudyLabel))
 	mux.HandleFunc("POST /api/studies/bulk-label", adminOnly(srv.BulkLabelStudies))
 
+	// Study relationships — link studies as baseline/follow_up/comparison/replicate pairs.
+	mux.HandleFunc("GET /api/studies/{id}/relationships", auth(srv.ListStudyRelationships))
+	mux.HandleFunc("POST /api/studies/{id}/relationships", adminOnly(srv.CreateStudyRelationship))
+	mux.HandleFunc("DELETE /api/studies/{id}/relationships/{relID}", adminOnly(srv.DeleteStudyRelationship))
+
 	// Webhook subscriptions — HTTP callbacks for study lifecycle events.
 	mux.HandleFunc("GET /api/webhook-subscriptions", auth(srv.ListWebhooks))
 	mux.HandleFunc("POST /api/webhook-subscriptions", adminOnly(srv.CreateWebhook))

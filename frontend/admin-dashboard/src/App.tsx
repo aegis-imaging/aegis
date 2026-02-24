@@ -43,6 +43,25 @@ type SeriesRow = {
   created_at: string
 }
 
+type RelatedStudySummary = {
+  id: string
+  study_instance_uid: string
+  study_description: string
+  status: string
+  modality: string
+}
+
+type RelationshipWithStudy = {
+  id: string
+  study_id: string
+  related_study_id: string
+  relationship: string
+  notes: string | null
+  created_by: string
+  created_at: string
+  related_study: RelatedStudySummary
+}
+
 type AuditEntry = {
   id: string
   action: string
@@ -1559,8 +1578,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [diagnostics, setDiagnostics] = useState<StudyDiagnosticsResponse | null>(null)
   const [labels, setLabels] = useState<StudyLabel[]>([])
   const [seriesList, setSeriesList] = useState<SeriesRow[]>([])
+  const [relationships, setRelationships] = useState<RelationshipWithStudy[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships'>('audit')
   const [newLabel, setNewLabel] = useState('')
   const [labelSaving, setLabelSaving] = useState(false)
 
@@ -1650,6 +1670,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [rejectReasonText, setRejectReasonText] = useState('')
 
+  // Link study form state (for relationships tab)
+  const [linkStudyUID, setLinkStudyUID] = useState('')
+  const [linkRelType, setLinkRelType] = useState('follow_up')
+  const [linkNotes, setLinkNotes] = useState('')
+  const [linkSaving, setLinkSaving] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
+
   const loadData = useCallback(() => {
     setLoading(true)
     Promise.all([
@@ -1660,7 +1687,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/diagnostics`).then(r => r.ok ? r.json() : null),
       fetch(`/api/studies/${studyId}/labels`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/series`).then(r => r.ok ? r.json() : { series: [] }),
-    ]).then(([s, a, rl, sh, diag, lbls, sr]) => {
+      fetch(`/api/studies/${studyId}/relationships`).then(r => r.ok ? r.json() : { relationships: [] }),
+    ]).then(([s, a, rl, sh, diag, lbls, sr, relData]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
@@ -1670,6 +1698,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       setDiagnostics(diag ?? null)
       setLabels(lbls ?? [])
       setSeriesList((sr?.series ?? []) as SeriesRow[])
+      setRelationships((relData?.relationships ?? []) as RelationshipWithStudy[])
       setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -2118,6 +2147,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               Series ({seriesList.length})
             </button>
           )}
+          <button type="button" className={`tab-btn${detailTab === 'relationships' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('relationships')}>
+            Related Studies ({relationships.length})
+          </button>
         </div>
 
         {detailTab === 'audit' && (
@@ -2279,6 +2311,99 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               ))}
             </tbody>
           </table>
+        )}
+
+        {detailTab === 'relationships' && (
+          <div className="labels-panel">
+            {/* Existing relationship cards */}
+            {relationships.length === 0 && <div className="routing-desc" style={{ marginBottom: '12px' }}>No related studies linked yet.</div>}
+            {relationships.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                {relationships.map(rel => (
+                  <div key={rel.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                    <span className={`badge badge--${rel.related_study.status === 'approved' ? 'enabled' : rel.related_study.status === 'rejected' ? 'rejected' : 'status'}`}>
+                      {rel.related_study.status}
+                    </span>
+                    <span className="routing-action" style={{ background: 'var(--teal-100)', color: 'var(--teal-800)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 500 }}>
+                      {rel.relationship.replace('_', ' ')}
+                    </span>
+                    <code style={{ fontSize: '0.78rem', flex: 1 }}>{rel.related_study.study_instance_uid}</code>
+                    {rel.related_study.study_description && (
+                      <span className="routing-desc">{rel.related_study.study_description}</span>
+                    )}
+                    {rel.related_study.modality && (
+                      <span className="badge badge--neutral">{rel.related_study.modality}</span>
+                    )}
+                    {rel.notes && <span className="routing-desc" style={{ fontStyle: 'italic' }}>{rel.notes}</span>}
+                    {isAdmin && (
+                      <button type="button" className="btn btn--revoke" style={{ marginLeft: 'auto' }}
+                        title="Remove this relationship link"
+                        onClick={async () => {
+                          await fetch(`/api/studies/${studyId}/relationships/${rel.id}`, { method: 'DELETE' })
+                          loadData()
+                        }}>
+                        Unlink
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Link new study form (admin only) */}
+            {isAdmin && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+                <div style={{ fontWeight: 500, fontSize: '0.875rem', marginBottom: '8px' }}>Link a study</div>
+                {linkError && <div className="form-error" style={{ marginBottom: '8px' }}>{linkError}</div>}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <input className="form-input" style={{ flex: '1 1 260px' }}
+                    placeholder="Study UUID or DICOM UID"
+                    value={linkStudyUID}
+                    onChange={e => setLinkStudyUID(e.target.value)} />
+                  <select className="form-select" style={{ flex: '0 0 auto' }} value={linkRelType} onChange={e => setLinkRelType(e.target.value)}>
+                    <option value="baseline">Baseline</option>
+                    <option value="follow_up">Follow-up</option>
+                    <option value="comparison">Comparison</option>
+                    <option value="replicate">Replicate</option>
+                  </select>
+                  <input className="form-input" style={{ flex: '1 1 160px' }}
+                    placeholder="Notes (optional)"
+                    value={linkNotes}
+                    onChange={e => setLinkNotes(e.target.value)} />
+                  <button type="button" className="btn-primary" disabled={linkSaving || !linkStudyUID.trim()}
+                    onClick={async () => {
+                      setLinkSaving(true)
+                      setLinkError(null)
+                      try {
+                        // Accept both UUID and DICOM UID — resolve via lookup if needed.
+                        let relatedId = linkStudyUID.trim()
+                        // Heuristic: DICOM UIDs contain dots, UUIDs contain hyphens
+                        if (relatedId.includes('.')) {
+                          const r = await fetch(`/api/study-uid/${encodeURIComponent(relatedId)}`)
+                          if (!r.ok) throw new Error('Study not found by DICOM UID')
+                          const s = await r.json()
+                          relatedId = s.id
+                        }
+                        const res = await fetch(`/api/studies/${studyId}/relationships`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ related_study_id: relatedId, relationship: linkRelType, notes: linkNotes.trim() }),
+                        })
+                        if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Link failed') }
+                        setLinkStudyUID('')
+                        setLinkNotes('')
+                        loadData()
+                      } catch (err) {
+                        setLinkError(err instanceof Error ? err.message : 'Link failed')
+                      } finally {
+                        setLinkSaving(false)
+                      }
+                    }}>
+                    {linkSaving ? 'Linking…' : 'Link'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {detailTab === 'diagnostics' && (
