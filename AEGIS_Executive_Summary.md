@@ -216,7 +216,7 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Development Velocity
 
-AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. The resulting platform is production-grade: version-controlled infrastructure, automated CI/CD, 370+ tests, and all services deployed and monitored on GCP.
+AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. The resulting platform is production-grade: version-controlled infrastructure, automated CI/CD, 370+ tests, and all services deployed and monitored on GCP. AWS deployment is underway in Q1 2026 — infrastructure was Terraformed and CI/CD configured in a single session.
 
 | Metric | Value |
 |--------|-------|
@@ -224,7 +224,9 @@ AEGIS was built from a blank repository to full GCP production deployment in **7
 | Git commits in the first week | **846+** |
 | API routes (Go) | **122** |
 | Automated tests (Go + Python) | **370+** |
-| Cloud Run services deployed | **11** |
+| Cloud Run services deployed (GCP) | **11** |
+| ECR repositories provisioned (AWS) | **10** |
+| ECS Fargate services (AWS) | **9** |
 
 ---
 
@@ -253,12 +255,14 @@ Everything listed below was built and deployed to GCP production within 7 days o
 - DIMSE C-MOVE / C-FIND workflows for active PACS pull integration
 - Enterprise onboarding documentation and SLA monitoring
 
-### → Milestone 3 — AWS Deployment (Q2 2026)
+### → Milestone 3 — AWS Deployment (Q1 2026, deploying now)
 
-- Full AWS deployment: ECS Fargate, RDS PostgreSQL, S3 storage, ALB + Cognito auth
-- AWS Terraform module already written; deployment is config, not code
-- Multi-cloud data federation — studies routable between GCP and AWS tenants
-- AWS Marketplace listing for enterprise procurement
+- Full AWS deployment underway: ECS Fargate (9 services), RDS PostgreSQL, S3, ALB + Cognito auth
+- Terraform infrastructure provisioned; 10 ECR repositories live; all images building and pushing
+- GitHub Actions CI/CD configured — mirrors GCP Cloud Build; auto-deploys on every push to `develop`
+- DIMSE receiver on EC2 with Elastic IP, SSM-driven rolling deploys (mirrors GCP Compute Engine pattern)
+- Multi-cloud data federation — studies routable between GCP and AWS tenants (next)
+- AWS Marketplace listing for enterprise procurement (next)
 
 ### → Milestone 4 — Azure + SOC 2 Type II (Q3 2026)
 
