@@ -35,6 +35,7 @@ import {
   listStudiesArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
+  testDestinationArgsSchema,
   testWebhookArgsSchema,
   readToolNames,
   reassignStudyArgsSchema,
@@ -567,6 +568,19 @@ const tools: Tool[] = [
       type: "object",
       properties: {
         request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "test_destination",
+    description: "Test connectivity to a DICOM forwarding destination. DICOMweb: sends GET /studies?limit=1 with auth headers. DIMSE: sends C-ECHO via the dimse-receiver. Returns {destination_id, type, success, latency_ms, status_code?, error?}. Useful before adding routing rules to verify the destination is reachable.",
+    inputSchema: {
+      type: "object",
+      required: ["destination_id"],
+      properties: {
+        request_id: { type: "string" },
+        destination_id: { type: "string", format: "uuid" }
       },
       additionalProperties: false
     }
@@ -1351,6 +1365,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "list_destinations") {
       emptyArgsSchema.parse(args);
       const data = await client.get("/api/destinations");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "test_destination") {
+      const parsed = testDestinationArgsSchema.parse(args);
+      const data = await client.post(`/api/destinations/${encodeURIComponent(parsed.destination_id)}/test`);
       return formatSuccess(requestId, name, data);
     }
 

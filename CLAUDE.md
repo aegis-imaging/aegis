@@ -1459,6 +1459,23 @@ Stores an optional free-text reason when revoking an export share. Visible in th
 
 **MCP `revoke_share` tool:** Accepts optional `revocation_reason` field (stored in DB) in addition to the required `reason` field (audit justification only).
 
+### Destination Connectivity Test (`api/handler/routing.go`, `dimse-receiver/app/`)
+
+Probes an external DICOM destination to verify network reachability before adding routing rules that depend on it.
+
+**API:**
+- `POST /api/destinations/{id}/test` (adminOnly) — tests connectivity to the destination
+  - **DICOMweb**: sends `GET {dicomweb_url}/studies?limit=1` with auth header; checks for non-4xx response
+  - **DIMSE**: sends C-ECHO to `ae_title@host:port` via the dimse-receiver `/echo` endpoint (requires `DIMSE_RECEIVER_URL`)
+  - Returns `{destination_id, type, success, latency_ms, status_code?, error?}`
+  - Emits `destination.tested` audit entry
+
+**dimse-receiver `/echo` endpoint** (`POST /echo`): accepts `{ae_title, host, port}`, sends C-ECHO via pynetdicom, returns `{success, latency_ms}` or HTTP 502 on failure.
+
+**Admin dashboard:** "Test" button per destination row in the Routing tab; shows inline result (teal for success, orange for failure + latency).
+
+**MCP `test_destination` read tool:** `{destination_id}` → calls `POST /api/destinations/{id}/test`, returns connectivity result.
+
 ### Per-IP Rate Limiting (`api/middleware/`)
 
 Token-bucket rate limiting on public upload endpoints prevents abuse without affecting authenticated admin traffic.
@@ -1503,6 +1520,7 @@ cd mcp-server && npm install && npm run build
 | `list_institutions` | All institutions with type/ae_title/ip_ranges |
 | `list_routing_rules` | All routing rules ordered by priority |
 | `list_destinations` | All DICOM forwarding destinations |
+| `test_destination` | Test connectivity to a DICOM destination (DICOMweb GET probe or DIMSE C-ECHO) |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 

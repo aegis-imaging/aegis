@@ -191,6 +191,38 @@ def test_forward_runtime_error_maps_to_502():
     assert "association failed" in resp.json()["detail"]
 
 
+def test_echo_success():
+    from unittest.mock import patch
+
+    payload = {"ae_title": "REMOTE_AE", "host": "10.0.0.8", "port": 104}
+    echo_result = {"success": True, "latency_ms": 12.5}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.send_echo", return_value=echo_result) as mock_echo:
+        with TestClient(app) as client:
+            resp = client.post("/echo", json=payload)
+
+    assert resp.status_code == 200
+    assert resp.json() == echo_result
+    mock_echo.assert_called_once_with(host="10.0.0.8", port=104, ae_title="REMOTE_AE")
+
+
+def test_echo_failure_maps_to_502():
+    from unittest.mock import patch
+
+    payload = {"ae_title": "REMOTE_AE", "host": "10.0.0.8", "port": 104}
+
+    with patch("app.main.create_scp", return_value=_DummyAE(active_associations=[])), patch(
+        "app.main.start_scp", return_value=None
+    ), patch("app.main.send_echo", side_effect=RuntimeError("association failed")):
+        with TestClient(app) as client:
+            resp = client.post("/echo", json=payload)
+
+    assert resp.status_code == 502
+    assert "association failed" in resp.json()["detail"]
+
+
 def test_ingest_retry_status_endpoint():
     from unittest.mock import patch
 
