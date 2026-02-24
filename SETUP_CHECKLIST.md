@@ -9,6 +9,19 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 
 ---
 
+## Monitoring & Observability
+
+**Cloud Monitoring Dashboard** (requires GCP console access):
+https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+
+**Alert policies** (9 active):
+- API 5xx rate, API p99 latency, API uptime check
+- Cloud SQL CPU, disk, connections
+- Cloud Run memory
+- Study stuck SLA, pipeline failures
+
+---
+
 ## 0. Business & Account Setup
 
 Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC and Encore Music LLC — keeps billing, sender reputation, and access controls separate per legal entity.
