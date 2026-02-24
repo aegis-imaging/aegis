@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydicom.uid import generate_uid
@@ -136,3 +136,53 @@ def test_create_scp_uses_config(monkeypatch):
     assert ae.maximum_associations == 7
     assert str(ae.ae_title).strip() == "AEGIS"
     assert len(ae.supported_contexts) > 0
+
+
+# ── Storage backend integration ──────────────────────────────────────────────
+
+
+def test_handle_store_local_mode_writes_file(make_dicom_dataset, tmp_path, monkeypatch):
+    """STORAGE_MODE=local (default) writes to the filesystem as before."""
+    monkeypatch.setattr("app.config.STORAGE_MODE", "local")
+    monkeypatch.setattr("app.config.DIMSE_DATA_DIR", str(tmp_path))
+    ds = make_dicom_dataset(study_uid="1.2.3.local")
+
+    assoc = _Assoc()
+    status = handle_store(_Event(assoc=assoc, dataset=ds, file_meta=ds.file_meta))
+
+    assert status == 0x0000
+    out = tmp_path / "dicom" / "raw" / "1.2.3.local" / "0.dcm"
+    assert out.exists()
+
+
+def test_handle_store_s3_mode_calls_put_object(make_dicom_dataset, monkeypatch):
+    """STORAGE_MODE=s3 writes to S3 via boto3 and does NOT touch the filesystem."""
+    monkeypatch.setattr("app.config.STORAGE_MODE", "s3")
+    monkeypatch.setattr("app.config.S3_BUCKET", "test-bucket")
+    monkeypatch.setattr("app.config.S3_REGION", "us-east-1")
+
+    mock_s3 = MagicMock()
+    mock_s3.list_objects_v2.return_value = {"Contents": []}  # no existing files → index 0
+    mock_boto3 = MagicMock()
+    mock_boto3.client.return_value = mock_s3
+
+    ds = make_dicom_dataset(study_uid="1.2.3.s3")
+
+    with patch.dict("sys.modules", {"boto3": mock_boto3}):
+        # Re-import storage_backend so it picks up the mocked boto3
+        import importlib
+        import app.storage_backend as sb
+        importlib.reload(sb)
+
+        assoc = _Assoc()
+        status = handle_store(_Event(assoc=assoc, dataset=ds, file_meta=ds.file_meta))
+
+    assert status == 0x0000
+    # Verify S3 put_object was called with the correct key
+    put_calls = mock_s3.put_object.call_args_list
+    assert len(put_calls) == 1
+    call_kwargs = put_calls[0].kwargs
+    assert call_kwargs["Bucket"] == "test-bucket"
+    assert call_kwargs["Key"] == "dicom/raw/1.2.3.s3/0.dcm"
+    assert isinstance(call_kwargs["Body"], bytes)
+    assert len(call_kwargs["Body"]) > 0
