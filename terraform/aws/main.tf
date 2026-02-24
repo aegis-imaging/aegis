@@ -996,6 +996,7 @@ resource "aws_ecs_task_definition" "api" {
         { name = "PROTOCOL_SERVICE_URL", value = "http://protocol-service.aegis.local:8080" },
         { name = "SYNTH_SERVICE_URL", value = "http://synth-service.aegis.local:8080" },
         { name = "DIMSE_RECEIVER_URL", value = "http://dimse-receiver.aegis.local:8080" },
+        { name = "FIRST_ADMIN_EMAIL", value = var.first_admin_email },
         { name = "SMTP_HOST", value = local.ses_smtp_hostname },
         { name = "SMTP_PORT", value = "587" },
         { name = "SMTP_FROM", value = var.smtp_from },
