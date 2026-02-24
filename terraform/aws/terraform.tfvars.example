@@ -27,3 +27,10 @@ admin_memory         = 1024
 
 # Optional CORS override for API runtime
 # api_allowed_origins = ["https://admin.example.com"]
+
+# Sidecar image tag (shared across all 7 Python processing sidecars)
+# sidecar_image_tag = "latest"
+
+# DIMSE receiver EC2 instance — set to a full ECR image URI to enable.
+# Leave empty (default) to skip all DIMSE resources.
+# dimse_receiver_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/aegis/dimse-receiver:latest"
