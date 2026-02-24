@@ -286,7 +286,10 @@ func main() {
 	mux.HandleFunc("PUT /api/webhook-subscriptions/{id}", adminOnly(srv.UpdateWebhook))
 	mux.HandleFunc("DELETE /api/webhook-subscriptions/{id}", adminOnly(srv.DeleteWebhook))
 	mux.HandleFunc("GET /api/webhook-subscriptions/{id}/deliveries", auth(srv.GetWebhookDeliveries))
+	mux.HandleFunc("GET /api/webhook-subscriptions/{id}/stats", auth(srv.GetWebhookStats))
 	mux.HandleFunc("POST /api/webhook-subscriptions/{id}/test", adminOnly(srv.TestWebhookDelivery))
+	mux.HandleFunc("GET /api/webhook-deliveries", auth(srv.ListAllDeliveries))
+	mux.HandleFunc("POST /api/webhook-deliveries/{id}/retry", adminOnly(srv.RetryDelivery))
 
 	// Subject-session linking — group studies by de-identified subject pseudonym.
 	mux.HandleFunc("GET /api/subjects", auth(srv.ListSubjects))
