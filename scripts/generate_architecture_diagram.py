@@ -299,13 +299,13 @@ def build_html():
         "Auto-retry: 3× exponential backoff per file",
     ], "react")
 
-    dimse = card("DIMSE Receiver  (pynetdicom)", [
-        "C-STORE SCP listening on port 11112",
-        "Receives studies from PACS systems / scanners",
+    dimse = card("DIMSE Receiver  (pynetdicom · GCE VM)", [
+        "Compute Engine VM — aegis-prod-dimse-receiver",
+        "Static IP 35.232.172.221 · TCP port 11112",
+        "C-STORE SCP — receives from PACS systems / scanners",
         "Institution attribution (AE title or IP CIDR)",
         "Calls POST /api/ingest on DICOM association close",
         "Durable retry queue + dead-letter (disk-persistent)",
-        "Exponential backoff · operator control API",
     ], "py")
 
     privacy = """
@@ -509,7 +509,7 @@ def build_html():
          "Routing rules · Institutions · Audit · Export Portal · Shares · Email · MCP Server",
          "#D97706"),
         ("Phase 4: Production  ✓",
-         "GCP live (aegis-prod) · Landing Page · Batch import · Synth MRI sidecar (8th) · RBAC",
+         "GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC",
          "#7C3AED"),
         ("Phase 5: Enterprise  🚧",
          "AEGIS AI Agent · Observability dashboard · Multi-tenant federation · Repo split",
@@ -540,7 +540,7 @@ def build_html():
         ("Local:",   "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem",        "slate"),
         ("Auth:",    "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth",     "orange"),
         ("Storage:", "STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes",    "go"),
-        ("CI:",      "Go tests (273+) · Python tests (244+) · TS typecheck · Docker (9)", "green"),
+        ("CI/CD:",   "GitHub Actions: Go (273+) · Python (244+) · TS · Docker (9) · Cloud Build auto-deploy", "green"),
         ("Domains:", "aegisimaging.ai · www · api · admin  —  SSL cert v3",               "py"),
     ]
 

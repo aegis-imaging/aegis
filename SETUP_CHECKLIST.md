@@ -2,8 +2,10 @@
 
 Personal environment setup tasks for building the MVP/POC. Complete these in order — each section unblocks the next.
 
-> **GCP Production Status (2026-02-22):** `aegis-prod-488120` is live.
+> **GCP Production Status (2026-02-23):** `aegis-prod-488120` is live.
 > API: `https://api.aegisimaging.ai` — all services healthy, cloud smoke suite 11/11 PASS.
+> DIMSE receiver: `aegis-prod-dimse-receiver` (Compute Engine VM, `us-central1-a`, static IP `35.232.172.221`, port 11112).
+> CI/CD: Cloud Build triggers active in `us-central1` (`deploy-on-develop` + `terraform-apply-on-develop`).
 
 ---
 
@@ -154,6 +156,55 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   # Expected: aegis-prod-pipeline-failures, aegis-prod-study-stuck
   ```
 - [ ] See `terraform/monitoring/README.md` for full metric reference and runbook links.
+
+## 4x. DIMSE Receiver — Compute Engine VM
+
+The DIMSE C-STORE SCP runs on a dedicated Compute Engine VM because Cloud Run cannot expose raw TCP ports. Terraform creates the VM; Cloud Build deploys new images by updating VM metadata and resetting the instance.
+
+- [x] VM `aegis-prod-dimse-receiver` created in `us-central1-a` via `terraform/infra/dimse.tf`
+- [x] Static regional IP `35.232.172.221` assigned; firewall rule allows TCP 11112 from `0.0.0.0/0`
+- [x] VPC-internal firewall allows TCP 8080 from Go API → DIMSE VM health endpoint
+- [x] Startup script mounts GCS staging bucket via gcsfuse at `/app/data` and starts the DIMSE container
+- [x] `dimse_receiver_image` and `dimse_api_url` set in `terraform/infra/terraform.tfvars` (stored in Secret Manager as `aegis-prod-terraform-tfvars` version 2)
+- [ ] Verify DIMSE receiver is running after a test C-STORE from PACS:
+  ```bash
+  # From any host with storescu installed
+  storescu -v -aec AEGIS 35.232.172.221 11112 /path/to/test.dcm
+  # Then verify in admin dashboard → Studies tab
+  ```
+- [ ] Verify VM health endpoint (VPC-internal only):
+  ```bash
+  # From a Cloud Run service or Cloud Shell with VPC access
+  curl http://<vm-internal-ip>:8080/healthz
+  ```
+
+**To update the DIMSE receiver image** (done automatically by Cloud Build on `develop` push):
+```bash
+# Manual update (if needed):
+gcloud compute instances add-metadata aegis-prod-dimse-receiver \
+  --zone=us-central1-a \
+  --metadata=dimse-image=us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/dimse-receiver:latest
+gcloud compute instances reset aegis-prod-dimse-receiver --zone=us-central1-a
+```
+
+## 4y. Cloud Build CI/CD Triggers
+
+Cloud Build triggers were created by `scripts/gcp_setup_cloudbuild.sh` and run in `us-central1`.
+
+- [x] GitHub App connection established (Cloud Build → `aegis` connection → `aegis-imaging/aegis` repo)
+- [x] Trigger `deploy-on-develop` — fires on push to `develop`; runs `cloudbuild.yaml` (builds+pushes all images, deploys Cloud Run services, hot-swaps DIMSE VM)
+- [x] Trigger `terraform-apply-on-develop` — fires when `terraform/infra/**` changes on `develop`; runs `cloudbuild.terraform.yaml`; reads `terraform.tfvars` from Secret Manager
+- [x] Cloud Build SA `aegis-cloud-build@aegis-prod-488120.iam.gserviceaccount.com` has all required IAM roles (tracked in `terraform/project/main.tf`)
+
+**Monitor recent builds:**
+```bash
+gcloud builds list --project=aegis-prod-488120 --region=us-central1 --limit=5
+```
+
+**Re-run setup (idempotent):**
+```bash
+./scripts/gcp_setup_cloudbuild.sh
+```
 
 ## 4a. First Admin Bootstrap
 
@@ -1174,4 +1225,4 @@ Use GitHub Organizations to separate codebases by company.
 
 ---
 
-*Generated 2026-02-18. Updated 2026-02-20. See AEGIS_Architecture.md for the full system design. Cloud AI backends and importer contract hardening reflected through 2026-02-20.*
+*Generated 2026-02-18. Updated 2026-02-23. See AEGIS_Architecture.md for the full system design. DIMSE receiver Compute Engine VM, Cloud Build CI/CD triggers, and IAM hardening reflected through 2026-02-23.*

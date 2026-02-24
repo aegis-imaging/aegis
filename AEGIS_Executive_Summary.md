@@ -38,7 +38,7 @@ css: |
   <p style="font-size: 16px; color: #6b7280; margin: 0.5em 0;">A multi-cloud platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
   <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
   <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
-  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 22, 2026</p>
+  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 23, 2026</p>
 </div>
 
 ---
@@ -163,7 +163,7 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 | **Defacing** | DeepDefacer (default), mri_deface, mri_reface | Multiple backends with automatic fallback; see `docs/research/mri-defacing-tools-comparison.md` |
 | **DICOM Viewer** | OHIF Viewer (v3) | Open-source, browser-based, supports all modalities |
 | **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
-| **Processing Pipeline** | 7 Python services (6 processing + 1 DIMSE receiver adapter) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion, plus DIMSE C-STORE ingress — auto-dispatched in dependency order |
+| **Processing Pipeline** | 6 Python processing services (Cloud Run) + DIMSE receiver (Compute Engine VM) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion auto-dispatched in dependency order; DIMSE C-STORE SCP on dedicated GCE VM (static IP, port 11112) |
 | **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
 
 **On the use of automated tools:** AEGIS uses automated tools to assist with — not replace — human review. Automated de-identification flags potential issues; a trained administrator reviews and approves every study before it is shared. Automated defacing quality is reviewed side-by-side against the original in the admin interface.
@@ -215,7 +215,7 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Phased Roadmap
 
-> **Production status:** Phases 1–4 are **deployed and running** on GCP (project `aegis-prod-488120`, region `us-central1`). The full platform stack — Go API, admin dashboard with OHIF viewer, DIMSE receiver, and all 6 Python processing sidecars — is live at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. Infrastructure is managed by Terraform (Cloud Run, Cloud SQL, GCS, Cloud Armor, IAP). Recent hardening includes operator tooling (bulk study approve/reject, CSV export, admin study notes, diagnostics panel), DIMSE C-STORE ingress with durable retry/dead-letter, and an MCP server for AI-assisted study operations.
+> **Production status:** Phases 1–4 are **deployed and running** on GCP (project `aegis-prod-488120`, region `us-central1`). The full platform stack — Go API, admin dashboard with OHIF viewer, all 6 Python processing sidecars (Cloud Run), and DIMSE receiver (Compute Engine VM `aegis-prod-dimse-receiver`, static IP `35.232.172.221`, port 11112) — is live at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. Infrastructure is managed by Terraform (Cloud Run, Cloud SQL, GCS, Cloud Armor, IAP, GCE). Cloud Build CI/CD triggers automatically deploy all services on merge to `develop`. Recent hardening includes DIMSE C-STORE ingress with durable retry/dead-letter, Cloud Build CD pipeline, operator tooling (bulk study approve/reject, CSV export, study notes, diagnostics panel), and an MCP server for AI-assisted operations.
 
 ### Phase 1 — Foundation (Code Complete)
 - Cloud infrastructure (Terraform for GCP and AWS)
@@ -248,7 +248,13 @@ XNAT and Flywheel serve research well but require software installation at sendi
 - All 10 services live on Cloud Run with private VPC, Cloud SQL, GCS, Cloud Armor
 - IAP-protected admin dashboard at `admin.aegisimaging.ai`
 - API at `api.aegisimaging.ai` with HTTPS load balancer
-- CI/CD via GitHub Actions; all 8 service images in Artifact Registry
+- CI/CD: GitHub Actions (Go/Python/TS/Docker CI checks) + Cloud Build (automated deploy to Cloud Run + GCE on push to `develop`); all 9 service images in Artifact Registry
+
+### DIMSE Receiver + Cloud Build CI/CD (Complete, February 2026)
+- DIMSE C-STORE SCP deployed on dedicated Compute Engine VM (`aegis-prod-dimse-receiver`, `us-central1-a`, `e2-small`, static IP `35.232.172.221`) — the only deployment path that can expose raw TCP port 11112 for legacy PACS integration
+- VM boots from a startup script that mounts the shared GCS staging bucket via gcsfuse, pulls the latest Docker image from Artifact Registry, and starts the DIMSE receiver container
+- Cloud Build CD triggers (`deploy-on-develop` + `terraform-apply-on-develop`) fire automatically on merge to `develop` — deploy step updates the GCE VM metadata key and resets the instance to hot-swap the image
+- Cloud Build service account has all required IAM roles (`roles/run.admin`, `roles/compute.admin`, `roles/iap.admin`, `roles/resourcemanager.projectIamAdmin`, `roles/artifactregistry.admin`, `roles/editor`) — all tracked in Terraform and setup script
 
 ### Operator Tooling (Complete, February 2026)
 - Bulk study approve/reject (`POST /api/studies/bulk`) with multi-select dashboard UI
