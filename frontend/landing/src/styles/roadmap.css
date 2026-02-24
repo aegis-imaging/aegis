@@ -241,6 +241,10 @@
   line-height: 1.5;
 }
 
+a.roadmap__tag {
+  text-decoration: none;
+}
+
 .roadmap__tag--done {
   background: var(--color-green-100);
   color: var(--color-green-600);

@@ -22,7 +22,7 @@ const MARKET_CARDS = [
   {
     stat: 'Day 1',
     label: 'Production-ready infrastructure',
-    detail: 'AEGIS is live on GCP, multi-cloud ready (AWS, GCP, Azure), with 7 automated processing services and audit trail built in.',
+    detail: 'AEGIS is live on GCP and AWS — microservices architecture (Go API + 7 Python microservices), multi-cloud ready, with full audit trail built in.',
     accent: '#059669',
   },
 ]
