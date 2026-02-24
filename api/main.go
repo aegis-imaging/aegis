@@ -138,7 +138,7 @@ func main() {
 	// Local dev only: serve stored files over HTTP (in GCS mode, signed URLs are used instead).
 	mux.HandleFunc("GET /api/storage/{key...}", srv.ServeStorageFile)
 
-	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by OHIF Viewer.
+	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by Weasis viewer.
 	mux.HandleFunc("GET /dicomweb/studies", srv.DicomwebStudies)
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series", srv.DicomwebSeries)
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances", srv.DicomwebInstances)
@@ -146,7 +146,7 @@ func main() {
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata", srv.DicomwebInstanceMetadata)
 
 	// Raw DICOMweb proxy — identical to /dicomweb but WADO-RS always reads from the
-	// pre-defacing "raw" store. Used by OHIF's "dicomweb-raw" data source for
+	// pre-defacing "raw" store. Used by the Weasis viewer (?store=raw) for
 	// side-by-side defacing review in the admin dashboard.
 	mux.HandleFunc("GET /dicomweb-raw/studies", srv.DicomwebStudies)
 	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series", srv.DicomwebSeries)

@@ -4,10 +4,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-# VITE_OHIF_BASE_URL and VITE_WEASIS_BASE_URL are baked into the static build at compile time.
-# Set these to the Cloud Run service URLs for production builds.
-ARG VITE_OHIF_BASE_URL
-ENV VITE_OHIF_BASE_URL=$VITE_OHIF_BASE_URL
+# VITE_WEASIS_BASE_URL is baked into the static build at compile time.
+# Set this to the Weasis Cloud Run service URL for production builds.
 ARG VITE_WEASIS_BASE_URL
 ENV VITE_WEASIS_BASE_URL=$VITE_WEASIS_BASE_URL
 

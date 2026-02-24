@@ -21,12 +21,10 @@ COPY frontend/landing/ frontend/landing/
 # npm ci resolves @aegis/client via the workspace symlink (client/ above).
 RUN npm ci --workspace=@aegis/landing --ignore-scripts
 
-# Vite bakes env vars at build time — pass API and OHIF URLs as build args.
+# Vite bakes env vars at build time — pass API URL as build arg.
 # Defaults point to production; override with --build-arg when building for other environments.
 ARG VITE_API_BASE_URL=https://api.aegisimaging.ai
-ARG VITE_OHIF_BASE_URL=https://ohif.aegisimaging.ai
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-ENV VITE_OHIF_BASE_URL=$VITE_OHIF_BASE_URL
 # Gate is now server-side — VITE_INVITE_GATE_ENABLED is no longer needed.
 # The React-side hook stays in the code but is a no-op (GATE_ENABLED env
 # var on the server controls access; the client always sees the full app).

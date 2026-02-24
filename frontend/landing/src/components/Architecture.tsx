@@ -8,7 +8,7 @@ const TECH_TAGS = [
   'Python FastAPI',
   'Terraform',
   'Docker',
-  'OHIF Viewer',
+  'Weasis DWV',
 ]
 
 const CLOUDS = [
