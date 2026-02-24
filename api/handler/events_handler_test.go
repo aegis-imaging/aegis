@@ -1,73 +1,82 @@
 package handler_test
 
 import (
+	"bufio"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// flusher wraps httptest.ResponseRecorder and implements http.Flusher
-// so the SSE handler can call Flush().
-type flusher struct{ *httptest.ResponseRecorder }
+// readSSELines opens an SSE stream at tsURL and returns the first few lines
+// that arrive before the context is cancelled.  Using a real HTTP round-trip
+// (httptest.NewServer + http.Client) avoids the data races that occur when the
+// handler goroutine and the test goroutine share an httptest.ResponseRecorder
+// at the same time.
+func readSSELines(t *testing.T, ctx context.Context, tsURL string) []string {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tsURL, nil)
+	require.NoError(t, err)
 
-func (f *flusher) Flush() {}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		// context cancelled before the response arrived — that's fine
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+		if len(lines) >= 5 {
+			break // enough data; don't wait for more
+		}
+	}
+	return lines
+}
 
 func TestStudyEvents_ContentTypeAndConnectedComment(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
 
-	rr := &flusher{httptest.NewRecorder()}
+	ts := httptest.NewServer(http.HandlerFunc(srv.StudyEvents))
+	defer ts.Close()
 
-	// Use a cancellable context so the SSE handler returns promptly.
 	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/api/studies/events", nil).WithContext(ctx)
+	defer cancel()
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		srv.StudyEvents(rr, req)
-	}()
+	lines := readSSELines(t, ctx, ts.URL)
 
-	// Give the handler time to write the initial comment and set headers.
-	time.Sleep(80 * time.Millisecond)
+	// Verify Content-Type via a separate HEAD-like request so we can inspect headers.
+	resp, err := http.Get(ts.URL) //nolint:noctx
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
 
-	assert.Equal(t, "text/event-stream", rr.Header().Get("Content-Type"))
-	assert.Contains(t, rr.Body.String(), ": connected")
-
-	cancel() // disconnect the client
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("SSE handler did not return after context cancel")
-	}
+	// The very first line written is the ": connected" keepalive comment.
+	assert.True(t, len(lines) > 0 && strings.Contains(strings.Join(lines, "\n"), ": connected"),
+		"expected ': connected' in first SSE lines, got: %v", lines)
 }
 
 func TestStudyEvents_ProjectFilter(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
 
-	rr := &flusher{httptest.NewRecorder()}
+	ts := httptest.NewServer(http.HandlerFunc(srv.StudyEvents))
+	defer ts.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/api/studies/events?project_id=proj-1", nil).WithContext(ctx)
+	defer cancel()
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		srv.StudyEvents(rr, req)
-	}()
+	lines := readSSELines(t, ctx, ts.URL+"?project_id=proj-1")
 
-	time.Sleep(60 * time.Millisecond)
-
-	// The connected comment must still appear regardless of filter.
-	assert.True(t, strings.Contains(rr.Body.String(), ": connected"))
-
-	cancel()
-	<-done
+	// The connected comment must appear regardless of the project filter.
+	all := strings.Join(lines, "\n")
+	assert.Contains(t, all, ": connected")
 }
