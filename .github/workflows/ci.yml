@@ -178,6 +178,7 @@ jobs:
           - { context: dimse-receiver, name: dimse-receiver }
           - { context: synth-service, name: synth-service }
           - { context: mcp-server, name: mcp-server }
+          - { context: weasis, name: weasis }
           - { context: ohif, name: ohif }
     steps:
       - uses: actions/checkout@v4
