@@ -982,7 +982,7 @@ resource "aws_ecs_task_definition" "api" {
         { name = "CLASSIFICATION_SERVICE_URL", value = "http://classification-service.aegis.local:8080" },
         { name = "PROTOCOL_SERVICE_URL", value = "http://protocol-service.aegis.local:8080" },
         { name = "SYNTH_SERVICE_URL", value = "http://synth-service.aegis.local:8080" },
-        { name = "DIMSE_RECEIVER_URL", value = "" },
+        { name = "DIMSE_RECEIVER_URL", value = try("http://${aws_instance.dimse_receiver[0].private_ip}:8080", "") },
         { name = "FIRST_ADMIN_EMAIL", value = var.first_admin_email },
         { name = "SMTP_HOST", value = local.ses_smtp_hostname },
         { name = "SMTP_PORT", value = "587" },
