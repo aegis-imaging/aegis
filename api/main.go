@@ -317,6 +317,8 @@ func main() {
 	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))
 	mux.HandleFunc("PUT /api/admin-users/{id}", adminOnly(srv.UpdateAdminUser))
 	mux.HandleFunc("DELETE /api/admin-users/{id}", adminOnly(srv.DeleteAdminUser))
+	mux.HandleFunc("GET /api/admin-users/{id}/preferences", auth(srv.GetUserPreferences))
+	mux.HandleFunc("PUT /api/admin-users/{id}/preferences", auth(srv.UpdateUserPreferences))
 
 	// Project-level batch export — dispatch all eligible approved studies.
 	mux.HandleFunc("POST /api/projects/{id}/export-batch", adminOnly(srv.ExportBatch))
