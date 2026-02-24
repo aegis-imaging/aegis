@@ -222,7 +222,7 @@ body {
     </div>
     <div class="g3">
       <div class="card" style="--c:#0EA5E9"><div class="card-hdr">React Upload Portal  (PWA)</div><ul><li>Drag-and-drop: files, folders, DICOM directories</li><li>Client-side tag de-identification (DICOM PS3.15)</li><li>Anonymization preview — before / after tag diff</li><li>Multi-study detection with per-study upload cards</li><li>Per-project retained-tag anonymization profiles</li><li>Auto-retry: 3× exponential backoff per file</li></ul></div>
-      <div class="card" style="--c:#3776AB"><div class="card-hdr">DIMSE Receiver  (pynetdicom)</div><ul><li>C-STORE SCP listening on port 11112</li><li>Receives studies from PACS systems / scanners</li><li>Institution attribution (AE title or IP CIDR)</li><li>Calls POST /api/ingest on DICOM association close</li><li>Durable retry queue + dead-letter (disk-persistent)</li><li>Exponential backoff · operator control API</li></ul></div>
+      <div class="card" style="--c:#3776AB"><div class="card-hdr">DIMSE Receiver  (pynetdicom · GCE VM)</div><ul><li>Compute Engine VM — aegis-prod-dimse-receiver</li><li>Static IP 35.232.172.221 · TCP port 11112</li><li>C-STORE SCP — receives from PACS systems / scanners</li><li>Institution attribution (AE title or IP CIDR)</li><li>Calls POST /api/ingest on DICOM association close</li><li>Durable retry queue + dead-letter (disk-persistent)</li></ul></div>
       
     <div class="privacy">
       <div class="privacy-title">Key Privacy Principle</div>
@@ -299,7 +299,7 @@ body {
     <div class="g5"><div class="phase" style="--c:#15803D"><div class="phase-title">Phase 1: Foundation  ✓</div><div class="phase-desc">Terraform (GCP + AWS) · Go API · Upload Portal · Admin Dashboard · PostgreSQL · CI/CD</div></div>
 <div class="phase" style="--c:#1D4ED8"><div class="phase-title">Phase 2: Processing  ✓</div><div class="phase-desc">Defacing · PHI Detection · QC · BIDS · Classification · Protocol · DIMSE Receiver</div></div>
 <div class="phase" style="--c:#D97706"><div class="phase-title">Phase 3: Operations  ✓</div><div class="phase-desc">Routing rules · Institutions · Audit · Export Portal · Shares · Email · MCP Server</div></div>
-<div class="phase" style="--c:#7C3AED"><div class="phase-title">Phase 4: Production  ✓</div><div class="phase-desc">GCP live (aegis-prod) · Landing Page · Batch import · Synth MRI sidecar (8th) · RBAC</div></div>
+<div class="phase" style="--c:#7C3AED"><div class="phase-title">Phase 4: Production  ✓</div><div class="phase-desc">GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC</div></div>
 <div class="phase" style="--c:#DC2626"><div class="phase-title">Phase 5: Enterprise  🚧</div><div class="phase-desc">AEGIS AI Agent · Observability dashboard · Multi-tenant federation · Repo split</div></div></div>
   </div>
 
@@ -312,7 +312,7 @@ body {
       </div>
       <div class="kv-box">
         <div class="kv-box-title">Multi-Cloud + Test Coverage</div>
-        <div class="kv"><span class="kv-k" style="color:#4285F4">GCP:</span><span class="kv-v">Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · KMS · Pub/Sub</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">AWS:</span><span class="kv-v">ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager</span></div><div class="kv"><span class="kv-k" style="color:#374151">Local:</span><span class="kv-v">Docker Compose · PostgreSQL 15 · Mailpit · local filesystem</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">Auth:</span><span class="kv-v">GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth</span></div><div class="kv"><span class="kv-k" style="color:#00ADD8">Storage:</span><span class="kv-v">STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes</span></div><div class="kv"><span class="kv-k" style="color:#0F766E">CI:</span><span class="kv-v">Go tests (273+) · Python tests (244+) · TS typecheck · Docker (9)</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Domains:</span><span class="kv-v">aegisimaging.ai · www · api · admin  —  SSL cert v3</span></div>
+        <div class="kv"><span class="kv-k" style="color:#4285F4">GCP:</span><span class="kv-v">Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · KMS · Pub/Sub</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">AWS:</span><span class="kv-v">ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager</span></div><div class="kv"><span class="kv-k" style="color:#374151">Local:</span><span class="kv-v">Docker Compose · PostgreSQL 15 · Mailpit · local filesystem</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">Auth:</span><span class="kv-v">GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth</span></div><div class="kv"><span class="kv-k" style="color:#00ADD8">Storage:</span><span class="kv-v">STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes</span></div><div class="kv"><span class="kv-k" style="color:#0F766E">CI/CD:</span><span class="kv-v">GitHub Actions: Go (273+) · Python (244+) · TS · Docker (9) · Cloud Build auto-deploy</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Domains:</span><span class="kv-v">aegisimaging.ai · www · api · admin  —  SSL cert v3</span></div>
       </div>
     </div>
   </div>
