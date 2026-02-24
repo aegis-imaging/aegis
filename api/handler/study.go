@@ -53,6 +53,10 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		DateFrom:  dateFrom,
 		DateTo:    dateTo,
 	}
+	if v := q.Get("flagged"); v == "true" {
+		t := true
+		f.Flagged = &t
+	}
 
 	total, err := model.CountStudies(r.Context(), s.db, f)
 	if err != nil {

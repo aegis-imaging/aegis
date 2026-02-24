@@ -38,6 +38,7 @@ type Study struct {
 	SubjectID              *string   `json:"subject_id,omitempty"`
 	RejectionReason        *string   `json:"rejection_reason,omitempty"`
 	StudySizeBytes         int64     `json:"study_size_bytes"`
+	PriorityFlag           bool      `json:"priority_flag"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
@@ -53,6 +54,7 @@ const studyColumns = `
 	subject_id,
 	rejection_reason,
 	study_size_bytes,
+	priority_flag,
 	created_at, updated_at`
 
 type scannable interface {
@@ -73,6 +75,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.SubjectID,
 		&s.RejectionReason,
 		&s.StudySizeBytes,
+		&s.PriorityFlag,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -130,6 +133,7 @@ type StudyFilters struct {
 	Label     string    // substring match on any study_labels.label value (case-insensitive)
 	DateFrom  time.Time // created_at >= DateFrom (zero = no lower bound)
 	DateTo    time.Time // created_at <= DateTo   (zero = no upper bound)
+	Flagged   *bool     // if non-nil, filter by priority_flag value
 }
 
 func studyWhere(f StudyFilters) (string, []any) {
@@ -187,6 +191,11 @@ func studyWhere(f StudyFilters) (string, []any) {
 	if !f.DateTo.IsZero() {
 		clauses = append(clauses, fmt.Sprintf(`created_at <= $%d`, n))
 		args = append(args, f.DateTo.UTC())
+		n++
+	}
+	if f.Flagged != nil {
+		clauses = append(clauses, fmt.Sprintf(`priority_flag = $%d`, n))
+		args = append(args, *f.Flagged)
 		n++
 	}
 	_ = n
@@ -281,6 +290,13 @@ func GetUploaderEmail(ctx context.Context, db *sql.DB, studyID string) (string, 
 func SetDefacingRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET defacing_required = $1, updated_at = now() WHERE id = $2`, required, id)
+	return err
+}
+
+// SetPriorityFlag sets or clears the priority_flag on a study for high-priority triage.
+func SetPriorityFlag(ctx context.Context, db *sql.DB, id string, flagged bool) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET priority_flag = $1, updated_at = now() WHERE id = $2`, flagged, id)
 	return err
 }
 
