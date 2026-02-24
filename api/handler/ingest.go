@@ -155,6 +155,7 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 		detail["institution_ae_title"] = strings.TrimSpace(req.InstitutionAETitle)
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "ingest.internal", actorEmail(r), "study", study.ID, clientIP(r), detail)
+	s.publishStudyEvent("study.created", study.ID, study.ProjectID, "received")
 
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"status":  "received",

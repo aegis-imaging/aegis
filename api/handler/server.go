@@ -10,6 +10,7 @@ import (
 
 	"github.com/aegis-imaging/aegis/api/config"
 	"github.com/aegis-imaging/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/events"
 	"github.com/aegis-imaging/aegis/api/storage"
 )
 
@@ -45,6 +46,7 @@ type Server struct {
 	mailer        *email.Client
 	httpClient    *http.Client
 	sidecarHealth *sidecarHealthCache
+	bus           *events.Bus
 }
 
 func NewServer(db *sql.DB, store storage.Storage, cfg *config.Config) *Server {
@@ -61,6 +63,7 @@ func NewServer(db *sql.DB, store storage.Storage, cfg *config.Config) *Server {
 			},
 		},
 		sidecarHealth: &sidecarHealthCache{results: map[string]string{}},
+		bus:           events.NewBus(),
 	}
 	go s.runSidecarHealthLoop()
 	return s
