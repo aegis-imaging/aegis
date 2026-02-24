@@ -79,6 +79,18 @@
       color: #ffffff;
     }
 
+    #hint {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 2px 16px;
+      flex-shrink: 0;
+    }
+
+    #hint span {
+      font-size: 11px;
+      color: #475569;
+    }
+
     #dwv-container {
       flex: 1;
       position: relative;
@@ -105,10 +117,11 @@
     <span id="status" class="loading">Initialising…</span>
   </div>
   <div id="toolbar">
-    <button class="tool-btn active" data-tool="Scroll" title="Scroll through slices">Scroll</button>
-    <button class="tool-btn" data-tool="ZoomAndPan" title="Zoom and pan">Zoom</button>
-    <button class="tool-btn" data-tool="WindowLevel" title="Adjust window / level">W/L</button>
+    <button class="tool-btn" data-tool="Scroll" title="Scroll — mouse wheel to navigate slices">Scroll</button>
+    <button class="tool-btn" data-tool="ZoomAndPan" title="Zoom/Pan — drag to pan, wheel to zoom">Zoom</button>
+    <button class="tool-btn" data-tool="WindowLevel" title="Window/Level — drag to adjust brightness/contrast">W/L</button>
   </div>
+  <div id="hint"><span>Scroll: wheel · Zoom: drag / wheel · W/L: drag</span></div>
   <div id="dwv-container"></div>
   <p id="error-message"></p>
   <script type="module" src="/src/main.js"></script>
