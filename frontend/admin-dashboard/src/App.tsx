@@ -5579,6 +5579,22 @@ function UsersPanel() {
   const [saving, setSaving]       = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
+  // Preferences editor state
+  const [prefsUserId, setPrefsUserId]           = useState<string | null>(null)
+  const [prefsUserName, setPrefsUserName]       = useState('')
+  const [prefsFreq, setPrefsFreq]               = useState('weekly')
+  const [prefsEvents, setPrefsEvents]           = useState<string[]>([])
+  const [prefsSaving, setPrefsSaving]           = useState(false)
+  const [prefsError, setPrefsError]             = useState<string | null>(null)
+
+  const NOTIFY_EVENT_OPTIONS: {value: string; label: string}[] = [
+    { value: 'study.stuck',       label: 'Study stuck (idle beyond SLA)' },
+    { value: 'pipeline.failed',   label: 'Pipeline step failed' },
+    { value: 'study.phi_flagged', label: 'PHI flagged in scan' },
+    { value: 'study.approved',    label: 'Study approved' },
+    { value: 'study.rejected',    label: 'Study rejected' },
+  ]
+
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -5644,6 +5660,41 @@ function UsersPanel() {
     fetchUsers()
   }
 
+  async function openPrefs(u: AdminUser) {
+    setPrefsUserId(u.id)
+    setPrefsUserName(u.name || u.email)
+    setPrefsError(null)
+    const res = await fetch(`/api/admin-users/${u.id}/preferences`)
+    if (res.ok) {
+      const p = await res.json()
+      setPrefsFreq(p.digest_frequency ?? 'weekly')
+      setPrefsEvents(p.notify_events ?? [])
+    }
+  }
+
+  async function savePrefs() {
+    if (!prefsUserId) return
+    setPrefsSaving(true)
+    setPrefsError(null)
+    try {
+      const res = await fetch(`/api/admin-users/${prefsUserId}/preferences`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ digest_frequency: prefsFreq, notify_events: prefsEvents }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setPrefsUserId(null)
+    } catch (err) {
+      setPrefsError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setPrefsSaving(false)
+    }
+  }
+
+  function togglePrefsEvent(ev: string) {
+    setPrefsEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev])
+  }
+
   if (loading) return <div className="state-loading">Loading users…</div>
   if (error)   return <div className="state-error">{error}</div>
 
@@ -5689,6 +5740,47 @@ function UsersPanel() {
           </div>
         )}
 
+        {/* Inline notification preferences editor */}
+        {prefsUserId && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>Notification Preferences — {prefsUserName}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Controls digest email frequency and which events trigger notifications for this user.
+            </div>
+            {prefsError && <div className="form-error">{prefsError}</div>}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Digest frequency
+                <select className="form-select" value={prefsFreq} onChange={e => setPrefsFreq(e.target.value)}>
+                  <option value="none">None — no digest emails</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
+            </div>
+            <div style={{ marginTop: '12px', fontSize: '0.875rem' }}>
+              <div style={{ marginBottom: '6px', fontWeight: 500 }}>Notify on events</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {NOTIFY_EVENT_OPTIONS.map(opt => (
+                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={prefsEvents.includes(opt.value)}
+                      onChange={() => togglePrefsEvent(opt.value)} />
+                    <span>{opt.label}</span>
+                    <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{opt.value}</code>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="form-row form-row--actions" style={{ marginTop: '12px' }}>
+              <button type="button" className="btn-primary" onClick={savePrefs} disabled={prefsSaving}>
+                {prefsSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setPrefsUserId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {users.length === 0 && !showForm ? (
           <div className="state-empty">No users yet.</div>
         ) : users.length > 0 && (
@@ -5723,6 +5815,10 @@ function UsersPanel() {
                   <td>
                     <div className="actions-cell">
                       <button type="button" className="btn btn--edit" onClick={() => openEdit(u)}>Edit</button>
+                      <button type="button" className="btn btn--action" onClick={() => openPrefs(u)}
+                        title="Configure digest frequency and notification event preferences">
+                        Preferences
+                      </button>
                       <button type="button" className="btn btn--secondary" onClick={() => toggleUser(u)}>
                         {u.enabled ? 'Disable' : 'Enable'}
                       </button>
