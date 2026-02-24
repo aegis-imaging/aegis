@@ -38,7 +38,8 @@ css: |
   <p style="font-size: 16px; color: #6b7280; margin: 0.5em 0;">A multi-cloud platform for secure, HIPAA-compliant de-identification and sharing of medical imaging data — for research teams and radiology departments alike</p>
   <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
   <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
-  <p style="font-size: 13px; color: #6b7280; margin-top: 0;">February 24, 2026</p>
+  <p style="font-size: 13px; color: #6b7280; margin-top: 0; margin-bottom: 2px;">AEGIS Imaging LLC</p>
+  <p style="font-size: 13px; color: #9ca3af; margin-top: 0;">February 24, 2026</p>
 </div>
 
 ---
@@ -326,7 +327,9 @@ Production costs scale with data volume. A 1,000-session multi-site study (~500 
 <div style="text-align: center; padding: 40px 0;">
   <img src="logo-small.png" alt="AEGIS Logo" style="width: 120px; margin-bottom: 16px;" />
   <h2 style="color: #1a1a2e;">AEGIS</h2>
+  <p style="font-size: 14px; color: #4a4a6a; margin: 4px 0 12px;"><strong>AEGIS Imaging LLC</strong></p>
   <p style="font-size: 16px; color: #6b7280; max-width: 600px; margin: 0 auto;">
     Secure, browser-based medical image de-identification and sharing for any DICOM modality — serving both multi-site research teams and hospital radiology departments from a single multi-cloud platform, with automated defacing, pixel-level PHI detection, and administrator review before any data is released. Runs on GCP, AWS, or Azure.
   </p>
+  <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">&copy; 2026 AEGIS Imaging LLC. All rights reserved.</p>
 </div>

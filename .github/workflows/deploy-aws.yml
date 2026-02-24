@@ -1,0 +1,179 @@
+# ── AWS Deploy — auto-deploy on push to develop ────────────────────────────────
+#
+# Mirrors the GCP Cloud Build trigger (cloudbuild.yaml) for the AWS environment.
+# Triggers on every push to develop, runs in parallel with the GCP Cloud Build.
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID      — IAM user with ECR push + ECS update + SSM write
+#   AWS_SECRET_ACCESS_KEY  — corresponding secret key
+#   AWS_ACCOUNT_ID         — 12-digit AWS account ID
+#
+# Phase 1: Build all 10 service images in parallel (matrix) and push to ECR.
+# Phase 2: Update all 9 ECS services (force new deployment) + reboot DIMSE EC2.
+
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  # ── Phase 1: Build and push all images ──────────────────────────────────────
+
+  build:
+    name: Build ${{ matrix.service }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: api
+            dockerfile: api/Dockerfile
+          - service: admin-dashboard
+            context: .
+            dockerfile: frontend/admin-dashboard/Dockerfile
+          - service: defacing
+            context: defacing
+            dockerfile: defacing/Dockerfile
+          - service: phi-detection
+            context: phi-detection
+            dockerfile: phi-detection/Dockerfile
+          - service: qc-service
+            context: qc-service
+            dockerfile: qc-service/Dockerfile
+          - service: bids-service
+            context: bids-service
+            dockerfile: bids-service/Dockerfile
+          - service: classification-service
+            context: classification-service
+            dockerfile: classification-service/Dockerfile
+          - service: protocol-service
+            context: protocol-service
+            dockerfile: protocol-service/Dockerfile
+          - service: synth-service
+            context: synth-service
+            dockerfile: synth-service/Dockerfile
+          - service: dimse-receiver
+            context: dimse-receiver
+            dockerfile: dimse-receiver/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            us-east-1
+
+      - name: Log in to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        env:
+          ECR_PREFIX: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/aegis
+          IMAGE_TAG:  ${{ github.sha }}
+          SERVICE:    ${{ matrix.service }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          CTX:        ${{ matrix.context }}
+        run: |
+          IMAGE="$ECR_PREFIX/$SERVICE"
+          SHA_TAG="$IMAGE:$IMAGE_TAG"
+          LATEST_TAG="$IMAGE:latest"
+
+          docker build \
+            --platform linux/amd64 \
+            --file "$DOCKERFILE" \
+            --tag  "$SHA_TAG" \
+            --tag  "$LATEST_TAG" \
+            "$CTX"
+
+          docker push "$SHA_TAG"
+          docker push "$LATEST_TAG"
+
+  # ── Phase 2: Deploy ECS services + DIMSE EC2 ────────────────────────────────
+
+  deploy-ecs:
+    name: Deploy ECS services
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            us-east-1
+
+      - name: Force new deployment for all ECS services
+        run: |
+          CLUSTER="aegis-cluster"
+          for SVC in \
+            aegis-api \
+            aegis-admin-dashboard \
+            aegis-defacing \
+            aegis-phi-detection \
+            aegis-qc-service \
+            aegis-bids-service \
+            aegis-classification-service \
+            aegis-protocol-service \
+            aegis-synth-service; do
+            echo "Updating $SVC..."
+            aws ecs update-service \
+              --cluster "$CLUSTER" \
+              --service  "$SVC" \
+              --force-new-deployment \
+              --no-cli-pager
+          done
+
+  deploy-dimse:
+    name: Deploy DIMSE EC2
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            us-east-1
+
+      - name: Update DIMSE image SSM parameter
+        env:
+          ECR_PREFIX: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/aegis
+          IMAGE_TAG:  ${{ github.sha }}
+        run: |
+          NEW_IMAGE="$ECR_PREFIX/dimse-receiver:$IMAGE_TAG"
+          aws ssm put-parameter \
+            --name  /aegis/dimse-image \
+            --value "$NEW_IMAGE" \
+            --type  String \
+            --overwrite \
+            --no-cli-pager
+          echo "SSM /aegis/dimse-image -> $NEW_IMAGE"
+
+      - name: Reboot DIMSE EC2 instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=aegis-dimse-receiver" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text \
+            --no-cli-pager)
+
+          if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
+            echo "No running DIMSE instance found — skipping reboot (DIMSE not deployed yet)"
+            exit 0
+          fi
+
+          echo "Rebooting DIMSE instance: $INSTANCE_ID"
+          aws ec2 reboot-instances \
+            --instance-ids "$INSTANCE_ID" \
+            --no-cli-pager

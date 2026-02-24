@@ -52,7 +52,7 @@ const MILESTONES: Milestone[] = [
   },
   {
     status: 'planned',
-    date: 'Q2 2026',
+    date: 'Q1–Q2 2026',
     title: 'AWS Deployment',
     items: [
       'Full AWS deployment: ECS Fargate, RDS PostgreSQL, S3 storage, ALB + Cognito auth',
