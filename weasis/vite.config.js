@@ -6,4 +6,10 @@ export default defineConfig({
     outDir: 'dist',
     target: 'es2020',
   },
+  server: {
+    port: 3005,
+    proxy: {
+      '/dicomweb': 'http://localhost:8080',
+    },
+  },
 })
