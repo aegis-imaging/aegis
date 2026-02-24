@@ -206,12 +206,28 @@ Static marketing site for aegisimaging.ai. Deployed on GCP Cloud Run (`aegis-pro
 | `api/model/invite_code.go` | Model — random code generation (`XXXX-XXXX-XXXX` format), validate+record usage |
 | Migration 036 | `invite_codes` table (`id`, `code`, `label`, `enabled`, `created_at`, `used_at`, `used_by_ip`) |
 
-**API endpoints:**
+**Invite code API endpoints:**
 - `POST /api/invite/validate` — public, rate-limited; `{"code":"..."}` → `{"valid":true/false}`
 - `GET /api/invite-codes` — admin; list all codes with usage stats
 - `POST /api/invite-codes` — admin; `{"label":"Dr. Smith"}` → generates new `XXXX-XXXX-XXXX` code
 - `POST /api/invite-codes/{id}/revoke` — admin; disables a code (keeps record)
 - `DELETE /api/invite-codes/{id}` — admin; permanently removes a code
+
+**Invite request system** — prospective users can submit an access request from the landing page (`POST /api/invite/request`, public + rate-limited). Requests are stored in the `invite_requests` table (migration 040) and surface in the admin dashboard "Access Requests" sub-tab under Invite Codes.
+
+| Component | Description |
+|-----------|-------------|
+| `api/handler/invite_request.go` | `RequestInvite` (public submit), `ListInviteRequestsAdmin`, `ApproveInviteRequestAdmin`, `DenyInviteRequestAdmin` |
+| `api/model/invite_request.go` | Model: `CreateInviteRequest`, `GetInviteRequest`, `ListInviteRequests`, `ApproveInviteRequest`, `DenyInviteRequest` |
+| Migration 040 | `invite_requests` table (`id`, `name`, `email`, `org`, `message`, `status`, `ip`, `created_at`, `reviewed_at`, `reviewed_by`, `invite_code_id`) |
+
+**Invite request API endpoints:**
+- `POST /api/invite/request` — public, rate-limited; submits a request and sends an email notification to admins
+- `GET /api/invite/requests` — admin; list requests (filterable by `status=pending|approved|denied|all`), returns `{requests, total}`
+- `POST /api/invite/requests/{id}/approve` — admin-only; creates a new invite code, emails the requester with their code, marks the request approved; returns `{status, invite_code}`
+- `POST /api/invite/requests/{id}/deny` — admin-only; marks request denied; returns `{status}`
+
+**Admin dashboard:** "Invite Codes" tab has two sub-tabs — "Invite Codes" (existing code management) and "Access Requests" (pending/approved/denied request list with Approve/Deny action buttons). Status badges use colorblind-friendly teal (approved) and orange (denied) palette.
 
 **Dockerfile build arg:**
 
