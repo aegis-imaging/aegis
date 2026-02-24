@@ -3501,6 +3501,10 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
   const [deliveries, setDeliveries]               = useState<WebhookDelivery[]>([])
   const [deliveriesLoading, setDeliveriesLoading] = useState(false)
 
+  // Webhook stats state
+  const [statsWhId, setStatsWhId] = useState<string | null>(null)
+  const [statsMap, setStatsMap]   = useState<Record<string, { total_deliveries: number; successful: number; failed: number; success_rate_pct: number; last_delivery_at?: string; deliveries_by_event: Record<string, number> }>>({})
+
   const showDeliveries = async (id: string) => {
     if (deliveryWhId === id) { setDeliveryWhId(null); return }
     setDeliveryWhId(id)
@@ -3509,6 +3513,33 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
       const res = await fetch(`/api/webhook-subscriptions/${id}/deliveries`)
       const data = res.ok ? await res.json() : { deliveries: [] }
       setDeliveries(data.deliveries ?? [])
+    } finally {
+      setDeliveriesLoading(false)
+    }
+  }
+
+  const showStats = async (id: string) => {
+    if (statsWhId === id) { setStatsWhId(null); return }
+    setStatsWhId(id)
+    if (!statsMap[id]) {
+      try {
+        const res = await fetch(`/api/webhook-subscriptions/${id}/stats`)
+        const data = res.ok ? await res.json() : null
+        if (data) setStatsMap(prev => ({ ...prev, [id]: data }))
+      } catch { /* ignore */ }
+    }
+  }
+
+  const retryDelivery = async (deliveryId: string, whId: string) => {
+    await fetch(`/api/webhook-deliveries/${deliveryId}/retry`, { method: 'POST' })
+    // Refresh the delivery log for this webhook
+    setDeliveriesLoading(true)
+    try {
+      const res = await fetch(`/api/webhook-subscriptions/${whId}/deliveries`)
+      const data = res.ok ? await res.json() : { deliveries: [] }
+      setDeliveries(data.deliveries ?? [])
+      // Invalidate cached stats so they reload on next toggle
+      setStatsMap(prev => { const n = { ...prev }; delete n[whId]; return n })
     } finally {
       setDeliveriesLoading(false)
     }
@@ -3816,6 +3847,11 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                     <td>
                       <div className="actions-cell">
                         <button type="button" className="btn-secondary"
+                          onClick={() => showStats(wh.id)}
+                          title="View delivery statistics">
+                          {statsWhId === wh.id ? 'Hide Stats' : 'Stats'}
+                        </button>
+                        <button type="button" className="btn-secondary"
                           onClick={() => showDeliveries(wh.id)}
                           title="View delivery log">
                           {deliveryWhId === wh.id ? 'Hide Log' : 'Log'}
@@ -3834,6 +3870,35 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                       </div>
                     </td>
                   </tr>
+                  {statsWhId === wh.id && (
+                    <tr key={`${wh.id}-stats`}>
+                      <td colSpan={5} className="audit-sub-cell">
+                        {!statsMap[wh.id] ? (
+                          <span className="td-muted">Loading stats…</span>
+                        ) : (() => {
+                          const s = statsMap[wh.id]
+                          const rate = s.success_rate_pct ?? 0
+                          return (
+                            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', padding: '0.25rem 0' }}>
+                              <div><strong>{s.total_deliveries}</strong> <span className="td-muted">total</span></div>
+                              <div><strong style={{ color: '#0d9488' }}>{s.successful}</strong> <span className="td-muted">ok</span></div>
+                              <div><strong style={{ color: '#ea580c' }}>{s.failed}</strong> <span className="td-muted">failed</span></div>
+                              <div>
+                                <strong>{rate.toFixed(1)}%</strong> <span className="td-muted">success rate</span>
+                                <div style={{ width: 120, height: 6, background: '#e5e7eb', borderRadius: 3, marginTop: 3 }}>
+                                  <div style={{ width: `${Math.min(rate, 100)}%`, height: '100%', background: rate >= 95 ? '#0d9488' : '#ea580c', borderRadius: 3 }} />
+                                </div>
+                              </div>
+                              {s.last_delivery_at && <div><span className="td-muted">last:</span> {fmtDate(s.last_delivery_at)}</div>}
+                              {Object.keys(s.deliveries_by_event).length > 0 && (
+                                <div><span className="td-muted">by event:</span> {Object.entries(s.deliveries_by_event).map(([ev, n]) => `${ev} ×${n}`).join(' · ')}</div>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </td>
+                    </tr>
+                  )}
                   {deliveryWhId === wh.id && (
                     <tr key={`${wh.id}-deliveries`}>
                       <td colSpan={5} className="audit-sub-cell">
@@ -3850,6 +3915,7 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                                 <th>Status</th>
                                 <th>Result</th>
                                 <th>Time</th>
+                                {isAdmin && <th></th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -3865,6 +3931,15 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                                     {d.error_message && <span className="td-subtle"> {d.error_message}</span>}
                                   </td>
                                   <td className="td-date">{fmtDate(d.delivered_at)}</td>
+                                  {isAdmin && (
+                                    <td>
+                                      {!d.success && (
+                                        <button type="button" className="btn btn--action"
+                                          title="Re-deliver this payload"
+                                          onClick={() => retryDelivery(d.id, wh.id)}>Retry</button>
+                                      )}
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
