@@ -36,6 +36,7 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.approved", actorEmail(r), "study", study.ID, clientIP(r), nil)
 	webhook.Deliver(r.Context(), s.db, "study.approved", study)
+	s.publishStudyEvent("study.status_changed", study.ID, study.ProjectID, "approved")
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
 		projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
@@ -94,6 +95,7 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "study.rejected", actorEmail(r), "study", study.ID, clientIP(r), auditMeta)
 	webhook.Deliver(r.Context(), s.db, "study.rejected", study)
+	s.publishStudyEvent("study.status_changed", study.ID, study.ProjectID, "rejected")
 
 	if uploaderEmail, err := model.GetUploaderEmail(r.Context(), s.db, study.ID); err == nil && uploaderEmail != "" {
 		projectName := projectNameForStudy(r.Context(), s.db, study.ProjectID)
