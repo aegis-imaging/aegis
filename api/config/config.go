@@ -69,6 +69,7 @@ type Config struct {
 	AuthEnabled  bool
 	AuthProvider string // AUTH_PROVIDER — "auto" (default), "iap" (GCP), "azure" (Azure AD), or "aws" (ALB + Cognito)
 	DevUserEmail string // DEV_USER_EMAIL — auto-authenticated email when AUTH_ENABLED=false
+	AWSALBRegion string // AWS_REGION — region for ALB public key endpoint (default us-east-1)
 
 	// Pipeline
 	PipelineAuto bool // PIPELINE_AUTO — auto-dispatch processing after routing (default true)
@@ -175,7 +176,8 @@ func Load() *Config {
 
 		AuthEnabled:  os.Getenv("AUTH_ENABLED") == "true",
 		AuthProvider: envOr("AUTH_PROVIDER", "auto"),
-		DevUserEmail: envOr("DEV_USER_EMAIL", "dev@aegis.local"),
+		DevUserEmail: envOr("DEV_USER_EMAIL", "ai@aegisimaging.ai"),
+		AWSALBRegion: envOr("AWS_REGION", envOr("AWS_DEFAULT_REGION", "us-east-1")),
 
 		SMTPHost:     smtpHost,
 		SMTPPort:     envOr("SMTP_PORT", "587"),

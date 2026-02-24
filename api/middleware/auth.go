@@ -2,17 +2,35 @@ package middleware
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/aegis-imaging/aegis/api/config"
 	"github.com/aegis-imaging/aegis/api/model"
+)
+
+// ALBKeyBaseURL is the format string used to fetch ALB public keys.
+// fmt.Sprintf(ALBKeyBaseURL, region, kid) must produce a valid URL.
+// Override in tests to point at a local httptest.Server.
+var ALBKeyBaseURL = "https://public-keys.auth.elb.%s.amazonaws.com/%s"
+
+var (
+	albKeyCache   sync.Map // kid → *ecdsa.PublicKey
+	albHTTPClient = &http.Client{Timeout: 5 * time.Second}
 )
 
 // AuthUser represents the authenticated user stored in the request context.
@@ -47,7 +65,7 @@ func RequireAuth(db *sql.DB, cfg *config.Config) func(http.HandlerFunc) http.Han
 			if !cfg.AuthEnabled {
 				user, err = devUser(r.Context(), db, cfg.DevUserEmail)
 			} else {
-				user, err = extractUser(r.Context(), db, r, cfg.AuthProvider)
+				user, err = extractUser(r.Context(), db, r, cfg)
 			}
 
 			if err != nil {
@@ -87,15 +105,15 @@ type authError struct {
 func (e *authError) Error() string { return e.Message }
 
 // extractUser determines the authenticated user based on the configured provider.
-// Supported providers: "iap" (GCP), "azure" (Azure AD Easy Auth), "aws" (ALB + Cognito), "auto" (try all).
-func extractUser(ctx context.Context, db *sql.DB, r *http.Request, provider string) (*AuthUser, error) {
-	switch provider {
+// Supported providers: "iap" (GCP), "azure" (Azure AD), "aws" (ALB + Cognito), "auto" (try all).
+func extractUser(ctx context.Context, db *sql.DB, r *http.Request, cfg *config.Config) (*AuthUser, error) {
+	switch cfg.AuthProvider {
 	case "iap":
 		return iapUser(ctx, db, r)
 	case "azure":
 		return azureUser(ctx, db, r)
 	case "aws":
-		return awsUser(ctx, db, r)
+		return awsUser(ctx, db, r, cfg.AWSALBRegion)
 	default: // "auto" — try IAP, then Azure, then AWS
 		if r.Header.Get("X-Goog-Authenticated-User-Email") != "" {
 			return iapUser(ctx, db, r)
@@ -104,7 +122,7 @@ func extractUser(ctx context.Context, db *sql.DB, r *http.Request, provider stri
 			return azureUser(ctx, db, r)
 		}
 		if r.Header.Get("X-Amzn-Oidc-Data") != "" {
-			return awsUser(ctx, db, r)
+			return awsUser(ctx, db, r, cfg.AWSALBRegion)
 		}
 		return nil, &authError{http.StatusUnauthorized, "missing authentication header"}
 	}
@@ -167,17 +185,16 @@ func azureUser(ctx context.Context, db *sql.DB, r *http.Request) (*AuthUser, err
 }
 
 // awsUser extracts user identity from AWS ALB + Cognito headers.
-// AWS ALB sets X-Amzn-Oidc-Data (JWT) and X-Amzn-Oidc-Identity (sub claim).
-// The JWT payload contains an "email" claim. We decode the payload without
-// signature verification because ALB has already validated the token — the
-// header is injected by the load balancer and cannot be spoofed by the client.
-func awsUser(ctx context.Context, db *sql.DB, r *http.Request) (*AuthUser, error) {
+// AWS ALB sets X-Amzn-Oidc-Data (JWT) containing an "email" claim.
+// The JWT is ES256-signed; the signature is verified against the ALB public key
+// fetched from the regional public key endpoint and cached in memory.
+func awsUser(ctx context.Context, db *sql.DB, r *http.Request, region string) (*AuthUser, error) {
 	jwt := r.Header.Get("X-Amzn-Oidc-Data")
 	if jwt == "" {
 		return nil, &authError{http.StatusUnauthorized, "missing AWS ALB authentication header"}
 	}
 
-	email, err := extractEmailFromALBJWT(jwt)
+	email, err := extractEmailFromALBJWT(region, jwt)
 	if err != nil {
 		return nil, &authError{http.StatusUnauthorized, "invalid AWS ALB authentication token: " + err.Error()}
 	}
@@ -185,40 +202,148 @@ func awsUser(ctx context.Context, db *sql.DB, r *http.Request) (*AuthUser, error
 	return lookupUser(ctx, db, email)
 }
 
-// extractEmailFromALBJWT pulls the "email" claim from the ALB-injected JWT payload.
-// No signature verification — ALB guarantees the header's integrity.
-func extractEmailFromALBJWT(token string) (string, error) {
+// extractEmailFromALBJWT pulls the "email" claim from the ALB-injected JWT payload
+// and verifies the ES256 signature against the ALB regional public key endpoint.
+// ALB uses the raw 64-byte r||s signature format (not ASN.1 DER).
+func extractEmailFromALBJWT(region, token string) (string, error) {
 	parts := strings.SplitN(token, ".", 4)
 	if len(parts) < 3 {
 		return "", errors.New("malformed JWT")
 	}
 
-	// Base64url-decode the payload (second segment).
-	payload := parts[1]
-	// Pad to a multiple of 4.
-	switch len(payload) % 4 {
-	case 2:
-		payload += "=="
-	case 3:
-		payload += "="
+	headerB64, payloadB64, sigB64 := parts[0], parts[1], parts[2]
+
+	// ── 1. Decode and parse header ────────────────────────────────────────────
+	headerBytes, err := base64.RawURLEncoding.DecodeString(headerB64)
+	if err != nil {
+		return "", fmt.Errorf("decode JWT header: %w", err)
 	}
-	decoded, err := base64.URLEncoding.DecodeString(payload)
+	var header struct {
+		Alg string `json:"alg"`
+		Kid string `json:"kid"`
+	}
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return "", fmt.Errorf("parse JWT header: %w", err)
+	}
+	if header.Alg != "ES256" {
+		return "", fmt.Errorf("unexpected JWT algorithm %q: expected ES256", header.Alg)
+	}
+	if header.Kid == "" {
+		return "", errors.New("missing kid in JWT header")
+	}
+
+	// ── 2. Decode and parse payload ───────────────────────────────────────────
+	// Pad to a multiple of 4 for standard Base64 decoding.
+	paddedPayload := payloadB64
+	switch len(paddedPayload) % 4 {
+	case 2:
+		paddedPayload += "=="
+	case 3:
+		paddedPayload += "="
+	}
+	payloadBytes, err := base64.URLEncoding.DecodeString(paddedPayload)
 	if err != nil {
 		return "", fmt.Errorf("decode JWT payload: %w", err)
 	}
-
 	var claims struct {
 		Email string `json:"email"`
+		Exp   int64  `json:"exp"`
 	}
-	if err := json.Unmarshal(decoded, &claims); err != nil {
+	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
 		return "", fmt.Errorf("parse JWT claims: %w", err)
+	}
+
+	// ── 3. Check expiry ───────────────────────────────────────────────────────
+	if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
+		return "", errors.New("JWT has expired")
 	}
 
 	email := strings.TrimSpace(strings.ToLower(claims.Email))
 	if email == "" {
 		return "", errors.New("no email claim in JWT")
 	}
+
+	// ── 4. Fetch + cache public key ───────────────────────────────────────────
+	pubKey, err := getALBPublicKey(region, header.Kid)
+	if err != nil {
+		return "", fmt.Errorf("fetch ALB public key: %w", err)
+	}
+
+	// ── 5. Verify signature ───────────────────────────────────────────────────
+	sigBytes, err := base64.RawURLEncoding.DecodeString(sigB64)
+	if err != nil {
+		return "", fmt.Errorf("decode JWT signature: %w", err)
+	}
+	if len(sigBytes) != 64 {
+		return "", fmt.Errorf("unexpected signature length %d (expected 64)", len(sigBytes))
+	}
+
+	// ALB uses raw r||s (64 bytes) — NOT ASN.1 DER.
+	r := new(big.Int).SetBytes(sigBytes[:32])
+	s := new(big.Int).SetBytes(sigBytes[32:])
+
+	// Message = header_b64 + "." + payload_b64 (the signed bytes).
+	message := headerB64 + "." + payloadB64
+	digest := sha256.Sum256([]byte(message))
+
+	if !ecdsaVerify(pubKey, digest[:], r, s) {
+		return "", errors.New("JWT signature verification failed")
+	}
+
 	return email, nil
+}
+
+// ecdsaVerify is a thin wrapper so tests can easily confirm we call the right function.
+var ecdsaVerify = func(pub *ecdsa.PublicKey, hash []byte, r, s *big.Int) bool {
+	return ecdsa.Verify(pub, hash, r, s)
+}
+
+// getALBPublicKey fetches and caches the ECDSA P-256 public key for the given kid.
+func getALBPublicKey(region, kid string) (*ecdsa.PublicKey, error) {
+	if cached, ok := albKeyCache.Load(kid); ok {
+		return cached.(*ecdsa.PublicKey), nil
+	}
+
+	url := fmt.Sprintf(ALBKeyBaseURL, region, kid)
+	resp, err := albHTTPClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("GET %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s: unexpected status %d", url, resp.StatusCode)
+	}
+
+	pemBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read key body: %w", err)
+	}
+
+	pub, err := parseECPublicKey(pemBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	albKeyCache.Store(kid, pub)
+	return pub, nil
+}
+
+// parseECPublicKey decodes a PEM-encoded ECDSA public key.
+func parseECPublicKey(pemBytes []byte) (*ecdsa.PublicKey, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("failed to decode PEM block")
+	}
+	key, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse PKIX public key: %w", err)
+	}
+	ecKey, ok := key.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("key is not ECDSA (got %T)", key)
+	}
+	return ecKey, nil
 }
 
 // lookupUser finds a user by email in admin_users and checks they are enabled.
