@@ -1937,6 +1937,20 @@ resource "google_logging_metric" "study_stuck" {
   }
 }
 
+# Counts every "pipeline: dispatching ..." log line from the Go API.
+# Each dispatch fires once per pipeline service dispatched per study, so this
+# metric tracks pipeline throughput / study processing activity over time.
+resource "google_logging_metric" "pipeline_dispatches" {
+  name   = "aegis-${var.environment}-pipeline-dispatches"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"pipeline: dispatching\""
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "AEGIS pipeline dispatch activity"
+  }
+}
+
 # GCP log-based metrics take up to 10 minutes to propagate before alert
 # policies can reference them. This sleep guards against a race on first apply.
 resource "time_sleep" "wait_for_log_metrics" {
