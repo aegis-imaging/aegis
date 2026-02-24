@@ -207,6 +207,12 @@ variable "ohif_domain" {
   default     = ""
 }
 
+variable "weasis_image" {
+  description = "Container image URI for the DWV/WEASIS viewer (empty = disabled)"
+  type        = string
+  default     = ""
+}
+
 variable "api_cpu" {
   description = "CPU limit for Cloud Run API container"
   type        = string
@@ -912,6 +918,61 @@ resource "google_cloud_run_service_iam_member" "ohif_invoker" {
   count    = var.ohif_image != "" ? 1 : 0
   location = var.region
   service  = google_cloud_run_v2_service.ohif[0].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# --- Cloud Run DWV (WEASIS) Viewer ---
+
+resource "google_cloud_run_v2_service" "weasis" {
+  count    = var.weasis_image != "" ? 1 : 0
+  name     = "weasis"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  deletion_protection = var.deletion_protection
+
+  template {
+    service_account = google_service_account.sidecars.email
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 2
+    }
+
+    containers {
+      image = var.weasis_image
+
+      env {
+        name  = "API_URL"
+        value = "https://${var.api_domain}"
+      }
+
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = "256Mi"
+        }
+      }
+
+      liveness_probe {
+        failure_threshold     = 3
+        initial_delay_seconds = 10
+        timeout_seconds       = 5
+        period_seconds        = 30
+
+        http_get {
+          path = "/health"
+        }
+      }
+    }
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "weasis_invoker" {
+  count    = var.weasis_image != "" ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.weasis[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -2147,6 +2208,10 @@ output "ohif_service_uri" {
 
 output "ohif_public_url" {
   value = var.ohif_domain != "" ? "https://${var.ohif_domain}" : ""
+}
+
+output "weasis_service_uri" {
+  value = var.weasis_image != "" ? google_cloud_run_v2_service.weasis[0].uri : ""
 }
 
 output "landing_service_uri" {
