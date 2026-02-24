@@ -101,6 +101,40 @@ func (s *Server) SetProjectRetention(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, project)
 }
 
+// SetProjectSLAThreshold sets or clears the per-project stuck-study threshold.
+// PUT /api/projects/{id}/sla-threshold
+// Body: {"stuck_threshold_minutes": 120} or {"stuck_threshold_minutes": null} to clear.
+func (s *Server) SetProjectSLAThreshold(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := model.GetProjectByID(r.Context(), s.db, id); err != nil {
+		s.writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
+	var body struct {
+		StuckThresholdMinutes *int `json:"stuck_threshold_minutes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if body.StuckThresholdMinutes != nil && *body.StuckThresholdMinutes <= 0 {
+		s.writeError(w, http.StatusBadRequest, "stuck_threshold_minutes must be a positive integer or null")
+		return
+	}
+
+	if err := model.UpdateProjectSLAThreshold(r.Context(), s.db, id, body.StuckThresholdMinutes); err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to update SLA threshold")
+		return
+	}
+	detail := map[string]any{"stuck_threshold_minutes": body.StuckThresholdMinutes}
+	model.CreateAuditEntry(r.Context(), s.db, "project.sla_threshold_updated", actorEmail(r),
+		"project", id, clientIP(r), detail)
+
+	project, _ := model.GetProjectByID(r.Context(), s.db, id)
+	s.writeJSON(w, http.StatusOK, project)
+}
+
 // ArchiveProject marks a project as archived.
 // POST /api/projects/{id}/archive
 func (s *Server) ArchiveProject(w http.ResponseWriter, r *http.Request) {

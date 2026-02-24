@@ -176,6 +176,7 @@ type Project = {
   description: string
   default_anon_profile_id?: string | null
   retention_days?: number | null
+  stuck_threshold_minutes?: number | null
   archived?: boolean
   created_at: string
 }
@@ -4282,6 +4283,12 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [retentionSaving, setRetentionSaving]         = useState(false)
   const [retentionError, setRetentionError]           = useState<string | null>(null)
 
+  // SLA threshold editor state
+  const [slaProjectId, setSlaProjectId]   = useState<string | null>(null)
+  const [slaDraft, setSlaDraft]           = useState<string>('')
+  const [slaSaving, setSlaSaving]         = useState(false)
+  const [slaError, setSlaError]           = useState<string | null>(null)
+
   // Archive/restore state
   const [archiving, setArchiving] = useState<string | null>(null)
 
@@ -4343,6 +4350,37 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
       setRetentionError(err instanceof Error ? err.message : 'Save failed')
     } finally {
       setRetentionSaving(false)
+    }
+  }
+
+  function openSla(p: Project) {
+    setSlaProjectId(p.id)
+    setSlaDraft(p.stuck_threshold_minutes != null ? String(p.stuck_threshold_minutes) : '')
+    setSlaError(null)
+  }
+
+  async function saveSla() {
+    if (!slaProjectId) return
+    const mins = slaDraft.trim() === '' ? null : parseInt(slaDraft, 10)
+    if (mins !== null && (isNaN(mins) || mins <= 0)) {
+      setSlaError('Must be a positive integer or leave blank to use the global default (60 min)')
+      return
+    }
+    setSlaSaving(true)
+    setSlaError(null)
+    try {
+      const res = await fetch(`/api/projects/${slaProjectId}/sla-threshold`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stuck_threshold_minutes: mins }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setSlaProjectId(null)
+      fetchProjects()
+    } catch (err) {
+      setSlaError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSlaSaving(false)
     }
   }
 
@@ -4511,6 +4549,31 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
 
+        {/* Inline SLA threshold editor */}
+        {slaProjectId && (
+          <div className="routing-form" style={{ marginTop: '16px' }}>
+            <h3>SLA Threshold — {projects.find(p => p.id === slaProjectId)?.name}</h3>
+            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+              Studies idle beyond this threshold are surfaced as "stuck". Leave blank to use the global default (60 min).
+            </div>
+            {slaError && <div className="form-error">{slaError}</div>}
+            <div className="form-grid">
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                Stuck threshold (minutes, blank = global default)
+                <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 120"
+                  value={slaDraft}
+                  onChange={e => setSlaDraft(e.target.value)} />
+              </label>
+            </div>
+            <div className="form-row form-row--actions">
+              <button type="button" className="btn-primary" onClick={saveSla} disabled={slaSaving}>
+                {slaSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => setSlaProjectId(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {projects.length === 0 && !showForm ? (
           <div className="state-empty">No projects yet.</div>
         ) : projects.length > 0 && (
@@ -4521,6 +4584,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Slug</th>
                 <th>Default profile</th>
                 <th>Retention</th>
+                <th>SLA</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -4545,6 +4609,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {p.retention_days != null
                       ? <span className="badge badge--status">{p.retention_days}d</span>
                       : <span className="routing-desc">unlimited</span>}
+                  </td>
+                  <td>
+                    {p.stuck_threshold_minutes != null
+                      ? <span className="badge badge--status">{p.stuck_threshold_minutes}m</span>
+                      : <span className="routing-desc">60m</span>}
                   </td>
                   <td className="td-date">{fmtDate(p.created_at)}</td>
                   <td>
@@ -4571,6 +4640,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           title="Set study retention period for this project"
                           onClick={() => openRetention(p)}>
                           Retention
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Set per-project SLA threshold for stuck studies"
+                          onClick={() => openSla(p)}>
+                          SLA
                         </button>
                         <button type="button"
                           className={p.archived ? 'btn btn--approve' : 'btn btn--action'}
