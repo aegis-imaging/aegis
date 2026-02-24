@@ -1,6 +1,6 @@
 # AEGIS Sprint-Ready Shortlist (Top 5)
 
-Date: 2026-02-22
+Date: 2026-02-23
 Source backlog: `docs/planning/next-feature-prioritization.md`
 
 ## Status: Pilot-Ready — Moving to Production Hardening
@@ -8,7 +8,7 @@ Source backlog: `docs/planning/next-feature-prioritization.md`
 All previous P0/P1/P2 backlog items are complete. GCP is live (`aegis-prod-488120`).
 This shortlist covers the next sprint for post-pilot production hardening.
 
-## Completion Status (previous sprint)
+## Completion Status (previous sprints)
 
 | # | Item | Status | Completed |
 |---|------|--------|-----------|
@@ -17,6 +17,10 @@ This shortlist covers the next sprint for post-pilot production hardening.
 | 3 | Automated Cloud Smoke Test Suite | ✅ DONE | 2026-02-22 (11/11 PASS) |
 | 4 | DIMSE PACS E2E Validation Harness | ✅ DONE | 2026-02-21 |
 | 5 | AWS HTTPS + Cognito Edge/Auth | ✅ DONE | 2026-02-21 |
+| 6 | DIMSE Receiver on Compute Engine VM (static IP 35.232.172.221, TCP 11112) | ✅ DONE | 2026-02-23 |
+| 7 | Cloud Build CI/CD pipeline (deploy-on-develop + terraform-apply-on-develop) | ✅ DONE | 2026-02-23 |
+| 8 | Cloud Build SA IAM hardening + Terraform tracking | ✅ DONE | 2026-02-23 |
+| 9 | MCP agent Zod validation fix (invalid summary bug) | ✅ DONE | 2026-02-23 |
 
 ## New Sprint Shortlist (Top 5)
 
