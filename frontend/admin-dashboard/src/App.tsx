@@ -2515,7 +2515,8 @@ function StudyRow({
   onAskAgent,
   isAdmin,
   checked,
-  onToggle
+  onToggle,
+  showDescCol
 }: {
   study: Study
   onAction: () => void
@@ -2524,12 +2525,21 @@ function StudyRow({
   isAdmin: boolean
   checked: boolean
   onToggle: () => void
+  showDescCol?: boolean
 }) {
   const [shareOpen,      setShareOpen]      = useState(false)
   const [viewOpen,       setViewOpen]       = useState(false)
   const [defaceOpen,     setDefaceOpen]     = useState(false)
   const [rejectRowOpen,  setRejectRowOpen]  = useState(false)
   const [rejectRowText,  setRejectRowText]  = useState('')
+  const [uidCopied,      setUidCopied]      = useState(false)
+
+  const copyUid = () => {
+    navigator.clipboard.writeText(study.study_instance_uid).then(() => {
+      setUidCopied(true)
+      setTimeout(() => setUidCopied(false), 1800)
+    })
+  }
 
   const handleApprove = async () => {
     await fetch(`/api/studies/${study.id}/approve`, { method: 'POST' })
@@ -2624,7 +2634,26 @@ function StudyRow({
             {study.priority_flag ? '★' : '☆'}
           </button>
         </td>
-        <td className="td-uid"><button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button></td>
+        <td className="td-uid">
+          <button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button>
+          <button
+            type="button"
+            className={`btn-copy-uid${uidCopied ? ' btn-copy-uid--copied' : ''}`}
+            onClick={copyUid}
+            title={uidCopied ? 'Copied!' : 'Copy full UID to clipboard'}
+          >
+            {uidCopied ? '✓' : '⎘'}
+          </button>
+        </td>
+        {showDescCol && (
+          <td className="td-desc" title={study.study_description || ''}>
+            {study.study_description
+              ? study.study_description.length > 42
+                ? study.study_description.slice(0, 42) + '…'
+                : study.study_description
+              : <span className="td-desc__empty">—</span>}
+          </td>
+        )}
         <td>{study.modality || '—'}</td>
         <td>{study.body_part || '—'}</td>
         <td><Badge label={study.source} prefix="source" /></td>
@@ -7318,9 +7347,10 @@ type StudiesState = 'loading' | 'loaded' | 'error'
 
 const PAGE_SIZE = 50
 
-const GLOBAL_PROJECT_KEY = 'aegis_global_project_id'
-const SAVED_FILTERS_KEY  = 'aegis_saved_filters'
-const STUDIES_SORT_KEY   = 'aegis_studies_sort'
+const GLOBAL_PROJECT_KEY    = 'aegis_global_project_id'
+const SAVED_FILTERS_KEY     = 'aegis_saved_filters'
+const STUDIES_SORT_KEY      = 'aegis_studies_sort'
+const STUDIES_SHOW_DESC_KEY = 'aegis_studies_show_desc'
 
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
@@ -7454,6 +7484,9 @@ export function App() {
   })
   const [sortDir, setSortDir] = useState<StudiesSortDir>(() => {
     try { return (JSON.parse(localStorage.getItem(STUDIES_SORT_KEY) || 'null') ?? {}).dir || 'desc' } catch { return 'desc' }
+  })
+  const [showDescCol, setShowDescCol] = useState<boolean>(() => {
+    try { return localStorage.getItem(STUDIES_SHOW_DESC_KEY) === 'true' } catch { return false }
   })
 
   // Real-time SSE updates — bump refreshTick on any study change so the list
@@ -8663,6 +8696,18 @@ export function App() {
             {state === 'loaded' && studiesTotal > 0 && (
               <a href={csvUrl} download="studies.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
             )}
+            <button
+              type="button"
+              className={`btn btn--secondary btn--toggle-desc${showDescCol ? ' btn--toggle-desc--on' : ''}`}
+              onClick={() => {
+                const next = !showDescCol
+                setShowDescCol(next)
+                localStorage.setItem(STUDIES_SHOW_DESC_KEY, String(next))
+              }}
+              title={showDescCol ? 'Hide description column' : 'Show study description column'}
+            >
+              {showDescCol ? 'Hide Desc' : 'Show Desc'}
+            </button>
           </div>
 
           {state === 'loading' && <div className="state-loading">Loading studies…</div>}
@@ -8730,6 +8775,7 @@ export function App() {
                     </th>
                     <th className="th-flag" title="Priority flag">★</th>
                     <th>Study UID</th>
+                    {showDescCol && <th>Description</th>}
                     <th className="th-sortable" onClick={() => setSortF('modality')} title="Sort by modality">Modality{sortIcon('modality')}</th>
                     <th className="th-sortable" onClick={() => setSortF('body_part')} title="Sort by body part">Body Part{sortIcon('body_part')}</th>
                     <th className="th-sortable" onClick={() => setSortF('source')} title="Sort by source">Source{sortIcon('source')}</th>
@@ -8764,6 +8810,7 @@ export function App() {
                         else next.add(study.id)
                         return next
                       })}
+                      showDescCol={showDescCol}
                     />
                   ))}
                 </tbody>
