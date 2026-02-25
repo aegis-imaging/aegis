@@ -136,6 +136,30 @@ func ListAuditEntries(ctx context.Context, db *sql.DB, f AuditFilters, limit, of
 	return entries, rows.Err()
 }
 
+// ListAuditEntriesByActor returns the most recent audit entries for a specific actor (email).
+func ListAuditEntriesByActor(ctx context.Context, db *sql.DB, actor string, limit int) ([]AuditEntry, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at
+		  FROM audit_trail
+		 WHERE actor = $1
+		 ORDER BY created_at DESC
+		 LIMIT $2`, actor, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		if err := rows.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
+			&e.Detail, &e.IPAddress, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
 // ListAuditEntriesForStudy returns all audit entries for a specific study (by resource_id).
 func ListAuditEntriesForStudy(ctx context.Context, db *sql.DB, studyID string) ([]AuditEntry, error) {
 	rows, err := db.QueryContext(ctx, `

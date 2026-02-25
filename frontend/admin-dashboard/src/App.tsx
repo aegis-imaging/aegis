@@ -5817,6 +5817,14 @@ type InviteCode = {
   created_at: string
   used_at?: string
   used_by_ip?: string
+  user_email?: string
+  last_seen_at?: string
+}
+
+type InviteCodeActivity = {
+  email: string
+  entries: { id: string; action: string; resource_type: string; resource_id: string; ip_address: string; created_at: string }[]
+  total: number
 }
 
 type InviteRequest = {
@@ -5851,6 +5859,15 @@ function InviteCodesPanel() {
   const [sendName, setSendName]     = useState('')
   const [sending, setSending]       = useState(false)
   const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  // Activity panel
+  const [activityId, setActivityId]       = useState<string | null>(null)
+  const [activityData, setActivityData]   = useState<InviteCodeActivity | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
+  // Admin dashboard invite
+  const [adminInviteId, setAdminInviteId]       = useState<string | null>(null)
+  const [adminInviteRole, setAdminInviteRole]   = useState<'viewer' | 'admin'>('viewer')
+  const [adminInviteSending, setAdminInviteSending] = useState(false)
+  const [adminInviteResult, setAdminInviteResult]   = useState<{ ok: boolean; msg: string } | null>(null)
 
   // ── Requests state ───────────────────────────────────────────────────────
   const [requests, setRequests]     = useState<InviteRequest[]>([])
@@ -5941,6 +5958,38 @@ function InviteCodesPanel() {
     } finally {
       setReqActing(prev => ({ ...prev, [id]: false }))
     }
+  }
+
+  async function fetchActivity(ic: InviteCode) {
+    if (activityId === ic.id) { setActivityId(null); return }
+    setActivityId(ic.id); setActivityData(null); setActivityLoading(true)
+    try {
+      const res = await fetch(`/api/invite-codes/${ic.id}/activity`)
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? `HTTP ${res.status}`) }
+      setActivityData(await res.json())
+    } catch (err) {
+      setActivityData({ email: ic.user_email ?? '', entries: [], total: 0 })
+    } finally { setActivityLoading(false) }
+  }
+
+  async function sendAdminInvite(ic: InviteCode) {
+    setAdminInviteSending(true); setAdminInviteResult(null)
+    try {
+      const res = await fetch(`/api/invite-codes/${ic.id}/send-admin-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: adminInviteRole }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`)
+      const msg = d.admin_user_created
+        ? `Dashboard access granted (${adminInviteRole}) and invite sent to ${d.email}`
+        : `Invite resent to ${d.email} (already had dashboard access)`
+      setAdminInviteResult({ ok: true, msg })
+      setTimeout(() => { setAdminInviteId(null); setAdminInviteResult(null) }, 3500)
+    } catch (err) {
+      setAdminInviteResult({ ok: false, msg: err instanceof Error ? err.message : 'Failed' })
+    } finally { setAdminInviteSending(false) }
   }
 
   function copy(text: string, key: string) {
@@ -6168,6 +6217,7 @@ function InviteCodesPanel() {
                 <th>Status</th>
                 <th>Created</th>
                 <th>Used</th>
+                <th>Last Seen</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -6231,8 +6281,40 @@ function InviteCodesPanel() {
                       ? <span title={ic.used_by_ip ?? ''}>{new Date(ic.used_at).toLocaleDateString()}{ic.used_by_ip ? ` (${ic.used_by_ip})` : ''}</span>
                       : <span style={{ color: '#64748b' }}>Unused</span>}
                   </td>
+                  <td style={{ fontSize: '0.8rem' }}>
+                    {!ic.user_email
+                      ? <span style={{ color: '#64748b' }} title="No email linked to this code">—</span>
+                      : ic.last_seen_at
+                        ? <span title={`${ic.user_email} · ${new Date(ic.last_seen_at).toLocaleString()}`} style={{ color: '#94a3b8' }}>
+                            {new Date(ic.last_seen_at).toLocaleDateString()}
+                          </span>
+                        : <span style={{ color: '#64748b' }} title={ic.user_email}>Never</span>
+                    }
+                  </td>
                   <td>
                     <div className="actions-cell">
+                      {ic.user_email && (
+                        <button
+                          type="button"
+                          className="btn-sm"
+                          title={`View audit activity for ${ic.user_email}`}
+                          style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                          onClick={() => { fetchActivity(ic); setAdminInviteId(null); setSendId(null) }}
+                        >
+                          {activityId === ic.id ? 'Hide' : 'Activity'}
+                        </button>
+                      )}
+                      {ic.user_email && (
+                        <button
+                          type="button"
+                          className="btn-sm"
+                          title={`Invite ${ic.user_email} to admin dashboard`}
+                          style={{ fontSize: '0.7rem', padding: '2px 6px', color: '#0d9488', borderColor: '#0d9488' }}
+                          onClick={() => { setAdminInviteId(adminInviteId === ic.id ? null : ic.id); setAdminInviteResult(null); setSendId(null); setActivityId(null) }}
+                        >
+                          {adminInviteId === ic.id ? 'Cancel' : '⊕ Dashboard'}
+                        </button>
+                      )}
                       {ic.enabled && (
                         <button type="button" className="btn-sm btn-warning" onClick={() => revoke(ic)}>
                           Revoke
@@ -6244,9 +6326,91 @@ function InviteCodesPanel() {
                     </div>
                   </td>
                 </tr>
+                {activityId === ic.id && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '8px 12px', background: '#0f172a' }}>
+                      {activityLoading
+                        ? <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Loading activity…</span>
+                        : activityData && (
+                          <div>
+                            <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: 6 }}>
+                              Activity for <strong style={{ color: '#e2e8f0' }}>{activityData.email}</strong>
+                              {' '}— {activityData.total} entries
+                              <button
+                                type="button"
+                                className="btn-sm"
+                                style={{ marginLeft: 8, fontSize: '0.65rem', padding: '1px 5px' }}
+                                onClick={() => setActivityId(null)}
+                              >✕</button>
+                            </div>
+                            {activityData.entries.length === 0
+                              ? <div style={{ color: '#64748b', fontSize: '0.8rem' }}>No admin activity recorded for this user.</div>
+                              : <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr style={{ color: '#64748b' }}>
+                                      <th style={{ textAlign: 'left', padding: '2px 6px', fontWeight: 600 }}>Date</th>
+                                      <th style={{ textAlign: 'left', padding: '2px 6px', fontWeight: 600 }}>Action</th>
+                                      <th style={{ textAlign: 'left', padding: '2px 6px', fontWeight: 600 }}>Resource</th>
+                                      <th style={{ textAlign: 'left', padding: '2px 6px', fontWeight: 600 }}>IP</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {activityData.entries.map(e => (
+                                      <tr key={e.id} style={{ borderTop: '1px solid #1e293b' }}>
+                                        <td style={{ padding: '3px 6px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{new Date(e.created_at).toLocaleString()}</td>
+                                        <td style={{ padding: '3px 6px', color: '#e2e8f0' }}>{e.action}</td>
+                                        <td style={{ padding: '3px 6px', color: '#94a3b8' }}>{e.resource_type}{e.resource_id ? ` · ${e.resource_id.slice(0, 8)}` : ''}</td>
+                                        <td style={{ padding: '3px 6px', color: '#64748b' }}>{e.ip_address || '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                            }
+                          </div>
+                        )
+                      }
+                    </td>
+                  </tr>
+                )}
+                {adminInviteId === ic.id && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '8px 12px', background: '#0f172a' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                          Invite <strong style={{ color: '#e2e8f0' }}>{ic.user_email}</strong> to admin dashboard as:
+                        </span>
+                        <select
+                          value={adminInviteRole}
+                          onChange={e => setAdminInviteRole(e.target.value as 'viewer' | 'admin')}
+                          style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid #374151',
+                                   background: '#1f2937', color: '#f9fafb', fontSize: '0.8rem' }}
+                        >
+                          <option value="viewer">Viewer (read-only)</option>
+                          <option value="admin">Admin (full access)</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={() => sendAdminInvite(ic)}
+                          disabled={adminInviteSending}
+                        >{adminInviteSending ? 'Sending…' : 'Send Invite'}</button>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => { setAdminInviteId(null); setAdminInviteResult(null) }}
+                        >Cancel</button>
+                        {adminInviteResult && (
+                          <span style={{ fontSize: '0.75rem', color: adminInviteResult.ok ? '#0d9488' : '#ea580c' }}>
+                            {adminInviteResult.msg}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 {sendId === ic.id && (
                   <tr>
-                    <td colSpan={6} style={{ padding: '8px 12px', background: '#0f172a' }}>
+                    <td colSpan={7} style={{ padding: '8px 12px', background: '#0f172a' }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <input
                           type="email"
