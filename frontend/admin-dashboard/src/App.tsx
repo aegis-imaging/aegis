@@ -6,6 +6,7 @@ import { TCIAPanel } from './components/TCIAPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
+import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { useStudyEvents } from './hooks/useStudyEvents'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -4860,6 +4861,9 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   // Compliance report modal
   const [complianceProjectId, setComplianceProjectId] = useState<string | null>(null)
 
+  // Health panel modal
+  const [healthProject, setHealthProject] = useState<{ id: string; name: string } | null>(null)
+
   async function openPhiConfig(projectId: string) {
     setPhiProjectId(projectId)
     setPhiError(null)
@@ -5343,6 +5347,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => setComplianceProjectId(p.id)}>
                           Compliance
                         </button>
+                        <button type="button" className="btn btn--action"
+                          title="View pipeline health snapshot for this project"
+                          onClick={() => setHealthProject({ id: p.id, name: p.name })}>
+                          Health
+                        </button>
                       </div>
                     )}
                   </td>
@@ -5357,6 +5366,14 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
         <ComplianceReportPanel
           projectId={complianceProjectId}
           onClose={() => setComplianceProjectId(null)}
+        />
+      )}
+
+      {healthProject && (
+        <ProjectHealthPanel
+          projectId={healthProject.id}
+          projectName={healthProject.name}
+          onClose={() => setHealthProject(null)}
         />
       )}
     </div>
