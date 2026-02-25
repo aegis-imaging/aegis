@@ -1634,6 +1634,7 @@ cd mcp-server && npm install && npm run build
 | `get_storage_usage` | Project storage usage in bytes with quota information (project_id required) |
 | `get_anonymization_diff` | Tag-level diff between raw and de-identified DICOM for a study (study_uid = DICOM UID, not DB UUID) |
 | `get_system_health_summary` | Cached (30s) system-wide health: API/sidecar status, pipeline activity (24h), DIMSE queue depths |
+| `list_study_relationships` | List all typed relationships for a study (baseline, follow_up, comparison, replicate) with related study details |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
@@ -1654,6 +1655,8 @@ cd mcp-server && npm install && npm run build
 | `re_evaluate_routing` | Re-evaluate routing rules for a study |
 | `toggle_study_flag` | Set or clear the priority flag (★) on a study |
 | `clone_project` | Duplicate a project with all settings (routing rules, profiles, templates, PHI config) |
+| `link_studies` | Create a typed relationship between two studies (baseline, follow_up, comparison, replicate) |
+| `unlink_studies` | Remove a study relationship by its relationship UUID (use list_study_relationships to find the ID) |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 

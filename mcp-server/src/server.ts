@@ -42,6 +42,9 @@ import {
   complianceReportArgsSchema,
   storageUsageArgsSchema,
   anonDiffArgsSchema,
+  listStudyRelationshipsArgsSchema,
+  linkStudiesArgsSchema,
+  unlinkStudiesArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -808,6 +811,19 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "list_study_relationships",
+    description: "List all relationships for a study (as source or target). Returns {relationships: [{id, study_id, related_study_id, relationship, notes, created_by, created_at, related_study: {id, study_instance_uid, modality, status, ...}}]}. Relationship types: baseline, follow_up, comparison, replicate. Use to navigate longitudinal imaging series and multi-session studies.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "list_subjects",
     description: "List unique research subject IDs with study counts for a project. Returns array of {subject_id, study_count}. Use to audit longitudinal subject coverage or find subjects with missing sessions.",
     inputSchema: {
@@ -941,6 +957,40 @@ const tools: Tool[] = [
         request_id: { type: "string" },
         study_id: { type: "string", format: "uuid" },
         subject_id: { type: "string", maxLength: 256, description: "Subject identifier string (empty string clears the link)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "link_studies",
+    description: "Create a typed relationship between two studies. Relationship types: 'baseline' (initial scan), 'follow_up' (repeat scan of same subject), 'comparison' (different subjects or conditions), 'replicate' (same protocol repeated). Requires confirm=true and a reason. Returns the created relationship record.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "related_study_id", "relationship", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid", description: "Source study UUID" },
+        related_study_id: { type: "string", format: "uuid", description: "Target study UUID (must differ from study_id)" },
+        relationship: { type: "string", enum: ["baseline", "follow_up", "comparison", "replicate"] },
+        notes: { type: "string", maxLength: 500, description: "Optional free-text annotation" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "unlink_studies",
+    description: "Remove a study relationship by its relationship UUID. Use list_study_relationships first to find the relationship_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "relationship_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid", description: "The study that owns the relationship" },
+        relationship_id: { type: "string", format: "uuid", description: "Relationship UUID from list_study_relationships" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -1806,6 +1856,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_study_relationships") {
+      const parsed = listStudyRelationshipsArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/relationships`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (name === "list_subjects") {
       const parsed = projectScopedArgsSchema.parse(args);
       const params = new URLSearchParams();
@@ -1940,6 +1996,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "set_study_subject") {
         const parsedSubject = setStudySubjectArgsSchema.parse(args);
         return handleSetStudySubject(parsedSubject.request_id ?? buildRequestId(), parsedSubject);
+      }
+
+      if (name === "link_studies") {
+        const parsedLink = linkStudiesArgsSchema.parse(args);
+        return handleLinkStudies(parsedLink.request_id ?? buildRequestId(), parsedLink);
+      }
+
+      if (name === "unlink_studies") {
+        const parsedUnlink = unlinkStudiesArgsSchema.parse(args);
+        return handleUnlinkStudies(parsedUnlink.request_id ?? buildRequestId(), parsedUnlink);
       }
 
       if (name === "add_study_note") {
@@ -2163,7 +2229,9 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
     name === "set_study_subject" ||
     name === "add_study_note" ||
     name === "reactivate_study" ||
-    name === "toggle_study_flag"
+    name === "toggle_study_flag" ||
+    name === "link_studies" ||
+    name === "unlink_studies"
   ) {
     return typeof args.study_id === "string" ? args.study_id : null;
   }
@@ -3047,6 +3115,50 @@ async function handleSetStudySubject(
     subject_id: parsed.subject_id,
     reason: parsed.reason,
     result: data
+  });
+}
+
+async function handleLinkStudies(
+  requestId: string,
+  parsed: { study_id: string; related_study_id: string; relationship: string; notes?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "link_studies");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow link_studies", false, "link_studies");
+  }
+
+  const body: Record<string, string> = { related_study_id: parsed.related_study_id, relationship: parsed.relationship };
+  if (parsed.notes) body.notes = parsed.notes;
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/relationships`, body);
+  return formatSuccess(requestId, "link_studies", {
+    accepted: true,
+    study_id: parsed.study_id,
+    related_study_id: parsed.related_study_id,
+    relationship: parsed.relationship,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleUnlinkStudies(
+  requestId: string,
+  parsed: { study_id: string; relationship_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "unlink_studies");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow unlink_studies", false, "unlink_studies");
+  }
+
+  await client.delete(`/api/studies/${encodeURIComponent(parsed.study_id)}/relationships/${encodeURIComponent(parsed.relationship_id)}`);
+  return formatSuccess(requestId, "unlink_studies", {
+    accepted: true,
+    study_id: parsed.study_id,
+    relationship_id: parsed.relationship_id,
+    reason: parsed.reason
   });
 }
 
