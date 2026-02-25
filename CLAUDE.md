@@ -1586,6 +1586,24 @@ Aggregates study counts, storage stats, routing totals, stuck count, and the pip
 
 **MCP:** `get_project_health` read tool — consolidated health snapshot, ideal for AI-assisted project triage
 
+### Routing Rules Export / Import (`api/handler/routing_rules_export.go`)
+
+Export and import project-scoped routing rules as a JSON file. Useful for copying a routing configuration to a new project or backing it up before making changes.
+
+**Export API:**
+- `GET /api/projects/{id}/routing-rules/export` — returns `Content-Disposition: attachment; filename="routing-rules.json"` with `{"project_id", "rules": [...], "count"}` indented JSON
+- Only project-scoped rules are exported (global rules with `project_id IS NULL` are excluded)
+- Emits `routing_rule.exported` audit entry with count
+
+**Import API** (admin-only):
+- `POST /api/projects/{id}/routing-rules/import` — body: either a raw JSON array `[{name, action, priority, ...}]` or the export format `{"rules":[...]}`
+- Skips rules whose name already exists in the project (no overwrite)
+- `destination_id` is stripped on import — operators must re-assign `route_to` destinations via UI after import (destination IDs are instance-specific)
+- Returns `{imported: N, skipped: M, errors: []}` — partial success supported
+- Emits `routing_rule.imported` audit entry with imported/skipped counts
+
+**Admin dashboard:** "Export JSON" and "Import JSON" buttons in the Routing Rules section header (Routing tab). Export only visible when a project is selected; import requires admin role. Import shows a success/error toast after file selection and refreshes the rules list.
+
 ### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
 Export and import protocol templates for a project as a JSON file.
