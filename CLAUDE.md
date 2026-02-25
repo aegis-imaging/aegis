@@ -1689,6 +1689,13 @@ cd mcp-server && npm install && npm run build
 | `send_invite_code` | Email an invite code directly to a recipient (requires SMTP) |
 | `approve_invite_request` | Approve a pending access request — creates invite code and emails it to the requester |
 | `deny_invite_request` | Deny a pending access request |
+| `create_protocol_template` | Create a new MRI protocol compliance template with acquisition parameter rules (TR, TE, flip angle, etc.) for a scanner/sequence combination |
+| `update_protocol_template` | Update an existing protocol compliance template (name, rules, enabled state) |
+| `delete_protocol_template` | Permanently delete a protocol compliance template |
+| `create_anon_profile` | Create a new anonymization profile defining which DICOM tags to retain during PS3.15 de-identification |
+| `update_anon_profile` | Update an anonymization profile (name, description, retained_tags, enabled) |
+| `delete_anon_profile` | Permanently delete an anonymization profile |
+| `set_default_anon_profile` | Set or clear the default anonymization profile for a project (empty profile_id clears the default) |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 
