@@ -1081,7 +1081,7 @@ resource "aws_ecs_task_definition" "admin" {
         # Use internal Cloud Map DNS for API so the Cognito JWT injected by the
         # admin ALB is forwarded intact — the public ALB strips X-Amzn-Oidc-Data
         # on a second hop, breaking auth middleware.
-        { name = "API_URL",        value = "http://api.aegis.local:8080" },
+        { name = "API_URL", value = "http://api.aegis.local:8080" },
         { name = "MCP_SERVER_URL", value = "http://mcp-server.aegis.local:8080" },
       ]
       logConfiguration = {
