@@ -1667,6 +1667,10 @@ cd mcp-server && npm install && npm run build
 | `unlink_studies` | Remove a study relationship by its relationship UUID (use list_study_relationships to find the ID) |
 | `create_digest_subscription` | Create a weekly or monthly email digest subscription for a project |
 | `delete_digest_subscription` | Delete a digest subscription by ID |
+| `create_webhook_subscription` | Create a webhook subscription to receive push notifications on study events (HMAC-SHA256 signed payloads) |
+| `update_webhook_subscription` | Update a webhook subscription — change URL, events, secret, or enabled state |
+| `delete_webhook_subscription` | Permanently delete a webhook subscription and all its delivery history |
+| `retry_webhook_delivery` | Retry a specific failed webhook delivery by delivery UUID |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 
