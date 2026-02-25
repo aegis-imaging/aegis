@@ -31,6 +31,7 @@ C = {
     "red":    "#EA580C",   # orange-600 — colorblind-safe (was #DC2626 red)
     "green":  "#0F766E",   # teal-700 — colorblind-safe (was #15803D green)
     "navy":   "#1D4ED8",
+    "azure":  "#0078D4",
     "slate":  "#374151",
     "emerald":"#0D9488",   # teal-600 — colorblind-safe (was #059669 emerald)
 }
@@ -136,6 +137,8 @@ body {
 .z-gcp  .zone-hdr { color: #0F766E; }
 .z-aws  { background: #FFF7ED; border-color: #EA580C; }
 .z-aws  .zone-hdr { color: #EA580C; }
+.z-azure { background: #EFF6FF; border-color: #0078D4; }
+.z-azure .zone-hdr { color: #0078D4; }
 .z-pipe { background: #EFF6FF; border-color: #1D4ED8; }
 .z-pipe .zone-hdr { color: #1D4ED8; }
 .z-ph   { background: #FAF5FF; border-color: #7C3AED; }
@@ -578,6 +581,49 @@ def build_html():
         "Update SSM param + reboot DIMSE EC2",
     ], "slate")
 
+    # ── Azure zone ───────────────────────────────────────────────────────────
+    az_auth = card("Azure Container Registry + Easy Auth", [
+        "ACR — private registry, GitHub Actions OIDC push",
+        "Easy Auth on Container Apps — injects X-MS-CLIENT-PRINCIPAL-NAME",
+        "AUTH_PROVIDER=azure, AUTH_ENABLED=true",
+        "Federated OIDC — no long-lived credentials stored",
+    ], "azure")
+
+    az_api = card("API + Admin  (Azure Container Apps)", [
+        "Go API — same image as GCP/AWS (0.5–1 vCPU / 2 GB)",
+        "Admin Dashboard — React / nginx Container App",
+        "Azure Communication Services SMTP relay (smtp.azurecomm.net)",
+        "Force-new-revision via GitHub Actions on every push",
+    ], "go")
+
+    az_sidecars = card("7 Python Sidecars  (Container Apps)", [
+        "defacing · phi-detection · qc-service",
+        "bids-service · classification-service",
+        "protocol-service · synth-service",
+        "Internal ingress only — same Docker images as GCP/AWS",
+    ], "py")
+
+    az_data = card("PostgreSQL Flex + Azure Blob  (Data Layer)", [
+        "Azure Database for PostgreSQL — Flexible Server",
+        "Azure Blob Storage — STORAGE_MODE=azure",
+        "DefaultAzureCredential — Workload Identity / Managed Identity",
+        "SAS tokens via user-delegation key for signed URLs",
+    ], "amber")
+
+    az_dimse = card("DIMSE Azure VM  (Standard_B2s)", [
+        "Debian 12 — Docker + Azure VM Extensions",
+        "Static public IP — TCP port 11112 for PACS registration",
+        "GitHub Actions: az vm run-command + docker pull/restart",
+        "Same pynetdicom C-STORE SCP as GCP/AWS",
+    ], "py")
+
+    az_cicd = card("GitHub Actions CI/CD  (OIDC)", [
+        "Triggers on push to develop — parallel with GCP + AWS",
+        "Federated OIDC — AZURE_CLIENT_ID / TENANT_ID / SUBSCRIPTION_ID",
+        "Build 13 images → push to ACR → az containerapp update",
+        "deploy-dimse job: az vm run-command on DIMSE VM",
+    ], "slate")
+
     # ── Tech stack ───────────────────────────────────────────────────────────
     deps = [
         ("Go:",       "suyashkumar/dicom · pgx · testcontainers-go · testify",          "go"),
@@ -595,7 +641,7 @@ def build_html():
         ("Local:",   "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem",        "slate"),
         ("Auth:",    "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth",     "orange"),
         ("Storage:", "STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes",    "go"),
-        ("Azure:",    "Container Apps · PostgreSQL Flex · Azure Blob · ACR · Easy Auth · Azure VM (DIMSE)",    "gcp"),
+        ("Azure:",    "Container Apps · PostgreSQL Flex · Azure Blob · ACR · Easy Auth · Azure VM (DIMSE)",    "azure"),
         ("CI/CD:",   "GitHub Actions: Go (160+) · Python (252+) · TS · Docker (9) · Cloud Build auto-deploy", "green"),
         ("Domains:", "aegisimaging.ai · www · api · admin  —  SSL cert v3",               "py"),
     ]
@@ -688,6 +734,24 @@ def build_html():
       {aws_data}
       {aws_dimse}
       {aws_cicd}
+    </div>
+  </div>
+
+  <!-- AZURE SUBSCRIPTION -->
+  <div class="zone z-azure" style="margin-bottom:6px">
+    <div class="zone-hdr">
+      AZURE SUBSCRIPTION
+      <span class="zone-sub" style="color:#005A9E">Container Apps · PostgreSQL Flexible Server · Azure Blob Storage &nbsp;·&nbsp; ● Deploying — Feb 26, 2026 (Day 9) · GitHub Actions OIDC CI/CD</span>
+    </div>
+    <div class="g3" style="margin-bottom:6px">
+      {az_auth}
+      {az_api}
+      {az_sidecars}
+    </div>
+    <div class="g3">
+      {az_data}
+      {az_dimse}
+      {az_cicd}
     </div>
   </div>
 
