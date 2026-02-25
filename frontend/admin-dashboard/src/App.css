@@ -1922,6 +1922,44 @@
   border-radius: 6px;
   overflow: auto;
 }
+
+.agent-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.agent-prompts__label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-right: 2px;
+}
+
+.agent-prompt-chip {
+  padding: 3px 10px;
+  border-radius: 14px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  font-size: 12px;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.agent-prompt-chip:hover {
+  background: #f0fdfa;
+  border-color: #0d9488;
+  color: #0f766e;
+}
+
+.agent-prompt-chip--active {
+  background: #ccfbf1;
+  border-color: #0d9488;
+  color: #0f766e;
+  font-weight: 500;
+}
 .dicom-tags-table td.dicom-tag-value {
   max-width: 320px;
   overflow: hidden;

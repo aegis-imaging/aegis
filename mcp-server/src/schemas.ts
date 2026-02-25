@@ -298,6 +298,84 @@ export const cloneProjectArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const updateDestinationArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  destination_id: z.string().uuid(),
+  name: z.string().min(1).max(256).optional(),
+  description: z.string().max(512).optional(),
+  dicomweb_url: z.string().url().optional(),
+  dicomweb_auth_header: z.string().max(1024).optional(),
+  enabled: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const createDestinationArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  name: z.string().min(1).max(256),
+  description: z.string().max(512).optional(),
+  type: z.enum(["dicomweb", "dimse"]),
+  dicomweb_url: z.string().url().optional(),
+  dicomweb_auth_header: z.string().max(1024).optional(),
+  ae_title: z.string().max(64).optional(),
+  host: z.string().max(256).optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  enabled: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const destinationIdArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  destination_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const createRoutingRuleArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  name: z.string().min(1).max(256),
+  description: z.string().max(512).optional(),
+  priority: z.number().int().min(1).max(9999),
+  enabled: z.boolean().optional(),
+  project_id: z.string().uuid().optional(),
+  modality: z.string().max(16).optional(),
+  body_part: z.string().max(64).optional(),
+  source: z.enum(["external", "internal"]).optional(),
+  action: z.enum(["route_to", "require_defacing", "require_phi_scan", "require_qc_check",
+    "require_bids_conversion", "require_classification", "require_protocol_check",
+    "require_export", "auto_approve", "require_qa", "reject"]),
+  destination_id: z.string().uuid().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateRoutingRuleArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  rule_id: z.string().uuid(),
+  name: z.string().min(1).max(256).optional(),
+  description: z.string().max(512).optional(),
+  priority: z.number().int().min(1).max(9999).optional(),
+  enabled: z.boolean().optional(),
+  project_id: z.string().uuid().optional().nullable(),
+  modality: z.string().max(16).optional().nullable(),
+  body_part: z.string().max(64).optional().nullable(),
+  source: z.enum(["external", "internal"]).optional().nullable(),
+  action: z.enum(["route_to", "require_defacing", "require_phi_scan", "require_qc_check",
+    "require_bids_conversion", "require_classification", "require_protocol_check",
+    "require_export", "auto_approve", "require_qa", "reject"]).optional(),
+  destination_id: z.string().uuid().optional().nullable(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const routingRuleIdArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  rule_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -371,7 +449,13 @@ export const writeToolNames = [
   "disable_api_key",
   "delete_api_key",
   "toggle_study_flag",
-  "clone_project"
+  "clone_project",
+  "update_destination",
+  "create_destination",
+  "delete_destination",
+  "create_routing_rule",
+  "update_routing_rule",
+  "delete_routing_rule"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
