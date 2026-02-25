@@ -7348,6 +7348,27 @@ export function App() {
     else setShowFunnel(v => !v)
   }
 
+  type CohortSubject = {
+    subject_id: string; study_count: number; approved_count: number; rejected_count: number
+    pending_count: number; modalities: string[]; earliest_study_at: string; latest_study_at: string
+    all_approved: boolean; has_defaced: boolean; has_exported: boolean
+  }
+  type CohortReport = {
+    project_id: string; generated_at: string; total_subjects: number; subjects_multi_study: number
+    total_studies_with_subject: number; modality_coverage: Record<string, number>; subjects: CohortSubject[]
+  }
+  const [cohortReport, setCohortReport] = useState<CohortReport | null>(null)
+  const [showCohortReport, setShowCohortReport] = useState(false)
+  const [cohortLoading, setCohortLoading] = useState(false)
+  const loadCohortReport = async () => {
+    if (!globalProjectId) { alert('Select a project to view the cohort report.'); return }
+    if (showCohortReport && cohortReport) { setShowCohortReport(false); return }
+    setCohortLoading(true)
+    const res = await fetch(`/api/projects/${globalProjectId}/cohort-report`)
+    setCohortLoading(false)
+    if (res.ok) { setCohortReport(await res.json()); setShowCohortReport(true) }
+  }
+
   const fmtDuration = (secs: number): string => {
     if (secs < 60) return `${secs}s`
     const m = Math.floor(secs / 60)
@@ -8154,6 +8175,67 @@ export function App() {
                         })}
                       </tbody>
                     </table>
+                  )}
+              </div>
+            )}
+          </div>
+
+          {/* Cohort report toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="btn-secondary" onClick={loadCohortReport} style={{fontSize:'0.8rem'}} disabled={cohortLoading}>
+              {cohortLoading ? 'Loading…' : showCohortReport ? '▲ Hide cohort report' : '▼ Cohort report (per-subject summary)'}
+            </button>
+            {!globalProjectId && (
+              <span style={{marginLeft:'8px',fontSize:'0.78rem',color:'#9ca3af'}}>Select a project to load.</span>
+            )}
+            {showCohortReport && cohortReport && (
+              <div style={{marginTop:'8px'}}>
+                <div style={{display:'flex',gap:'24px',marginBottom:'8px',flexWrap:'wrap'}}>
+                  <span style={{fontSize:'0.8rem'}}><strong>{cohortReport.total_subjects}</strong> subjects</span>
+                  <span style={{fontSize:'0.8rem'}}><strong>{cohortReport.subjects_multi_study}</strong> multi-study</span>
+                  <span style={{fontSize:'0.8rem'}}><strong>{cohortReport.total_studies_with_subject}</strong> total linked studies</span>
+                  {Object.keys(cohortReport.modality_coverage).length > 0 && (
+                    <span style={{fontSize:'0.8rem'}}>
+                      Coverage: {Object.entries(cohortReport.modality_coverage).map(([m, n]) => `${m} (${n})`).join(', ')}
+                    </span>
+                  )}
+                  <span style={{fontSize:'0.75rem',color:'#9ca3af'}}>Generated {new Date(cohortReport.generated_at).toLocaleTimeString()}</span>
+                </div>
+                {cohortReport.subjects.length === 0
+                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No subjects with linked studies in this project.</span>
+                  : (
+                    <div style={{overflowX:'auto'}}>
+                      <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'900px'}}>
+                        <thead>
+                          <tr>
+                            <th>Subject ID</th>
+                            <th style={{textAlign:'right'}}>Studies</th>
+                            <th style={{textAlign:'right'}}>Approved</th>
+                            <th style={{textAlign:'right'}}>Pending</th>
+                            <th>Modalities</th>
+                            <th>All approved</th>
+                            <th>Defaced</th>
+                            <th>Exported</th>
+                            <th>Latest study</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cohortReport.subjects.map(s => (
+                            <tr key={s.subject_id}>
+                              <td><code style={{fontSize:'0.8rem'}}>{s.subject_id}</code></td>
+                              <td style={{textAlign:'right'}}>{s.study_count}</td>
+                              <td style={{textAlign:'right',color:'#0f766e'}}>{s.approved_count}</td>
+                              <td style={{textAlign:'right',color: s.pending_count > 0 ? '#b45309' : '#6b7280'}}>{s.pending_count}</td>
+                              <td>{(s.modalities ?? []).join(', ') || <span className="td-muted">—</span>}</td>
+                              <td style={{textAlign:'center',color: s.all_approved ? '#0f766e' : '#9a3412'}}>{s.all_approved ? '✓' : '✗'}</td>
+                              <td style={{textAlign:'center',color: s.has_defaced ? '#0f766e' : '#9ca3af'}}>{s.has_defaced ? '✓' : '—'}</td>
+                              <td style={{textAlign:'center',color: s.has_exported ? '#0f766e' : '#9ca3af'}}>{s.has_exported ? '✓' : '—'}</td>
+                              <td style={{color:'#6b7280'}}>{new Date(s.latest_study_at).toLocaleDateString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
               </div>
             )}

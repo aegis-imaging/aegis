@@ -1285,6 +1285,30 @@ Associates studies with a research subject identifier (`subject_id`). Enables gr
 
 **Admin dashboard:** Subject input field in the study detail panel; Subjects tab lists all subjects for the current project with a count of associated studies.
 
+### Cohort Report (`api/handler/cohort_report.go`)
+
+Per-subject cohort completeness report for research coordinators. Aggregates study count, modalities, approval/rejection/pending counts, defacing and export status, and timeline per subject across a project.
+
+**API:**
+- `GET /api/projects/{id}/cohort-report` — returns per-subject summary for all studies with a `subject_id`
+
+**Response fields:**
+| Field | Notes |
+|-------|-------|
+| `total_subjects` | Distinct subject IDs with at least one study |
+| `subjects_multi_study` | Subjects with ≥2 studies |
+| `total_studies_with_subject` | Total study rows that have a subject_id |
+| `modality_coverage` | `{modality: subject_count}` — how many subjects have each modality |
+| `subjects[]` | Per-subject rows (ordered by most recent study first, limit 500) |
+
+**Per-subject row fields:** `subject_id`, `study_count`, `approved_count`, `rejected_count`, `pending_count`, `modalities[]` (distinct, sorted), `earliest_study_at`, `latest_study_at`, `all_approved`, `has_defaced`, `has_exported`
+
+Studies without a `subject_id` are excluded. Uses PostgreSQL `ARRAY_AGG`, `BOOL_AND`, and `BOOL_OR` aggregates. Custom PostgreSQL `text[]` scanner (`nullableStringSlice`) with no `lib/pq` dependency.
+
+**MCP tool:** `get_cohort_report` (read) — `{project_id}` → calls `GET /api/projects/{id}/cohort-report`
+
+**Admin dashboard:** Collapsible "Cohort report" panel in the Studies tab (requires a project to be selected in the global project selector).
+
 ### Webhook Subscriptions (`api/handler/webhook.go`, `api/webhook/deliver.go`)
 
 Push notifications to external HTTP endpoints when study events occur. Payloads are signed with HMAC-SHA256 using the subscriber's `secret` (`X-AEGIS-Signature` header) so receivers can verify origin.
@@ -1697,6 +1721,7 @@ cd mcp-server && npm install && npm run build
 | `get_pipeline_funnel` | Pipeline conversion funnel: per-stage counts and conversion rates (optional days, project_id) |
 | `get_project_health` | Consolidated project health: study counts + storage + routing totals + stuck count + funnel in one call (optional days, project_id, stuck_minutes) |
 | `get_compliance_report` | Project compliance report: PHI detection rates, defacing completion, protocol compliance, export activity (project_id required, optional days) |
+| `get_cohort_report` | Per-subject cohort summary: study count, modalities, approved/pending counts, all_approved flag, has_defaced, has_exported per subject; plus modality_coverage map and multi-study subject count (project_id required) |
 | `get_storage_usage` | Project storage usage in bytes with quota information (project_id required) |
 | `get_anonymization_diff` | Tag-level diff between raw and de-identified DICOM for a study (study_uid = DICOM UID, not DB UUID) |
 | `get_system_health_summary` | Cached (30s) system-wide health: API/sidecar status, pipeline activity (24h), DIMSE queue depths |
