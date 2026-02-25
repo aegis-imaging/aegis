@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/aegis-imaging/aegis/api/model"
 )
@@ -41,6 +42,10 @@ func (s *Server) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 	u.Enabled = true
 
 	if err := model.CreateAdminUser(r.Context(), s.db, &u); err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			s.writeError(w, http.StatusConflict, "user with this email already exists")
+			return
+		}
 		log.Printf("create admin user: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to create user")
 		return

@@ -253,6 +253,36 @@ func InviteCodeIssued(name, code, inviteURL, landingURL string) (subject, body s
 	return subject, buf.String()
 }
 
+var adminDashboardInviteTmpl = template.Must(template.New("admin_dashboard_invite").Parse(
+	`Hi,
+
+You have been granted {{ .Role }} access to the AEGIS Admin Dashboard.
+
+Dashboard URL:
+
+  {{ .DashboardURL }}
+
+Sign in using your existing Google, Microsoft, or AWS account at the link above.
+No separate password is required — use your organisation's single sign-on.
+
+Your role: {{ .Role }}
+
+--
+This is an automated message from AEGIS. Do not reply to this email.
+`))
+
+// AdminDashboardInvite renders the welcome email sent when an admin invites a user
+// to the dashboard directly. No PHI is included.
+func AdminDashboardInvite(toEmail, dashboardURL, role string) (subject, body string) {
+	subject = "You've been invited to the AEGIS Admin Dashboard"
+	var buf bytes.Buffer
+	adminDashboardInviteTmpl.Execute(&buf, struct {
+		DashboardURL string
+		Role         string
+	}{dashboardURL, role})
+	return subject, buf.String()
+}
+
 var contactFormTmpl = template.Must(template.New("contact_form").Parse(
 	`New contact form submission from the AEGIS website.
 
