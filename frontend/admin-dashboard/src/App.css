@@ -339,6 +339,16 @@
 }
 
 .studies-table th.align-right { text-align: right; }
+.studies-table th.th-sortable {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  white-space: nowrap;
+}
+.studies-table th.th-sortable:hover {
+  color: #374151;
+  background: #f3f4f6;
+}
 
 .studies-table td {
   padding: 10px 12px;
