@@ -1630,6 +1630,10 @@ cd mcp-server && npm install && npm run build
 | `get_routing_rule_stats` | Per-rule hit analytics: hit counts, last matched, unused rules in period (optional days) |
 | `get_pipeline_funnel` | Pipeline conversion funnel: per-stage counts and conversion rates (optional days, project_id) |
 | `get_project_health` | Consolidated project health: study counts + storage + routing totals + stuck count + funnel in one call (optional days, project_id, stuck_minutes) |
+| `get_compliance_report` | Project compliance report: PHI detection rates, defacing completion, protocol compliance, export activity (project_id required, optional days) |
+| `get_storage_usage` | Project storage usage in bytes with quota information (project_id required) |
+| `get_anonymization_diff` | Tag-level diff between raw and de-identified DICOM for a study (study_uid = DICOM UID, not DB UUID) |
+| `get_system_health_summary` | Cached (30s) system-wide health: API/sidecar status, pipeline activity (24h), DIMSE queue depths |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 

@@ -107,6 +107,22 @@ export const projectHealthArgsSchema = z.object({
   stuck_minutes: z.number().int().min(1).optional()
 });
 
+export const complianceReportArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  days: z.number().int().min(1).max(365).optional()
+});
+
+export const storageUsageArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid()
+});
+
+export const anonDiffArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_uid: z.string().min(1)
+});
+
 export const getAuditActorsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   limit: z.number().int().min(1).max(100).optional()
@@ -453,7 +469,11 @@ export const readToolNames = [
   "get_destination_stats",
   "get_routing_rule_stats",
   "get_pipeline_funnel",
-  "get_project_health"
+  "get_project_health",
+  "get_compliance_report",
+  "get_storage_usage",
+  "get_anonymization_diff",
+  "get_system_health_summary"
 ] as const;
 
 export const writeToolNames = [

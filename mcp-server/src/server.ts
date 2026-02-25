@@ -39,6 +39,9 @@ import {
   routingRuleStatsArgsSchema,
   pipelineFunnelArgsSchema,
   projectHealthArgsSchema,
+  complianceReportArgsSchema,
+  storageUsageArgsSchema,
+  anonDiffArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -718,6 +721,62 @@ const tools: Tool[] = [
           minimum: 1,
           description: "Idle threshold for stuck detection in minutes (default 60)"
         }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_compliance_report",
+    description: "Get a compliance report for a project covering PHI detection, defacing, protocol compliance, and export activity. Returns {project_id, period_days, studies: {total, approved, rejected, pending}, phi_detection: {scanned, flagged, flag_rate_pct}, defacing: {required, completed, failed, avg_qa_score}, protocol_compliance: {checked, compliant, minor_deviations, non_compliant}, exports: {shares_created, shares_downloaded, total_downloads}}. Useful for audits and IRB reporting.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 365,
+          description: "Look-back window in days (default 30)"
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_storage_usage",
+    description: "Get storage usage for a project in bytes, with optional quota information. Returns {project_id, used_bytes, quota_bytes (null if no quota), usage_pct (null if no quota)}. Use to check if a project is approaching its storage quota.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_anonymization_diff",
+    description: "Get the tag-level diff between the raw and de-identified DICOM stores for a study, showing exactly which tags were removed, modified, or added during anonymization. Returns {study_id, diff: {removed: [{tag, keyword, vr, raw_value}], modified: [{tag, keyword, vr, raw_value, clean_value}], added: []}}. Returns 404 if no raw files, 204 if no clean files yet. Requires the study's DICOM StudyInstanceUID (not the database ID).",
+    inputSchema: {
+      type: "object",
+      required: ["study_uid"],
+      properties: {
+        request_id: { type: "string" },
+        study_uid: { type: "string", description: "DICOM StudyInstanceUID (not the database UUID)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_system_health_summary",
+    description: "Get a cached (30s TTL) system-wide health summary aggregating the API healthz probe, sidecar statuses, pipeline activity (studies received/approved in last 24h, stuck count, error rate), and DIMSE retry/dead-letter queue depths. Returns {generated_at, api: {status, database, storage}, services: {defacing, phi-detection, qc-service, ...}, pipeline: {studies_received_24h, studies_approved_24h, studies_stuck, pipeline_error_rate}, dimse: {pending_retries, dead_letter}}. Use for a quick operational health check.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
       },
       additionalProperties: false
     }
@@ -1666,6 +1725,33 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.stuck_minutes !== undefined) params.set("stuck_minutes", String(parsed.stuck_minutes));
       const qs = params.toString();
       const data = await client.get(`/api/stats/project-health${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_compliance_report") {
+      const parsed = complianceReportArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      const qs = params.toString();
+      const data = await client.get(`/api/projects/${parsed.project_id}/compliance-report${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_storage_usage") {
+      const parsed = storageUsageArgsSchema.parse(args);
+      const data = await client.get(`/api/projects/${parsed.project_id}/storage-usage`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_anonymization_diff") {
+      const parsed = anonDiffArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${encodeURIComponent(parsed.study_uid)}/anonymization-diff`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_system_health_summary") {
+      emptyArgsSchema.parse(args);
+      const data = await client.get("/api/system/health-summary");
       return formatSuccess(requestId, name, data);
     }
 
