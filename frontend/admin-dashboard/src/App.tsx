@@ -7319,6 +7319,7 @@ type StudiesState = 'loading' | 'loaded' | 'error'
 const PAGE_SIZE = 50
 
 const GLOBAL_PROJECT_KEY = 'aegis_global_project_id'
+const SAVED_FILTERS_KEY  = 'aegis_saved_filters'
 
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
@@ -7416,6 +7417,32 @@ export function App() {
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo,   setFilterDateTo]   = useState('')
   const [filterFlagged,  setFilterFlagged]  = useState(false)
+
+  // Saved filter presets (localStorage)
+  type SavedFilter = {
+    name: string; status: string; modality: string; bodyPart: string; source: string
+    search: string; subject: string; label: string; dateFrom: string; dateTo: string
+    flagged: boolean
+  }
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => {
+    try { return JSON.parse(localStorage.getItem(SAVED_FILTERS_KEY) ?? 'null') ?? [] } catch { return [] }
+  })
+  const [showSaveFilterPrompt, setShowSaveFilterPrompt] = useState(false)
+  const [saveFilterName, setSaveFilterName] = useState('')
+  const [savedFiltersMenuOpen, setSavedFiltersMenuOpen] = useState(false)
+  const savedFiltersMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!savedFiltersMenuOpen) return
+    function onOutsideClick(e: MouseEvent) {
+      if (savedFiltersMenuRef.current && !savedFiltersMenuRef.current.contains(e.target as Node)) {
+        setSavedFiltersMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick)
+    return () => document.removeEventListener('mousedown', onOutsideClick)
+  }, [savedFiltersMenuOpen])
+
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -7704,6 +7731,30 @@ export function App() {
     setFilterSubject(''); setFilterLabel(''); setFilterDateFrom(''); setFilterDateTo('')
     setFilterFlagged(false); setPage(0)
     setBulkSelected(new Set())
+  }
+
+  function saveCurrentFilter() {
+    const name = saveFilterName.trim()
+    if (!name) return
+    const f: SavedFilter = { name, status: filterStatus, modality: filterModality, bodyPart: filterBodyPart, source: filterSource, search: filterSearch, subject: filterSubject, label: filterLabel, dateFrom: filterDateFrom, dateTo: filterDateTo, flagged: filterFlagged }
+    const updated = [f, ...savedFilters.filter(x => x.name !== name)]
+    setSavedFilters(updated)
+    localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(updated))
+    setShowSaveFilterPrompt(false)
+    setSaveFilterName('')
+  }
+
+  function loadSavedFilter(f: SavedFilter) {
+    setFilterStatus(f.status); setFilterModality(f.modality); setFilterBodyPart(f.bodyPart)
+    setFilterSource(f.source); setFilterSearch(f.search); setFilterSubject(f.subject)
+    setFilterLabel(f.label); setFilterDateFrom(f.dateFrom); setFilterDateTo(f.dateTo)
+    setFilterFlagged(f.flagged); setPage(0); setBulkSelected(new Set()); setSavedFiltersMenuOpen(false)
+  }
+
+  function deleteSavedFilter(name: string) {
+    const updated = savedFilters.filter(f => f.name !== name)
+    setSavedFilters(updated)
+    localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(updated))
   }
 
   const allPageIds = studies.map(s => s.id)
@@ -8505,6 +8556,74 @@ export function App() {
             />
             {hasFilters && (
               <button type="button" className="btn btn--secondary" onClick={clearFilters}>Clear</button>
+            )}
+            {/* Save current filter as a named preset */}
+            {hasFilters && !showSaveFilterPrompt && (
+              <button type="button" className="btn btn--secondary" onClick={() => { setSaveFilterName(''); setShowSaveFilterPrompt(true) }} title="Save current filters as a preset">
+                Save filter
+              </button>
+            )}
+            {showSaveFilterPrompt && (
+              <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="filter-input"
+                  placeholder="Preset name…"
+                  value={saveFilterName}
+                  onChange={e => setSaveFilterName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveCurrentFilter(); if (e.key === 'Escape') setShowSaveFilterPrompt(false) }}
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
+                  autoFocus
+                  style={{ width: 130 }}
+                />
+                <button type="button" className="btn btn--action" onClick={saveCurrentFilter} disabled={!saveFilterName.trim()}>Save</button>
+                <button type="button" className="btn btn--secondary" onClick={() => setShowSaveFilterPrompt(false)}>✕</button>
+              </span>
+            )}
+            {/* Load saved filter presets dropdown */}
+            {savedFilters.length > 0 && (
+              <div ref={savedFiltersMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => setSavedFiltersMenuOpen(v => !v)}
+                  title="Load a saved filter preset"
+                >
+                  Saved ({savedFilters.length}) ▾
+                </button>
+                {savedFiltersMenuOpen && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 200,
+                    background: 'var(--bg-card, #fff)', border: '1px solid var(--border, #e2e8f0)',
+                    borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                    minWidth: 200, padding: '4px 0',
+                  }}>
+                    {savedFilters.map(f => (
+                      <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px' }}>
+                        <button
+                          type="button"
+                          style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: 4, fontSize: 13, color: 'var(--text-primary, #1e293b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover, #f1f5f9)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                          onClick={() => loadSavedFilter(f)}
+                        >
+                          {f.name}
+                        </button>
+                        <button
+                          type="button"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4, fontSize: 12, color: '#ea580c', flexShrink: 0 }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#ffedd5')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                          onClick={() => deleteSavedFilter(f.name)}
+                          title="Delete this preset"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             {state === 'loaded' && (
               <span className="filter-count">
