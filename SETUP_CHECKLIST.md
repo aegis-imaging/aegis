@@ -2,10 +2,18 @@
 
 Personal environment setup tasks for building the MVP/POC. Complete these in order — each section unblocks the next.
 
-> **GCP Production Status (2026-02-23):** `aegis-prod-488120` is live.
+> **GCP Production Status (2026-02-24):** `aegis-prod-488120` is live.
 > API: `https://api.aegisimaging.ai` — all services healthy, cloud smoke suite 11/11 PASS.
 > DIMSE receiver: `aegis-prod-dimse-receiver` (Compute Engine VM, `us-central1-a`, static IP `35.232.172.221`, port 11112).
 > CI/CD: Cloud Build triggers active in `us-central1` (`deploy-on-develop` + `terraform-apply-on-develop`).
+>
+> **AWS Production Status (2026-02-25):** `301691475234` / `us-east-1` is live.
+> API: `https://aws.api.aegisimaging.ai` — 10 ECS Fargate services, RDS PostgreSQL 15, S3, ALB + Cognito auth.
+> Cross-cloud DICOM routing: GCP→AWS STOW-RS verified live. GitHub Actions CI/CD active (fires on push to `develop`).
+>
+> **Azure Status (2026-02-26):** Deploying — day 9.
+> Azure Container Apps + PostgreSQL Flexible Server + Azure Blob Storage + Azure Container Registry.
+> GitHub Actions OIDC CI/CD (`.github/workflows/deploy-azure.yml`) fires on push to `develop`.
 
 ---
 
@@ -301,7 +309,9 @@ Manual trigger via GitHub Actions:
 
 ## 4d. Terraform — AWS HTTPS + Cognito Edge/Auth
 
-- [ ] Copy `terraform/aws/terraform.tfvars.example` to `terraform/aws/terraform.tfvars`
+> **AWS Production Status (2026-02-25): LIVE.** `https://aws.api.aegisimaging.ai` — 10 ECS Fargate services, RDS PostgreSQL 15, S3, ALB + Cognito. Cross-cloud DICOM routing verified. GitHub Actions auto-deploy active.
+
+- [x] Copy `terraform/aws/terraform.tfvars.example` to `terraform/aws/terraform.tfvars`
 - [ ] Fill required values:
   - `aws_region`, `environment`, `project_name`
   - `acm_certificate_arn` (issued cert in the same region as ALB)
@@ -329,6 +339,8 @@ Manual trigger via GitHub Actions:
   ```
 
 ## 4e. Terraform — Azure Infrastructure
+
+> **Azure Status (2026-02-26): Deploying — Day 9.** Azure Container Apps + PostgreSQL Flexible Server + Azure Blob Storage + Azure Container Registry. GitHub Actions OIDC CI/CD (`.github/workflows/deploy-azure.yml`) auto-deploys on push to `develop`.
 
 ### Prerequisites
 
