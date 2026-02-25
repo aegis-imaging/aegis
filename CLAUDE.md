@@ -1823,6 +1823,7 @@ cd mcp-server && npm install && npm run build
 | `list_all_webhook_deliveries` | All webhook delivery attempts across all subscriptions; filterable by subscription_id and success status; paginated |
 | `get_user_preferences` | Get notification preferences for an admin user: digest frequency and subscribed notify events |
 | `get_project_bids_info` | BIDS availability for a project: count of BIDS-complete studies, UIDs list, and download URL for the bulk ZIP |
+| `export_routing_rules` | Export all project-scoped routing rules as a JSON payload (project_id required); global rules excluded |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
@@ -1888,6 +1889,8 @@ cd mcp-server && npm install && npm run build
 | `bulk_pipeline_trigger` | Trigger a pipeline step (classify/phi_scan/protocol/deface/qc/bids/export) for multiple studies at once |
 | `import_tcia_series` | Download a TCIA series by SeriesInstanceUID and import it into AEGIS (triggers full pipeline) |
 | `import_protocol_templates` | Bulk-import protocol compliance templates into a project from a JSON array (skips duplicates by name) |
+| `import_routing_rules` | Bulk-import routing rules into a project (skips duplicates by name; destination_id stripped — must be re-assigned via update_routing_rule) |
+| `reorder_routing_rules` | Atomically update the priority of multiple routing rules in one transaction; pass [{id, priority}] array |
 | `batch_import_studies` | Import DICOM files from a server-local directory path into AEGIS; supports dry_run preview mode |
 | `set_user_preferences` | Update an admin user's personal notification preferences: digest frequency and subscribed notify events |
 
