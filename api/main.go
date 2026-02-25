@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/audit_retention"
 	"github.com/aegis-imaging/aegis/api/config"
 	"github.com/aegis-imaging/aegis/api/digest"
 	"github.com/aegis-imaging/aegis/api/email"
@@ -441,6 +442,11 @@ func main() {
 	retentionCtx, retentionCancel := context.WithCancel(context.Background())
 	defer retentionCancel()
 	retention.Start(retentionCtx, db)
+
+	// Start the audit log purge worker (daily sweep, no-op when AUDIT_RETENTION_DAYS=0).
+	auditRetentionCtx, auditRetentionCancel := context.WithCancel(context.Background())
+	defer auditRetentionCancel()
+	audit_retention.Start(auditRetentionCtx, db, cfg.AuditRetentionDays)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)

@@ -119,6 +119,10 @@ type Config struct {
 	DestHealthInterval  int    // DEST_HEALTH_INTERVAL — probe interval in seconds (0 = disabled)
 	DestHealthAlertEmail string // DEST_HEALTH_ALERT_EMAIL — email for failure transition alerts
 
+	// Audit log retention — purge audit_trail rows older than N days.
+	// 0 (default) = keep forever.
+	AuditRetentionDays int // AUDIT_RETENTION_DAYS
+
 	// First-admin bootstrap — seeds the first admin user on startup when admin_users is empty.
 	// Idempotent: has no effect once any admin user exists.
 	FirstAdminEmail string // FIRST_ADMIN_EMAIL
@@ -212,6 +216,8 @@ func Load() *Config {
 
 		DestHealthInterval:   envInt("DEST_HEALTH_INTERVAL", 0),
 		DestHealthAlertEmail: os.Getenv("DEST_HEALTH_ALERT_EMAIL"),
+
+		AuditRetentionDays: envInt("AUDIT_RETENTION_DAYS", 0),
 
 		FirstAdminEmail: os.Getenv("FIRST_ADMIN_EMAIL"),
 		FirstAdminName:  envOr("FIRST_ADMIN_NAME", os.Getenv("FIRST_ADMIN_EMAIL")),
