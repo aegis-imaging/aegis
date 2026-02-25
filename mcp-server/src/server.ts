@@ -1019,7 +1019,7 @@ const tools: Tool[] = [
   },
   {
     name: "list_webhook_subscriptions",
-    description: "List all webhook subscriptions. Returns array of {id, url, events, project_id, enabled, created_at}. Webhooks push study event notifications (approved, rejected, phi_flagged, export_complete, stuck) to external HTTP endpoints.",
+    description: "List all webhook subscriptions. Returns array of {id, url, events, project_id, enabled, created_at}. Webhooks push study event notifications (created, processing_complete, approved, rejected, phi_flagged, export_complete, stuck) to external HTTP endpoints.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1202,7 +1202,7 @@ const tools: Tool[] = [
   },
   {
     name: "create_webhook_subscription",
-    description: "Create a new webhook subscription to receive push notifications on study events. Payloads are signed with HMAC-SHA256 using the provided secret (X-AEGIS-Signature header). Supported events: study.approved, study.rejected, study.phi_flagged, study.export_complete, study.stuck. Requires confirm=true and a reason.",
+    description: "Create a new webhook subscription to receive push notifications on study events. Payloads are signed with HMAC-SHA256 using the provided secret (X-AEGIS-Signature header). Supported events: study.created, study.processing_complete, study.approved, study.rejected, study.phi_flagged, study.export_complete, study.stuck. Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["url", "events", "secret", "reason", "confirm"],
@@ -1211,7 +1211,7 @@ const tools: Tool[] = [
         url: { type: "string", format: "uri", description: "HTTPS endpoint that receives POST notifications" },
         events: {
           type: "array",
-          items: { type: "string", enum: ["study.approved", "study.rejected", "study.phi_flagged", "study.export_complete", "study.stuck"] },
+          items: { type: "string", enum: ["study.created", "study.processing_complete", "study.approved", "study.rejected", "study.phi_flagged", "study.export_complete", "study.stuck"] },
           minItems: 1,
           description: "Event names to subscribe to"
         },
@@ -1236,7 +1236,7 @@ const tools: Tool[] = [
         url: { type: "string", format: "uri", description: "New HTTPS endpoint URL (omit to keep current)" },
         events: {
           type: "array",
-          items: { type: "string", enum: ["study.approved", "study.rejected", "study.phi_flagged", "study.export_complete", "study.stuck"] },
+          items: { type: "string", enum: ["study.created", "study.processing_complete", "study.approved", "study.rejected", "study.phi_flagged", "study.export_complete", "study.stuck"] },
           minItems: 1,
           description: "New event list (omit to keep current)"
         },

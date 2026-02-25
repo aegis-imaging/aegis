@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/aegis-imaging/aegis/api/importer"
+	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // BatchImport imports DICOM files from a server-local directory.
@@ -32,9 +34,12 @@ func (s *Server) BatchImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auto-dispatch processing pipeline for each imported study.
+	// Auto-dispatch processing pipeline and fire study.created webhook for each imported study.
 	for _, studyID := range result.StudyIDs {
 		s.AdvancePipeline(r.Context(), studyID)
+		if study, err := model.GetStudyByID(r.Context(), s.db, studyID); err == nil {
+			go webhook.Deliver(r.Context(), s.db, "study.created", study)
+		}
 	}
 
 	s.writeJSON(w, http.StatusOK, result)

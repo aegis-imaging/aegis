@@ -162,6 +162,7 @@ export const getDailySummaryArgsSchema = z.object({
 });
 
 const webhookEvents = z.array(z.enum([
+  "study.created", "study.processing_complete",
   "study.approved", "study.rejected", "study.phi_flagged",
   "study.export_complete", "study.stuck"
 ])).min(1);

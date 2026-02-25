@@ -6,6 +6,7 @@ import (
 
 	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // AdvancePipeline inspects a study's processing state and dispatches the next
@@ -65,6 +66,44 @@ func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 	}
 	s.dispatchQcCheck(ctx, study)
 	s.dispatchBidsConversion(ctx, study)
+
+	// Fire study.processing_complete if all required steps are now terminal.
+	s.maybeFireProcessingComplete(ctx, study.ID)
+}
+
+// maybeFireProcessingComplete fires the study.processing_complete webhook when all
+// required pipeline steps are terminal and the study is awaiting human review.
+// Called at the end of AdvancePipeline so it fires once per pipeline completion.
+func (s *Server) maybeFireProcessingComplete(ctx context.Context, studyID string) {
+	fresh, err := model.GetStudyByID(ctx, s.db, studyID)
+	if err != nil {
+		return
+	}
+	// Already terminal — approved/rejected/expired; nothing to signal.
+	if fresh.Status == "approved" || fresh.Status == "rejected" || fresh.Status == "expired" {
+		return
+	}
+	// Check each required step has reached a terminal status.
+	classOK := !fresh.ClassificationRequired ||
+		fresh.ClassificationStatus == "classified" || fresh.ClassificationStatus == "failed"
+	phiOK := !fresh.PhiScanRequired ||
+		fresh.PhiScanStatus == "clean" || fresh.PhiScanStatus == "flagged" || fresh.PhiScanStatus == "failed"
+	protocolOK := !fresh.ProtocolRequired ||
+		fresh.ProtocolStatus == "compliant" || fresh.ProtocolStatus == "minor_deviations" ||
+		fresh.ProtocolStatus == "non_compliant" || fresh.ProtocolStatus == "failed"
+	defacingOK := !fresh.DefacingRequired ||
+		fresh.Status == "defaced" || fresh.Status == "clean"
+	qcOK := !fresh.QcRequired ||
+		fresh.QcStatus == "pass" || fresh.QcStatus == "warn" ||
+		fresh.QcStatus == "fail" || fresh.QcStatus == "failed"
+	bidsOK := !fresh.BidsRequired ||
+		fresh.BidsStatus == "complete" || fresh.BidsStatus == "failed"
+	exportOK := !fresh.ExportRequired ||
+		fresh.ExportStatus == "exported" || fresh.ExportStatus == "failed"
+
+	if classOK && phiOK && protocolOK && defacingOK && qcOK && bidsOK && exportOK {
+		go webhook.Deliver(ctx, s.db, "study.processing_complete", fresh)
+	}
 }
 
 func (s *Server) dispatchClassification(ctx context.Context, study *model.Study) {
