@@ -177,7 +177,7 @@ func (s *Server) GetDailySummary(w http.ResponseWriter, r *http.Request) {
 	// ── Recent significant audit events (last 10 in period) ───────────────────
 	auditRows, err := s.db.QueryContext(r.Context(), `
 		SELECT action, actor, created_at
-		FROM audit_log
+		FROM audit_trail
 		WHERE created_at >= $1
 		  AND action IN (
 		    'study.approved','study.rejected','study.stuck',
