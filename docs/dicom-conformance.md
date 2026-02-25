@@ -1,8 +1,8 @@
 # DICOM Conformance Statement
 
 **Application**: Anonymization & Exchange Gateway for Imaging Studies (AEGIS)
-**Version**: 1.0
-**Date**: 2026-02-22
+**Version**: 1.1
+**Date**: 2026-02-25
 **Standard**: DICOM PS3 (2024c)
 
 ---
@@ -11,12 +11,17 @@
 
 This conformance statement describes the DICOM capabilities of the AEGIS platform. AEGIS is a HIPAA-compliant medical imaging data exchange and anonymization system supporting brain MRI, PET, CT, and all other standard DICOM modalities.
 
-AEGIS provides two DICOM network interfaces:
+AEGIS provides the following DICOM network interfaces:
 
 | Interface | Role | Protocol |
 |-----------|------|---------|
 | **DIMSE Receiver** | Storage SCP | DICOM C-STORE (DIMSE, port 11112) |
-| **DICOMweb Proxy** | Query/Retrieve SCU (read-only) | QIDO-RS + WADO-RS (HTTP/HTTPS) |
+| **DIMSE Query** | C-FIND SCU | Query remote PACS/AE for matching studies (via sidecar `/api/dimse/query`) |
+| **STOW-RS Receiver** | Storage SCU (receive) | DICOMweb STOW-RS (`POST /api/stow/studies`) |
+| **DICOMweb Proxy** | Query/Retrieve (read-only) | QIDO-RS + WADO-RS (HTTP/HTTPS) |
+| **DIMSE Forwarder** | C-STORE SCU | Forward studies to remote DIMSE destinations (routing rules) |
+
+AEGIS is cloud-agnostic. The same application stack is certified for deployment on Google Cloud Platform (GCP), Amazon Web Services (AWS), and Microsoft Azure. See §9 for cloud-specific deployment notes.
 
 ---
 
@@ -26,17 +31,28 @@ AEGIS provides two DICOM network interfaces:
 
 | AE Title | Role | Network Port | Transport |
 |----------|------|-------------|-----------|
-| `AEGIS` (configurable via `DIMSE_AE_TITLE`) | Storage SCP | 11112 (configurable via `DIMSE_PORT`) | TCP |
-| *(calling AE — OHIF Viewer or admin client)* | DICOMweb SCU | 8080 (Go API HTTP) | HTTP/HTTPS |
+| `AEGIS` (configurable via `DIMSE_AE_TITLE`) | Storage SCP, C-FIND SCU, C-STORE SCU | 11112 (configurable via `DIMSE_PORT`) | TCP |
+| *(calling AE — Weasis DWV viewer or admin client)* | DICOMweb SCU | 8080 (Go API HTTP) | HTTP/HTTPS |
 
 ### 2.2 Association Policies
 
 **Storage SCP (DIMSE Receiver):**
 - Maximum simultaneous associations: 10 (configurable via `DIMSE_MAX_ASSOCIATIONS`)
-- Association initiator: no (SCP only)
+- Association initiator: no (SCP only for inbound C-STORE)
 - Association acceptor: yes
 - Asynchronous operations: not supported
 - Extended negotiation: not supported
+
+**C-FIND SCU (Outbound Query):**
+- Association initiator: yes
+- Association acceptor: no
+- Query Information Models: Study Root (default); Patient Root (when `query_level=PATIENT`)
+- Triggered by: `POST /api/dimse/query` admin API endpoint
+
+**C-STORE SCU (Outbound Forwarding):**
+- Association initiator: yes
+- Association acceptor: no
+- Triggered by: routing rules with `route_to` action pointing to a DIMSE destination
 
 ---
 
@@ -104,7 +120,7 @@ The DIMSE Receiver accepts all standard DICOM Storage SOP classes, including but
 > DICOM-registered Storage SOP classes. The table above lists the most commonly encountered
 > classes in research and clinical imaging.
 
-### 3.3 DIMSE Services
+### 3.3 DIMSE Services — SCP
 
 | Service | Role | Notes |
 |---------|------|-------|
@@ -121,11 +137,52 @@ On each C-STORE association close (`EVT_RELEASED`):
 
 ---
 
-## 4. DICOMweb Proxy (QIDO-RS + WADO-RS)
+## 4. DIMSE C-FIND SCU (Outbound Query)
 
-The Go API exposes a minimal DICOMweb proxy at `/dicomweb` (and `/dicomweb-raw` for pre-defacing access). This interface is read-only and is consumed by the OHIF Viewer embedded in the admin dashboard.
+AEGIS can query remote PACS/AE systems using C-FIND SCU via the admin API endpoint `POST /api/dimse/query`. The query is proxied through the DIMSE receiver sidecar.
 
-### 4.1 QIDO-RS (Query)
+### 4.1 Supported Query Information Models
+
+| Information Model | SOP Class UID | `query_level` values |
+|-------------------|--------------|---------------------|
+| Study Root Q/R — FIND | `1.2.840.10008.5.1.4.1.2.2.1` | `STUDY`, `SERIES`, `IMAGE` (default: `STUDY`) |
+| Patient Root Q/R — FIND | `1.2.840.10008.5.1.4.1.2.1.1` | `PATIENT`, `STUDY`, `SERIES`, `IMAGE` |
+
+### 4.2 API Request
+
+```
+POST /api/dimse/query
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{
+  "ae_title": "REMOTE_PACS",
+  "host": "pacs.example.com",
+  "port": 11112,
+  "query_level": "STUDY",
+  "query_params": {
+    "PatientID": "12345",
+    "StudyDate": "20240101-20240201",
+    "StudyInstanceUID": "",
+    "StudyDescription": ""
+  }
+}
+```
+
+**Response:**
+```json
+{"matches": [{"StudyInstanceUID": "...", "PatientID": "...", ...}], "count": N}
+```
+
+Empty-string values in `query_params` are treated as wildcard matches (standard DICOM C-FIND behaviour). Any DICOM keyword accepted by pydicom's `Dataset` may be specified.
+
+---
+
+## 5. DICOMweb Proxy (QIDO-RS, WADO-RS, STOW-RS)
+
+The Go API exposes DICOMweb endpoints at `/dicomweb` (and `/dicomweb-raw` for pre-defacing access). The proxy is consumed by the Weasis DWV viewer embedded in the admin dashboard, and by STOW-RS clients forwarding studies cross-cloud.
+
+### 5.1 QIDO-RS (Query)
 
 | Endpoint | DICOM Standard Reference |
 |----------|--------------------------|
@@ -145,30 +202,44 @@ The Go API exposes a minimal DICOMweb proxy at `/dicomweb` (and `/dicomweb-raw` 
 > Full tag-level QIDO filtering (e.g., by PatientName, StudyDate) is not implemented — use the
 > AEGIS REST API (`GET /api/studies`) for advanced filtering.
 
-### 4.2 WADO-RS (Retrieve)
+### 5.2 WADO-RS (Retrieve)
 
 | Endpoint | DICOM Standard Reference |
 |----------|--------------------------|
 | `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}` | PS3.18 §10.4 — Retrieve Instance |
+| `GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata` | PS3.18 §10.4.1 — Retrieve Instance Metadata |
 
-- Returns raw DICOM bytes (`application/dicom` content type).
+- Instance retrieval returns raw DICOM bytes (`application/dicom` content type).
+- Metadata retrieval returns DICOMweb JSON (pixel data excluded).
 - SOPInstanceUID format: `{StudyInstanceUID}.1.{fileIndex}` where `fileIndex` maps to a file in the study's DICOM store.
-- `/dicomweb-raw` endpoint always reads from `dicom/raw/` (pre-defacing store) regardless of study state.
-- `/dicomweb` endpoint reads from the study's current `dicom_store` (`raw` or `clean`).
+- `/dicomweb-raw` endpoints always read from `dicom/raw/` (pre-defacing store) regardless of study state.
+- `/dicomweb` endpoints read from the study's current `dicom_store` (`raw` or `clean`).
 
-### 4.3 Not Supported
+### 5.3 STOW-RS (Store — Cross-Cloud Routing)
+
+AEGIS implements a STOW-RS receiver at `POST /api/stow/studies` for receiving forwarded studies from other cloud deployments (cross-cloud routing). This endpoint is **not** a general-purpose PACS ingestion path — it is used internally for GCP ↔ AWS ↔ Azure study replication via routing rules.
+
+| Endpoint | DICOM Standard Reference |
+|----------|--------------------------|
+| `POST /api/stow/studies` | PS3.18 §10.5.1 — Store Instances |
+
+**Authentication**: API key (`Authorization: Bearer <key>`) required. The API key is registered in the destination tenancy's `api_keys` table. On each cross-cloud routing rule with `route_to` action pointing to a DICOMweb destination, the source tenancy injects the key via `dicomweb_auth_header`.
+
+**Accepted media types**: `multipart/related; type="application/dicom"` (standard STOW-RS).
+
+### 5.4 Not Supported
 
 The following DICOMweb services are **not** implemented in this version:
 
-- STOW-RS (ingest via DICOMweb) — use browser upload portal or DIMSE C-STORE
 - WADO-URI (legacy URL-based retrieve)
 - UPS-RS (Unified Procedure Step)
 - Bulk Data retrieve (`/bulkdata`)
 - Thumbnail retrieve (`/thumbnail`)
+- STOW-RS for general external PACS push (use DIMSE C-STORE or the browser upload portal)
 
 ---
 
-## 5. De-identification
+## 6. De-identification
 
 AEGIS applies DICOM PS3.15 Annex E — Basic Application Level Confidentiality Profile (de-identification) at the browser before upload. The de-identification is performed in the client's browser via the `@aegis/client` TypeScript library, which applies the Basic Profile (E.1.1) tag actions: keep, remove, empty, replace, or UID-remap.
 
@@ -183,34 +254,83 @@ AEGIS applies DICOM PS3.15 Annex E — Basic Application Level Confidentiality P
 
 ---
 
-## 6. Security
+## 7. Security
 
 - **Authentication**: GCP Identity-Aware Proxy (IAP), Azure AD Easy Auth, or AWS ALB + Cognito in production. Dev mode: auto-authenticate via `DEV_USER_EMAIL`.
-- **Transport security**: All HTTP endpoints should be deployed behind an HTTPS load balancer (enforced by Terraform modules). The DIMSE port (11112) is a plain TCP/DICOM port — TLS wrapping via stunnel or a VPN is recommended for inter-site deployments.
-- **API keys**: Machine-to-machine integrations use HMAC-SHA256 hashed API keys stored in the database.
+- **Transport security**: All HTTP endpoints are deployed behind an HTTPS load balancer (enforced by Terraform modules). The DIMSE port (11112) is a plain TCP/DICOM port — TLS wrapping via stunnel or a VPN is recommended for inter-site deployments.
+- **API keys**: Machine-to-machine integrations use SHA-256 hashed API keys stored in the database.
 - **DIMSE operator key**: `/ingest/retry*` control endpoints can be protected by `DIMSE_OPERATOR_API_KEY`.
 
 ---
 
-## 7. Limitations and Known Deviations
+## 8. Limitations and Known Deviations
 
 | Item | Description |
 |------|-------------|
-| C-FIND / C-MOVE | Not implemented. Query/retrieve from PACS is not supported in this release. Use STOW-RS from PACS or DIMSE C-STORE push. |
+| C-MOVE | Not implemented. C-FIND query (SCU) is supported; C-MOVE retrieve is not. PACS must push via C-STORE or STOW-RS. |
 | C-GET | Not implemented. |
 | WADO-RS multipart/related bulk retrieve | Not implemented. Instances are retrieved one at a time. |
 | QIDO-RS tag-level filtering | Not implemented in the proxy. Use the AEGIS REST API for study-level filtering. |
-| Enhanced DICOM (multi-frame) | Accepted and stored as-is. Protocol compliance service reads Enhanced DICOM functional groups; viewer support depends on OHIF version. |
+| Enhanced DICOM (multi-frame) | Accepted and stored as-is. Protocol compliance service reads Enhanced DICOM functional groups; viewer support depends on the Weasis DWV version deployed. |
 | Study-level merging | Multiple associations for the same StudyInstanceUID are addended to the existing study record. |
 | Large series (>10,000 instances) | Not performance-tested. File count is stored but no chunked-retrieval pagination is implemented on the WADO-RS endpoint. |
 | TLS on DIMSE port | Not natively supported. Deploy behind a TLS proxy (stunnel, Nginx stream) for encrypted PACS communication. |
+| C-FIND SCU — Patient Root SERIES/IMAGE levels | Patient Root is supported at PATIENT and STUDY levels. SERIES and IMAGE levels use Study Root regardless of model selection. |
 
 ---
 
-## 8. References
+## 9. Multi-Cloud Deployment Notes
+
+AEGIS is certified for deployment on three cloud platforms. The DICOM protocol behaviour is identical across all clouds; only the infrastructure hosting the services differs.
+
+### 9.1 Google Cloud Platform (GCP) — Production
+
+| Component | Platform Resource |
+|-----------|-----------------|
+| Go API | Cloud Run (`aegis-api`) |
+| DIMSE Receiver SCP | Compute Engine VM (Debian 12, port 11112) — Cloud Run cannot expose raw TCP |
+| DICOM Storage | Google Cloud Storage (GCS), `STORAGE_MODE=gcs` |
+| Auth | IAP (`AUTH_PROVIDER=iap`), header `X-Goog-Authenticated-User-Email` |
+| Cross-cloud routing | STOW-RS to AWS/Azure via routing rules + API key auth |
+
+### 9.2 Amazon Web Services (AWS)
+
+| Component | Platform Resource |
+|-----------|-----------------|
+| Go API | ECS Fargate |
+| DIMSE Receiver SCP | ECS Fargate task (port 11112 exposed via NLB) |
+| DICOM Storage | S3 (SSE-KMS), `STORAGE_MODE=s3` |
+| Auth | ALB + Cognito (`AUTH_PROVIDER=aws`), OIDC JWT via `X-Amzn-Oidc-Data` header |
+| Cross-cloud routing | STOW-RS to GCP via routing rules + API key auth |
+
+> **WAF note**: The AWS WAF has a dedicated `allow-stow-rs` rule at priority 15 to bypass the `SizeRestrictions_BODY` managed rule for `POST /api/stow` paths, as DICOM multipart payloads regularly exceed the WAF's default 8 KB body limit.
+
+### 9.3 Microsoft Azure
+
+| Component | Platform Resource |
+|-----------|-----------------|
+| Go API | Azure Container Apps |
+| DIMSE Receiver SCP | Azure Linux VM (Standard_B2s, Debian 12, port 11112) — Container Apps cannot expose raw TCP |
+| DICOM Storage | Azure Blob Storage, `STORAGE_MODE=azure` |
+| Auth | Easy Auth (`AUTH_PROVIDER=azure`), header `X-MS-CLIENT-PRINCIPAL-NAME` |
+| Email (SMTP) | Azure Communication Services Email relay (`smtp.azurecomm.net:587`) |
+| Cross-cloud routing | STOW-RS to GCP/AWS via routing rules + API key auth |
+
+### 9.4 Cross-Cloud DICOM Routing
+
+Bidirectional cross-cloud study forwarding is implemented using DICOMweb STOW-RS:
+
+1. A routing rule with `action=route_to` and a DICOMweb destination (`dicomweb_url = https://{cloud}/api/stow`) is configured in the source tenancy.
+2. On study approval, the Go API streams DICOM files as `multipart/related` to the destination STOW-RS endpoint.
+3. The destination tenancy receives the study via `/api/stow/studies`, creates a study record, and runs its own routing rules.
+4. Duplicate StudyInstanceUIDs are rejected by a unique database constraint — the loop terminates after one hop.
+
+---
+
+## 10. References
 
 - DICOM Standard: PS3 (2024c) — https://www.dicomstandard.org/current
 - PS3.15 Annex E — Basic Application Level Confidentiality Profile
 - PS3.18 — Web Services (DICOMweb)
 - pynetdicom — https://pydicom.github.io/pynetdicom/
-- OHIF Viewer — https://ohif.org/
+- Weasis DWV — https://weasis.org/
