@@ -279,6 +279,7 @@ func main() {
 
 	// Routing rules — condition → action mappings evaluated on study ingest.
 	mux.HandleFunc("GET /api/routing-rules", auth(srv.ListRoutingRules))
+	mux.HandleFunc("POST /api/routing-rules/simulate", auth(srv.SimulateRoutingRules)) // must be before {id} patterns
 	mux.HandleFunc("POST /api/routing-rules", adminOnly(srv.CreateRoutingRule))
 	mux.HandleFunc("PUT /api/routing-rules/{id}", adminOnly(srv.UpdateRoutingRule))
 	mux.HandleFunc("DELETE /api/routing-rules/{id}", adminOnly(srv.DeleteRoutingRule))
