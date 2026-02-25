@@ -1431,7 +1431,7 @@ Per-institution aggregate statistics derived from the studies table.
 
 **Admin dashboard:** Stats panel shown when an institution is selected in the Institutions tab.
 
-### Stats: Breakdown, Storage, Activity Summary, and Timeline
+### Stats: Breakdown, Storage, Activity Summary, Timeline, and Processing Times
 
 **Modality/body part breakdown** (`GET /api/stats/breakdown`, admin-read):
 - Returns `{rows: [{modality, body_part, count}]}` ordered by count descending
@@ -1457,6 +1457,15 @@ Per-institution aggregate statistics derived from the studies table.
 - Returns `{days: [{day: "YYYY-MM-DD", received, approved}]}` for the last N days (default 30)
 - Query params: `days` (1–365), `project_id` (UUID, optional)
 - **Admin dashboard:** collapsible "Daily ingestion (last 30 days)" table showing received and approved counts per day; respects global project selector; resets when project changes
+
+**Pipeline stage processing times** (`GET /api/stats/processing-times`, admin-read):
+- Returns `{generated_at, period_days, stages: [{stage, count, avg_seconds, p95_seconds, min_seconds, max_seconds}]}` derived from paired `.triggered` / `.complete` audit trail events
+- Stages: `deface`, `phi_scan`, `qc_check`, `bids_conversion`, `classification`, `protocol_check`, `export`
+- Uses a lateral join to find the nearest completion event after each trigger within a 2-hour window, correctly handling re-processing
+- Query params: `days` (1–365, default 30), `project_id` (UUID, optional)
+- Results ordered slowest-to-fastest by average duration
+- **Admin dashboard:** collapsible "Stage processing times (last 30 days)" table showing avg/P95/min/max per stage with human-readable duration formatting
+- **MCP:** `get_processing_stats` read tool (supports `days` and `project_id` params)
 
 ### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
@@ -1555,6 +1564,7 @@ cd mcp-server && npm install && npm run build
 | `get_stuck_studies` | Studies idle beyond a threshold (minutes, optional project_id) |
 | `get_breakdown_stats` | Modality/body part breakdown (optional project_id) |
 | `get_storage_stats` | Raw/clean file counts (optional project_id) |
+| `get_processing_stats` | Per-stage processing-time statistics (avg/p95/min/max) derived from audit trail (optional project_id, days) |
 | `get_audit_actors` | Top admin actors in the last 30 days |
 | `list_projects` | All projects with id/name/slug/archived/retention_days |
 | `list_institutions` | All institutions with type/ae_title/ip_ranges |

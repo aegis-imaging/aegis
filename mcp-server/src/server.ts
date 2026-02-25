@@ -33,6 +33,7 @@ import {
   listAuditArgsSchema,
   listProtocolTemplatesArgsSchema,
   listStudiesArgsSchema,
+  processingTimesArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -519,6 +520,28 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_processing_stats",
+    description: "Get per-stage pipeline processing-time statistics (avg, p95, min, max, count) derived from the audit trail. Stages: deface, phi_scan, qc_check, bids_conversion, classification, protocol_check, export. Useful for identifying bottlenecks, SLA compliance monitoring, and capacity planning. Results are ordered slowest-to-fastest by average duration.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 365,
+          description: "Look-back window in days (default 30)"
+        },
+        project_id: {
+          type: "string",
+          format: "uuid",
+          description: "Scope to a single project (optional)"
+        }
       },
       additionalProperties: false
     }
@@ -1478,6 +1501,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.project_id) params.set("project_id", parsed.project_id);
       const qs = params.toString();
       const data = await client.get(`/api/storage/stats${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_processing_stats") {
+      const parsed = processingTimesArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/processing-times${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
