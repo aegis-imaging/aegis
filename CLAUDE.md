@@ -35,6 +35,7 @@ Operational docs:
 - `docs/runbooks/alert-response.md` — per-alert incident response for all 9 Cloud Monitoring alert policies: triage steps, remediation commands, escalation paths
 - `docs/runbooks/incident-response.md` — general incident management workflow (severity levels, communication, post-mortem)
 - `docs/runbooks/secret-rotation.md` — secret rotation procedures for DB password, API keys, and DIMSE operator key
+- `docs/runbooks/cross-cloud-routing.md` — GCP→AWS cross-cloud DICOM routing setup (STOW-RS + DIMSE), step-by-step config, troubleshooting
 
 ## Repository Structure (Monorepo)
 
