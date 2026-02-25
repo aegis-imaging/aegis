@@ -67,6 +67,7 @@ import {
   createAdminUserArgsSchema,
   updateAdminUserArgsSchema,
   deleteAdminUserArgsSchema,
+  sendAdminInviteArgsSchema,
   listInviteCodesArgsSchema,
   listInviteRequestsArgsSchema,
   createInviteCodeArgsSchema,
@@ -1433,6 +1434,21 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         user_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "send_admin_invite",
+    description: "Send a dashboard invite email to a registered admin user. The email contains the dashboard URL and SSO sign-in instructions (Google, Microsoft, or AWS). Requires SMTP to be configured on the server (SMTP_HOST env var). Use list_admin_users to find the user_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["user_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        user_id: { type: "string", format: "uuid", description: "UUID of the admin user to invite" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -3474,6 +3490,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleDeleteAdminUser(parsedDAU.request_id ?? buildRequestId(), parsedDAU);
       }
 
+      if (name === "send_admin_invite") {
+        const parsedSAI = sendAdminInviteArgsSchema.parse(args);
+        return handleSendAdminInvite(parsedSAI.request_id ?? buildRequestId(), parsedSAI);
+      }
+
       if (name === "create_invite_code") {
         const parsedCIC = createInviteCodeArgsSchema.parse(args);
         return handleCreateInviteCode(parsedCIC.request_id ?? buildRequestId(), parsedCIC);
@@ -3946,7 +3967,7 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   if (name === "create_admin_user") {
     return typeof args.email === "string" ? args.email : null;
   }
-  if (name === "update_admin_user" || name === "delete_admin_user") {
+  if (name === "update_admin_user" || name === "delete_admin_user" || name === "send_admin_invite") {
     return typeof args.user_id === "string" ? args.user_id : null;
   }
   if (name === "create_invite_code") {
@@ -5400,6 +5421,26 @@ async function handleDeleteAdminUser(
   return formatSuccess(requestId, "delete_admin_user", {
     accepted: true,
     user_id: parsed.user_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleSendAdminInvite(
+  requestId: string,
+  parsed: { user_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "send_admin_invite");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow send_admin_invite", false, "send_admin_invite");
+  }
+
+  const data = await client.post(`/api/admin-users/${encodeURIComponent(parsed.user_id)}/send-invite`, {});
+  return formatSuccess(requestId, "send_admin_invite", {
+    accepted: true,
+    user_id: parsed.user_id,
+    result: data,
     reason: parsed.reason
   });
 }

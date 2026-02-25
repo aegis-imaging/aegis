@@ -628,6 +628,13 @@ export const deleteAdminUserArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const sendAdminInviteArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  user_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 // ─── Invite codes + access requests ──────────────────────────────────────────
 export const listInviteCodesArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional()
@@ -1136,6 +1143,7 @@ export const writeToolNames = [
   "create_admin_user",
   "update_admin_user",
   "delete_admin_user",
+  "send_admin_invite",
   "create_invite_code",
   "revoke_invite_code",
   "delete_invite_code",
