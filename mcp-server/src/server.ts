@@ -31,6 +31,7 @@ import {
   getRetentionPreviewArgsSchema,
   getDestinationHealthArgsSchema,
   simulateRoutingArgsSchema,
+  getCohortReportArgsSchema,
   getStudyDicomTagsArgsSchema,
   getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
@@ -855,6 +856,19 @@ const tools: Tool[] = [
           maximum: 365,
           description: "Look-back window in days (default 30)"
         }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_cohort_report",
+    description: "Get a per-subject cohort summary for a project. Returns total_subjects, subjects_multi_study (subjects with ≥2 studies), total_studies_with_subject, modality_coverage {modality: subject_count}, and subjects[] each with: subject_id, study_count, approved_count, rejected_count, pending_count, modalities[], earliest_study_at, latest_study_at, all_approved, has_defaced, has_exported. Use to identify data completeness gaps (e.g. missing follow-up scans), subjects with multiple modalities, and longitudinal cohort health.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" }
       },
       additionalProperties: false
     }
@@ -2915,6 +2929,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.days !== undefined) params.set("days", String(parsed.days));
       const qs = params.toString();
       const data = await client.get(`/api/projects/${parsed.project_id}/compliance-report${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_cohort_report") {
+      const parsed = getCohortReportArgsSchema.parse(args);
+      const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/cohort-report`);
       return formatSuccess(requestId, name, data);
     }
 
