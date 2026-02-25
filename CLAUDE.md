@@ -1696,6 +1696,18 @@ cd mcp-server && npm install && npm run build
 | `update_anon_profile` | Update an anonymization profile (name, description, retained_tags, enabled) |
 | `delete_anon_profile` | Permanently delete an anonymization profile |
 | `set_default_anon_profile` | Set or clear the default anonymization profile for a project (empty profile_id clears the default) |
+| `create_institution` | Register a new institution (hospital, research site) with type, IP ranges, and AE title |
+| `update_institution` | Update an institution's metadata, network identity, or enabled state |
+| `delete_institution` | Permanently delete an institution record |
+| `link_institution_project` | Link an institution to a project with a role (sender/receiver/admin) |
+| `unlink_institution_project` | Remove an institution-project link |
+| `create_federation_peer` | Register a trusted remote AEGIS instance as a federation peer (stub — no data flows yet) |
+| `update_federation_peer` | Update a federation peer's name, URL, notes, or enabled state |
+| `delete_federation_peer` | Permanently delete a federation peer registration |
+| `set_storage_quota` | Set or clear the per-project DICOM storage quota in bytes (null = unlimited) |
+| `update_phi_config` | Override global PHI detection thresholds (confidence_threshold, min_text_length) for a project |
+| `delete_study` | Permanently delete a study record and all DICOM files from storage |
+| `bulk_pipeline_trigger` | Trigger a pipeline step (classify/phi_scan/protocol/deface/qc/bids/export) for multiple studies at once |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 
