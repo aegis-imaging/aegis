@@ -594,6 +594,46 @@ export const deleteAdminUserArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Invite codes + access requests ──────────────────────────────────────────
+export const listInviteCodesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional()
+});
+
+export const listInviteRequestsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  status: z.enum(["pending", "approved", "denied", "all"]).optional()
+});
+
+export const createInviteCodeArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  label: z.string().min(1).max(256),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const inviteCodeIdArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  code_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const sendInviteCodeArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  code_id: z.string().uuid(),
+  email: z.string().email(),
+  name: z.string().min(1).max(255).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const inviteRequestActionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  invite_request_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -644,7 +684,9 @@ export const readToolNames = [
   "list_study_relationships",
   "list_digest_subscriptions",
   "get_daily_summary",
-  "list_admin_users"
+  "list_admin_users",
+  "list_invite_codes",
+  "list_invite_requests"
 ] as const;
 
 export const writeToolNames = [
@@ -704,7 +746,13 @@ export const writeToolNames = [
   "set_project_sla_threshold",
   "create_admin_user",
   "update_admin_user",
-  "delete_admin_user"
+  "delete_admin_user",
+  "create_invite_code",
+  "revoke_invite_code",
+  "delete_invite_code",
+  "send_invite_code",
+  "approve_invite_request",
+  "deny_invite_request"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
