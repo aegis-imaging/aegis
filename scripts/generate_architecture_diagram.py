@@ -449,6 +449,7 @@ def build_html():
             "DICOMweb STOW-RS destinations",
             "DIMSE C-STORE to remote AE Title",
             "Auto-forwards on study approval",
+            "Cross-cloud: GCP↔AWS STOW-RS live",
         ]),
         ("Share Lifecycle", [
             "Extend / revoke anytime",
@@ -513,8 +514,8 @@ def build_html():
         ("Phase 4: Production  ✓",
          "GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC",
          "#7C3AED"),
-        ("Phase 5: Beta → GA  🚧",
-         "Private beta · AWS deployment (Q1, deploying now) · Azure + SOC 2 (Q3) · Enterprise GA (Q4)",
+        ("Phase 5: AWS Live  ✓",
+         "AWS production live (Feb 25) · Cross-cloud STOW-RS routing GCP↔AWS · Single codebase deploys both clouds in parallel · Azure + SOC 2 (Q3) · Enterprise GA (Q4)",
          "#DC2626"),
     ]
     phases_html = "\n".join(
@@ -562,10 +563,10 @@ def build_html():
     ], "py")
 
     aws_cicd = card("GitHub Actions CI/CD", [
-        "Triggers on push to develop (same as GCP Cloud Build)",
-        "Matrix build: 10 services, --platform linux/amd64",
-        "Push SHA tag + latest tag to ECR",
-        "Force-new-deployment for 9 ECS services",
+        "Triggers on push to develop — parallel with GCP Cloud Build",
+        "Matrix build: 11 services, --platform linux/amd64",
+        "Push SHA tag + latest tag to 13 ECR repositories",
+        "Force-new-deployment for 10 ECS services",
         "Update SSM param + reboot DIMSE EC2",
     ], "slate")
 
