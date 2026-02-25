@@ -75,6 +75,18 @@ import {
   updateAnonProfileArgsSchema,
   deleteAnonProfileArgsSchema,
   setDefaultAnonProfileArgsSchema,
+  createInstitutionArgsSchema,
+  updateInstitutionArgsSchema,
+  institutionIdArgsSchema,
+  linkInstitutionProjectArgsSchema,
+  unlinkInstitutionProjectArgsSchema,
+  createFederationPeerArgsSchema,
+  updateFederationPeerArgsSchema,
+  federationPeerIdArgsSchema,
+  setStorageQuotaArgsSchema,
+  updatePhiConfigArgsSchema,
+  deleteStudyArgsSchema,
+  bulkPipelineTriggerArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -2087,6 +2099,227 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "create_institution",
+    description: "Register a new institution (hospital, research site, imaging center). type must be 'sender', 'receiver', or 'both'. ip_ranges is an optional comma-separated list of CIDR blocks used for automatic source attribution on internal ingest. ae_title is the DICOM AE title used for DIMSE attribution. Slug is auto-derived from name if omitted. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "type", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        name: { type: "string", minLength: 1, maxLength: 256 },
+        type: { type: "string", enum: ["sender", "receiver", "both"], description: "Institution role" },
+        slug: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z0-9-]+$", description: "URL-safe identifier (auto-derived from name if omitted)" },
+        description: { type: "string", maxLength: 1024 },
+        contact_name: { type: "string", maxLength: 256 },
+        contact_email: { type: "string", format: "email" },
+        ip_ranges: { type: "string", description: "Comma-separated CIDR blocks for IP-based auto-attribution (e.g. '10.0.0.0/8,192.168.1.5')" },
+        ae_title: { type: "string", maxLength: 16, description: "DICOM AE title for DIMSE attribution" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_institution",
+    description: "Update an existing institution's metadata, type, contact info, IP ranges, or AE title. name and type are required; all others are optional. enabled=false soft-disables the institution. Use list_institutions to find institution UUIDs. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["institution_id", "name", "type", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        institution_id: { type: "string", format: "uuid" },
+        name: { type: "string", minLength: 1, maxLength: 256 },
+        type: { type: "string", enum: ["sender", "receiver", "both"] },
+        slug: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z0-9-]+$" },
+        description: { type: "string", maxLength: 1024 },
+        contact_name: { type: "string", maxLength: 256 },
+        contact_email: { type: "string", format: "email" },
+        ip_ranges: { type: "string", description: "Comma-separated CIDR blocks" },
+        ae_title: { type: "string", maxLength: 16 },
+        enabled: { type: "boolean" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_institution",
+    description: "Permanently delete an institution record. Studies that referenced this institution will retain their institution_id FK but the institution row will be gone. Use list_institutions to find institution UUIDs. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["institution_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        institution_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "link_institution_project",
+    description: "Link an institution to a project with a role (sender/receiver/admin). Senders can submit studies; receivers are valid forwarding destinations; admin links grant institution access to all project data. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["institution_id", "project_id", "role", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        institution_id: { type: "string", format: "uuid" },
+        project_id: { type: "string", format: "uuid" },
+        role: { type: "string", enum: ["sender", "receiver", "admin"], description: "Institution role in this project" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "unlink_institution_project",
+    description: "Remove a project link from an institution. Studies already attributed to this institution are not affected. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["institution_id", "project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        institution_id: { type: "string", format: "uuid" },
+        project_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_federation_peer",
+    description: "Register a trusted remote AEGIS instance as a federation peer. This is a stub registry entry for future cross-tenant federation — no data flows yet. name and api_url are required; slug is auto-derived from name if omitted. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "api_url", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        name: { type: "string", minLength: 1, maxLength: 256 },
+        slug: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z0-9-]+$", description: "URL-safe identifier (auto-derived from name if omitted)" },
+        api_url: { type: "string", format: "uri", description: "Base URL of the remote AEGIS instance" },
+        notes: { type: "string", maxLength: 1024 },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_federation_peer",
+    description: "Update a federation peer's name, URL, notes, or enabled state. Use list_federation_peers to find peer UUIDs. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["peer_id", "name", "api_url", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        peer_id: { type: "string", format: "uuid" },
+        name: { type: "string", minLength: 1, maxLength: 256 },
+        slug: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z0-9-]+$" },
+        api_url: { type: "string", format: "uri" },
+        notes: { type: "string", maxLength: 1024 },
+        enabled: { type: "boolean" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_federation_peer",
+    description: "Permanently delete a federation peer registration. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["peer_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        peer_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "set_storage_quota",
+    description: "Set or clear the per-project DICOM storage quota in bytes. When set, new uploads are rejected once the project's total storage exceeds this limit. Pass storage_quota_bytes=null to clear the quota (unlimited). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "storage_quota_bytes", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        storage_quota_bytes: { type: ["integer", "null"], minimum: 1, description: "Quota in bytes (e.g. 10737418240 = 10 GB), or null to remove the quota" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_phi_config",
+    description: "Override the global PHI detection thresholds for a specific project. confidence_threshold (0.0–1.0) is the minimum OCR confidence to flag text; min_text_length is the minimum character count. Omit a field to keep its current value. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        confidence_threshold: { type: "number", minimum: 0, maximum: 1, description: "Minimum OCR confidence to flag (0.0–1.0)" },
+        min_text_length: { type: "integer", minimum: 1, description: "Minimum text length to consider as PHI" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_study",
+    description: "Permanently delete a study record and ALL associated DICOM files from storage. This action cannot be undone. The study must not be in an actively processing state. Use for removing incorrectly uploaded, duplicate, or test studies. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid", description: "Study UUID to permanently delete" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "bulk_pipeline_trigger",
+    description: "Trigger a pipeline step for multiple studies in one call. Resets the specified step to 'pending' and lets the auto-pipeline re-dispatch it. Useful for batch re-processing after a service outage or configuration change. step must be one of: classify, phi_scan, protocol, deface, qc, bids, export. Returns {triggered, skipped, errors[]}. Skipped = step not required or already in-flight. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_ids", "step", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_ids: {
+          type: "array",
+          items: { type: "string", format: "uuid" },
+          minItems: 1,
+          maxItems: 200,
+          description: "Study UUIDs to trigger (max 200)"
+        },
+        step: {
+          type: "string",
+          enum: ["classify", "phi_scan", "protocol", "deface", "qc", "bids", "export"],
+          description: "Pipeline step to reset and re-trigger"
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -2795,6 +3028,66 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleSetDefaultAnonProfile(parsed.request_id ?? buildRequestId(), parsed);
       }
 
+      if (name === "create_institution") {
+        const parsed = createInstitutionArgsSchema.parse(args);
+        return handleCreateInstitution(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "update_institution") {
+        const parsed = updateInstitutionArgsSchema.parse(args);
+        return handleUpdateInstitution(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "delete_institution") {
+        const parsed = institutionIdArgsSchema.parse(args);
+        return handleDeleteInstitution(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "link_institution_project") {
+        const parsed = linkInstitutionProjectArgsSchema.parse(args);
+        return handleLinkInstitutionProject(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "unlink_institution_project") {
+        const parsed = unlinkInstitutionProjectArgsSchema.parse(args);
+        return handleUnlinkInstitutionProject(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "create_federation_peer") {
+        const parsed = createFederationPeerArgsSchema.parse(args);
+        return handleCreateFederationPeer(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "update_federation_peer") {
+        const parsed = updateFederationPeerArgsSchema.parse(args);
+        return handleUpdateFederationPeer(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "delete_federation_peer") {
+        const parsed = federationPeerIdArgsSchema.parse(args);
+        return handleDeleteFederationPeer(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "set_storage_quota") {
+        const parsed = setStorageQuotaArgsSchema.parse(args);
+        return handleSetStorageQuota(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "update_phi_config") {
+        const parsed = updatePhiConfigArgsSchema.parse(args);
+        return handleUpdatePhiConfig(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "delete_study") {
+        const parsed = deleteStudyArgsSchema.parse(args);
+        return handleDeleteStudy(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "bulk_pipeline_trigger") {
+        const parsed = bulkPipelineTriggerArgsSchema.parse(args);
+        return handleBulkPipelineTrigger(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       if (name === "add_study_note") {
         const parsedNote = addStudyNoteArgsSchema.parse(args);
         return handleAddStudyNote(parsedNote.request_id ?? buildRequestId(), parsedNote);
@@ -3121,6 +3414,28 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "set_default_anon_profile") {
     return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "create_institution") {
+    return typeof args.name === "string" ? args.name : null;
+  }
+  if (name === "update_institution" || name === "delete_institution" ||
+      name === "link_institution_project" || name === "unlink_institution_project") {
+    return typeof args.institution_id === "string" ? args.institution_id : null;
+  }
+  if (name === "create_federation_peer") {
+    return typeof args.name === "string" ? args.name : null;
+  }
+  if (name === "update_federation_peer" || name === "delete_federation_peer") {
+    return typeof args.peer_id === "string" ? args.peer_id : null;
+  }
+  if (name === "set_storage_quota" || name === "update_phi_config") {
+    return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "delete_study") {
+    return typeof args.study_id === "string" ? args.study_id : null;
+  }
+  if (name === "bulk_pipeline_trigger") {
+    return Array.isArray(args.study_ids) ? (args.study_ids as string[]).join(",") : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -5205,6 +5520,300 @@ async function handleSetDefaultAnonProfile(
     project_id: parsed.project_id,
     profile_id: parsed.profile_id || null,
     action: parsed.profile_id ? "set" : "cleared",
+    reason: parsed.reason
+  });
+}
+
+async function handleCreateInstitution(
+  requestId: string,
+  parsed: {
+    name: string; type: string; slug?: string; description?: string;
+    contact_name?: string; contact_email?: string; ip_ranges?: string;
+    ae_title?: string; reason: string; confirm: true
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_institution");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_institution", false, "create_institution");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name, institution_type: parsed.type };
+  if (parsed.slug !== undefined) body.slug = parsed.slug;
+  if (parsed.description !== undefined) body.description = parsed.description;
+  if (parsed.contact_name !== undefined) body.contact_name = parsed.contact_name;
+  if (parsed.contact_email !== undefined) body.contact_email = parsed.contact_email;
+  if (parsed.ip_ranges !== undefined) body.ip_ranges = parsed.ip_ranges;
+  if (parsed.ae_title !== undefined) body.ae_title = parsed.ae_title;
+
+  const data = await client.post("/api/institutions", body);
+  return formatSuccess(requestId, "create_institution", {
+    accepted: true,
+    name: parsed.name,
+    institution: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUpdateInstitution(
+  requestId: string,
+  parsed: {
+    institution_id: string; name: string; type: string; slug?: string; description?: string;
+    contact_name?: string; contact_email?: string; ip_ranges?: string;
+    ae_title?: string; enabled?: boolean; reason: string; confirm: true
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_institution");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_institution", false, "update_institution");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name, institution_type: parsed.type };
+  if (parsed.slug !== undefined) body.slug = parsed.slug;
+  if (parsed.description !== undefined) body.description = parsed.description;
+  if (parsed.contact_name !== undefined) body.contact_name = parsed.contact_name;
+  if (parsed.contact_email !== undefined) body.contact_email = parsed.contact_email;
+  if (parsed.ip_ranges !== undefined) body.ip_ranges = parsed.ip_ranges;
+  if (parsed.ae_title !== undefined) body.ae_title = parsed.ae_title;
+  if (parsed.enabled !== undefined) body.enabled = parsed.enabled;
+
+  const data = await client.put(`/api/institutions/${encodeURIComponent(parsed.institution_id)}`, body);
+  return formatSuccess(requestId, "update_institution", {
+    accepted: true,
+    institution_id: parsed.institution_id,
+    institution: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteInstitution(
+  requestId: string,
+  parsed: { institution_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_institution");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_institution", false, "delete_institution");
+  }
+
+  await client.delete(`/api/institutions/${encodeURIComponent(parsed.institution_id)}`);
+  return formatSuccess(requestId, "delete_institution", {
+    accepted: true,
+    institution_id: parsed.institution_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleLinkInstitutionProject(
+  requestId: string,
+  parsed: { institution_id: string; project_id: string; role: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "link_institution_project");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow link_institution_project", false, "link_institution_project");
+  }
+
+  const data = await client.post(`/api/institutions/${encodeURIComponent(parsed.institution_id)}/projects`, {
+    project_id: parsed.project_id,
+    role: parsed.role
+  });
+  return formatSuccess(requestId, "link_institution_project", {
+    accepted: true,
+    institution_id: parsed.institution_id,
+    project_id: parsed.project_id,
+    role: parsed.role,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUnlinkInstitutionProject(
+  requestId: string,
+  parsed: { institution_id: string; project_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "unlink_institution_project");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow unlink_institution_project", false, "unlink_institution_project");
+  }
+
+  await client.delete(`/api/institutions/${encodeURIComponent(parsed.institution_id)}/projects/${encodeURIComponent(parsed.project_id)}`);
+  return formatSuccess(requestId, "unlink_institution_project", {
+    accepted: true,
+    institution_id: parsed.institution_id,
+    project_id: parsed.project_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleCreateFederationPeer(
+  requestId: string,
+  parsed: { name: string; slug?: string; api_url: string; notes?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_federation_peer");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_federation_peer", false, "create_federation_peer");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name, api_url: parsed.api_url };
+  if (parsed.slug !== undefined) body.slug = parsed.slug;
+  if (parsed.notes !== undefined) body.notes = parsed.notes;
+
+  const data = await client.post("/api/federation-peers", body);
+  return formatSuccess(requestId, "create_federation_peer", {
+    accepted: true,
+    name: parsed.name,
+    peer: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUpdateFederationPeer(
+  requestId: string,
+  parsed: {
+    peer_id: string; name: string; slug?: string; api_url: string;
+    notes?: string; enabled?: boolean; reason: string; confirm: true
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_federation_peer");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_federation_peer", false, "update_federation_peer");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name, api_url: parsed.api_url };
+  if (parsed.slug !== undefined) body.slug = parsed.slug;
+  if (parsed.notes !== undefined) body.notes = parsed.notes;
+  if (parsed.enabled !== undefined) body.enabled = parsed.enabled;
+
+  const data = await client.put(`/api/federation-peers/${encodeURIComponent(parsed.peer_id)}`, body);
+  return formatSuccess(requestId, "update_federation_peer", {
+    accepted: true,
+    peer_id: parsed.peer_id,
+    peer: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteFederationPeer(
+  requestId: string,
+  parsed: { peer_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_federation_peer");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_federation_peer", false, "delete_federation_peer");
+  }
+
+  await client.delete(`/api/federation-peers/${encodeURIComponent(parsed.peer_id)}`);
+  return formatSuccess(requestId, "delete_federation_peer", {
+    accepted: true,
+    peer_id: parsed.peer_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleSetStorageQuota(
+  requestId: string,
+  parsed: { project_id: string; storage_quota_bytes: number | null; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "set_storage_quota");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow set_storage_quota", false, "set_storage_quota");
+  }
+
+  const data = await client.put(`/api/projects/${encodeURIComponent(parsed.project_id)}/storage-quota`, {
+    storage_quota_bytes: parsed.storage_quota_bytes
+  });
+  return formatSuccess(requestId, "set_storage_quota", {
+    accepted: true,
+    project_id: parsed.project_id,
+    storage_quota_bytes: parsed.storage_quota_bytes,
+    action: parsed.storage_quota_bytes !== null ? "set" : "cleared",
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUpdatePhiConfig(
+  requestId: string,
+  parsed: {
+    project_id: string; confidence_threshold?: number;
+    min_text_length?: number; reason: string; confirm: true
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_phi_config");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_phi_config", false, "update_phi_config");
+  }
+
+  const body: Record<string, unknown> = {};
+  if (parsed.confidence_threshold !== undefined) body.confidence_threshold = parsed.confidence_threshold;
+  if (parsed.min_text_length !== undefined) body.min_text_length = parsed.min_text_length;
+
+  const data = await client.put(`/api/projects/${encodeURIComponent(parsed.project_id)}/phi-config`, body);
+  return formatSuccess(requestId, "update_phi_config", {
+    accepted: true,
+    project_id: parsed.project_id,
+    config: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteStudy(
+  requestId: string,
+  parsed: { study_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_study", false, "delete_study");
+  }
+
+  await client.delete(`/api/studies/${encodeURIComponent(parsed.study_id)}`);
+  return formatSuccess(requestId, "delete_study", {
+    accepted: true,
+    study_id: parsed.study_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleBulkPipelineTrigger(
+  requestId: string,
+  parsed: { study_ids: string[]; step: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "bulk_pipeline_trigger");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow bulk_pipeline_trigger", false, "bulk_pipeline_trigger");
+  }
+
+  const data = await client.post("/api/studies/bulk-pipeline-trigger", {
+    study_ids: parsed.study_ids,
+    step: parsed.step
+  });
+  return formatSuccess(requestId, "bulk_pipeline_trigger", {
+    accepted: true,
+    study_count: parsed.study_ids.length,
+    step: parsed.step,
+    result: data,
     reason: parsed.reason
   });
 }
