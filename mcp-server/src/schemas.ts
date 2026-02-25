@@ -634,6 +634,89 @@ export const inviteRequestActionArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Protocol templates ───────────────────────────────────────────────────────
+const parameterRule = z.object({
+  tag_keyword: z.string().min(1),
+  target: z.union([z.string(), z.number(), z.array(z.string())]),
+  tolerance: z.number().optional(),
+  match_type: z.enum(["numeric", "exact", "contains_all", "range"]).optional(),
+  severity: z.enum(["critical", "warning", "info"]).optional(),
+  description: z.string().optional()
+});
+
+export const createProtocolTemplateArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  name: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  manufacturer: z.string().max(128).optional(),
+  model: z.string().max(128).optional(),
+  software_version: z.string().max(128).optional(),
+  sequence_type: z.string().max(128).optional(),
+  rules: z.array(parameterRule).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateProtocolTemplateArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  template_id: z.string().uuid(),
+  name: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  manufacturer: z.string().max(128).optional(),
+  model: z.string().max(128).optional(),
+  software_version: z.string().max(128).optional(),
+  sequence_type: z.string().max(128).optional(),
+  rules: z.array(parameterRule).optional(),
+  enabled: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const templateIdArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  template_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+// ─── Anonymization profiles ───────────────────────────────────────────────────
+export const createAnonProfileArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  name: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  retained_tags: z.array(z.string()).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateAnonProfileArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  profile_id: z.string().uuid(),
+  name: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  retained_tags: z.array(z.string()).optional(),
+  enabled: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const deleteAnonProfileArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  profile_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const setDefaultAnonProfileArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  profile_id: z.string().uuid().or(z.literal("")),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -752,7 +835,14 @@ export const writeToolNames = [
   "delete_invite_code",
   "send_invite_code",
   "approve_invite_request",
-  "deny_invite_request"
+  "deny_invite_request",
+  "create_protocol_template",
+  "update_protocol_template",
+  "delete_protocol_template",
+  "create_anon_profile",
+  "update_anon_profile",
+  "delete_anon_profile",
+  "set_default_anon_profile"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

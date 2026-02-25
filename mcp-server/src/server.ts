@@ -68,6 +68,13 @@ import {
   inviteCodeIdArgsSchema,
   sendInviteCodeArgsSchema,
   inviteRequestActionArgsSchema,
+  createProtocolTemplateArgsSchema,
+  updateProtocolTemplateArgsSchema,
+  templateIdArgsSchema,
+  createAnonProfileArgsSchema,
+  updateAnonProfileArgsSchema,
+  deleteAnonProfileArgsSchema,
+  setDefaultAnonProfileArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -1913,6 +1920,173 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "create_protocol_template",
+    description: "Create a new MRI protocol compliance template for a project. The template defines expected acquisition parameters (TR, TE, flip angle, slice thickness, etc.) for a specific scanner/sequence. Rules specify tag_keyword, target value, match_type (numeric/exact/contains_all/range), optional tolerance, and severity (critical/warning/info). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "name", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" },
+        name: { type: "string", minLength: 1, maxLength: 128, description: "Template name (unique within project)" },
+        description: { type: "string", maxLength: 512 },
+        manufacturer: { type: "string", maxLength: 128, description: "Scanner manufacturer (e.g. SIEMENS, PHILIPS). Empty = match any." },
+        model: { type: "string", maxLength: 128, description: "Scanner model (e.g. MAGNETOM Prisma). Empty = match any." },
+        software_version: { type: "string", maxLength: 128, description: "Software version (e.g. VE11C). Empty = match any." },
+        sequence_type: { type: "string", maxLength: 128, description: "Pulse sequence identifier (e.g. T1w_MPRAGE, FLAIR, DWI)." },
+        rules: {
+          type: "array",
+          description: "Parameter compliance rules",
+          items: {
+            type: "object",
+            required: ["tag_keyword", "target"],
+            properties: {
+              tag_keyword: { type: "string", minLength: 1, description: "DICOM keyword (e.g. RepetitionTime, EchoTime)" },
+              target: { description: "Expected value — string, number, or array of strings" },
+              tolerance: { type: "number", description: "Percentage tolerance for numeric matches (default from PROTOCOL_DEFAULT_TOLERANCE env var)" },
+              match_type: { type: "string", enum: ["numeric", "exact", "contains_all", "range"], description: "Comparison type (default: numeric for numbers, exact for strings)" },
+              severity: { type: "string", enum: ["critical", "warning", "info"], description: "Violation severity (default: warning)" },
+              description: { type: "string", description: "Human-readable description of this rule" }
+            },
+            additionalProperties: false
+          }
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_protocol_template",
+    description: "Update an existing protocol compliance template. All fields are optional except template_id — omitted fields are preserved. Use list_protocol_templates to find template UUIDs. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["template_id", "name", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        template_id: { type: "string", format: "uuid", description: "Protocol template UUID" },
+        name: { type: "string", minLength: 1, maxLength: 128 },
+        description: { type: "string", maxLength: 512 },
+        manufacturer: { type: "string", maxLength: 128 },
+        model: { type: "string", maxLength: 128 },
+        software_version: { type: "string", maxLength: 128 },
+        sequence_type: { type: "string", maxLength: 128 },
+        rules: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["tag_keyword", "target"],
+            properties: {
+              tag_keyword: { type: "string", minLength: 1 },
+              target: {},
+              tolerance: { type: "number" },
+              match_type: { type: "string", enum: ["numeric", "exact", "contains_all", "range"] },
+              severity: { type: "string", enum: ["critical", "warning", "info"] },
+              description: { type: "string" }
+            },
+            additionalProperties: false
+          }
+        },
+        enabled: { type: "boolean", description: "Enable or disable this template" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_protocol_template",
+    description: "Permanently delete a protocol compliance template. This cannot be undone — any routing rules referencing this template will no longer apply it. Use list_protocol_templates to find template UUIDs. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["template_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        template_id: { type: "string", format: "uuid", description: "Protocol template UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_anon_profile",
+    description: "Create a new anonymization profile for a project. The profile defines which DICOM tags are retained (not stripped) during PS3.15 Basic Profile de-identification. retained_tags is an array of DICOM keyword strings (e.g. ['PatientAge', 'StudyDate']). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "name", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" },
+        name: { type: "string", minLength: 1, maxLength: 128, description: "Profile name (unique within project)" },
+        description: { type: "string", maxLength: 512 },
+        retained_tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "DICOM keyword strings to retain (e.g. ['PatientAge', 'StudyDate', 'InstitutionName'])"
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_anon_profile",
+    description: "Update an existing anonymization profile. All fields are optional except profile_id and name. retained_tags replaces the full existing list when provided. Use list_anon_profiles to find profile UUIDs. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["profile_id", "name", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        profile_id: { type: "string", format: "uuid", description: "Anonymization profile UUID" },
+        name: { type: "string", minLength: 1, maxLength: 128 },
+        description: { type: "string", maxLength: 512 },
+        retained_tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Full replacement list of DICOM keyword strings to retain"
+        },
+        enabled: { type: "boolean", description: "Enable or disable this profile" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_anon_profile",
+    description: "Permanently delete an anonymization profile. If this profile is the project's default, the default will be cleared. Use list_anon_profiles to find profile UUIDs. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["profile_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        profile_id: { type: "string", format: "uuid", description: "Anonymization profile UUID" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "set_default_anon_profile",
+    description: "Set or clear the default anonymization profile for a project. The default profile is automatically applied by the upload portal for every upload. Pass profile_id='' (empty string) to clear the default (revert to full PS3.15 strip). Use list_anon_profiles to find profile UUIDs. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "profile_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" },
+        profile_id: { type: "string", description: "Profile UUID to set as default, or empty string to clear" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -2586,6 +2760,41 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleDenyInviteRequest(parsedDIR.request_id ?? buildRequestId(), parsedDIR);
       }
 
+      if (name === "create_protocol_template") {
+        const parsed = createProtocolTemplateArgsSchema.parse(args);
+        return handleCreateProtocolTemplate(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "update_protocol_template") {
+        const parsed = updateProtocolTemplateArgsSchema.parse(args);
+        return handleUpdateProtocolTemplate(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "delete_protocol_template") {
+        const parsed = templateIdArgsSchema.parse(args);
+        return handleDeleteProtocolTemplate(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "create_anon_profile") {
+        const parsed = createAnonProfileArgsSchema.parse(args);
+        return handleCreateAnonProfile(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "update_anon_profile") {
+        const parsed = updateAnonProfileArgsSchema.parse(args);
+        return handleUpdateAnonProfile(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "delete_anon_profile") {
+        const parsed = deleteAnonProfileArgsSchema.parse(args);
+        return handleDeleteAnonProfile(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "set_default_anon_profile") {
+        const parsed = setDefaultAnonProfileArgsSchema.parse(args);
+        return handleSetDefaultAnonProfile(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       if (name === "add_study_note") {
         const parsedNote = addStudyNoteArgsSchema.parse(args);
         return handleAddStudyNote(parsedNote.request_id ?? buildRequestId(), parsedNote);
@@ -2897,6 +3106,21 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "approve_invite_request" || name === "deny_invite_request") {
     return typeof args.invite_request_id === "string" ? args.invite_request_id : null;
+  }
+  if (name === "create_protocol_template") {
+    return typeof args.name === "string" ? args.name : null;
+  }
+  if (name === "update_protocol_template" || name === "delete_protocol_template") {
+    return typeof args.template_id === "string" ? args.template_id : null;
+  }
+  if (name === "create_anon_profile") {
+    return typeof args.name === "string" ? args.name : null;
+  }
+  if (name === "update_anon_profile" || name === "delete_anon_profile") {
+    return typeof args.profile_id === "string" ? args.profile_id : null;
+  }
+  if (name === "set_default_anon_profile") {
+    return typeof args.project_id === "string" ? args.project_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -4800,6 +5024,187 @@ async function handleDeleteRoutingRule(
   return formatSuccess(requestId, "delete_routing_rule", {
     accepted: true,
     rule_id: parsed.rule_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleCreateProtocolTemplate(
+  requestId: string,
+  parsed: {
+    project_id: string; name: string; description?: string; manufacturer?: string;
+    model?: string; software_version?: string; sequence_type?: string;
+    rules?: unknown[]; reason: string; confirm: true
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_protocol_template");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_protocol_template", false, "create_protocol_template");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name };
+  if (parsed.description !== undefined) body.description = parsed.description;
+  if (parsed.manufacturer !== undefined) body.manufacturer = parsed.manufacturer;
+  if (parsed.model !== undefined) body.model = parsed.model;
+  if (parsed.software_version !== undefined) body.software_version = parsed.software_version;
+  if (parsed.sequence_type !== undefined) body.sequence_type = parsed.sequence_type;
+  if (parsed.rules !== undefined) body.rules = parsed.rules;
+
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/protocol-templates`, body);
+  return formatSuccess(requestId, "create_protocol_template", {
+    accepted: true,
+    project_id: parsed.project_id,
+    name: parsed.name,
+    template: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUpdateProtocolTemplate(
+  requestId: string,
+  parsed: {
+    template_id: string; name: string; description?: string; manufacturer?: string;
+    model?: string; software_version?: string; sequence_type?: string;
+    rules?: unknown[]; enabled?: boolean; reason: string; confirm: true
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_protocol_template");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_protocol_template", false, "update_protocol_template");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name };
+  if (parsed.description !== undefined) body.description = parsed.description;
+  if (parsed.manufacturer !== undefined) body.manufacturer = parsed.manufacturer;
+  if (parsed.model !== undefined) body.model = parsed.model;
+  if (parsed.software_version !== undefined) body.software_version = parsed.software_version;
+  if (parsed.sequence_type !== undefined) body.sequence_type = parsed.sequence_type;
+  if (parsed.rules !== undefined) body.rules = parsed.rules;
+  if (parsed.enabled !== undefined) body.enabled = parsed.enabled;
+
+  const data = await client.put(`/api/protocol-templates/${encodeURIComponent(parsed.template_id)}`, body);
+  return formatSuccess(requestId, "update_protocol_template", {
+    accepted: true,
+    template_id: parsed.template_id,
+    template: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteProtocolTemplate(
+  requestId: string,
+  parsed: { template_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_protocol_template");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_protocol_template", false, "delete_protocol_template");
+  }
+
+  await client.delete(`/api/protocol-templates/${encodeURIComponent(parsed.template_id)}`);
+  return formatSuccess(requestId, "delete_protocol_template", {
+    accepted: true,
+    template_id: parsed.template_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleCreateAnonProfile(
+  requestId: string,
+  parsed: {
+    project_id: string; name: string; description?: string;
+    retained_tags?: string[]; reason: string; confirm: true
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_anon_profile");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_anon_profile", false, "create_anon_profile");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name };
+  if (parsed.description !== undefined) body.description = parsed.description;
+  if (parsed.retained_tags !== undefined) body.retained_tags = parsed.retained_tags;
+
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/anon-profiles`, body);
+  return formatSuccess(requestId, "create_anon_profile", {
+    accepted: true,
+    project_id: parsed.project_id,
+    name: parsed.name,
+    profile: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUpdateAnonProfile(
+  requestId: string,
+  parsed: {
+    profile_id: string; name: string; description?: string;
+    retained_tags?: string[]; enabled?: boolean; reason: string; confirm: true
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_anon_profile");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_anon_profile", false, "update_anon_profile");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name };
+  if (parsed.description !== undefined) body.description = parsed.description;
+  if (parsed.retained_tags !== undefined) body.retained_tags = parsed.retained_tags;
+  if (parsed.enabled !== undefined) body.enabled = parsed.enabled;
+
+  const data = await client.put(`/api/anon-profiles/${encodeURIComponent(parsed.profile_id)}`, body);
+  return formatSuccess(requestId, "update_anon_profile", {
+    accepted: true,
+    profile_id: parsed.profile_id,
+    profile: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteAnonProfile(
+  requestId: string,
+  parsed: { profile_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_anon_profile");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_anon_profile", false, "delete_anon_profile");
+  }
+
+  await client.delete(`/api/anon-profiles/${encodeURIComponent(parsed.profile_id)}`);
+  return formatSuccess(requestId, "delete_anon_profile", {
+    accepted: true,
+    profile_id: parsed.profile_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleSetDefaultAnonProfile(
+  requestId: string,
+  parsed: { project_id: string; profile_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "set_default_anon_profile");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow set_default_anon_profile", false, "set_default_anon_profile");
+  }
+
+  await client.put(`/api/projects/${encodeURIComponent(parsed.project_id)}/default-anon-profile`, { profile_id: parsed.profile_id });
+  return formatSuccess(requestId, "set_default_anon_profile", {
+    accepted: true,
+    project_id: parsed.project_id,
+    profile_id: parsed.profile_id || null,
+    action: parsed.profile_id ? "set" : "cleared",
     reason: parsed.reason
   });
 }
