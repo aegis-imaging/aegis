@@ -88,16 +88,33 @@ const MILESTONES: Milestone[] = [
   },
   {
     status: 'planned',
+    date: 'Q2 2026',
+    title: 'Beta Hardening + Compliance Foundations',
+    items: [
+      'Production email — SMTP for share notifications, pipeline alerts, and digest subscriptions',
+      'Business Associate Agreement (BAA) template + countersigning workflow — required before real PHI',
+      'SOC 2 Type I audit initiation — point-in-time controls assessment; engages auditor and starts 6-month Type II observation window',
+      'DIMSE C-MOVE / C-FIND — AEGIS actively queries and retrieves studies from PACS rather than waiting for push',
+      'AWS Marketplace listing submission — enterprise procurement channel',
+    ],
+    tags: [
+      { label: 'Target', style: 'neutral' },
+      { label: 'Compliance', style: 'neutral' },
+      { label: 'PACS', style: 'neutral' },
+    ],
+  },
+  {
+    status: 'planned',
     date: 'Q3 2026',
     title: 'SOC 2 Type II + Enterprise Integrations',
     items: [
-      'SOC 2 Type II certification — formal audit after 6-month observation period',
-      'HL7 FHIR notifications — integrate with hospital EMR/RIS systems',
-      'Cross-tenant federated sharing — peer AEGIS instances can exchange approved studies',
-      'AWS Marketplace listing for enterprise procurement',
+      'SOC 2 Type II observation period underway — 6-month audit window; final report expected Q4 2026',
+      'HL7 FHIR notifications — fire DiagnosticReport / ImagingStudy resources to Epic, Cerner, and other EMR/RIS on study events',
+      'DICOM conformance statement v2 — formal PS3.2 statement across all three clouds; required for PACS vendor certification',
+      'Cross-tenant federated sharing — peer AEGIS instances exchange approved studies across institutions',
     ],
     tags: [
-      { label: 'Planned', style: 'neutral' },
+      { label: 'Vision', style: 'neutral' },
       { label: 'SOC 2 Type II', style: 'neutral' },
       { label: 'Enterprise', style: 'neutral' },
     ],
@@ -107,13 +124,13 @@ const MILESTONES: Milestone[] = [
     date: 'Q4 2026',
     title: 'Enterprise GA',
     items: [
-      'On-premises deployment option for institutions with strict data residency requirements',
-      'PACS/VNA native query-retrieve — pull studies on demand, no push required',
-      'Multi-tenant SaaS with per-organization data isolation for radiology groups',
-      'Imaging data consortium marketplace — connect research networks to data sources',
+      'SOC 2 Type II report issued — formal certification after 6-month observation period',
+      'On-premises deployment — Helm chart / Docker Compose for air-gapped and data-residency-constrained institutions',
+      'Multi-tenant SaaS mode — per-organization database isolation; tenant provisioning API for radiology groups',
+      'PACS/VNA native integration — full C-MOVE / C-FIND at enterprise scale across modalities and VNA vendors',
     ],
     tags: [
-      { label: 'Future', style: 'neutral' },
+      { label: 'Vision', style: 'neutral' },
       { label: 'On-Premises', style: 'cloud' },
       { label: 'SaaS', style: 'neutral' },
     ],
@@ -135,7 +152,7 @@ export function Roadmap() {
         >
           <h2 className="roadmap__heading">Built to move fast</h2>
           <p className="roadmap__subheading">
-            From first commit to GCP production in 7 days — and a clear path to enterprise.
+            From first commit to three-cloud production in 9 days — and a clear path to enterprise with the right team.
           </p>
         </div>
 
@@ -160,7 +177,7 @@ export function Roadmap() {
           {MILESTONES.map((m, i) => (
             <div
               key={m.title}
-              className={`roadmap__milestone roadmap__milestone--${m.status} animate animate--fade-up animate--delay-${i + 1 as 1|2|3|4|5|6}${timelineVisible ? ' animate--visible' : ''}`}
+              className={`roadmap__milestone roadmap__milestone--${m.status} animate animate--fade-up animate--delay-${i + 1 as 1|2|3|4|5|6|7}${timelineVisible ? ' animate--visible' : ''}`}
             >
               <div className="roadmap__milestone-node" aria-hidden="true">
                 {m.status === 'done' ? '✓' : m.status === 'active' ? '●' : '○'}
