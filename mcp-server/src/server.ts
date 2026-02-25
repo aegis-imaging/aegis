@@ -37,6 +37,7 @@ import {
   routingStatsArgsSchema,
   destinationStatsArgsSchema,
   routingRuleStatsArgsSchema,
+  pipelineFunnelArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -666,6 +667,28 @@ const tools: Tool[] = [
           minimum: 1,
           maximum: 365,
           description: "Look-back window in days (default 30)"
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_pipeline_funnel",
+    description: "Get a conversion funnel showing how many studies pass through each pipeline stage. Returns {period_days, generated_at, project_id, funnel: [{stage, count, pct_of_total, pct_of_prev}]}. Stages: received → classified → phi_scanned → defaced → qc_passed → bids_converted → approved → exported. pct_of_total = % of received studies; pct_of_prev = conversion rate from prior stage. Useful for identifying pipeline bottlenecks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 365,
+          description: "Look-back window in days (default 30)"
+        },
+        project_id: {
+          type: "string",
+          format: "uuid",
+          description: "Scope to a specific project (omit for all projects)"
         }
       },
       additionalProperties: false
@@ -1594,6 +1617,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.days !== undefined) params.set("days", String(parsed.days));
       const qs = params.toString();
       const data = await client.get(`/api/stats/routing-rules${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_pipeline_funnel") {
+      const parsed = pipelineFunnelArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      if (parsed.project_id !== undefined) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/pipeline-funnel${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
