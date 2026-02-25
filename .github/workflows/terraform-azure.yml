@@ -70,7 +70,12 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: terraform/azure
-        run: terraform plan -input=false -no-color -out=tfplan
+        # Use api_image_tag=placeholder so Container Apps can be created even when
+        # ACR images have not been pushed yet. GitHub Actions (deploy-azure.yml)
+        # updates the images via `az containerapp update` after pushing to ACR.
+        # The lifecycle { ignore_changes = [template[0].container[0].image] } block
+        # on each Container App prevents terraform from reverting CI/CD-deployed images.
+        run: terraform plan -input=false -no-color -var 'api_image_tag=placeholder' -out=tfplan
 
       - name: Terraform Apply
         working-directory: terraform/azure
