@@ -53,6 +53,15 @@ import {
   updateWebhookSubscriptionArgsSchema,
   deleteWebhookSubscriptionArgsSchema,
   retryWebhookDeliveryArgsSchema,
+  createProjectArgsSchema,
+  updateProjectArgsSchema,
+  archiveRestoreProjectArgsSchema,
+  setProjectRetentionArgsSchema,
+  setProjectSLAThresholdArgsSchema,
+  listAdminUsersArgsSchema,
+  createAdminUserArgsSchema,
+  updateAdminUserArgsSchema,
+  deleteAdminUserArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -1140,6 +1149,167 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "create_project",
+    description: "Create a new AEGIS project. Slug is auto-derived from name if omitted (lowercase, dashes). Returns 409 Conflict if the slug already exists. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        name: { type: "string", minLength: 1, maxLength: 128, description: "Human-readable project name" },
+        slug: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z0-9-]+$", description: "URL-safe identifier (auto-derived from name if omitted)" },
+        description: { type: "string", maxLength: 1024 },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_project",
+    description: "Update a project's name, slug, or description. Name is required. Slug is auto-derived from name if omitted. Returns 409 if slug conflict. Use list_projects to find the project_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "name", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        name: { type: "string", minLength: 1, maxLength: 128 },
+        slug: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z0-9-]+$", description: "URL-safe identifier (auto-derived from name if omitted)" },
+        description: { type: "string", maxLength: 1024 },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "archive_project",
+    description: "Archive a project. Archived projects are visually flagged in the dashboard; studies remain accessible. Use restore_project to unarchive. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "restore_project",
+    description: "Restore (unarchive) a previously archived project. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "set_project_retention",
+    description: "Set or clear the study retention policy for a project. Approved studies older than retention_days will be soft-expired. Pass retention_days=null to keep studies indefinitely (default). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "retention_days", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        retention_days: { type: ["integer", "null"], minimum: 1, description: "Days to retain approved studies, or null to keep indefinitely" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "set_project_sla_threshold",
+    description: "Set or clear the per-project stuck-study SLA threshold. Studies idle longer than stuck_threshold_minutes trigger SLA alerts. Pass stuck_threshold_minutes=null to use the global default (60 minutes). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "stuck_threshold_minutes", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        stuck_threshold_minutes: { type: ["integer", "null"], minimum: 1, description: "Minutes before a study is considered stuck, or null to use global default (60)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_admin_users",
+    description: "List all registered admin users with their roles, enabled state, and last-seen info. Use before create_admin_user to check if a user already exists, or before update_admin_user/delete_admin_user to find the user_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_admin_user",
+    description: "Register a new admin dashboard user with email and role. Role 'admin' has full write access; 'viewer' is read-only. The user must already be authenticated via IAP/Azure/AWS — this just registers them in the access control table. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["email", "role", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        email: { type: "string", format: "email", description: "User's email (must match their IAP/Easy Auth identity)" },
+        name: { type: "string", minLength: 1, maxLength: 255 },
+        role: { type: "string", enum: ["admin", "viewer"] },
+        notes: { type: "string", maxLength: 1024 },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_admin_user",
+    description: "Update an existing admin user's email, name, role, enabled state, or notes. Use list_admin_users to find the user_id. Setting enabled=false disables access without deleting the record. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["user_id", "email", "role", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        user_id: { type: "string", format: "uuid" },
+        email: { type: "string", format: "email" },
+        name: { type: "string", minLength: 1, maxLength: 255 },
+        role: { type: "string", enum: ["admin", "viewer"] },
+        enabled: { type: "boolean", description: "false to disable access without deleting" },
+        notes: { type: "string", maxLength: 1024 },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_admin_user",
+    description: "Permanently remove an admin user record. This cannot be undone — use update_admin_user with enabled=false to revoke access without deleting. Use list_admin_users to find the user_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["user_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        user_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_study_dicom_tags",
     description: "Get all non-pixel DICOM tags from the first file of a study. Returns {tags: [{tag, keyword, vr, value}], file, store}. Use for debugging de-identification issues, verifying protocol parameters, or inspecting tag values after defacing. Reads from the study's current dicom_store (raw before defacing, clean after).",
     inputSchema: {
@@ -2103,6 +2273,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_admin_users") {
+      listAdminUsersArgsSchema.parse(args);
+      const data = await client.get("/api/admin-users");
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -2197,6 +2373,51 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "retry_webhook_delivery") {
         const parsedRWD = retryWebhookDeliveryArgsSchema.parse(args);
         return handleRetryWebhookDelivery(parsedRWD.request_id ?? buildRequestId(), parsedRWD);
+      }
+
+      if (name === "create_project") {
+        const parsedCP = createProjectArgsSchema.parse(args);
+        return handleCreateProject(parsedCP.request_id ?? buildRequestId(), parsedCP);
+      }
+
+      if (name === "update_project") {
+        const parsedUP = updateProjectArgsSchema.parse(args);
+        return handleUpdateProject(parsedUP.request_id ?? buildRequestId(), parsedUP);
+      }
+
+      if (name === "archive_project") {
+        const parsedAP = archiveRestoreProjectArgsSchema.parse(args);
+        return handleArchiveProject(parsedAP.request_id ?? buildRequestId(), parsedAP);
+      }
+
+      if (name === "restore_project") {
+        const parsedRP = archiveRestoreProjectArgsSchema.parse(args);
+        return handleRestoreProject(parsedRP.request_id ?? buildRequestId(), parsedRP);
+      }
+
+      if (name === "set_project_retention") {
+        const parsedPR = setProjectRetentionArgsSchema.parse(args);
+        return handleSetProjectRetention(parsedPR.request_id ?? buildRequestId(), parsedPR);
+      }
+
+      if (name === "set_project_sla_threshold") {
+        const parsedSLA = setProjectSLAThresholdArgsSchema.parse(args);
+        return handleSetProjectSLAThreshold(parsedSLA.request_id ?? buildRequestId(), parsedSLA);
+      }
+
+      if (name === "create_admin_user") {
+        const parsedCAU = createAdminUserArgsSchema.parse(args);
+        return handleCreateAdminUser(parsedCAU.request_id ?? buildRequestId(), parsedCAU);
+      }
+
+      if (name === "update_admin_user") {
+        const parsedUAU = updateAdminUserArgsSchema.parse(args);
+        return handleUpdateAdminUser(parsedUAU.request_id ?? buildRequestId(), parsedUAU);
+      }
+
+      if (name === "delete_admin_user") {
+        const parsedDAU = deleteAdminUserArgsSchema.parse(args);
+        return handleDeleteAdminUser(parsedDAU.request_id ?? buildRequestId(), parsedDAU);
       }
 
       if (name === "add_study_note") {
@@ -2479,6 +2700,24 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "retry_webhook_delivery") {
     return typeof args.delivery_id === "string" ? args.delivery_id : null;
+  }
+  if (name === "create_project") {
+    return typeof args.name === "string" ? args.name : null;
+  }
+  if (
+    name === "update_project" ||
+    name === "archive_project" ||
+    name === "restore_project" ||
+    name === "set_project_retention" ||
+    name === "set_project_sla_threshold"
+  ) {
+    return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "create_admin_user") {
+    return typeof args.email === "string" ? args.email : null;
+  }
+  if (name === "update_admin_user" || name === "delete_admin_user") {
+    return typeof args.user_id === "string" ? args.user_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -3535,6 +3774,209 @@ async function handleReactivateStudy(
     study_id: parsed.study_id,
     reason: parsed.reason,
     result: data
+  });
+}
+
+async function handleCreateProject(
+  requestId: string,
+  parsed: { name: string; slug?: string; description?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_project");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_project", false, "create_project");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name };
+  if (parsed.slug !== undefined) body.slug = parsed.slug;
+  if (parsed.description !== undefined) body.description = parsed.description;
+
+  const data = await client.post("/api/projects", body);
+  return formatSuccess(requestId, "create_project", {
+    accepted: true,
+    name: parsed.name,
+    project: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUpdateProject(
+  requestId: string,
+  parsed: { project_id: string; name: string; slug?: string; description?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_project");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_project", false, "update_project");
+  }
+
+  const body: Record<string, unknown> = { name: parsed.name };
+  if (parsed.slug !== undefined) body.slug = parsed.slug;
+  if (parsed.description !== undefined) body.description = parsed.description;
+
+  const data = await client.put(`/api/projects/${encodeURIComponent(parsed.project_id)}`, body);
+  return formatSuccess(requestId, "update_project", {
+    accepted: true,
+    project_id: parsed.project_id,
+    project: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleArchiveProject(
+  requestId: string,
+  parsed: { project_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "archive_project");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow archive_project", false, "archive_project");
+  }
+
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/archive`);
+  return formatSuccess(requestId, "archive_project", {
+    accepted: true,
+    project_id: parsed.project_id,
+    project: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleRestoreProject(
+  requestId: string,
+  parsed: { project_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "restore_project");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow restore_project", false, "restore_project");
+  }
+
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/restore`);
+  return formatSuccess(requestId, "restore_project", {
+    accepted: true,
+    project_id: parsed.project_id,
+    project: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleSetProjectRetention(
+  requestId: string,
+  parsed: { project_id: string; retention_days: number | null; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "set_project_retention");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow set_project_retention", false, "set_project_retention");
+  }
+
+  const data = await client.put(`/api/projects/${encodeURIComponent(parsed.project_id)}/retention`, {
+    retention_days: parsed.retention_days
+  });
+  return formatSuccess(requestId, "set_project_retention", {
+    accepted: true,
+    project_id: parsed.project_id,
+    retention_days: parsed.retention_days,
+    project: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleSetProjectSLAThreshold(
+  requestId: string,
+  parsed: { project_id: string; stuck_threshold_minutes: number | null; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "set_project_sla_threshold");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow set_project_sla_threshold", false, "set_project_sla_threshold");
+  }
+
+  const data = await client.put(`/api/projects/${encodeURIComponent(parsed.project_id)}/sla-threshold`, {
+    stuck_threshold_minutes: parsed.stuck_threshold_minutes
+  });
+  return formatSuccess(requestId, "set_project_sla_threshold", {
+    accepted: true,
+    project_id: parsed.project_id,
+    stuck_threshold_minutes: parsed.stuck_threshold_minutes,
+    project: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleCreateAdminUser(
+  requestId: string,
+  parsed: { email: string; name?: string; role: "admin" | "viewer"; notes?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_admin_user");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_admin_user", false, "create_admin_user");
+  }
+
+  const body: Record<string, unknown> = { email: parsed.email, role: parsed.role, enabled: true };
+  if (parsed.name !== undefined) body.name = parsed.name;
+  if (parsed.notes !== undefined) body.notes = parsed.notes;
+
+  const data = await client.post("/api/admin-users", body);
+  return formatSuccess(requestId, "create_admin_user", {
+    accepted: true,
+    email: parsed.email,
+    role: parsed.role,
+    user: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUpdateAdminUser(
+  requestId: string,
+  parsed: { user_id: string; email: string; name?: string; role: "admin" | "viewer"; enabled?: boolean; notes?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_admin_user");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_admin_user", false, "update_admin_user");
+  }
+
+  const body: Record<string, unknown> = { email: parsed.email, role: parsed.role };
+  if (parsed.name !== undefined) body.name = parsed.name;
+  if (parsed.enabled !== undefined) body.enabled = parsed.enabled;
+  if (parsed.notes !== undefined) body.notes = parsed.notes;
+
+  const data = await client.put(`/api/admin-users/${encodeURIComponent(parsed.user_id)}`, body);
+  return formatSuccess(requestId, "update_admin_user", {
+    accepted: true,
+    user_id: parsed.user_id,
+    user: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteAdminUser(
+  requestId: string,
+  parsed: { user_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_admin_user");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_admin_user", false, "delete_admin_user");
+  }
+
+  await client.delete(`/api/admin-users/${encodeURIComponent(parsed.user_id)}`);
+  return formatSuccess(requestId, "delete_admin_user", {
+    accepted: true,
+    user_id: parsed.user_id,
+    reason: parsed.reason
   });
 }
 
