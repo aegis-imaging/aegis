@@ -5352,6 +5352,13 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => setHealthProject({ id: p.id, name: p.name })}>
                           Health
                         </button>
+                        <a
+                          href={`/api/projects/${p.id}/bids-export`}
+                          className="btn btn--bids-download"
+                          title="Download all BIDS-converted approved studies for this project as a ZIP archive"
+                          download>
+                          ↓ BIDS
+                        </a>
                       </div>
                     )}
                   </td>

@@ -346,6 +346,8 @@ func main() {
 
 	// Project-level batch export — dispatch all eligible approved studies.
 	mux.HandleFunc("POST /api/projects/{id}/export-batch", adminOnly(srv.ExportBatch))
+	mux.HandleFunc("GET /api/projects/{id}/bids-export", auth(srv.ServeProjectBidsExport))
+	mux.HandleFunc("GET /api/projects/{id}/bids-info", auth(srv.GetProjectBidsInfo))
 
 	// Protocol templates — per-project MRI acquisition parameter expectations.
 	mux.HandleFunc("GET /api/projects/{projectID}/protocol-templates", auth(srv.ListProtocolTemplates))
