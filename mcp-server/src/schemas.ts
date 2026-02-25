@@ -72,6 +72,12 @@ export const projectScopedArgsSchema = z.object({
   project_id: z.string().uuid().optional()
 });
 
+export const processingTimesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  days: z.number().int().min(1).max(365).optional(),
+  project_id: z.string().uuid().optional()
+});
+
 export const getAuditActorsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   limit: z.number().int().min(1).max(100).optional()
@@ -393,6 +399,7 @@ export const readToolNames = [
   "get_stuck_studies",
   "get_breakdown_stats",
   "get_storage_stats",
+  "get_processing_stats",
   "get_audit_actors",
   "list_projects",
   "list_institutions",

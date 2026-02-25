@@ -6851,6 +6851,34 @@ export function App() {
     else setShowTimeline(v => !v)
   }
 
+  type StageTiming = { stage: string; count: number; avg_seconds: number; p95_seconds: number; min_seconds: number; max_seconds: number }
+  const [processingTimes, setProcessingTimes] = useState<StageTiming[] | null>(null)
+  const [showProcessingTimes, setShowProcessingTimes] = useState(false)
+  const loadProcessingTimes = async () => {
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const res = await fetch(`/api/stats/processing-times?${params}`)
+    if (res.ok) { const d = await res.json(); setProcessingTimes(d.stages ?? []); setShowProcessingTimes(true) }
+    else setShowProcessingTimes(v => !v)
+  }
+
+  const fmtDuration = (secs: number): string => {
+    if (secs < 60) return `${secs}s`
+    const m = Math.floor(secs / 60)
+    const s = Math.round(secs % 60)
+    return s > 0 ? `${m}m ${s}s` : `${m}m`
+  }
+
+  const stageLabel: Record<string, string> = {
+    deface: 'Defacing',
+    phi_scan: 'PHI Scan',
+    qc_check: 'QC Check',
+    bids_conversion: 'BIDS Conversion',
+    classification: 'Classification',
+    protocol_check: 'Protocol Check',
+    export: 'Export',
+  }
+
   // ── Quick-search palette (Cmd/Ctrl+K) ──────────────────────────────────────
   type PaletteNavItem  = { kind: 'nav';   label: string; tab: AppTab; icon: string }
   type PaletteStudyItem = { kind: 'study'; label: string; sub: string; id: string }
@@ -7480,6 +7508,45 @@ export function App() {
                             <td>{d.date}</td>
                             <td>{d.received}</td>
                             <td>{d.approved}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+              </div>
+            )}
+          </div>
+
+          {/* Stage processing times toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="btn-secondary" onClick={loadProcessingTimes} style={{fontSize:'0.8rem'}}>
+              {showProcessingTimes ? '▲ Hide stage processing times' : '▼ Stage processing times (last 30 days)'}
+            </button>
+            {showProcessingTimes && processingTimes && (
+              <div style={{marginTop:'6px',overflowX:'auto'}}>
+                {processingTimes.length === 0
+                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No pipeline events in the last 30 days.</span>
+                  : (
+                    <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
+                      <thead>
+                        <tr>
+                          <th>Stage</th>
+                          <th>Count</th>
+                          <th>Avg</th>
+                          <th>P95</th>
+                          <th>Min</th>
+                          <th>Max</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {processingTimes.map(r => (
+                          <tr key={r.stage}>
+                            <td>{stageLabel[r.stage] ?? r.stage}</td>
+                            <td>{r.count}</td>
+                            <td>{fmtDuration(r.avg_seconds)}</td>
+                            <td>{fmtDuration(r.p95_seconds)}</td>
+                            <td>{fmtDuration(r.min_seconds)}</td>
+                            <td>{fmtDuration(r.max_seconds)}</td>
                           </tr>
                         ))}
                       </tbody>
