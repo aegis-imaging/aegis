@@ -18,7 +18,7 @@
 terraform {
   backend "azurerm" {
     resource_group_name  = "aegis-tfstate"
-    storage_account_name = "aegistfstate"
+    storage_account_name = "aegistfstate18d5c432"
     container_name       = "tfstate"
     key                  = "azure/prod/terraform.tfstate"
   }

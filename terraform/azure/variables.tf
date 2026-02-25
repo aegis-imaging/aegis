@@ -113,6 +113,12 @@ variable "dimse_vm_size" {
   default     = "Standard_B2s"
 }
 
+variable "dimse_ssh_public_key" {
+  description = "SSH public key for the DIMSE receiver VM (required when dimse_receiver_image is set)"
+  type        = string
+  default     = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0 placeholder-replace-with-real-key"
+}
+
 # ── MCP Server ────────────────────────────────────────────────────────────────
 
 variable "azure_openai_endpoint" {
