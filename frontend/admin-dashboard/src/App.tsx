@@ -7320,6 +7320,7 @@ const PAGE_SIZE = 50
 
 const GLOBAL_PROJECT_KEY = 'aegis_global_project_id'
 const SAVED_FILTERS_KEY  = 'aegis_saved_filters'
+const STUDIES_SORT_KEY   = 'aegis_studies_sort'
 
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
@@ -7445,6 +7446,15 @@ export function App() {
 
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
+
+  // Studies table sort (persisted to localStorage)
+  type StudiesSortDir = 'asc' | 'desc'
+  const [sortBy,  setSortBy]  = useState<string>(() => {
+    try { return (JSON.parse(localStorage.getItem(STUDIES_SORT_KEY) || 'null') ?? {}).col || 'created_at' } catch { return 'created_at' }
+  })
+  const [sortDir, setSortDir] = useState<StudiesSortDir>(() => {
+    try { return (JSON.parse(localStorage.getItem(STUDIES_SORT_KEY) || 'null') ?? {}).dir || 'desc' } catch { return 'desc' }
+  })
 
   // Real-time SSE updates — bump refreshTick on any study change so the list
   // re-fetches automatically without requiring a manual refresh.
@@ -7693,6 +7703,8 @@ export function App() {
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
     if (filterFlagged)  params.set('flagged',    'true')
+    params.set('sort_by',  sortBy)
+    params.set('sort_dir', sortDir)
 
     fetch(`/api/studies?${params}`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
@@ -7708,7 +7720,7 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterDateFrom, filterDateTo, filterFlagged, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterDateFrom, filterDateTo, filterFlagged, sortBy, sortDir, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
@@ -7722,6 +7734,20 @@ export function App() {
   function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
   function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
   function setFlaggedF(v: boolean)  { setFilterFlagged(v);   setPage(0); setBulkSelected(new Set()) }
+
+  function setSortF(col: string) {
+    const newDir: StudiesSortDir = sortBy === col && sortDir === 'desc' ? 'asc' : 'desc'
+    setSortBy(col)
+    setSortDir(newDir)
+    setPage(0)
+    setBulkSelected(new Set())
+    localStorage.setItem(STUDIES_SORT_KEY, JSON.stringify({ col, dir: newDir }))
+  }
+
+  function sortIcon(col: string): string {
+    if (sortBy !== col) return ' ⇅'
+    return sortDir === 'asc' ? ' ▲' : ' ▼'
+  }
 
   const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterDateFrom || filterDateTo || filterFlagged)
 
@@ -8704,18 +8730,18 @@ export function App() {
                     </th>
                     <th className="th-flag" title="Priority flag">★</th>
                     <th>Study UID</th>
-                    <th>Modality</th>
-                    <th>Body Part</th>
-                    <th>Source</th>
-                    <th>Status</th>
+                    <th className="th-sortable" onClick={() => setSortF('modality')} title="Sort by modality">Modality{sortIcon('modality')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('body_part')} title="Sort by body part">Body Part{sortIcon('body_part')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('source')} title="Sort by source">Source{sortIcon('source')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('status')} title="Sort by status">Status{sortIcon('status')}</th>
                     <th>PHI Scan</th>
                     <th>QC</th>
                     <th>BIDS</th>
                     <th>Class.</th>
                     <th>Protocol</th>
                     <th>Export</th>
-                    <th className="align-right">Files</th>
-                    <th>Received</th>
+                    <th className="align-right th-sortable" onClick={() => setSortF('instance_count')} title="Sort by file count">Files{sortIcon('instance_count')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('created_at')} title="Sort by received date">Received{sortIcon('created_at')}</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
