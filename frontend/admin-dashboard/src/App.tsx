@@ -2772,6 +2772,21 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   const [destTestResults, setDestTestResults] = useState<Record<string, DestTestResult>>({})
   const [destTesting, setDestTesting]         = useState<Record<string, boolean>>({})
 
+  // Destination historical health summaries (loaded once when Routing tab opens)
+  type DestHealthStatus = { destination_id: string; status: string; test_count: number; success_rate: number; last_tested_at: string | null; last_error: string }
+  const [destHealthSummaries, setDestHealthSummaries] = useState<Record<string, DestHealthStatus>>({})
+  function loadDestinationHealth() {
+    fetch('/api/destinations/health')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.destinations) return
+        const byId: Record<string, DestHealthStatus> = {}
+        for (const s of d.destinations) byId[s.destination_id] = s
+        setDestHealthSummaries(byId)
+      })
+      .catch(() => {})
+  }
+
   // Routing health stats
   type DestRoutingSummary = { destination_id: string; destination_name: string; destination_type: string; attempts: number; successful: number; failed: number; success_rate: number; last_attempt_at: string | null }
   type RoutingTotals = { attempts: number; successful: number; failed: number; success_rate: number }
@@ -2816,7 +2831,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
     }
   }, [])
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  useEffect(() => { fetchAll(); loadDestinationHealth() }, [fetchAll])
 
   const fetchRoutingHealth = useCallback(async (days: number) => {
     setHealthLoading(true)
@@ -3031,11 +3046,31 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               {destinations.map(d => {
                 const testResult = destTestResults[d.id]
                 const testing = destTesting[d.id]
+                const healthSummary = destHealthSummaries[d.id]
+                const healthColor = (status: string) => ({
+                  healthy: { bg: '#ccfbf1', color: '#0f766e', border: '#5eead4' },
+                  degraded: { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
+                  failing: { bg: '#ffedd5', color: '#9a3412', border: '#fed7aa' },
+                  unknown: { bg: '#f3f4f6', color: '#6b7280', border: '#e5e7eb' },
+                }[status] ?? { bg: '#f3f4f6', color: '#6b7280', border: '#e5e7eb' })
                 return (
                   <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
                     <td>
                       <div className="routing-name">{d.name}</div>
                       {d.description && <div className="routing-desc">{d.description}</div>}
+                      {healthSummary && healthSummary.test_count > 0 && (
+                        <div style={{
+                          marginTop: 4, fontSize: 11, padding: '2px 6px', borderRadius: 4,
+                          display: 'inline-block', marginRight: 4,
+                          ...healthColor(healthSummary.status),
+                          border: `1px solid ${healthColor(healthSummary.status).border}`,
+                        }} title={healthSummary.last_error ? `Last error: ${healthSummary.last_error}` : `${healthSummary.test_count} tests, ${(healthSummary.success_rate * 100).toFixed(0)}% success`}>
+                          {healthSummary.status === 'healthy' ? '● healthy' :
+                           healthSummary.status === 'degraded' ? '◐ degraded' :
+                           healthSummary.status === 'failing' ? '● failing' : '○ unknown'}
+                          {' '}({(healthSummary.success_rate * 100).toFixed(0)}%)
+                        </div>
+                      )}
                       {testResult && (
                         <div style={{
                           marginTop: 4,

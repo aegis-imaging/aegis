@@ -29,6 +29,7 @@ import {
   getStuckStudiesArgsSchema,
   getExpiringStudiesArgsSchema,
   getRetentionPreviewArgsSchema,
+  getDestinationHealthArgsSchema,
   getStudyDicomTagsArgsSchema,
   getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
@@ -740,6 +741,19 @@ const tools: Tool[] = [
           maximum: 365,
           description: "Look-back window in days (default 30)"
         }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_destination_health",
+    description: "Get connectivity test history for DICOM forwarding destinations. When destination_id is provided, returns a detailed summary (test count, success rate, last_tested_at, last_success, last_failure, last_error, last_latency_ms, status) plus a recent test log from the audit trail. Status is 'healthy' (≥90% success), 'degraded' (50-90%), 'failing' (<50%), or 'unknown' (never tested). When destination_id is omitted, returns a summary for ALL destinations. Use this to check if cross-cloud routing is healthy before diagnosing failures.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        destination_id: { type: "string", format: "uuid", description: "Specific destination; omit for all" },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Max recent test log entries (default 20, single destination only)" }
       },
       additionalProperties: false
     }
@@ -2822,6 +2836,20 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       const qs = params.toString();
       const data = await client.get(`/api/destinations/${parsed.destination_id}/stats${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_destination_health") {
+      const parsed = getDestinationHealthArgsSchema.parse(args);
+      if (parsed.destination_id) {
+        const params = new URLSearchParams();
+        if (parsed.limit !== undefined) params.set("limit", String(parsed.limit));
+        const qs = params.toString();
+        const data = await client.get(`/api/destinations/${encodeURIComponent(parsed.destination_id)}/health${qs ? "?" + qs : ""}`);
+        return formatSuccess(requestId, name, data);
+      } else {
+        const data = await client.get("/api/destinations/health");
+        return formatSuccess(requestId, name, data);
+      }
     }
 
     if (name === "get_routing_rule_stats") {
