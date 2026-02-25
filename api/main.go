@@ -197,6 +197,8 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}/compliance-report", auth(srv.GetProjectComplianceReport))
 	mux.HandleFunc("GET /api/projects/{id}/cohort-report", auth(srv.GetCohortReport))
 	mux.HandleFunc("POST /api/projects/{id}/re-evaluate-routing", adminOnly(srv.BulkReEvaluateRouting))
+	mux.HandleFunc("GET /api/projects/{id}/routing-rules/export", auth(srv.ExportRoutingRules))
+	mux.HandleFunc("POST /api/projects/{id}/routing-rules/import", adminOnly(srv.ImportRoutingRules))
 
 	// Anonymization profiles — per-project DICOM tag retention overrides.
 	mux.HandleFunc("GET /api/projects/{projectID}/anon-profiles", auth(srv.ListAnonProfiles))
