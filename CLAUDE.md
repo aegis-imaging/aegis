@@ -1586,6 +1586,19 @@ Aggregates study counts, storage stats, routing totals, stuck count, and the pip
 
 **MCP:** `get_project_health` read tool — consolidated health snapshot, ideal for AI-assisted project triage
 
+### Routing Rule Priority Reorder (`api/handler/routing_reorder.go`)
+
+Reorder routing rule priorities in one atomic database transaction without editing each rule individually.
+
+**API:**
+- `POST /api/routing-rules/reorder` (admin-only) — body: `{"rules": [{"id": "<uuid>", "priority": 10}, ...]}`
+- Up to 200 rules per call; duplicate IDs and negative priorities are rejected
+- All updates committed atomically — no transient ordering inconsistencies
+- Returns `{rules: [...], updated: N}` with the full updated rule list
+- Writes `routing_rule.reordered` audit entry with count
+
+**Admin dashboard:** ▲/▼ arrow buttons next to each rule's priority number in the Routing Rules table. Clicking swaps the clicked rule's priority with its neighbour and refreshes the list inline.
+
 ### Routing Rules Export / Import (`api/handler/routing_rules_export.go`)
 
 Export and import project-scoped routing rules as a JSON file. Useful for copying a routing configuration to a new project or backing it up before making changes.

@@ -2868,6 +2868,39 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
     }
   }
 
+  // Priority reorder
+  const [reordering, setReordering] = useState(false)
+
+  async function moveRule(ruleId: string, direction: 'up' | 'down') {
+    // Get the current filtered sorted list (same filter as the table).
+    const visible = rules.filter(r => !projectId || !r.project_id || r.project_id === projectId)
+    const idx = visible.findIndex(r => r.id === ruleId)
+    if (idx < 0) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= visible.length) return
+
+    const a = visible[idx]
+    const b = visible[swapIdx]
+    // Swap priorities between the two rules.
+    const newPriorityA = b.priority
+    const newPriorityB = a.priority === b.priority ? b.priority + (direction === 'up' ? -1 : 1) : a.priority
+
+    setReordering(true)
+    try {
+      const res = await fetch('/api/routing-rules/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rules: [{ id: a.id, priority: newPriorityA }, { id: b.id, priority: newPriorityB }] }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.rules) setRules(data.rules)
+      }
+    } finally {
+      setReordering(false)
+    }
+  }
+
   // Bulk re-evaluate routing
   const [bulkReEvalLoading, setBulkReEvalLoading] = useState(false)
   const [bulkReEvalResult, setBulkReEvalResult]   = useState<{evaluated: number; errors: string[]} | null>(null)
@@ -3335,7 +3368,27 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 ].filter(Boolean)
                 return (
                   <tr key={r.id} className={r.enabled ? '' : 'routing-row--disabled'}>
-                    <td className="routing-priority">{r.priority}</td>
+                    <td className="routing-priority">
+                      {r.priority}
+                      {isAdmin && (
+                        <span style={{ display: 'inline-flex', flexDirection: 'column', marginLeft: 4, gap: 1 }}>
+                          <button
+                            type="button"
+                            style={{ padding: '0 3px', fontSize: 10, lineHeight: '12px', cursor: 'pointer', border: '1px solid #d1d5db', borderRadius: 2, background: 'transparent' }}
+                            title="Move up (lower priority number)"
+                            disabled={reordering}
+                            onClick={() => moveRule(r.id, 'up')}
+                          >▲</button>
+                          <button
+                            type="button"
+                            style={{ padding: '0 3px', fontSize: 10, lineHeight: '12px', cursor: 'pointer', border: '1px solid #d1d5db', borderRadius: 2, background: 'transparent' }}
+                            title="Move down (higher priority number)"
+                            disabled={reordering}
+                            onClick={() => moveRule(r.id, 'down')}
+                          >▼</button>
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <div className="routing-name">{r.name}</div>
                       {r.description && <div className="routing-desc">{r.description}</div>}
