@@ -219,7 +219,17 @@ export function SynthPanel({
             <tbody>
               <tr>
                 <th style={{ width: 160 }}>Study UID</th>
-                <td className="tcia-uid" title={result.study_uid}>…{result.study_uid.slice(-30)}</td>
+                <td className="tcia-uid tcia-uid-cell">
+                  {result.study_uid}
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(result.study_uid)}
+                    title="Copy UID"
+                    className="tcia-uid-copy"
+                  >
+                    Copy
+                  </button>
+                </td>
               </tr>
               <tr>
                 <th>Files</th>
