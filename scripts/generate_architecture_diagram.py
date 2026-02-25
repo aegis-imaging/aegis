@@ -459,11 +459,16 @@ def build_html():
     ], "green", "#F0FDF4")
 
     mcp = info_box("MCP Server + AI Agent Tools", [
-        ("Model Context Protocol  (Claude)", [
-            "17 read tools: studies, audit, stats, health",
-            "13 write tools (confirm:true + reason required)",
+        ("Model Context Protocol  (Claude / Cursor)", [
+            "52+ read tools: studies, audit, stats, routing, health",
+            "29+ write tools (confirm:true + reason required)",
             "Zod-validated schemas — read-safe by default",
             "DIMSE retry proxy: process, replay, dead-letter",
+        ]),
+        ("Agent Orchestrator", [
+            "DICOM tag provenance analysis",
+            "9 diagnostic tools for study triage",
+            "Cohort report, pipeline funnel, project health",
         ]),
         ("Batch Import + Webhooks + API Keys", [
             "aegis-import CLI — bulk historical migration",
@@ -515,8 +520,11 @@ def build_html():
          "GCP live (aegis-prod) · DIMSE on GCE VM · Cloud Build CI/CD · IAM hardening · Landing Page · RBAC",
          "#7C3AED"),
         ("Phase 5: AWS Live  ✓",
-         "AWS production live (Feb 25) · Cross-cloud STOW-RS routing GCP↔AWS · Single codebase deploys both clouds in parallel · Azure + SOC 2 (Q3) · Enterprise GA (Q4)",
+         "AWS production live (Feb 25) · GCP→AWS cross-cloud routing verified · Single codebase deploys both clouds in parallel",
          "#DC2626"),
+        ("Phase 6: Azure Deploying  →",
+         "Azure Container Apps + PostgreSQL Flexible Server + Azure Blob Storage — deploying Feb 26 (day 9) · GitHub Actions OIDC CI/CD · SOC 2 + HL7 FHIR (Q3) · Enterprise GA (Q4)",
+         "#0078D4"),
     ]
     phases_html = "\n".join(
         f'<div class="phase" style="--c:{c}">'
@@ -587,7 +595,8 @@ def build_html():
         ("Local:",   "Docker Compose · PostgreSQL 15 · Mailpit · local filesystem",        "slate"),
         ("Auth:",    "GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth",     "orange"),
         ("Storage:", "STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes",    "go"),
-        ("CI/CD:",   "GitHub Actions: Go (120+) · Python (252+) · TS · Docker (9) · Cloud Build auto-deploy", "green"),
+        ("Azure:",    "Container Apps · PostgreSQL Flex · Azure Blob · ACR · Easy Auth · Azure VM (DIMSE)",    "gcp"),
+        ("CI/CD:",   "GitHub Actions: Go (160+) · Python (252+) · TS · Docker (9) · Cloud Build auto-deploy", "green"),
         ("Domains:", "aegisimaging.ai · www · api · admin  —  SSL cert v3",               "py"),
     ]
 
@@ -668,7 +677,7 @@ def build_html():
   <div class="zone" style="background:#FFF7ED;border-color:#EA580C;margin-bottom:6px">
     <div class="zone-hdr" style="color:#EA580C">
       AWS ACCOUNT
-      <span class="zone-sub" style="color:#9A3412">301691475234 &nbsp;·&nbsp; us-east-1 &nbsp;·&nbsp; Deploying Q1 2026 — same app layer as GCP, parallel infrastructure</span>
+      <span class="zone-sub" style="color:#9A3412">301691475234 &nbsp;·&nbsp; us-east-1 &nbsp;·&nbsp; ✓ Live — aws.api.aegisimaging.ai · Cross-cloud routing verified · Feb 25, 2026</span>
     </div>
     <div class="g3" style="margin-bottom:6px">
       {aws_alb}
@@ -694,7 +703,7 @@ def build_html():
   <!-- PHASES -->
   <div class="zone z-ph">
     <div class="zone-hdr">Implementation Phases</div>
-    <div class="g5">{phases_html}</div>
+    <div class="g5" style="grid-template-columns:repeat(6,1fr)">{phases_html}</div>
   </div>
 
   <!-- TECH STACK + MULTI-CLOUD -->
