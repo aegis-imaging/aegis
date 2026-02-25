@@ -1406,6 +1406,52 @@
   color: #1d4ed8;
 }
 
+/* Copy UID clipboard button */
+.btn-copy-uid {
+  background: none;
+  border: none;
+  padding: 0 3px;
+  margin-left: 3px;
+  font-size: 11px;
+  color: #9ca3af;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.2s;
+  vertical-align: middle;
+  line-height: 1;
+}
+.td-uid:hover .btn-copy-uid,
+.btn-copy-uid--copied {
+  opacity: 1;
+}
+.btn-copy-uid--copied {
+  color: #0d9488;
+}
+.btn-copy-uid:hover {
+  color: #6b7280;
+}
+
+/* Description column */
+.td-desc {
+  font-size: 12px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #374151;
+}
+.td-desc__empty {
+  color: #9ca3af;
+}
+.btn--toggle-desc {
+  font-size: 12px;
+}
+.btn--toggle-desc--on {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+
 .routing-section-title {
   margin: 0;
   font-size: 18px;
