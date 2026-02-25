@@ -160,6 +160,32 @@ func ListAuditEntriesByActor(ctx context.Context, db *sql.DB, actor string, limi
 	return entries, rows.Err()
 }
 
+// ListStudyNoteAuditEntries returns all study.note audit entries for a study,
+// ordered newest-first. Notes are stored as audit_trail rows with action='study.note'.
+func ListStudyNoteAuditEntries(ctx context.Context, db *sql.DB, studyID string) ([]AuditEntry, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at
+		FROM audit_trail
+		WHERE resource_id = $1
+		  AND action = 'study.note'
+		ORDER BY created_at DESC`, studyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		if err := rows.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
+			&e.Detail, &e.IPAddress, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
 // ListAuditEntriesForStudy returns all audit entries for a specific study (by resource_id).
 func ListAuditEntriesForStudy(ctx context.Context, db *sql.DB, studyID string) ([]AuditEntry, error) {
 	rows, err := db.QueryContext(ctx, `
