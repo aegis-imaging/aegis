@@ -423,6 +423,11 @@ func main() {
 	defer slaCancel()
 	sla.Start(slaCtx, db, mailer, cfg.SLAPipelineMinutes, cfg.SLACooldownHours, cfg.SLAAlertEmail)
 
+	// Start the destination health probe scheduler (no-op when DEST_HEALTH_INTERVAL=0).
+	probeCtx, probeCancel := context.WithCancel(context.Background())
+	defer probeCancel()
+	srv.StartDestinationProbeScheduler(probeCtx, time.Duration(cfg.DestHealthInterval)*time.Second, cfg.DestHealthAlertEmail)
+
 	// Start the study retention worker (daily sweep, no-op when no projects have retention_days set).
 	retentionCtx, retentionCancel := context.WithCancel(context.Background())
 	defer retentionCancel()
