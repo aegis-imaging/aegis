@@ -50,6 +50,15 @@ const GEMINI_MODELS = [
   { value: 'google/gemini-1.5-flash-001',      label: 'Gemini 1.5 Flash' },
 ]
 
+const EXAMPLE_PROMPTS = [
+  { label: 'Why is this stuck?', text: 'Why is this study stuck and what should I do to fix it?' },
+  { label: 'Routing issue?', text: 'Why did this study fail to route to its destination?' },
+  { label: 'Pipeline failed?', text: 'Which pipeline steps failed and what are the errors?' },
+  { label: 'Defacing OK?', text: 'Was defacing successful and what is the QA score?' },
+  { label: 'Approve this?', text: 'Should I approve this study? Are there any blockers or concerns?' },
+  { label: 'What happened?', text: 'Summarize everything that has happened to this study so far.' },
+]
+
 export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps) {
   const baseUrl = import.meta.env.VITE_AGENT_BASE_URL || DEFAULT_AGENT_BASE_URL
   const [studyId, setStudyId] = useState('')
@@ -133,7 +142,10 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
       <div className="agent-panel__header">
         <div>
           <h2>AEGIS Agent</h2>
-          <p>Read-only study status and diagnostics assistant</p>
+          <p>
+            AI-powered study diagnostics — ask why a study is stuck, why routing failed, what pipeline steps ran, and more.
+            Paste a study UUID or StudyInstanceUID, then ask a question or pick an example below.
+          </p>
         </div>
       </div>
 
@@ -142,27 +154,47 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
           <input
             className="form-input"
             type="text"
-            placeholder="Study UUID"
+            placeholder="Study UUID (e.g. 7445e605-…)"
             value={studyId}
             onChange={(e) => setStudyId(e.target.value)}
+            title="The database UUID for the study — copy it from the study detail page"
           />
           <input
             className="form-input"
             type="text"
-            placeholder="StudyInstanceUID"
+            placeholder="StudyInstanceUID (e.g. 1.2.826.0.1…)"
             value={studyUid}
             onChange={(e) => setStudyUid(e.target.value)}
+            title="The DICOM StudyInstanceUID — copy it from the Synth Generator or study list"
           />
         </div>
         <div className="form-row">
           <input
             className="form-input"
             type="text"
-            placeholder="Question (optional)"
+            placeholder="Ask a question — or pick one below ↓"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
+            title="Leave blank for a general status summary, or type a specific question"
           />
         </div>
+
+        {/* Example prompt chips */}
+        <div className="agent-prompts">
+          <span className="agent-prompts__label">Try:</span>
+          {EXAMPLE_PROMPTS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              className={`agent-prompt-chip${question === p.text ? ' agent-prompt-chip--active' : ''}`}
+              onClick={() => setQuestion(question === p.text ? '' : p.text)}
+              title={p.text}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
         <div className="form-row">
           <input
             className="form-input"
@@ -170,18 +202,20 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
             placeholder="Agent API key (optional)"
             value={agentApiKey}
             onChange={(e) => setAgentApiKey(e.target.value)}
+            title="Leave blank to use the server-configured API key, or enter your own for rate-limiting purposes"
           />
           <select
             className="form-input"
             value={model}
             onChange={(e) => setModel(e.target.value)}
+            title="Choose a Gemini model — 'Server default' uses whichever model the MCP server is configured with"
           >
             {GEMINI_MODELS.map((m) => (
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
         </div>
-        <label className="form-checkbox">
+        <label className="form-checkbox" title="Ask the agent to suggest concrete remediation steps based on what it finds">
           <input
             type="checkbox"
             checked={includeNextSteps}

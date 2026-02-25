@@ -62,6 +62,8 @@ const allowedGetPathPatterns = [
 const allowedPostPathPatterns = [
   /^\/api\/api-keys$/,
   /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/rotate$/,
+  /^\/api\/destinations$/,
+  /^\/api\/routing-rules$/,
   /^\/api\/studies\/bulk$/,
   /^\/api\/studies\/bulk-label$/,
   /^\/api\/studies\/generate-synthetic$/,
@@ -91,12 +93,16 @@ const allowedPostPathPatterns = [
 const allowedDeletePathPatterns = [
   /^\/api\/shares\/[0-9a-fA-F-]{36}$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels\/[0-9a-fA-F-]{36}$/,
-  /^\/api\/api-keys\/[0-9a-fA-F-]{36}$/
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/destinations\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/routing-rules\/[0-9a-fA-F-]{36}$/
 ] as const;
 
 const allowedPutPathPatterns = [
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/project$/,
-  /^\/api\/studies\/[0-9a-fA-F-]{36}\/subject$/
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/subject$/,
+  /^\/api\/destinations\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/routing-rules\/[0-9a-fA-F-]{36}$/
 ] as const;
 
 const allowedPatchPathPatterns = [
