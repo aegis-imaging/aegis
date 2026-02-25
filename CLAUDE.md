@@ -1774,7 +1774,7 @@ cd mcp-server && npm install && npm run build
 
 | Tool | Description |
 |------|-------------|
-| `list_studies` | Paginated study list with filters (status, modality, body_part, source, project_id, search, date range) |
+| `list_studies` | Paginated study list with filters (status, modality, body_part, source, project_id, search, label, subject_id, date range, flagged) and sort (sort_by, sort_dir) |
 | `get_study_detail` | Full study record by UUID |
 | `get_study_by_uid` | Full study record by DICOM StudyInstanceUID |
 | `get_study_diagnostics` | "Why is this stuck?" triage payload |
