@@ -36,6 +36,12 @@ import {
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
+  createDestinationArgsSchema,
+  updateDestinationArgsSchema,
+  destinationIdArgsSchema,
+  createRoutingRuleArgsSchema,
+  updateRoutingRuleArgsSchema,
+  routingRuleIdArgsSchema,
   testDestinationArgsSchema,
   testWebhookArgsSchema,
   readToolNames,
@@ -812,6 +818,128 @@ const tools: Tool[] = [
         project_id: { type: "string", format: "uuid" },
         name: { type: "string", minLength: 1, maxLength: 128, description: "New project name (default: 'Copy of <source>')" },
         slug: { type: "string", minLength: 1, maxLength: 128, description: "New project slug (auto-derived from name if omitted)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_destination",
+    description: "Update a DICOMweb or DIMSE routing destination. Use to fix auth headers (dicomweb_auth_header must include 'Bearer ' prefix), correct URLs, rename destinations, or enable/disable them. Only the fields you provide are updated (others keep their current values). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["destination_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        destination_id: { type: "string", format: "uuid" },
+        name: { type: "string", minLength: 1, maxLength: 256 },
+        description: { type: "string", maxLength: 512 },
+        dicomweb_url: { type: "string", format: "uri", description: "STOW-RS base URL (without /studies suffix)" },
+        dicomweb_auth_header: { type: "string", maxLength: 1024, description: "Full Authorization header value, e.g. 'Bearer aegis_...' (must include Bearer prefix)" },
+        enabled: { type: "boolean" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_destination",
+    description: "Create a new DICOMweb or DIMSE routing destination. DICOMweb destinations require dicomweb_url. DIMSE destinations require ae_title, host, and port. The dicomweb_auth_header must include the 'Bearer ' prefix if set. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "type", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        name: { type: "string", minLength: 1, maxLength: 256 },
+        description: { type: "string", maxLength: 512 },
+        type: { type: "string", enum: ["dicomweb", "dimse"] },
+        dicomweb_url: { type: "string", format: "uri", description: "Required for type=dicomweb" },
+        dicomweb_auth_header: { type: "string", maxLength: 1024, description: "e.g. 'Bearer aegis_...' — full Authorization header value" },
+        ae_title: { type: "string", maxLength: 64, description: "Required for type=dimse" },
+        host: { type: "string", maxLength: 256, description: "Required for type=dimse" },
+        port: { type: "integer", minimum: 1, maximum: 65535, description: "Required for type=dimse" },
+        enabled: { type: "boolean" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_destination",
+    description: "Permanently delete a routing destination. Any routing rules referencing this destination will lose their destination link. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["destination_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        destination_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_routing_rule",
+    description: "Create a new routing rule. Rules are evaluated on every study ingest in priority order (lower = first). All matching rules fire. Use action=route_to with a destination_id to forward DICOM files. Other actions: require_defacing, require_phi_scan, require_qc_check, require_bids_conversion, require_classification, require_protocol_check, require_export, auto_approve, require_qa, reject. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["name", "priority", "action", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        name: { type: "string", minLength: 1, maxLength: 256 },
+        description: { type: "string", maxLength: 512 },
+        priority: { type: "integer", minimum: 1, maximum: 9999, description: "Lower number = higher priority; rules are evaluated in ascending priority order" },
+        enabled: { type: "boolean" },
+        project_id: { type: "string", format: "uuid", description: "Scope rule to a specific project (omit for all projects)" },
+        modality: { type: "string", maxLength: 16, description: "Filter by modality e.g. MRI, CT, PET (omit for any)" },
+        body_part: { type: "string", maxLength: 64, description: "Filter by body part e.g. HEAD, CHEST (omit for any)" },
+        source: { type: "string", enum: ["external", "internal"], description: "Filter by study source (omit for any)" },
+        action: { type: "string", enum: ["route_to", "require_defacing", "require_phi_scan", "require_qc_check", "require_bids_conversion", "require_classification", "require_protocol_check", "require_export", "auto_approve", "require_qa", "reject"] },
+        destination_id: { type: "string", format: "uuid", description: "Required when action=route_to" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_routing_rule",
+    description: "Update an existing routing rule. Only the fields you provide are updated. Pass null to clear optional fields (project_id, modality, body_part, source, destination_id) so the rule matches any value. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["rule_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        rule_id: { type: "string", format: "uuid" },
+        name: { type: "string", minLength: 1, maxLength: 256 },
+        description: { type: "string", maxLength: 512 },
+        priority: { type: "integer", minimum: 1, maximum: 9999 },
+        enabled: { type: "boolean" },
+        project_id: { type: ["string", "null"], format: "uuid", description: "null clears project scoping (match any project)" },
+        modality: { type: ["string", "null"], maxLength: 16, description: "null matches any modality" },
+        body_part: { type: ["string", "null"], maxLength: 64, description: "null matches any body part" },
+        source: { type: ["string", "null"], enum: ["external", "internal", null], description: "null matches any source" },
+        action: { type: "string", enum: ["route_to", "require_defacing", "require_phi_scan", "require_qc_check", "require_bids_conversion", "require_classification", "require_protocol_check", "require_export", "auto_approve", "require_qa", "reject"] },
+        destination_id: { type: ["string", "null"], format: "uuid", description: "null clears destination link" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_routing_rule",
+    description: "Permanently delete a routing rule. Studies already ingested are not affected. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["rule_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        rule_id: { type: "string", format: "uuid" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -1620,6 +1748,36 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleGenerateSyntheticStudy(parsedSynth.request_id ?? buildRequestId(), parsedSynth);
       }
 
+      if (name === "update_destination") {
+        const parsedDest = updateDestinationArgsSchema.parse(args);
+        return handleUpdateDestination(parsedDest.request_id ?? buildRequestId(), parsedDest);
+      }
+
+      if (name === "create_destination") {
+        const parsedDest = createDestinationArgsSchema.parse(args);
+        return handleCreateDestination(parsedDest.request_id ?? buildRequestId(), parsedDest);
+      }
+
+      if (name === "delete_destination") {
+        const parsedDest = destinationIdArgsSchema.parse(args);
+        return handleDeleteDestination(parsedDest.request_id ?? buildRequestId(), parsedDest);
+      }
+
+      if (name === "create_routing_rule") {
+        const parsedRule = createRoutingRuleArgsSchema.parse(args);
+        return handleCreateRoutingRule(parsedRule.request_id ?? buildRequestId(), parsedRule);
+      }
+
+      if (name === "update_routing_rule") {
+        const parsedRule = updateRoutingRuleArgsSchema.parse(args);
+        return handleUpdateRoutingRule(parsedRule.request_id ?? buildRequestId(), parsedRule);
+      }
+
+      if (name === "delete_routing_rule") {
+        const parsedRule = routingRuleIdArgsSchema.parse(args);
+        return handleDeleteRoutingRule(parsedRule.request_id ?? buildRequestId(), parsedRule);
+      }
+
       const parsed = writeArgsSchema.parse(args);
 
       if (name === "trigger_classification") {
@@ -1764,6 +1922,18 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "generate_synthetic_study") {
     return typeof args.project_slug === "string" ? args.project_slug : "default";
+  }
+  if (name === "update_destination" || name === "delete_destination") {
+    return typeof args.destination_id === "string" ? args.destination_id : null;
+  }
+  if (name === "create_destination") {
+    return typeof args.name === "string" ? args.name : null;
+  }
+  if (name === "create_routing_rule") {
+    return typeof args.name === "string" ? args.name : null;
+  }
+  if (name === "update_routing_rule" || name === "delete_routing_rule") {
+    return typeof args.rule_id === "string" ? args.rule_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -2924,6 +3094,242 @@ async function handleGenerateSyntheticStudy(
     project_slug: parsed.project_slug ?? "default",
     reason: parsed.reason,
     result: data
+  });
+}
+
+async function handleUpdateDestination(
+  requestId: string,
+  parsed: {
+    destination_id: string;
+    name?: string;
+    description?: string;
+    dicomweb_url?: string;
+    dicomweb_auth_header?: string;
+    enabled?: boolean;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_destination");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_destination", false, "update_destination");
+  }
+
+  // Fetch existing destination first to apply partial updates.
+  const existing = await client.get(`/api/destinations`) as { destinations?: unknown[] } | unknown[];
+  const list: unknown[] = Array.isArray(existing) ? existing : ((existing as Record<string, unknown>)?.destinations ?? []) as unknown[];
+  const dest = (list as Array<Record<string, unknown>>).find((d) => d.id === parsed.destination_id);
+  if (!dest) {
+    return formatError(requestId, "NOT_FOUND", `Destination ${parsed.destination_id} not found`, false, "update_destination");
+  }
+
+  const body: Record<string, unknown> = {
+    name: parsed.name ?? dest.name,
+    slug: dest.slug,
+    description: parsed.description !== undefined ? parsed.description : dest.description,
+    type: dest.type,
+    dicomweb_url: parsed.dicomweb_url ?? dest.dicomweb_url ?? "",
+    dicomweb_auth_header: parsed.dicomweb_auth_header !== undefined ? parsed.dicomweb_auth_header : dest.dicomweb_auth_header ?? "",
+    ae_title: dest.ae_title ?? "",
+    host: dest.host ?? "",
+    port: dest.port ?? 0,
+    enabled: parsed.enabled !== undefined ? parsed.enabled : dest.enabled
+  };
+
+  const data = await client.put(`/api/destinations/${encodeURIComponent(parsed.destination_id)}`, body);
+  return formatSuccess(requestId, "update_destination", {
+    accepted: true,
+    destination_id: parsed.destination_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleCreateDestination(
+  requestId: string,
+  parsed: {
+    name: string;
+    description?: string;
+    type: "dicomweb" | "dimse";
+    dicomweb_url?: string;
+    dicomweb_auth_header?: string;
+    ae_title?: string;
+    host?: string;
+    port?: number;
+    enabled?: boolean;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_destination");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_destination", false, "create_destination");
+  }
+
+  const body: Record<string, unknown> = {
+    name: parsed.name,
+    type: parsed.type,
+    enabled: parsed.enabled ?? true
+  };
+  if (parsed.description) body.description = parsed.description;
+  if (parsed.dicomweb_url) body.dicomweb_url = parsed.dicomweb_url;
+  if (parsed.dicomweb_auth_header) body.dicomweb_auth_header = parsed.dicomweb_auth_header;
+  if (parsed.ae_title) body.ae_title = parsed.ae_title;
+  if (parsed.host) body.host = parsed.host;
+  if (parsed.port) body.port = parsed.port;
+
+  const data = await client.post("/api/destinations", body);
+  return formatSuccess(requestId, "create_destination", {
+    accepted: true,
+    name: parsed.name,
+    type: parsed.type,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleDeleteDestination(
+  requestId: string,
+  parsed: { destination_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_destination");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_destination", false, "delete_destination");
+  }
+
+  await client.delete(`/api/destinations/${encodeURIComponent(parsed.destination_id)}`);
+  return formatSuccess(requestId, "delete_destination", {
+    accepted: true,
+    destination_id: parsed.destination_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleCreateRoutingRule(
+  requestId: string,
+  parsed: {
+    name: string;
+    description?: string;
+    priority: number;
+    enabled?: boolean;
+    project_id?: string;
+    modality?: string;
+    body_part?: string;
+    source?: "external" | "internal";
+    action: string;
+    destination_id?: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_routing_rule");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_routing_rule", false, "create_routing_rule");
+  }
+
+  const body: Record<string, unknown> = {
+    name: parsed.name,
+    priority: parsed.priority,
+    action: parsed.action,
+    enabled: parsed.enabled ?? true
+  };
+  if (parsed.description) body.description = parsed.description;
+  if (parsed.project_id) body.project_id = parsed.project_id;
+  if (parsed.modality) body.modality = parsed.modality;
+  if (parsed.body_part) body.body_part = parsed.body_part;
+  if (parsed.source) body.source = parsed.source;
+  if (parsed.destination_id) body.destination_id = parsed.destination_id;
+
+  const data = await client.post("/api/routing-rules", body);
+  return formatSuccess(requestId, "create_routing_rule", {
+    accepted: true,
+    name: parsed.name,
+    action: parsed.action,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleUpdateRoutingRule(
+  requestId: string,
+  parsed: {
+    rule_id: string;
+    name?: string;
+    description?: string;
+    priority?: number;
+    enabled?: boolean;
+    project_id?: string | null;
+    modality?: string | null;
+    body_part?: string | null;
+    source?: "external" | "internal" | null;
+    action?: string;
+    destination_id?: string | null;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_routing_rule");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_routing_rule", false, "update_routing_rule");
+  }
+
+  // Fetch existing rule to apply partial updates.
+  const existing = await client.get("/api/routing-rules") as { rules?: unknown[] } | unknown[];
+  const list: unknown[] = Array.isArray(existing) ? existing : ((existing as Record<string, unknown>)?.rules ?? []) as unknown[];
+  const rule = (list as Array<Record<string, unknown>>).find((r) => r.id === parsed.rule_id);
+  if (!rule) {
+    return formatError(requestId, "NOT_FOUND", `Routing rule ${parsed.rule_id} not found`, false, "update_routing_rule");
+  }
+
+  const body: Record<string, unknown> = {
+    name: parsed.name ?? rule.name,
+    description: parsed.description !== undefined ? parsed.description : rule.description,
+    priority: parsed.priority ?? rule.priority,
+    enabled: parsed.enabled !== undefined ? parsed.enabled : rule.enabled,
+    action: parsed.action ?? rule.action
+  };
+  // Explicitly settable nullable fields
+  body.project_id = parsed.project_id !== undefined ? parsed.project_id : rule.project_id;
+  body.modality = parsed.modality !== undefined ? parsed.modality : rule.modality;
+  body.body_part = parsed.body_part !== undefined ? parsed.body_part : rule.body_part;
+  body.source = parsed.source !== undefined ? parsed.source : rule.source;
+  body.destination_id = parsed.destination_id !== undefined ? parsed.destination_id : rule.destination_id;
+
+  const data = await client.put(`/api/routing-rules/${encodeURIComponent(parsed.rule_id)}`, body);
+  return formatSuccess(requestId, "update_routing_rule", {
+    accepted: true,
+    rule_id: parsed.rule_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleDeleteRoutingRule(
+  requestId: string,
+  parsed: { rule_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_routing_rule");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_routing_rule", false, "delete_routing_rule");
+  }
+
+  await client.delete(`/api/routing-rules/${encodeURIComponent(parsed.rule_id)}`);
+  return formatSuccess(requestId, "delete_routing_rule", {
+    accepted: true,
+    rule_id: parsed.rule_id,
+    reason: parsed.reason
   });
 }
 

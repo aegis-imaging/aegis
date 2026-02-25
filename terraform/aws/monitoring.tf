@@ -122,7 +122,41 @@ resource "aws_wafv2_web_acl" "api" {
     }
   }
 
-  # Rule 3: AWS Managed — common exploits (SQLi, XSS, etc.).
+  # Rule 3: Allow STOW-RS paths before managed rules.
+  # DICOMweb STOW-RS receives large multipart/related DICOM bodies that exceed the
+  # 8 KB body-size limit enforced by AWSManagedRulesCommonRuleSet SizeRestrictions_BODY.
+  # This ALLOW rule short-circuits WAF inspection for /api/stow* so binary DICOM
+  # payloads are not blocked. The Go API enforces its own API-key auth on these routes.
+  rule {
+    name     = "allow-stow-rs"
+    priority = 15
+
+    action {
+      allow {}
+    }
+
+    statement {
+      byte_match_statement {
+        search_string = "/api/stow"
+        field_to_match {
+          uri_path {}
+        }
+        text_transformations {
+          priority = 0
+          type     = "NONE"
+        }
+        positional_constraint = "STARTS_WITH"
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${var.project_name}-waf-stow-allow"
+    }
+  }
+
+  # Rule 4: AWS Managed — common exploits (SQLi, XSS, etc.).
   rule {
     name     = "aws-managed-common"
     priority = 20
