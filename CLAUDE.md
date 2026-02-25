@@ -1482,6 +1482,19 @@ Per-destination and aggregate routing success/failure analytics derived from the
 - `get_routing_stats` read tool — aggregate routing health overview (`days` param)
 - `get_destination_stats` read tool — per-destination stats (`destination_id` required, `days` optional)
 
+### Routing Rule Hit Analytics (`api/handler/routing_rule_stats.go`)
+
+Per-rule hit counts from the `routing_log` table — identifies which rules are actively firing and which are stale.
+
+**API:**
+- `GET /api/stats/routing-rules?days=30` — returns `{period_days, generated_at, total_hits, active_rules, by_rule: [{rule_id, rule_name, rule_action, rule_enabled, destination_id, destination_name, hit_count, last_matched_at, first_matched_at}], unused_rules: [{rule_id, rule_name, rule_action, rule_enabled, destination_id}]}`
+- `by_rule` ordered by `hit_count DESC`; `unused_rules` lists rules with zero log entries in the period (ordered by priority then name)
+- `days` param accepts 1–365, default 30
+
+**Admin dashboard:** collapsible "Rule Analytics" section in the Routing tab showing hit-count summary cards, a ranked rules table, and a separate "Unused rules" table (amber heading) for rules that haven't fired in the period.
+
+**MCP:** `get_routing_rule_stats` read tool — returns hit analytics + unused rules list (`days` optional)
+
 ### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
 Export and import protocol templates for a project as a JSON file.
@@ -1588,6 +1601,7 @@ cd mcp-server && npm install && npm run build
 | `test_destination` | Test connectivity to a DICOM destination (DICOMweb GET probe or DIMSE C-ECHO) |
 | `get_routing_stats` | Aggregate routing health overview across all destinations (optional days) |
 | `get_destination_stats` | Per-destination routing stats: success rate, recent errors, daily breakdown (destination_id required, optional days) |
+| `get_routing_rule_stats` | Per-rule hit analytics: hit counts, last matched, unused rules in period (optional days) |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 

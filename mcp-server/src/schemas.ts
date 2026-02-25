@@ -83,6 +83,11 @@ export const routingStatsArgsSchema = z.object({
   days: z.number().int().min(1).max(365).optional()
 });
 
+export const routingRuleStatsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  days: z.number().int().min(1).max(365).optional()
+});
+
 export const destinationStatsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   destination_id: z.string().uuid(),
@@ -432,7 +437,8 @@ export const readToolNames = [
   "list_api_keys",
   "test_destination",
   "get_routing_stats",
-  "get_destination_stats"
+  "get_destination_stats",
+  "get_routing_rule_stats"
 ] as const;
 
 export const writeToolNames = [
