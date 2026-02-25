@@ -61,6 +61,8 @@ body {
 .z-gcp  .zone-hdr { color: #0F766E; }
 .z-aws  { background: #FFF7ED; border-color: #EA580C; }
 .z-aws  .zone-hdr { color: #EA580C; }
+.z-azure { background: #EFF6FF; border-color: #0078D4; }
+.z-azure .zone-hdr { color: #0078D4; }
 .z-pipe { background: #EFF6FF; border-color: #1D4ED8; }
 .z-pipe .zone-hdr { color: #1D4ED8; }
 .z-ph   { background: #FAF5FF; border-color: #7C3AED; }
@@ -298,6 +300,24 @@ body {
     </div>
   </div>
 
+  <!-- AZURE SUBSCRIPTION -->
+  <div class="zone z-azure" style="margin-bottom:6px">
+    <div class="zone-hdr">
+      AZURE SUBSCRIPTION
+      <span class="zone-sub" style="color:#005A9E">Container Apps · PostgreSQL Flexible Server · Azure Blob Storage &nbsp;·&nbsp; ● Deploying — Feb 26, 2026 (Day 9) · GitHub Actions OIDC CI/CD</span>
+    </div>
+    <div class="g3" style="margin-bottom:6px">
+      <div class="card" style="--c:#0078D4"><div class="card-hdr">Azure Container Registry + Easy Auth</div><ul><li>ACR — private registry, GitHub Actions OIDC push</li><li>Easy Auth on Container Apps — injects X-MS-CLIENT-PRINCIPAL-NAME</li><li>AUTH_PROVIDER=azure, AUTH_ENABLED=true</li><li>Federated OIDC — no long-lived credentials stored</li></ul></div>
+      <div class="card" style="--c:#00ADD8"><div class="card-hdr">API + Admin  (Azure Container Apps)</div><ul><li>Go API — same image as GCP/AWS (0.5–1 vCPU / 2 GB)</li><li>Admin Dashboard — React / nginx Container App</li><li>Azure Communication Services SMTP relay (smtp.azurecomm.net)</li><li>Force-new-revision via GitHub Actions on every push</li></ul></div>
+      <div class="card" style="--c:#3776AB"><div class="card-hdr">7 Python Sidecars  (Container Apps)</div><ul><li>defacing · phi-detection · qc-service</li><li>bids-service · classification-service</li><li>protocol-service · synth-service</li><li>Internal ingress only — same Docker images as GCP/AWS</li></ul></div>
+    </div>
+    <div class="g3">
+      <div class="card" style="--c:#D97706"><div class="card-hdr">PostgreSQL Flex + Azure Blob  (Data Layer)</div><ul><li>Azure Database for PostgreSQL — Flexible Server</li><li>Azure Blob Storage — STORAGE_MODE=azure</li><li>DefaultAzureCredential — Workload Identity / Managed Identity</li><li>SAS tokens via user-delegation key for signed URLs</li></ul></div>
+      <div class="card" style="--c:#3776AB"><div class="card-hdr">DIMSE Azure VM  (Standard_B2s)</div><ul><li>Debian 12 — Docker + Azure VM Extensions</li><li>Static public IP — TCP port 11112 for PACS registration</li><li>GitHub Actions: az vm run-command + docker pull/restart</li><li>Same pynetdicom C-STORE SCP as GCP/AWS</li></ul></div>
+      <div class="card" style="--c:#374151"><div class="card-hdr">GitHub Actions CI/CD  (OIDC)</div><ul><li>Triggers on push to develop — parallel with GCP + AWS</li><li>Federated OIDC — AZURE_CLIENT_ID / TENANT_ID / SUBSCRIPTION_ID</li><li>Build 13 images → push to ACR → az containerapp update</li><li>deploy-dimse job: az vm run-command on DIMSE VM</li></ul></div>
+    </div>
+  </div>
+
   <!-- PIPELINE -->
   <div class="zone z-pipe">
     <div class="zone-hdr">
@@ -333,7 +353,7 @@ body {
       </div>
       <div class="kv-box">
         <div class="kv-box-title">Multi-Cloud + Test Coverage</div>
-        <div class="kv"><span class="kv-k" style="color:#4285F4">GCP:</span><span class="kv-v">Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · KMS · Pub/Sub</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">AWS:</span><span class="kv-v">ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager</span></div><div class="kv"><span class="kv-k" style="color:#374151">Local:</span><span class="kv-v">Docker Compose · PostgreSQL 15 · Mailpit · local filesystem</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">Auth:</span><span class="kv-v">GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth</span></div><div class="kv"><span class="kv-k" style="color:#00ADD8">Storage:</span><span class="kv-v">STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes</span></div><div class="kv"><span class="kv-k" style="color:#4285F4">Azure:</span><span class="kv-v">Container Apps · PostgreSQL Flex · Azure Blob · ACR · Easy Auth · Azure VM (DIMSE)</span></div><div class="kv"><span class="kv-k" style="color:#0F766E">CI/CD:</span><span class="kv-v">GitHub Actions: Go (160+) · Python (252+) · TS · Docker (9) · Cloud Build auto-deploy</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Domains:</span><span class="kv-v">aegisimaging.ai · www · api · admin  —  SSL cert v3</span></div>
+        <div class="kv"><span class="kv-k" style="color:#4285F4">GCP:</span><span class="kv-v">Cloud Run · Cloud SQL · GCS · IAP · Cloud Armor · KMS · Pub/Sub</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">AWS:</span><span class="kv-v">ECS Fargate · RDS · S3 · ALB + Cognito · ACM · Secrets Manager</span></div><div class="kv"><span class="kv-k" style="color:#374151">Local:</span><span class="kv-v">Docker Compose · PostgreSQL 15 · Mailpit · local filesystem</span></div><div class="kv"><span class="kv-k" style="color:#EA580C">Auth:</span><span class="kv-v">GCP IAP · Azure AD Easy Auth · AWS ALB+Cognito · dev auto-auth</span></div><div class="kv"><span class="kv-k" style="color:#00ADD8">Storage:</span><span class="kv-v">STORAGE_MODE=gcs | s3 | local  —  same Go API, no code changes</span></div><div class="kv"><span class="kv-k" style="color:#0078D4">Azure:</span><span class="kv-v">Container Apps · PostgreSQL Flex · Azure Blob · ACR · Easy Auth · Azure VM (DIMSE)</span></div><div class="kv"><span class="kv-k" style="color:#0F766E">CI/CD:</span><span class="kv-v">GitHub Actions: Go (160+) · Python (252+) · TS · Docker (9) · Cloud Build auto-deploy</span></div><div class="kv"><span class="kv-k" style="color:#3776AB">Domains:</span><span class="kv-v">aegisimaging.ai · www · api · admin  —  SSL cert v3</span></div>
       </div>
     </div>
   </div>
