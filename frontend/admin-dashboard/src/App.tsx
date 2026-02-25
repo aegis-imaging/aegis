@@ -2836,6 +2836,38 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
     }
   }
 
+  // Routing rules import/export
+  const rulesImportRef = useRef<HTMLInputElement>(null)
+  const [rulesImporting, setRulesImporting] = useState(false)
+  const [rulesImportMsg, setRulesImportMsg] = useState<string | null>(null)
+
+  async function handleRulesImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !projectId) return
+    e.target.value = ''
+    setRulesImporting(true)
+    setRulesImportMsg(null)
+    try {
+      const text = await file.text()
+      const res = await fetch(`/api/projects/${projectId}/routing-rules/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: text,
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setRulesImportMsg(`Import failed: ${data.error ?? res.statusText}`)
+      } else {
+        setRulesImportMsg(`Imported ${data.imported} rule${data.imported === 1 ? '' : 's'}, skipped ${data.skipped} duplicate${data.skipped === 1 ? '' : 's'}`)
+        fetchAll()
+      }
+    } catch (err) {
+      setRulesImportMsg('Import failed: network error')
+    } finally {
+      setRulesImporting(false)
+    }
+  }
+
   // Bulk re-evaluate routing
   const [bulkReEvalLoading, setBulkReEvalLoading] = useState(false)
   const [bulkReEvalResult, setBulkReEvalResult]   = useState<{evaluated: number; errors: string[]} | null>(null)
@@ -3173,8 +3205,45 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
       <section className="routing-section">
         <div className="routing-section-header">
           <h2>Routing Rules</h2>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openNewRule}>+ Add rule</button>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {projectId && (
+              <a
+                className="btn btn--secondary"
+                href={`/api/projects/${projectId}/routing-rules/export`}
+                download="routing-rules.json"
+                title="Download all project-scoped routing rules as JSON"
+              >
+                Export JSON
+              </a>
+            )}
+            {isAdmin && projectId && (
+              <>
+                <input
+                  ref={rulesImportRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleRulesImport}
+                />
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => rulesImportRef.current?.click()}
+                  disabled={rulesImporting}
+                  title="Import routing rules from a JSON file (duplicates skipped)"
+                >
+                  {rulesImporting ? 'Importing…' : 'Import JSON'}
+                </button>
+              </>
+            )}
+            {isAdmin && <button type="button" className="btn-primary" onClick={openNewRule}>+ Add rule</button>}
+          </div>
         </div>
+        {rulesImportMsg && (
+          <div style={{ padding: '6px 12px', fontSize: 13, color: rulesImportMsg.startsWith('Import failed') ? '#9a3412' : '#0f766e', background: rulesImportMsg.startsWith('Import failed') ? '#ffedd5' : '#ccfbf1', borderRadius: 4, marginTop: 4 }}>
+            {rulesImportMsg}
+          </div>
+        )}
         <p className="routing-hint">
           Rules are evaluated in <strong>priority order</strong> (lower = first) on every study ingest.
           All matching rules fire — not just the first.

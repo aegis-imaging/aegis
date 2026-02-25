@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,6 +102,33 @@ func CreateTestRoutingRule(t *testing.T, db *sql.DB, name, action string) *model
 	}
 	if err := model.CreateRoutingRule(context.Background(), db, r); err != nil {
 		t.Fatalf("create test routing rule: %v", err)
+	}
+	return r
+}
+
+// CreateTestProject creates a new project with the given name and a derived slug.
+func CreateTestProject(t *testing.T, db *sql.DB, name string) *model.Project {
+	t.Helper()
+	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-")) + fmt.Sprintf("-%d", time.Now().UnixNano())
+	p, err := model.CreateProject(context.Background(), db, name, slug, "")
+	if err != nil {
+		t.Fatalf("create test project %q: %v", name, err)
+	}
+	return p
+}
+
+// CreateTestRoutingRuleForProject creates an enabled routing rule scoped to a specific project.
+func CreateTestRoutingRuleForProject(t *testing.T, db *sql.DB, name, action, projectID string) *model.RoutingRule {
+	t.Helper()
+	r := &model.RoutingRule{
+		Name:      name,
+		Priority:  100,
+		Enabled:   true,
+		Action:    action,
+		ProjectID: &projectID,
+	}
+	if err := model.CreateRoutingRule(context.Background(), db, r); err != nil {
+		t.Fatalf("create test routing rule for project: %v", err)
 	}
 	return r
 }
