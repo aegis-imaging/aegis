@@ -38,6 +38,7 @@ import {
   destinationStatsArgsSchema,
   routingRuleStatsArgsSchema,
   pipelineFunnelArgsSchema,
+  projectHealthArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -689,6 +690,33 @@ const tools: Tool[] = [
           type: "string",
           format: "uuid",
           description: "Scope to a specific project (omit for all projects)"
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_project_health",
+    description: "Get a consolidated health snapshot for a project (or all projects). Returns {period_days, generated_at, project_id, studies: {received, defacing, clean, defaced, approved, rejected}, storage: {raw_file_count, clean_file_count, total_file_count, total_studies}, stuck_count, routing: {attempts, successful, failed, success_rate}, funnel: [{stage, count, pct_of_total, pct_of_prev}]}. Single call combining study counts, storage, routing health, stuck count, and pipeline funnel — ideal for a quick project status check.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 365,
+          description: "Look-back window in days for routing and funnel (default 30)"
+        },
+        project_id: {
+          type: "string",
+          format: "uuid",
+          description: "Scope to a specific project (omit for all projects)"
+        },
+        stuck_minutes: {
+          type: "integer",
+          minimum: 1,
+          description: "Idle threshold for stuck detection in minutes (default 60)"
         }
       },
       additionalProperties: false
@@ -1627,6 +1655,17 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.project_id !== undefined) params.set("project_id", parsed.project_id);
       const qs = params.toString();
       const data = await client.get(`/api/stats/pipeline-funnel${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_project_health") {
+      const parsed = projectHealthArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      if (parsed.project_id !== undefined) params.set("project_id", parsed.project_id);
+      if (parsed.stuck_minutes !== undefined) params.set("stuck_minutes", String(parsed.stuck_minutes));
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/project-health${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
