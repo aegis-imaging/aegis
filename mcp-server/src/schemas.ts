@@ -903,6 +903,11 @@ export const getProjectBidsInfoArgsSchema = z.object({
     .describe("Study status filter (default: 'approved')")
 });
 
+export const getCohortReportArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid().describe("Project UUID to generate cohort report for.")
+});
+
 export const getRetentionPreviewArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   project_id: z.string().uuid().describe("Project UUID to preview retention for."),
@@ -1014,7 +1019,8 @@ export const readToolNames = [
   "get_expiring_studies",
   "get_retention_preview",
   "get_destination_health",
-  "simulate_routing"
+  "simulate_routing",
+  "get_cohort_report"
 ] as const;
 
 export const writeToolNames = [
