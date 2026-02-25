@@ -245,7 +245,7 @@ resource "azurerm_role_assignment" "blob_delegator" {
 # ── Key Vault ─────────────────────────────────────────────────────────────────
 
 resource "azurerm_key_vault" "main" {
-  name                      = "${local.prefix}-kv"
+  name                      = "${local.prefix}-kv-${random_string.pg_suffix.result}"
   location                  = azurerm_resource_group.main.location
   resource_group_name       = azurerm_resource_group.main.name
   tenant_id                 = data.azurerm_client_config.current.tenant_id
