@@ -13,11 +13,13 @@ import (
 
 // ValidWebhookEvents is the set of events subscribers can listen to.
 var ValidWebhookEvents = map[string]bool{
-	"study.approved":      true,
-	"study.rejected":      true,
-	"study.phi_flagged":   true,
-	"study.export_complete": true,
-	"study.stuck":         true,
+	"study.created":            true,
+	"study.processing_complete": true,
+	"study.approved":           true,
+	"study.rejected":           true,
+	"study.phi_flagged":        true,
+	"study.export_complete":    true,
+	"study.stuck":              true,
 }
 
 type webhookRequest struct {
@@ -328,7 +330,7 @@ func validateWebhookRequest(req webhookRequest) error {
 	}
 	for _, e := range req.Events {
 		if !ValidWebhookEvents[e] {
-			return errMsg("unknown event: " + e + "; valid events: study.approved, study.rejected, study.phi_flagged, study.export_complete, study.stuck")
+			return errMsg("unknown event: " + e + "; valid events: study.created, study.processing_complete, study.approved, study.rejected, study.phi_flagged, study.export_complete, study.stuck")
 		}
 	}
 	return nil
