@@ -27,7 +27,7 @@ const MARKET_CARDS = [
   },
 ]
 
-export function Testimonials() {
+export function MarketOpportunity() {
   const { ref, isVisible } = useScrollAnimation()
 
   return (
