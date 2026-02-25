@@ -95,7 +95,7 @@ resource "azurerm_monitor_metric_alert" "api_cpu" {
   description         = "API Container App CPU usage > 80% over 10 minutes"
   severity            = 3
   frequency           = "PT5M"
-  window_size         = "PT10M"
+  window_size         = "PT15M"
 
   criteria {
     metric_namespace = "Microsoft.App/containerapps"
@@ -124,7 +124,7 @@ resource "azurerm_monitor_metric_alert" "db_cpu" {
   description         = "PostgreSQL CPU usage > 80% over 10 minutes"
   severity            = 2
   frequency           = "PT5M"
-  window_size         = "PT10M"
+  window_size         = "PT15M"
 
   criteria {
     metric_namespace = "Microsoft.DBforPostgreSQL/flexibleServers"
@@ -211,7 +211,7 @@ resource "azurerm_monitor_metric_alert" "api_memory" {
   description         = "API Container App memory usage > 80% of limit over 10 minutes"
   severity            = 3
   frequency           = "PT5M"
-  window_size         = "PT10M"
+  window_size         = "PT15M"
 
   criteria {
     metric_namespace = "Microsoft.App/containerapps"

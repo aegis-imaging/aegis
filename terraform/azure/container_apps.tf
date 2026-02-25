@@ -148,7 +148,7 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "CLASSIFICATION_SERVICE_URL"
-        value = "https://${local.prefix}-classification-service.internal.${local.aca_internal_domain}"
+        value = "https://${local.prefix}-classify.internal.${local.aca_internal_domain}"
       }
       env {
         name  = "PROTOCOL_SERVICE_URL"
@@ -598,7 +598,7 @@ resource "azurerm_container_app" "bids_service" {
 }
 
 resource "azurerm_container_app" "classification_service" {
-  name                         = "${local.prefix}-classification-service"
+  name                         = "${local.prefix}-classify"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"

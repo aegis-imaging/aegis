@@ -138,7 +138,7 @@ resource "azurerm_linux_virtual_machine" "dimse" {
 
   admin_ssh_key {
     username   = "aegis"
-    public_key = file("~/.ssh/id_rsa.pub")
+    public_key = var.dimse_ssh_public_key
   }
 
   os_disk {
