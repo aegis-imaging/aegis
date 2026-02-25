@@ -157,6 +157,34 @@ func PipelineFailure(studyUID, service, errMsg string) (subject, body string) {
 	return subject, buf.String()
 }
 
+var destinationFailingTmpl = template.Must(template.New("destination_failing").Parse(
+`A DICOM destination has stopped responding.
+
+Destination: {{ .Name }} ({{ .Type }})
+Error:        {{ .ErrMsg }}
+Detected at:  {{ .DetectedAt }} UTC
+
+The destination health probe recorded a failure. Check that the remote
+endpoint is online and that any firewall rules permit outbound connections.
+
+--
+This is an automated alert from AEGIS. Do not reply to this email.
+`))
+
+// DestinationFailing renders an alert email when a DICOM destination transitions to failing.
+// No PHI is included — only the destination name, type, and error message.
+func DestinationFailing(name, destType, errMsg string) (subject, body string) {
+	subject = "[AEGIS Alert] Destination unreachable: " + name
+	var buf bytes.Buffer
+	destinationFailingTmpl.Execute(&buf, struct {
+		Name        string
+		Type        string
+		ErrMsg      string
+		DetectedAt  string
+	}{name, destType, errMsg, time.Now().UTC().Format("2006-01-02 15:04:05 UTC")})
+	return subject, buf.String()
+}
+
 var inviteRequestTmpl = template.Must(template.New("invite_request").Parse(
 	`Someone has requested early access to AEGIS.
 

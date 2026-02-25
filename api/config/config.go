@@ -114,6 +114,11 @@ type Config struct {
 	// Disabled when PipelineAlertEmail is empty or SMTP is not configured.
 	PipelineAlertEmail string // PIPELINE_ALERT_EMAIL — recipient for pipeline step failure alerts
 
+	// Destination health probe scheduler — automatically probes all enabled destinations.
+	// Disabled when DestHealthInterval is 0.
+	DestHealthInterval  int    // DEST_HEALTH_INTERVAL — probe interval in seconds (0 = disabled)
+	DestHealthAlertEmail string // DEST_HEALTH_ALERT_EMAIL — email for failure transition alerts
+
 	// First-admin bootstrap — seeds the first admin user on startup when admin_users is empty.
 	// Idempotent: has no effect once any admin user exists.
 	FirstAdminEmail string // FIRST_ADMIN_EMAIL
@@ -204,6 +209,9 @@ func Load() *Config {
 		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),
 		SLAAlertEmail:      os.Getenv("SLA_ALERT_EMAIL"),
 		PipelineAlertEmail: os.Getenv("PIPELINE_ALERT_EMAIL"),
+
+		DestHealthInterval:   envInt("DEST_HEALTH_INTERVAL", 0),
+		DestHealthAlertEmail: os.Getenv("DEST_HEALTH_ALERT_EMAIL"),
 
 		FirstAdminEmail: os.Getenv("FIRST_ADMIN_EMAIL"),
 		FirstAdminName:  envOr("FIRST_ADMIN_NAME", os.Getenv("FIRST_ADMIN_EMAIL")),
