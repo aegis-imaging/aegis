@@ -353,6 +353,7 @@ func main() {
 	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))
 	mux.HandleFunc("PUT /api/admin-users/{id}", adminOnly(srv.UpdateAdminUser))
 	mux.HandleFunc("DELETE /api/admin-users/{id}", adminOnly(srv.DeleteAdminUser))
+	mux.HandleFunc("POST /api/admin-users/{id}/send-invite", adminOnly(srv.SendAdminUserInvite))
 	mux.HandleFunc("GET /api/admin-users/{id}/preferences", auth(srv.GetUserPreferences))
 	mux.HandleFunc("PUT /api/admin-users/{id}/preferences", auth(srv.UpdateUserPreferences))
 
