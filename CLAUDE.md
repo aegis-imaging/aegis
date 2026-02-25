@@ -1227,6 +1227,16 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - Returns `400` if the step is not required for the study (enable it via a routing rule first)
 - Emits `study.pipeline_reset` audit entry
 
+**Study expiry warnings** (`GET /api/studies/expiring`, admin-read):
+- Returns approved studies that will be soft-expired by the retention worker within the next N days
+- Query params: `days` (1–365, default 7), `project_id` (optional), `limit` (1–500, default 200)
+- Only studies from projects with a non-null `retention_days` are returned
+- Response: `{studies: [{...study, retention_days, expires_at, days_until_expiry}], total, days, truncated}`
+- `expires_at` is RFC3339; `days_until_expiry` is a non-negative integer (0 = expires today)
+- Results are ordered by `expires_at` ascending (soonest-expiring first)
+- Admin dashboard: orange warning banner above the studies list when studies expire within 7 days; "View" button expands an inline table with per-study expiry details; clicking a row opens the study detail panel; `days_until_expiry` is color-coded (orange = today, amber = ≤3 days, default = ≤7 days)
+- MCP `get_expiring_studies` read tool
+
 **Study expiry + reactivation** (`POST /api/studies/{id}/reactivate`, admin-only):
 - Studies in `expired` status cannot be approved or rejected
 - `POST /api/studies/{id}/reactivate` — sets status back to `approved` for expired studies; emits `study.reactivated` audit entry
@@ -1624,6 +1634,7 @@ cd mcp-server && npm install && npm run build
 | `get_audit_log` | Global audit log with filters (search, date_from, date_to, action, resource_type, actor) |
 | `get_pipeline_stats` | Study status counts (optionally scoped to a project) |
 | `get_stuck_studies` | Studies idle beyond a threshold (minutes, optional project_id) |
+| `get_expiring_studies` | Approved studies expiring within N days per retention policy (days, project_id, limit) |
 | `get_breakdown_stats` | Modality/body part breakdown (optional project_id) |
 | `get_storage_stats` | Raw/clean file counts (optional project_id) |
 | `get_processing_stats` | Per-stage processing-time statistics (avg/p95/min/max) derived from audit trail (optional project_id, days) |

@@ -6954,6 +6954,8 @@ export function App() {
   const [bulkLabelInput, setBulkLabelInput] = useState('')
   const [bulkPipelineStep, setBulkPipelineStep] = useState('qc')
   const [stuckCount, setStuckCount] = useState(0)
+  const [expiringStudies, setExpiringStudies] = useState<Array<{id:string;study_instance_uid:string;modality:string;body_part:string;expires_at:string;days_until_expiry:number;retention_days:number}>>([])
+  const [showExpiringPanel, setShowExpiringPanel] = useState(false)
 
   // Global project selector — persisted to localStorage.
   const [globalProjectId, setGlobalProjectId] = useState<string>(() => localStorage.getItem(GLOBAL_PROJECT_KEY) ?? '')
@@ -6993,6 +6995,21 @@ export function App() {
     }
     fetchStuck()
     const id = setInterval(fetchStuck, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [globalProjectId])
+
+  // Poll for studies expiring within 7 days every 5 minutes (non-critical).
+  useEffect(() => {
+    const fetchExpiring = () => {
+      const params = new URLSearchParams({ days: '7', limit: '50' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      fetch(`/api/studies/expiring?${params}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => d && setExpiringStudies(d.studies ?? []))
+        .catch(() => {})
+    }
+    fetchExpiring()
+    const id = setInterval(fetchExpiring, 5 * 60 * 1000)
     return () => clearInterval(id)
   }, [globalProjectId])
 
@@ -7714,6 +7731,64 @@ export function App() {
                   </span>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Expiring soon warning */}
+          {expiringStudies.length > 0 && (
+            <div style={{
+              background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6,
+              padding: '8px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10
+            }}>
+              <span style={{fontSize: 13, color: '#9a3412', fontWeight: 600}}>
+                {expiringStudies.length} approved {expiringStudies.length === 1 ? 'study' : 'studies'} expiring within 7 days
+              </span>
+              <button type="button"
+                onClick={() => setShowExpiringPanel(v => !v)}
+                style={{
+                  fontSize: 12, padding: '2px 10px', background: '#ea580c',
+                  color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600,
+                  marginLeft: 'auto'
+                }}>
+                {showExpiringPanel ? 'Hide' : 'View'}
+              </button>
+            </div>
+          )}
+          {showExpiringPanel && expiringStudies.length > 0 && (
+            <div style={{
+              background: '#fff', border: '1px solid #fed7aa', borderRadius: 6,
+              padding: '10px 14px', marginBottom: 10, overflowX: 'auto'
+            }}>
+              <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                <thead>
+                  <tr>
+                    <th>Study UID</th>
+                    <th>Modality</th>
+                    <th>Body part</th>
+                    <th>Expires at</th>
+                    <th>Days left</th>
+                    <th>Retention</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expiringStudies.map(s => (
+                    <tr key={s.id}
+                      style={{cursor: 'pointer'}}
+                      onClick={() => setSelectedStudyId(s.id)}
+                      title="Click to view study details"
+                    >
+                      <td style={{fontFamily: 'monospace', fontSize: '0.75rem'}}>{s.study_instance_uid}</td>
+                      <td>{s.modality || <span className="td-muted">—</span>}</td>
+                      <td>{s.body_part || <span className="td-muted">—</span>}</td>
+                      <td>{new Date(s.expires_at).toLocaleDateString()}</td>
+                      <td style={{color: s.days_until_expiry <= 1 ? '#ea580c' : s.days_until_expiry <= 3 ? '#b45309' : '#374151', fontWeight: 600}}>
+                        {s.days_until_expiry === 0 ? 'Today' : `${s.days_until_expiry}d`}
+                      </td>
+                      <td>{s.retention_days}d policy</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
