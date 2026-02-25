@@ -216,7 +216,7 @@ jobs:
         run: az containerapp update --name aegis-prod-bids-service --resource-group "$RG" --image "$ACR/bids-service:$IMAGE_TAG"
 
       - name: Deploy — classification-service
-        run: az containerapp update --name aegis-prod-classification-service --resource-group "$RG" --image "$ACR/classification-service:$IMAGE_TAG"
+        run: az containerapp update --name aegis-prod-classify --resource-group "$RG" --image "$ACR/classification-service:$IMAGE_TAG"
 
       - name: Deploy — protocol-service
         run: az containerapp update --name aegis-prod-protocol-service --resource-group "$RG" --image "$ACR/protocol-service:$IMAGE_TAG"

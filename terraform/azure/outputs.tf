@@ -53,11 +53,6 @@ output "nat_gateway_ip" {
   value       = azurerm_public_ip.nat.ip_address
 }
 
-output "gateway_public_ip" {
-  description = "Application Gateway public IP — point your DNS A records here"
-  value       = azurerm_public_ip.gateway.ip_address
-}
-
 output "key_vault_uri" {
   description = "Azure Key Vault URI"
   value       = azurerm_key_vault.main.vault_uri
