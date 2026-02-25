@@ -45,6 +45,9 @@ import {
   listStudyRelationshipsArgsSchema,
   linkStudiesArgsSchema,
   unlinkStudiesArgsSchema,
+  listDigestSubscriptionsArgsSchema,
+  createDigestSubscriptionArgsSchema,
+  deleteDigestSubscriptionArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -824,6 +827,18 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "list_digest_subscriptions",
+    description: "List email digest subscriptions. Returns array of {id, project_id, email, frequency, last_sent_at, created_at}. Digests send weekly or monthly plain-text study summaries (no PHI — counts only). Optionally filter by project_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Filter subscriptions for a specific project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "list_subjects",
     description: "List unique research subject IDs with study counts for a project. Returns array of {subject_id, study_count}. Use to audit longitudinal subject coverage or find subjects with missing sessions.",
     inputSchema: {
@@ -991,6 +1006,38 @@ const tools: Tool[] = [
         request_id: { type: "string" },
         study_id: { type: "string", format: "uuid", description: "The study that owns the relationship" },
         relationship_id: { type: "string", format: "uuid", description: "Relationship UUID from list_study_relationships" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_digest_subscription",
+    description: "Create an email digest subscription for a project. Sends weekly or monthly plain-text study activity summaries (counts only — no PHI). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "email", "frequency", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        email: { type: "string", format: "email", description: "Recipient email address" },
+        frequency: { type: "string", enum: ["weekly", "monthly"] },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_digest_subscription",
+    description: "Delete an email digest subscription by ID. Use list_digest_subscriptions first to find the subscription_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["subscription_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -1862,6 +1909,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_digest_subscriptions") {
+      const parsed = listDigestSubscriptionsArgsSchema.parse(args);
+      if (parsed.project_id) {
+        const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/digest-subscriptions`);
+        return formatSuccess(requestId, name, data);
+      }
+      const data = await client.get("/api/digest-subscriptions");
+      return formatSuccess(requestId, name, data);
+    }
+
     if (name === "list_subjects") {
       const parsed = projectScopedArgsSchema.parse(args);
       const params = new URLSearchParams();
@@ -2006,6 +2063,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "unlink_studies") {
         const parsedUnlink = unlinkStudiesArgsSchema.parse(args);
         return handleUnlinkStudies(parsedUnlink.request_id ?? buildRequestId(), parsedUnlink);
+      }
+
+      if (name === "create_digest_subscription") {
+        const parsedSub = createDigestSubscriptionArgsSchema.parse(args);
+        return handleCreateDigestSubscription(parsedSub.request_id ?? buildRequestId(), parsedSub);
+      }
+
+      if (name === "delete_digest_subscription") {
+        const parsedDelSub = deleteDigestSubscriptionArgsSchema.parse(args);
+        return handleDeleteDigestSubscription(parsedDelSub.request_id ?? buildRequestId(), parsedDelSub);
       }
 
       if (name === "add_study_note") {
@@ -2276,6 +2343,9 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "update_routing_rule" || name === "delete_routing_rule") {
     return typeof args.rule_id === "string" ? args.rule_id : null;
+  }
+  if (name === "create_digest_subscription" || name === "delete_digest_subscription") {
+    return typeof args.project_id === "string" ? args.project_id : (typeof args.subscription_id === "string" ? args.subscription_id : null);
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -3158,6 +3228,50 @@ async function handleUnlinkStudies(
     accepted: true,
     study_id: parsed.study_id,
     relationship_id: parsed.relationship_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleCreateDigestSubscription(
+  requestId: string,
+  parsed: { project_id: string; email: string; frequency: "weekly" | "monthly"; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_digest_subscription");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_digest_subscription", false, "create_digest_subscription");
+  }
+
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/digest-subscriptions`, {
+    email: parsed.email,
+    frequency: parsed.frequency
+  });
+  return formatSuccess(requestId, "create_digest_subscription", {
+    accepted: true,
+    project_id: parsed.project_id,
+    email: parsed.email,
+    frequency: parsed.frequency,
+    subscription: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteDigestSubscription(
+  requestId: string,
+  parsed: { subscription_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_digest_subscription");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_digest_subscription", false, "delete_digest_subscription");
+  }
+
+  await client.delete(`/api/digest-subscriptions/${encodeURIComponent(parsed.subscription_id)}`);
+  return formatSuccess(requestId, "delete_digest_subscription", {
+    accepted: true,
+    subscription_id: parsed.subscription_id,
     reason: parsed.reason
   });
 }
