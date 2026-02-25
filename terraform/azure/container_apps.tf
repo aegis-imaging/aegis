@@ -24,6 +24,14 @@ locals {
   # Internal ACA DNS suffix for service discovery
   aca_internal_domain = azurerm_container_app_environment.main.default_domain
 
+  # Placeholder image for initial terraform provisioning before CI/CD pushes real images.
+  # Use: terraform apply -var 'api_image_tag=placeholder'  (first apply only)
+  # GitHub Actions (deploy-azure.yml) updates images via `az containerapp update`.
+  # lifecycle { ignore_changes = [template[0].container[0].image] } on each app
+  # prevents terraform from reverting after CI/CD deploys.
+  placeholder_image     = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+  use_placeholder_image = var.api_image_tag == "placeholder"
+
   # Common env vars injected into every sidecar
   sidecar_common_env = [
     {
@@ -89,7 +97,7 @@ resource "azurerm_container_app" "api" {
 
     container {
       name   = "api"
-      image  = "${local.acr_server}/api:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/api:${var.api_image_tag}"
       cpu    = 1.0
       memory = "2.0Gi"
 
@@ -204,7 +212,7 @@ resource "azurerm_container_app" "admin_dashboard" {
 
     container {
       name   = "admin-dashboard"
-      image  = "${local.acr_server}/admin-dashboard:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/admin-dashboard:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
     }
@@ -252,7 +260,7 @@ resource "azurerm_container_app" "landing" {
 
     container {
       name   = "landing"
-      image  = "${local.acr_server}/landing:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/landing:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
     }
@@ -300,7 +308,7 @@ resource "azurerm_container_app" "weasis" {
 
     container {
       name   = "weasis"
-      image  = "${local.acr_server}/weasis:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/weasis:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
     }
@@ -348,7 +356,7 @@ resource "azurerm_container_app" "mcp_server" {
 
     container {
       name   = "mcp-server"
-      image  = "${local.acr_server}/mcp-server:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/mcp-server:${var.api_image_tag}"
       cpu    = 0.5
       memory = "1.0Gi"
 
@@ -419,7 +427,7 @@ resource "azurerm_container_app" "defacing" {
 
     container {
       name   = "defacing"
-      image  = "${local.acr_server}/defacing:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/defacing:${var.api_image_tag}"
       cpu    = 1.0
       memory = "2.0Gi"
 
@@ -477,7 +485,7 @@ resource "azurerm_container_app" "phi_detection" {
 
     container {
       name   = "phi-detection"
-      image  = "${local.acr_server}/phi-detection:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/phi-detection:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -543,7 +551,7 @@ resource "azurerm_container_app" "qc_service" {
 
     container {
       name   = "qc-service"
-      image  = "${local.acr_server}/qc-service:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/qc-service:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -609,7 +617,7 @@ resource "azurerm_container_app" "bids_service" {
 
     container {
       name   = "bids-service"
-      image  = "${local.acr_server}/bids-service:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/bids-service:${var.api_image_tag}"
       cpu    = 0.5
       memory = "1.0Gi"
 
@@ -667,7 +675,7 @@ resource "azurerm_container_app" "classification_service" {
 
     container {
       name   = "classification-service"
-      image  = "${local.acr_server}/classification-service:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/classification-service:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -729,7 +737,7 @@ resource "azurerm_container_app" "protocol_service" {
 
     container {
       name   = "protocol-service"
-      image  = "${local.acr_server}/protocol-service:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/protocol-service:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -791,7 +799,7 @@ resource "azurerm_container_app" "synth_service" {
 
     container {
       name   = "synth-service"
-      image  = "${local.acr_server}/synth-service:${var.api_image_tag}"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/synth-service:${var.api_image_tag}"
       cpu    = 0.5
       memory = "1.0Gi"
 
