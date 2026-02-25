@@ -2780,6 +2780,15 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   const [healthLoading, setHealthLoading]     = useState(false)
   const [healthOpen, setHealthOpen]           = useState(false)
 
+  // Rule analytics
+  type RuleHitEntry = { rule_id: string; rule_name: string; rule_action: string; rule_enabled: boolean; destination_name: string | null; hit_count: number; last_matched_at: string | null }
+  type UnusedRuleEntry = { rule_id: string; rule_name: string; rule_action: string; rule_enabled: boolean }
+  type RuleStats = { period_days: number; total_hits: number; active_rules: number; by_rule: RuleHitEntry[]; unused_rules: UnusedRuleEntry[] }
+  const [ruleStats, setRuleStats]             = useState<RuleStats | null>(null)
+  const [ruleStatsDays, setRuleStatsDays]     = useState(30)
+  const [ruleStatsLoading, setRuleStatsLoading] = useState(false)
+  const [ruleStatsOpen, setRuleStatsOpen]     = useState(false)
+
   // Rule form
   const [ruleForm, setRuleForm]         = useState<Omit<RoutingRule, 'id' | 'created_at'>>(EMPTY_RULE)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
@@ -2819,6 +2828,18 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   }, [])
 
   useEffect(() => { if (healthOpen) fetchRoutingHealth(healthDays) }, [healthOpen, healthDays, fetchRoutingHealth])
+
+  const fetchRuleStats = useCallback(async (days: number) => {
+    setRuleStatsLoading(true)
+    try {
+      const res = await fetch(`/api/stats/routing-rules?days=${days}`)
+      if (res.ok) setRuleStats(await res.json())
+    } finally {
+      setRuleStatsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { if (ruleStatsOpen) fetchRuleStats(ruleStatsDays) }, [ruleStatsOpen, ruleStatsDays, fetchRuleStats])
 
   // ── Destination CRUD ────────────────────────────────────────────────────────
 
@@ -3193,6 +3214,103 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               })}
             </tbody>
           </table>
+        )}
+      </section>
+
+      {/* ── Rule Analytics ── */}
+      <section className="routing-section">
+        <div className="routing-section-header" style={{ cursor: 'pointer' }} onClick={() => setRuleStatsOpen(o => !o)}>
+          <h2>Rule Analytics {ruleStatsOpen ? '▲' : '▼'}</h2>
+          <select
+            className="form-select"
+            aria-label="Period"
+            style={{ width: 'auto', marginLeft: 'auto' }}
+            value={ruleStatsDays}
+            onClick={e => e.stopPropagation()}
+            onChange={e => { const d = Number(e.target.value); setRuleStatsDays(d); if (ruleStatsOpen) fetchRuleStats(d) }}
+          >
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </select>
+        </div>
+        {ruleStatsOpen && (
+          <div>
+            {ruleStatsLoading && <div className="state-loading">Loading rule analytics…</div>}
+            {!ruleStatsLoading && ruleStats && (
+              <>
+                <div style={{ display: 'flex', gap: '16px', margin: '12px 0', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Total rule hits', value: ruleStats.total_hits },
+                    { label: 'Active rules', value: ruleStats.active_rules },
+                    { label: 'Unused rules', value: ruleStats.unused_rules.length }
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 20px', minWidth: '120px' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>{label}</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {ruleStats.by_rule.length === 0
+                  ? <p className="routing-hint">No rule hits recorded in this period.</p>
+                  : (
+                    <>
+                      <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '16px 0 8px', color: '#374151' }}>Rules by hit count</h3>
+                      <table className="routing-table">
+                        <thead>
+                          <tr>
+                            <th>Rule</th>
+                            <th>Action</th>
+                            <th>Destination</th>
+                            <th>Hits</th>
+                            <th>Last matched</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ruleStats.by_rule.map(r => (
+                            <tr key={r.rule_id}>
+                              <td><span className="routing-name">{r.rule_name}</span></td>
+                              <td><code style={{ fontSize: '0.8rem' }}>{r.rule_action}</code></td>
+                              <td className="td-subtle">{r.destination_name ?? '—'}</td>
+                              <td style={{ fontWeight: 600 }}>{r.hit_count}</td>
+                              <td className="td-subtle">{r.last_matched_at ? new Date(r.last_matched_at).toLocaleString() : '—'}</td>
+                              <td><span className={`badge badge--${r.rule_enabled ? 'enabled' : 'disabled'}`}>{r.rule_enabled ? 'enabled' : 'disabled'}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )
+                }
+
+                {ruleStats.unused_rules.length > 0 && (
+                  <>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '16px 0 8px', color: '#b45309' }}>Unused rules (no hits in period)</h3>
+                    <table className="routing-table">
+                      <thead>
+                        <tr>
+                          <th>Rule</th>
+                          <th>Action</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ruleStats.unused_rules.map(r => (
+                          <tr key={r.rule_id}>
+                            <td><span className="routing-name">{r.rule_name}</span></td>
+                            <td><code style={{ fontSize: '0.8rem' }}>{r.rule_action}</code></td>
+                            <td><span className={`badge badge--${r.rule_enabled ? 'enabled' : 'disabled'}`}>{r.rule_enabled ? 'enabled' : 'disabled'}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         )}
       </section>
 
