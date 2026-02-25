@@ -2038,6 +2038,20 @@
   font-family: monospace;
   font-size: 0.8rem;
   color: #6b7280;
+  word-break: break-all;
+}
+
+.tcia-uid-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.tcia-uid-copy {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 1px 6px;
+  cursor: pointer;
 }
 
 .tcia-row--selected {
