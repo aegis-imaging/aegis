@@ -1589,6 +1589,22 @@ Stores an optional free-text reason when revoking an export share. Visible in th
 
 **MCP `revoke_share` tool:** Accepts optional `revocation_reason` field (stored in DB) in addition to the required `reason` field (audit justification only).
 
+### Routing Rule Simulation (`api/handler/routing_simulate.go`)
+
+Dry-run evaluation of all enabled routing rules against a hypothetical study. No data is written — purely read-only simulation.
+
+**API:**
+- `POST /api/routing-rules/simulate` — body: `{project_id?, modality?, body_part?, source?}`
+- Returns `{input, matched_rules[], skipped_rules[], action_summary}`
+  - `matched_rules` — rules that would fire, with `priority`, `action`, `destination_name` (for route_to)
+  - `skipped_rules` — enabled rules that didn't match (visible for debugging)
+  - `action_summary` — boolean flags for all pipeline actions (`require_defacing`, `require_phi_scan`, `require_qc_check`, `require_bids_conversion`, `require_classification`, `require_protocol_check`, `require_export`, `auto_approve`, `reject`)
+- Accessible to viewers (read-only) and admins
+
+**Admin dashboard:** "Rule Simulator" collapsible panel in the Routing tab. Operator enters modality, body part, and source, clicks "Simulate", and sees matched rules + action summary chips.
+
+**MCP `simulate_routing` read tool:** `{project_id?, modality?, body_part?, source?}` — dry-run routing evaluation for AI-assisted operations planning.
+
 ### Destination Connectivity Test (`api/handler/routing.go`, `dimse-receiver/app/`)
 
 Probes an external DICOM destination to verify network reachability before adding routing rules that depend on it.
@@ -1674,6 +1690,7 @@ cd mcp-server && npm install && npm run build
 | `list_destinations` | All DICOM forwarding destinations |
 | `test_destination` | Test connectivity to a DICOM destination (DICOMweb GET probe or DIMSE C-ECHO) |
 | `get_destination_health` | Historical health summary from past tests — status (healthy/degraded/failing/unknown), success rate, last errors; optional `destination_id` for single-dest detail |
+| `simulate_routing` | Dry-run routing rule evaluation against hypothetical study attributes (`modality`, `body_part`, `source`, optional `project_id`); returns matched rules, skipped rules, and action summary |
 | `get_routing_stats` | Aggregate routing health overview across all destinations (optional days) |
 | `get_destination_stats` | Per-destination routing stats: success rate, recent errors, daily breakdown (destination_id required, optional days) |
 | `get_routing_rule_stats` | Per-rule hit analytics: hit counts, last matched, unused rules in period (optional days) |

@@ -486,6 +486,14 @@ export const getDestinationHealthArgsSchema = z.object({
   limit: z.number().int().min(1).max(100).optional().describe("Max recent test entries to return per destination (default 20, only for single-destination queries).")
 });
 
+export const simulateRoutingArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid().optional().describe("Scope simulation to a specific project (only project-scoped rules and any-project rules will match)."),
+  modality: z.string().max(16).optional().describe("e.g. MRI, CT, PET"),
+  body_part: z.string().max(64).optional().describe("e.g. HEAD, CHEST, ABDOMEN"),
+  source: z.enum(["external", "internal"]).optional().describe("Study ingest source (default: external)")
+});
+
 export const createRoutingRuleArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   name: z.string().min(1).max(256),
@@ -1005,7 +1013,8 @@ export const readToolNames = [
   "get_project_bids_info",
   "get_expiring_studies",
   "get_retention_preview",
-  "get_destination_health"
+  "get_destination_health",
+  "simulate_routing"
 ] as const;
 
 export const writeToolNames = [

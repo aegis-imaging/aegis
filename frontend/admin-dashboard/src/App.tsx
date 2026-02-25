@@ -2805,6 +2805,37 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   const [ruleStatsLoading, setRuleStatsLoading] = useState(false)
   const [ruleStatsOpen, setRuleStatsOpen]     = useState(false)
 
+  // Routing simulation
+  type SimMatchedRule = { id: string; name: string; priority: number; action: string; destination_id?: string; destination_name?: string }
+  type SimActionSummary = { require_defacing: boolean; require_phi_scan: boolean; require_qc_check: boolean; require_bids_conversion: boolean; require_classification: boolean; require_protocol_check: boolean; require_export: boolean; auto_approve: boolean; reject: boolean }
+  type SimResult = { matched_rules: SimMatchedRule[]; skipped_rules: SimMatchedRule[]; action_summary: SimActionSummary }
+  const [simOpen, setSimOpen]               = useState(false)
+  const [simModality, setSimModality]       = useState('')
+  const [simBodyPart, setSimBodyPart]       = useState('')
+  const [simSource, setSimSource]           = useState('external')
+  const [simResult, setSimResult]           = useState<SimResult | null>(null)
+  const [simLoading, setSimLoading]         = useState(false)
+  const [simError, setSimError]             = useState<string | null>(null)
+
+  async function runSimulation() {
+    setSimLoading(true)
+    setSimError(null)
+    setSimResult(null)
+    try {
+      const res = await fetch('/api/routing-rules/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modality: simModality.trim().toUpperCase() || undefined, body_part: simBodyPart.trim().toUpperCase() || undefined, source: simSource }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setSimResult(await res.json())
+    } catch (e: unknown) {
+      setSimError(e instanceof Error ? e.message : 'Simulation failed')
+    } finally {
+      setSimLoading(false)
+    }
+  }
+
   // Rule form
   const [ruleForm, setRuleForm]         = useState<Omit<RoutingRule, 'id' | 'created_at'>>(EMPTY_RULE)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
@@ -3423,6 +3454,104 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                   )
                 }
               </>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ── Routing Rule Simulator ── */}
+      <section className="section-block" style={{ marginTop: 12 }}>
+        <div className="section-header" style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setSimOpen(v => !v)}>
+          <h2>Rule Simulator {simOpen ? '▲' : '▼'}</h2>
+          <p>Dry-run: see which rules would fire for a hypothetical study</p>
+        </div>
+        {simOpen && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Modality
+                <input value={simModality} onChange={e => setSimModality(e.target.value)}
+                  placeholder="MRI, CT, PET…"
+                  style={{ padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13, width: 100 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Body Part
+                <input value={simBodyPart} onChange={e => setSimBodyPart(e.target.value)}
+                  placeholder="HEAD, CHEST…"
+                  style={{ padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13, width: 110 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Source
+                <select value={simSource} onChange={e => setSimSource(e.target.value)}
+                  style={{ padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13 }}>
+                  <option value="external">external</option>
+                  <option value="internal">internal</option>
+                </select>
+              </label>
+              <button type="button" onClick={runSimulation} disabled={simLoading}
+                style={{ padding: '6px 16px', fontSize: 13, fontWeight: 600, background: '#0d9488', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
+                {simLoading ? 'Running…' : 'Simulate'}
+              </button>
+            </div>
+            {simError && (
+              <div style={{ background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 5, padding: '8px 12px', color: '#9a3412', fontSize: 12, marginBottom: 10 }}>
+                {simError}
+              </div>
+            )}
+            {simResult && (
+              <div>
+                {/* Matched rules */}
+                <div style={{ fontWeight: 600, fontSize: 12, color: '#374151', marginBottom: 6 }}>
+                  {simResult.matched_rules.length === 0
+                    ? 'No rules matched — study would proceed with no special handling.'
+                    : `${simResult.matched_rules.length} rule${simResult.matched_rules.length === 1 ? '' : 's'} matched:`}
+                </div>
+                {simResult.matched_rules.length > 0 && (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 12 }}>
+                    <thead>
+                      <tr style={{ background: '#f9fafb' }}>
+                        {['Priority', 'Rule', 'Action', 'Destination'].map(h => (
+                          <th key={h} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {simResult.matched_rules.map(r => (
+                        <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '6px 10px', color: '#6b7280' }}>{r.priority}</td>
+                          <td style={{ padding: '6px 10px', fontWeight: 500 }}>{r.name}</td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <span style={{ background: '#ccfbf1', color: '#0f766e', borderRadius: 3, padding: '2px 6px', fontSize: 11, fontWeight: 600 }}>
+                              {r.action}
+                            </span>
+                          </td>
+                          <td style={{ padding: '6px 10px', color: '#6b7280' }}>{r.destination_name || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {/* Action summary chips */}
+                {simResult.matched_rules.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                    {Object.entries(simResult.action_summary).filter(([, v]) => v).map(([k]) => (
+                      <span key={k} style={{ background: '#ccfbf1', color: '#0f766e', borderRadius: 12, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>
+                        {k.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                    {Object.values(simResult.action_summary).every(v => !v) && (
+                      <span style={{ color: '#9ca3af', fontSize: 11 }}>no pipeline actions triggered</span>
+                    )}
+                  </div>
+                )}
+                {/* Skipped rules count */}
+                {simResult.skipped_rules.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                    {simResult.skipped_rules.length} rule{simResult.skipped_rules.length === 1 ? '' : 's'} did not match (conditions not satisfied)
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
