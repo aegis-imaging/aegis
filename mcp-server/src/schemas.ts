@@ -717,6 +717,125 @@ export const setDefaultAnonProfileArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Institutions ─────────────────────────────────────────────────────────────
+export const createInstitutionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  name: z.string().min(1).max(256),
+  type: z.enum(["sender", "receiver", "both"]),
+  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "slug must be lowercase alphanumeric with hyphens").optional(),
+  description: z.string().max(1024).optional(),
+  contact_name: z.string().max(256).optional(),
+  contact_email: z.string().email().optional(),
+  ip_ranges: z.string().optional(),
+  ae_title: z.string().max(16).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateInstitutionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  institution_id: z.string().uuid(),
+  name: z.string().min(1).max(256),
+  type: z.enum(["sender", "receiver", "both"]),
+  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "slug must be lowercase alphanumeric with hyphens").optional(),
+  description: z.string().max(1024).optional(),
+  contact_name: z.string().max(256).optional(),
+  contact_email: z.string().email().optional(),
+  ip_ranges: z.string().optional(),
+  ae_title: z.string().max(16).optional(),
+  enabled: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const institutionIdArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  institution_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const linkInstitutionProjectArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  institution_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  role: z.enum(["sender", "receiver", "admin"]),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const unlinkInstitutionProjectArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  institution_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+// ─── Federation peers ─────────────────────────────────────────────────────────
+export const createFederationPeerArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  name: z.string().min(1).max(256),
+  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "slug must be lowercase alphanumeric with hyphens").optional(),
+  api_url: z.string().url(),
+  notes: z.string().max(1024).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateFederationPeerArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  peer_id: z.string().uuid(),
+  name: z.string().min(1).max(256),
+  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "slug must be lowercase alphanumeric with hyphens").optional(),
+  api_url: z.string().url(),
+  notes: z.string().max(1024).optional(),
+  enabled: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const federationPeerIdArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  peer_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+// ─── Project config ───────────────────────────────────────────────────────────
+export const setStorageQuotaArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  storage_quota_bytes: z.number().int().positive().nullable(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updatePhiConfigArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  confidence_threshold: z.number().min(0).max(1).optional(),
+  min_text_length: z.number().int().positive().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+// ─── Study management ─────────────────────────────────────────────────────────
+export const deleteStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const bulkPipelineTriggerArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_ids: z.array(z.string().uuid()).min(1).max(200),
+  step: z.enum(["classify", "phi_scan", "protocol", "deface", "qc", "bids", "export"]),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -842,7 +961,19 @@ export const writeToolNames = [
   "create_anon_profile",
   "update_anon_profile",
   "delete_anon_profile",
-  "set_default_anon_profile"
+  "set_default_anon_profile",
+  "create_institution",
+  "update_institution",
+  "delete_institution",
+  "link_institution_project",
+  "unlink_institution_project",
+  "create_federation_peer",
+  "update_federation_peer",
+  "delete_federation_peer",
+  "set_storage_quota",
+  "update_phi_config",
+  "delete_study",
+  "bulk_pipeline_trigger"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
