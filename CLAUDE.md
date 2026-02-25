@@ -1646,6 +1646,8 @@ cd mcp-server && npm install && npm run build
 | `list_admin_users` | List all registered admin dashboard users with roles, enabled state, and last-seen info |
 | `list_invite_codes` | List all beta invite codes with label, enabled state, and usage info (used_at, used_by_ip) |
 | `list_invite_requests` | List access requests from the landing page; optional `status=pending\|approved\|denied\|all` filter |
+| `get_tcia_series` | Browse available TCIA (The Cancer Imaging Archive) series for a collection (optional min_slices filter) |
+| `export_protocol_templates` | Export all protocol compliance templates for a project as a JSON structure |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
@@ -1708,6 +1710,8 @@ cd mcp-server && npm install && npm run build
 | `update_phi_config` | Override global PHI detection thresholds (confidence_threshold, min_text_length) for a project |
 | `delete_study` | Permanently delete a study record and all DICOM files from storage |
 | `bulk_pipeline_trigger` | Trigger a pipeline step (classify/phi_scan/protocol/deface/qc/bids/export) for multiple studies at once |
+| `import_tcia_series` | Download a TCIA series by SeriesInstanceUID and import it into AEGIS (triggers full pipeline) |
+| `import_protocol_templates` | Bulk-import protocol compliance templates into a project from a JSON array (skips duplicates by name) |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 
