@@ -874,6 +874,48 @@ export const importProtocolTemplatesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Webhook stats + all deliveries ──────────────────────────────────────────
+export const getWebhookStatsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subscription_id: z.string().uuid()
+});
+
+export const listAllWebhookDeliveriesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subscription_id: z.string().uuid().optional(),
+  success: z.enum(["true", "false"]).optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+  offset: z.number().int().min(0).optional()
+});
+
+// ─── Batch import ─────────────────────────────────────────────────────────────
+export const batchImportStudiesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  dir: z.string().min(1).max(1024).describe("Absolute path on the server to directory containing DICOM files"),
+  project_slug: z.string().min(1).max(64).optional(),
+  institution_id: z.string().uuid().optional(),
+  institution_slug: z.string().min(1).max(64).optional(),
+  source: z.enum(["internal", "external"]).optional(),
+  dry_run: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+// ─── Admin user preferences ───────────────────────────────────────────────────
+export const getUserPreferencesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  user_id: z.string().uuid()
+});
+
+export const setUserPreferencesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  user_id: z.string().uuid(),
+  digest_frequency: z.enum(["none", "daily", "weekly", "monthly"]),
+  notify_events: z.array(z.string().min(1).max(128)).max(20).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -928,7 +970,10 @@ export const readToolNames = [
   "list_invite_codes",
   "list_invite_requests",
   "get_tcia_series",
-  "export_protocol_templates"
+  "export_protocol_templates",
+  "get_webhook_stats",
+  "list_all_webhook_deliveries",
+  "get_user_preferences"
 ] as const;
 
 export const writeToolNames = [
@@ -1015,7 +1060,9 @@ export const writeToolNames = [
   "delete_study",
   "bulk_pipeline_trigger",
   "import_tcia_series",
-  "import_protocol_templates"
+  "import_protocol_templates",
+  "batch_import_studies",
+  "set_user_preferences"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
