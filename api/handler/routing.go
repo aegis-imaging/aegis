@@ -311,7 +311,8 @@ type destinationTestResult struct {
 }
 
 // TestDestination probes an external DICOM destination to verify connectivity.
-// DICOMweb: sends GET {dicomweb_url}/studies?limit=1 and checks for a non-4xx response.
+// DICOMweb: sends GET {dicomweb_url}/studies?limit=1; accepts any <400 or 405
+// (STOW-RS endpoints only accept POST so 405 = reachable, not an error).
 // DIMSE: sends C-ECHO via the dimse-receiver /echo endpoint.
 func (s *Server) TestDestination(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
@@ -352,7 +353,9 @@ func (s *Server) TestDestination(w http.ResponseWriter, r *http.Request) {
 			resp.Body.Close()
 			code := resp.StatusCode
 			result.StatusCode = &code
-			result.Success = resp.StatusCode < 400
+			// 405 Method Not Allowed is also a success: it means the server is
+			// reachable and responded (e.g. STOW-RS endpoints only accept POST).
+			result.Success = resp.StatusCode < 400 || resp.StatusCode == http.StatusMethodNotAllowed
 			if !result.Success {
 				result.Error = fmt.Sprintf("unexpected status %d", resp.StatusCode)
 			}
