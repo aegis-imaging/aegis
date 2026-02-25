@@ -227,6 +227,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{studyUID}/anonymization-diff", auth(srv.GetAnonDiff))
 	mux.HandleFunc("POST /api/studies/bulk", adminOnly(srv.BulkStudyAction))
 	mux.HandleFunc("POST /api/studies/bulk-pipeline-trigger", adminOnly(srv.BulkPipelineTrigger))
+	mux.HandleFunc("GET /api/studies/{id}/notes", auth(srv.ListStudyNotes))
 	mux.HandleFunc("POST /api/studies/{id}/notes", adminOnly(srv.AddStudyNote))
 	mux.HandleFunc("PATCH /api/studies/{id}/flag", adminOnly(srv.PatchStudyFlag))
 	mux.HandleFunc("POST /api/studies/{id}/reset-pipeline-step", adminOnly(srv.ResetPipelineStep))
