@@ -196,6 +196,10 @@ function buildToolHandlers(client: AegisApiClient): Record<string, ToolHandler> 
       const studyId = String(args.study_id ?? "");
       return client.get(`/api/studies/${encodeURIComponent(studyId)}/routing-log`);
     },
+    get_study_dicom_tags: async (args) => {
+      const studyUid = String(args.study_instance_uid ?? "");
+      return client.get(`/api/studies/${encodeURIComponent(studyUid)}/dicom-tags`);
+    },
     get_system_health: async () => client.get(`/healthz`)
   };
 }
@@ -284,6 +288,19 @@ function buildToolSchema() {
           type: "object",
           required: ["study_id"],
           properties: { study_id: { type: "string" } },
+          additionalProperties: false
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_study_dicom_tags",
+        description: "Get all non-pixel DICOM tags from the first file of a study. Use to answer provenance questions — InstitutionName, StationName, SourceApplicationEntityTitle — directly from the DICOM file header.",
+        parameters: {
+          type: "object",
+          required: ["study_instance_uid"],
+          properties: { study_instance_uid: { type: "string" } },
           additionalProperties: false
         }
       }
