@@ -123,6 +123,29 @@ export const anonDiffArgsSchema = z.object({
   study_uid: z.string().min(1)
 });
 
+export const listStudyRelationshipsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid()
+});
+
+export const linkStudiesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  related_study_id: z.string().uuid(),
+  relationship: z.enum(["baseline", "follow_up", "comparison", "replicate"]),
+  notes: z.string().max(500).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const unlinkStudiesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  relationship_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const getAuditActorsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   limit: z.number().int().min(1).max(100).optional()
@@ -473,7 +496,8 @@ export const readToolNames = [
   "get_compliance_report",
   "get_storage_usage",
   "get_anonymization_diff",
-  "get_system_health_summary"
+  "get_system_health_summary",
+  "list_study_relationships"
 ] as const;
 
 export const writeToolNames = [
@@ -516,7 +540,9 @@ export const writeToolNames = [
   "delete_destination",
   "create_routing_rule",
   "update_routing_rule",
-  "delete_routing_rule"
+  "delete_routing_rule",
+  "link_studies",
+  "unlink_studies"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
