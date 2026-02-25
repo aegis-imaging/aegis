@@ -17,7 +17,7 @@ func queryProcessingTimes(ctx context.Context, db *sql.DB, since time.Time, proj
 	projectJoin := ""
 	projectWhere := ""
 	if projectID != "" {
-		projectJoin = `JOIN studies s ON s.id = t.resource_id`
+		projectJoin = `JOIN studies s ON s.id::text = t.resource_id`
 		projectWhere = `AND s.project_id = $2`
 	}
 
