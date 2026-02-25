@@ -151,6 +151,47 @@ export const getDailySummaryArgsSchema = z.object({
   hours: z.number().int().min(1).max(168).optional()
 });
 
+const webhookEvents = z.array(z.enum([
+  "study.approved", "study.rejected", "study.phi_flagged",
+  "study.export_complete", "study.stuck"
+])).min(1);
+
+export const createWebhookSubscriptionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  url: z.string().url(),
+  events: webhookEvents,
+  secret: z.string().min(8).max(256),
+  project_id: z.string().uuid().optional(),
+  enabled: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateWebhookSubscriptionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subscription_id: z.string().uuid(),
+  url: z.string().url().optional(),
+  events: webhookEvents.optional(),
+  secret: z.string().min(8).max(256).optional(),
+  enabled: z.boolean().optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const deleteWebhookSubscriptionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subscription_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const retryWebhookDeliveryArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  delivery_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const listDigestSubscriptionsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   project_id: z.string().uuid().optional()
@@ -572,7 +613,11 @@ export const writeToolNames = [
   "link_studies",
   "unlink_studies",
   "create_digest_subscription",
-  "delete_digest_subscription"
+  "delete_digest_subscription",
+  "create_webhook_subscription",
+  "update_webhook_subscription",
+  "delete_webhook_subscription",
+  "retry_webhook_delivery"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
