@@ -15,6 +15,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/routing"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 type uploadInitRequest struct {
@@ -218,6 +219,7 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		"instance_count":    len(files),
 		"defacing_required": study.DefacingRequired,
 	})
+	go webhook.Deliver(r.Context(), s.db, "study.created", study)
 
 	s.writeJSON(w, http.StatusOK, uploadCompleteResponse{
 		SessionID: session.ID,
