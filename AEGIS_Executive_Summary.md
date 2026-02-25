@@ -39,7 +39,7 @@ css: |
   <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
   <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
   <p style="font-size: 13px; color: #6b7280; margin-top: 0; margin-bottom: 2px;">AEGIS Imaging LLC</p>
-  <p style="font-size: 13px; color: #9ca3af; margin-top: 0;">February 24, 2026</p>
+  <p style="font-size: 13px; color: #9ca3af; margin-top: 0;">February 25, 2026</p>
 </div>
 
 ---
@@ -218,23 +218,26 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Development Velocity
 
-AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. The resulting platform is production-grade: version-controlled infrastructure, automated CI/CD, 370+ tests, and all services deployed and monitored on GCP. AWS deployment is underway in Q1 2026 — infrastructure was Terraformed and CI/CD configured in a single session.
+AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. AWS production followed on day 8. The resulting platform is production-grade on both clouds: version-controlled infrastructure, automated CI/CD, 370+ tests, and all services deployed and monitored on GCP and AWS simultaneously.
+
+A single merge to `develop` deploys to both clouds in parallel — GCP Cloud Build and GitHub Actions trigger concurrently, updating all services on both platforms within minutes from a single shared codebase. Cross-cloud DICOM routing (GCP→AWS and AWS→GCP via STOW-RS) is live and tested.
 
 | Metric | Value |
 |--------|-------|
 | Days from first commit to GCP production | **7** |
+| Days from first commit to AWS production | **8** |
 | Git commits in the first week | **846+** |
 | API routes (Go) | **122** |
 | Automated tests (Go + Python) | **370+** |
 | Cloud Run services deployed (GCP) | **11** |
-| ECR repositories provisioned (AWS) | **10** |
-| ECS Fargate services (AWS) | **9** |
+| ECR repositories provisioned (AWS) | **13** |
+| ECS Fargate services (AWS) | **10** |
 
 ---
 
 ## Phased Roadmap
 
-> **Production status:** The full platform — Go API, admin dashboard with Weasis DWV viewer, 7 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM `aegis-prod-dimse-receiver`, static IP `35.232.172.221`, port 11112), and MCP server — is **live** at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. Infrastructure is managed by Terraform. Cloud Build CI/CD auto-deploys all services on merge to `develop`.
+> **Production status:** The full platform is **live on two clouds.** GCP: Go API, admin dashboard, Weasis DWV viewer, 7 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM, static IP `35.232.172.221`, port 11112), and MCP server at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. AWS: 10 ECS Fargate services, RDS PostgreSQL, S3, ALB + Cognito auth at `aws.api.aegisimaging.ai` and `aws.admin.aegisimaging.ai`. Both clouds share one codebase and deploy in parallel on every merge to `develop`. Cross-cloud DICOM routing between tenants is live.
 
 ### ✓ Milestone 1 — Foundation + GCP Production (February 17–24, 2026)
 
@@ -257,13 +260,13 @@ Everything listed below was built and deployed to GCP production within 7 days o
 - DIMSE C-MOVE / C-FIND workflows for active PACS pull integration
 - Enterprise onboarding documentation and SLA monitoring
 
-### → Milestone 3 — AWS Deployment (Q1 2026, deploying now)
+### ✓ Milestone 3 — AWS Deployment (February 25, 2026)
 
-- Full AWS deployment underway: ECS Fargate (9 services), RDS PostgreSQL, S3, ALB + Cognito auth
-- Terraform infrastructure provisioned; 10 ECR repositories live; all images building and pushing
-- GitHub Actions CI/CD configured — mirrors GCP Cloud Build; auto-deploys on every push to `develop`
-- DIMSE receiver on EC2 with Elastic IP, SSM-driven rolling deploys (mirrors GCP Compute Engine pattern)
-- Multi-cloud data federation — studies routable between GCP and AWS tenants (next)
+- ECS Fargate (10 services), RDS PostgreSQL, S3, ALB + Cognito auth — fully live at `aws.api.aegisimaging.ai`
+- Terraform infrastructure provisioned; 13 ECR repositories; GitHub Actions CI/CD auto-deploys on every push to `develop`
+- DIMSE receiver on EC2 with Elastic IP, SSM-driven rolling deploys
+- **Cross-cloud DICOM routing live** — studies route between GCP and AWS tenants in both directions via STOW-RS; bidirectional API key authentication
+- Single shared codebase; one merge deploys to both clouds simultaneously
 - AWS Marketplace listing for enterprise procurement (next)
 
 ### → Milestone 4 — Azure + SOC 2 Type II (Q3 2026)
