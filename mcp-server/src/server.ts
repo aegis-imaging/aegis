@@ -87,6 +87,10 @@ import {
   updatePhiConfigArgsSchema,
   deleteStudyArgsSchema,
   bulkPipelineTriggerArgsSchema,
+  getTCIASeriesArgsSchema,
+  importTCIASeriesArgsSchema,
+  exportProtocolTemplatesArgsSchema,
+  importProtocolTemplatesArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -2320,6 +2324,85 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "get_tcia_series",
+    description: "List available MRI series from The Cancer Imaging Archive (TCIA) for a given collection. Returns series with their UIDs, modality, body part, description, and slice count. Use before import_tcia_series to find a series_uid. Filters to volumetric MR series with at least min_slices slices (default 20).",
+    inputSchema: {
+      type: "object",
+      required: ["collection"],
+      properties: {
+        request_id: { type: "string" },
+        collection: { type: "string", minLength: 1, maxLength: 128, description: "TCIA collection name (e.g. TCGA-GBM, ADNI, TCIA-Prostate)" },
+        min_slices: { type: "integer", minimum: 1, description: "Minimum slice count filter (default 20)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "import_tcia_series",
+    description: "Download a DICOM series from The Cancer Imaging Archive (TCIA) and import it into AEGIS. Use get_tcia_series first to find a valid series_uid for a collection. The series is downloaded as a ZIP archive from TCIA's NBIA API, extracted, and processed through the normal AEGIS ingest pipeline. Large series may take several minutes. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["series_uid", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        series_uid: { type: "string", minLength: 1, maxLength: 256, description: "DICOM SeriesInstanceUID from TCIA" },
+        collection: { type: "string", minLength: 1, maxLength: 128, description: "TCIA collection name (for logging)" },
+        project_slug: { type: "string", minLength: 1, maxLength: 64, description: "Target project slug (default: 'default')" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "export_protocol_templates",
+    description: "Export all protocol compliance templates for a project as a structured JSON array. Returns {project_id, templates, count}. Use to inspect current templates, back them up before changes, or copy them to another project via import_protocol_templates.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "import_protocol_templates",
+    description: "Bulk-import protocol compliance templates into a project. Templates whose name already exists in the project are silently skipped (no overwrite). Returns {imported, skipped, errors[]}. Accepts up to 200 templates per call. Use export_protocol_templates to get the source format. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "templates", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Destination project UUID" },
+        templates: {
+          type: "array",
+          minItems: 1,
+          maxItems: 200,
+          description: "Array of template objects to import",
+          items: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: { type: "string", minLength: 1, maxLength: 128 },
+              description: { type: "string", maxLength: 512 },
+              manufacturer: { type: "string", maxLength: 128 },
+              model: { type: "string", maxLength: 128 },
+              software_version: { type: "string", maxLength: 128 },
+              sequence_type: { type: "string", maxLength: 128 },
+              rules: { type: "array", items: {} }
+            },
+            additionalProperties: false
+          }
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -2822,6 +2905,20 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_tcia_series") {
+      const parsed = getTCIASeriesArgsSchema.parse(args);
+      const params = new URLSearchParams({ collection: parsed.collection });
+      if (parsed.min_slices !== undefined) params.set("min_slices", String(parsed.min_slices));
+      const data = await client.get(`/api/tcia/series?${params.toString()}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "export_protocol_templates") {
+      const parsed = exportProtocolTemplatesArgsSchema.parse(args);
+      const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/protocol-templates/export`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -3086,6 +3183,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "bulk_pipeline_trigger") {
         const parsed = bulkPipelineTriggerArgsSchema.parse(args);
         return handleBulkPipelineTrigger(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "import_tcia_series") {
+        const parsed = importTCIASeriesArgsSchema.parse(args);
+        return handleImportTCIASeries(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "import_protocol_templates") {
+        const parsed = importProtocolTemplatesArgsSchema.parse(args);
+        return handleImportProtocolTemplates(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "add_study_note") {
@@ -3436,6 +3543,12 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "bulk_pipeline_trigger") {
     return Array.isArray(args.study_ids) ? (args.study_ids as string[]).join(",") : null;
+  }
+  if (name === "import_tcia_series") {
+    return typeof args.series_uid === "string" ? args.series_uid : null;
+  }
+  if (name === "import_protocol_templates") {
+    return typeof args.project_id === "string" ? args.project_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -5813,6 +5926,51 @@ async function handleBulkPipelineTrigger(
     accepted: true,
     study_count: parsed.study_ids.length,
     step: parsed.step,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleImportTCIASeries(
+  requestId: string,
+  parsed: { series_uid: string; collection?: string; project_slug?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "import_tcia_series");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow import_tcia_series", false, "import_tcia_series");
+  }
+
+  const body: Record<string, unknown> = { series_uid: parsed.series_uid };
+  if (parsed.collection !== undefined) body.collection = parsed.collection;
+  if (parsed.project_slug !== undefined) body.project_slug = parsed.project_slug;
+
+  const data = await client.post("/api/tcia/import", body);
+  return formatSuccess(requestId, "import_tcia_series", {
+    accepted: true,
+    series_uid: parsed.series_uid,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleImportProtocolTemplates(
+  requestId: string,
+  parsed: { project_id: string; templates: unknown[]; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "import_protocol_templates");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow import_protocol_templates", false, "import_protocol_templates");
+  }
+
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/protocol-templates/import`, parsed.templates);
+  return formatSuccess(requestId, "import_protocol_templates", {
+    accepted: true,
+    project_id: parsed.project_id,
+    template_count: parsed.templates.length,
     result: data,
     reason: parsed.reason
   });
