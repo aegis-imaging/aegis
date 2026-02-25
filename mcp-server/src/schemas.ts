@@ -836,6 +836,44 @@ export const bulkPipelineTriggerArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── TCIA (The Cancer Imaging Archive) ───────────────────────────────────────
+export const getTCIASeriesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  collection: z.string().min(1).max(128),
+  min_slices: z.number().int().positive().optional()
+});
+
+export const importTCIASeriesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  series_uid: z.string().min(1).max(256),
+  collection: z.string().min(1).max(128).optional(),
+  project_slug: z.string().min(1).max(64).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+// ─── Protocol template import ─────────────────────────────────────────────────
+export const exportProtocolTemplatesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid()
+});
+
+export const importProtocolTemplatesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  templates: z.array(z.object({
+    name: z.string().min(1).max(128),
+    description: z.string().max(512).optional(),
+    manufacturer: z.string().max(128).optional(),
+    model: z.string().max(128).optional(),
+    software_version: z.string().max(128).optional(),
+    sequence_type: z.string().max(128).optional(),
+    rules: z.array(z.record(z.unknown())).optional()
+  })).min(1).max(200),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -888,7 +926,9 @@ export const readToolNames = [
   "get_daily_summary",
   "list_admin_users",
   "list_invite_codes",
-  "list_invite_requests"
+  "list_invite_requests",
+  "get_tcia_series",
+  "export_protocol_templates"
 ] as const;
 
 export const writeToolNames = [
@@ -973,7 +1013,9 @@ export const writeToolNames = [
   "set_storage_quota",
   "update_phi_config",
   "delete_study",
-  "bulk_pipeline_trigger"
+  "bulk_pipeline_trigger",
+  "import_tcia_series",
+  "import_protocol_templates"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
