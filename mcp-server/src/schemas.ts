@@ -146,6 +146,27 @@ export const unlinkStudiesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const listDigestSubscriptionsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid().optional()
+});
+
+export const createDigestSubscriptionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  email: z.string().email(),
+  frequency: z.enum(["weekly", "monthly"]),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const deleteDigestSubscriptionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subscription_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const getAuditActorsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   limit: z.number().int().min(1).max(100).optional()
@@ -497,7 +518,8 @@ export const readToolNames = [
   "get_storage_usage",
   "get_anonymization_diff",
   "get_system_health_summary",
-  "list_study_relationships"
+  "list_study_relationships",
+  "list_digest_subscriptions"
 ] as const;
 
 export const writeToolNames = [
@@ -542,7 +564,9 @@ export const writeToolNames = [
   "update_routing_rule",
   "delete_routing_rule",
   "link_studies",
-  "unlink_studies"
+  "unlink_studies",
+  "create_digest_subscription",
+  "delete_digest_subscription"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
