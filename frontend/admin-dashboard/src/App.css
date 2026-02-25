@@ -312,6 +312,41 @@
   text-align: center;
 }
 
+.pagination-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.pagination-jump__label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.pagination-jump__input {
+  width: 52px;
+  padding: 3px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.pagination-jump__input::-webkit-inner-spin-button,
+.pagination-jump__input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pagination-jump__of {
+  font-size: 13px;
+  color: #6b7280;
+}
+
 /* ── Studies table ───────────────────────────────────────────────────────── */
 .studies-table-wrap {
   border: 1px solid #e5e7eb;
