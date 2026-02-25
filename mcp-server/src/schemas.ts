@@ -100,6 +100,13 @@ export const pipelineFunnelArgsSchema = z.object({
   project_id: z.string().uuid().optional()
 });
 
+export const projectHealthArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  days: z.number().int().min(1).max(365).optional(),
+  project_id: z.string().uuid().optional(),
+  stuck_minutes: z.number().int().min(1).optional()
+});
+
 export const getAuditActorsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   limit: z.number().int().min(1).max(100).optional()
@@ -445,7 +452,8 @@ export const readToolNames = [
   "get_routing_stats",
   "get_destination_stats",
   "get_routing_rule_stats",
-  "get_pipeline_funnel"
+  "get_pipeline_funnel",
+  "get_project_health"
 ] as const;
 
 export const writeToolNames = [

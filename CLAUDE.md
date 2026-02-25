@@ -1510,6 +1510,17 @@ Shows how many studies pass through each pipeline stage from receipt to export, 
 
 **MCP:** `get_pipeline_funnel` read tool — returns full funnel breakdown (`days` and `project_id` optional)
 
+### Project Health Summary (`api/handler/project_health.go`)
+
+Aggregates study counts, storage stats, routing totals, stuck count, and the pipeline funnel into a single endpoint — the fastest way to get a complete project status snapshot.
+
+**API:**
+- `GET /api/stats/project-health?days=30&project_id=<uuid>&stuck_minutes=60`
+- Returns: `{period_days, generated_at, project_id, studies: {received, defacing, clean, defaced, approved, rejected}, storage: {raw_file_count, clean_file_count, total_file_count, total_studies}, stuck_count, routing: {attempts, successful, failed, success_rate}, funnel: [{stage, count, pct_of_total, pct_of_prev}]}`
+- `days` scopes routing and funnel look-back (default 30); `project_id` optional; `stuck_minutes` threshold for stuck count (default 60)
+
+**MCP:** `get_project_health` read tool — consolidated health snapshot, ideal for AI-assisted project triage
+
 ### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
 Export and import protocol templates for a project as a JSON file.
@@ -1618,6 +1629,7 @@ cd mcp-server && npm install && npm run build
 | `get_destination_stats` | Per-destination routing stats: success rate, recent errors, daily breakdown (destination_id required, optional days) |
 | `get_routing_rule_stats` | Per-rule hit analytics: hit counts, last matched, unused rules in period (optional days) |
 | `get_pipeline_funnel` | Pipeline conversion funnel: per-stage counts and conversion rates (optional days, project_id) |
+| `get_project_health` | Consolidated project health: study counts + storage + routing totals + stuck count + funnel in one call (optional days, project_id, stuck_minutes) |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
