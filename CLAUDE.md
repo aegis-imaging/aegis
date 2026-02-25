@@ -357,7 +357,7 @@ In the admin dashboard:
 - **Institutions tab** — manage institutions and their project memberships.
 - **Profiles tab** — manage per-project anonymization profiles (see below).
 - **Notifications tab** — manage email digest subscriptions (see below).
-- **Projects tab** — create and edit projects (name, slug, description); shows default anon profile badge. Each project row has a **Health** button (opens `ProjectHealthPanel` modal — key metrics + pipeline funnel from `GET /api/stats/project-health`) and a **Compliance** button (opens `ComplianceReportPanel` modal). `frontend/admin-dashboard/src/components/ProjectHealthPanel.tsx`.
+- **Projects tab** — create and edit projects (name, slug, description); shows default anon profile badge. Each project row has a **Health** button (opens `ProjectHealthPanel` modal — key metrics + pipeline funnel from `GET /api/stats/project-health`), a **Compliance** button (opens `ComplianceReportPanel` modal), and a **↓ BIDS** link that directly downloads all BIDS-complete approved studies for the project as a merged ZIP archive (calls `GET /api/projects/{id}/bids-export`). `frontend/admin-dashboard/src/components/ProjectHealthPanel.tsx`.
 - **Users tab** — manage authorised admin users and their roles (admin|viewer).
 
 **Global project selector:** A dropdown in the admin dashboard header scopes all tabs — studies list, stats banner, breakdown table, storage stats, timeline, and audit log — to a single project. Selecting "All Projects" restores the unfiltered view. The selection is persisted in `localStorage`. The stats banner, breakdown, and timeline panels auto-reload when the project changes.
@@ -793,7 +793,9 @@ uvicorn app.main:app --port 8084
 
 **API:**
 - `POST /api/studies/{studyUID}/bids-convert` — trigger BIDS conversion (returns 202 Accepted, runs async)
-- `GET /api/studies/{studyUID}/bids-download` — download BIDS output as zip archive
+- `GET /api/studies/{studyUID}/bids-download` — download BIDS output as zip archive (single study)
+- `GET /api/projects/{id}/bids-info` — metadata about BIDS-complete studies in a project (`{project_id, bids_complete_count, study_uids[], download_url, truncated}`); optional `?status=approved` filter (default `approved`); capped at 500 studies
+- `GET /api/projects/{id}/bids-export` — stream all BIDS-complete approved studies for a project as a merged ZIP archive; sets `X-BIDS-Study-Count` and `X-BIDS-Truncated` headers; optional `?status=...` filter; emits `project.bids_export` audit entry
 
 **BIDS output structure:**
 ```
@@ -1651,6 +1653,7 @@ cd mcp-server && npm install && npm run build
 | `get_webhook_stats` | Per-subscription delivery statistics: total, success/failure counts, success rate, last delivery, breakdown by event |
 | `list_all_webhook_deliveries` | All webhook delivery attempts across all subscriptions; filterable by subscription_id and success status; paginated |
 | `get_user_preferences` | Get notification preferences for an admin user: digest frequency and subscribed notify events |
+| `get_project_bids_info` | BIDS availability for a project: count of BIDS-complete studies, UIDs list, and download URL for the bulk ZIP |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 

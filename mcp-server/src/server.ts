@@ -96,6 +96,7 @@ import {
   batchImportStudiesArgsSchema,
   getUserPreferencesArgsSchema,
   setUserPreferencesArgsSchema,
+  getProjectBidsInfoArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -2491,6 +2492,20 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "get_project_bids_info",
+    description: "Get metadata about BIDS-converted studies available for bulk download in a project: count, list of study UIDs, and the download URL for the merged ZIP archive. Use before directing a user to download via the /api/projects/{id}/bids-export endpoint. Optional status filter (default: 'approved').",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" },
+        status: { type: "string", enum: ["approved", "received", "clean", "defaced"], description: "Study status filter (default: 'approved')" }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -3028,6 +3043,15 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "get_user_preferences") {
       const parsed = getUserPreferencesArgsSchema.parse(args);
       const data = await client.get(`/api/admin-users/${encodeURIComponent(parsed.user_id)}/preferences`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_project_bids_info") {
+      const parsed = getProjectBidsInfoArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.status) params.set("status", parsed.status);
+      const qs = params.toString();
+      const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/bids-info${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
