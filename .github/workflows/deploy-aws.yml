@@ -62,6 +62,10 @@ jobs:
           - service: dimse-receiver
             context: dimse-receiver
             dockerfile: dimse-receiver/Dockerfile
+          - service: landing
+            context: frontend/landing
+            dockerfile: frontend/landing/Dockerfile
+            build_args: "--build-arg VITE_API_BASE_URL=https://aws.api.aegisimaging.ai"
 
     steps:
       - name: Checkout
@@ -129,7 +133,8 @@ jobs:
             aegis-bids-service \
             aegis-classification-service \
             aegis-protocol-service \
-            aegis-synth-service; do
+            aegis-synth-service \
+            aegis-landing; do
             echo "Updating $SVC..."
             aws ecs update-service \
               --cluster "$CLUSTER" \
