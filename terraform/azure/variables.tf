@@ -82,9 +82,9 @@ variable "smtp_from" {
 # ── Container Images ──────────────────────────────────────────────────────────
 
 variable "api_image_tag" {
-  description = "Container image tag for the Go API"
+  description = "Container image tag for the Go API. Use 'placeholder' for initial provisioning before CI/CD pushes real images."
   type        = string
-  default     = "latest"
+  default     = "placeholder"
 }
 
 variable "api_min_replicas" {
