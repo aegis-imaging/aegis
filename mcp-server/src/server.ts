@@ -28,6 +28,7 @@ import {
   getShareDownloadsArgsSchema,
   getStuckStudiesArgsSchema,
   getExpiringStudiesArgsSchema,
+  getRetentionPreviewArgsSchema,
   getStudyDicomTagsArgsSchema,
   getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
@@ -575,6 +576,20 @@ const tools: Tool[] = [
         project_id: { type: "string", format: "uuid", description: "Scope to a single project" },
         limit: { type: "integer", minimum: 1, maximum: 500, description: "Max results (default 200)" }
       },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_retention_preview",
+    description: "Dry-run preview of how many approved studies would be expired if a project's retention policy were set to N days. Returns would_expire_count, total_approved, and an age_distribution histogram (6 buckets: 0–7d, 8–30d, 31–90d, 91–180d, 181–365d, 365d+). Each bucket shows count and whether those studies would be affected at the given policy. Does NOT modify any data — safe to call at any time.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID to preview retention for" },
+        days: { type: "integer", minimum: 1, maximum: 3650, description: "Simulated retention period in days (default 90)" }
+      },
+      required: ["project_id"],
       additionalProperties: false
     }
   },
@@ -2751,6 +2766,15 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.limit !== undefined) params.set("limit", String(parsed.limit));
       const qs = params.toString();
       const data = await client.get(`/api/studies/expiring${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_retention_preview") {
+      const parsed = getRetentionPreviewArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      const qs = params.toString();
+      const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/retention-preview${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 

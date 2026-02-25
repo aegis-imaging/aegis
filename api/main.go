@@ -185,6 +185,7 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
 	mux.HandleFunc("PUT /api/projects/{id}", adminOnly(srv.UpdateProject))
 	mux.HandleFunc("PUT /api/projects/{id}/retention", adminOnly(srv.SetProjectRetention))
+	mux.HandleFunc("GET /api/projects/{id}/retention-preview", auth(srv.GetRetentionPreview))
 	mux.HandleFunc("PUT /api/projects/{id}/sla-threshold", adminOnly(srv.SetProjectSLAThreshold))
 	mux.HandleFunc("PUT /api/projects/{id}/storage-quota", adminOnly(srv.SetStorageQuota))
 	mux.HandleFunc("GET /api/projects/{id}/storage-usage", auth(srv.GetStorageUsage))

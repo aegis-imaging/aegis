@@ -889,6 +889,13 @@ export const getProjectBidsInfoArgsSchema = z.object({
     .describe("Study status filter (default: 'approved')")
 });
 
+export const getRetentionPreviewArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid().describe("Project UUID to preview retention for."),
+  days: z.number().int().min(1).max(3650).optional()
+    .describe("Simulated retention period in days (default 90). Studies older than this would be expired.")
+});
+
 // ─── Webhook stats + all deliveries ──────────────────────────────────────────
 export const getWebhookStatsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
@@ -990,7 +997,8 @@ export const readToolNames = [
   "list_all_webhook_deliveries",
   "get_user_preferences",
   "get_project_bids_info",
-  "get_expiring_studies"
+  "get_expiring_studies",
+  "get_retention_preview"
 ] as const;
 
 export const writeToolNames = [
