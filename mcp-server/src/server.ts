@@ -30,6 +30,7 @@ import {
   getExpiringStudiesArgsSchema,
   getRetentionPreviewArgsSchema,
   getDestinationHealthArgsSchema,
+  simulateRoutingArgsSchema,
   getStudyDicomTagsArgsSchema,
   getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
@@ -754,6 +755,21 @@ const tools: Tool[] = [
         request_id: { type: "string" },
         destination_id: { type: "string", format: "uuid", description: "Specific destination; omit for all" },
         limit: { type: "integer", minimum: 1, maximum: 100, description: "Max recent test log entries (default 20, single destination only)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "simulate_routing",
+    description: "Dry-run simulation of routing rule evaluation against a hypothetical study with given attributes. Returns which enabled rules would match (matched_rules), which would not (skipped_rules), and an action_summary showing boolean flags for each action type (require_defacing, require_phi_scan, require_qc_check, require_bids_conversion, require_classification, require_protocol_check, require_export, auto_approve, reject). For route_to rules, destination_name is also resolved. Use this to test routing rule changes before activating them, or to explain why a study did or did not trigger a pipeline step.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Optional project scope; omit to test with no project scoping" },
+        modality: { type: "string", description: "e.g. MRI, CT, PET" },
+        body_part: { type: "string", description: "e.g. HEAD, CHEST, ABDOMEN" },
+        source: { type: "string", enum: ["external", "internal"], description: "Ingest source (default: external)" }
       },
       additionalProperties: false
     }
@@ -2850,6 +2866,17 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         const data = await client.get("/api/destinations/health");
         return formatSuccess(requestId, name, data);
       }
+    }
+
+    if (name === "simulate_routing") {
+      const parsed = simulateRoutingArgsSchema.parse(args);
+      const body: Record<string, string> = {};
+      if (parsed.project_id) body.project_id = parsed.project_id;
+      if (parsed.modality) body.modality = parsed.modality;
+      if (parsed.body_part) body.body_part = parsed.body_part;
+      if (parsed.source) body.source = parsed.source;
+      const data = await client.post("/api/routing-rules/simulate", body);
+      return formatSuccess(requestId, name, data);
     }
 
     if (name === "get_routing_rule_stats") {
