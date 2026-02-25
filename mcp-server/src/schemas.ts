@@ -78,6 +78,17 @@ export const processingTimesArgsSchema = z.object({
   project_id: z.string().uuid().optional()
 });
 
+export const routingStatsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  days: z.number().int().min(1).max(365).optional()
+});
+
+export const destinationStatsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  destination_id: z.string().uuid(),
+  days: z.number().int().min(1).max(365).optional()
+});
+
 export const getAuditActorsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   limit: z.number().int().min(1).max(100).optional()
@@ -419,7 +430,9 @@ export const readToolNames = [
   "get_phi_config",
   "list_anon_profiles",
   "list_api_keys",
-  "test_destination"
+  "test_destination",
+  "get_routing_stats",
+  "get_destination_stats"
 ] as const;
 
 export const writeToolNames = [

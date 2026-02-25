@@ -170,6 +170,7 @@ func main() {
 	mux.HandleFunc("GET /api/stats/breakdown", auth(srv.GetBreakdownStats))
 	mux.HandleFunc("GET /api/stats/timeline", auth(srv.GetTimeline))
 	mux.HandleFunc("GET /api/stats/processing-times", auth(srv.GetProcessingTimes))
+	mux.HandleFunc("GET /api/stats/routing", auth(srv.GetRoutingStats))
 	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
 	// System health summary — aggregated operational status panel.
@@ -266,6 +267,7 @@ func main() {
 	mux.HandleFunc("PUT /api/destinations/{id}", adminOnly(srv.UpdateDestination))
 	mux.HandleFunc("DELETE /api/destinations/{id}", adminOnly(srv.DeleteDestination))
 	mux.HandleFunc("POST /api/destinations/{id}/test", adminOnly(srv.TestDestination))
+	mux.HandleFunc("GET /api/destinations/{id}/stats", auth(srv.GetDestinationStats))
 
 	// Routing rules — condition → action mappings evaluated on study ingest.
 	mux.HandleFunc("GET /api/routing-rules", auth(srv.ListRoutingRules))

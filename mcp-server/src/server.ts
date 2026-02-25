@@ -34,6 +34,8 @@ import {
   listProtocolTemplatesArgsSchema,
   listStudiesArgsSchema,
   processingTimesArgsSchema,
+  routingStatsArgsSchema,
+  destinationStatsArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -611,6 +613,42 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         destination_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_routing_stats",
+    description: "Get aggregate routing health statistics across all destinations for the last N days. Returns totals (attempts, successful, failed, success_rate) plus a per-destination breakdown ordered by attempt count. Useful for monitoring cross-cloud routing health (GCP↔AWS↔Azure) and identifying failing destinations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 365,
+          description: "Look-back window in days (default 30)"
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_destination_stats",
+    description: "Get routing health statistics for a specific DICOM forwarding destination: total attempts, success/failure counts, success rate, recent error messages, and daily breakdown. Use this to diagnose why a specific cross-cloud forwarding destination is failing.",
+    inputSchema: {
+      type: "object",
+      required: ["destination_id"],
+      properties: {
+        request_id: { type: "string" },
+        destination_id: { type: "string", format: "uuid", description: "UUID of the destination" },
+        days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 365,
+          description: "Look-back window in days (default 30)"
+        }
       },
       additionalProperties: false
     }
@@ -1511,6 +1549,24 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.project_id) params.set("project_id", parsed.project_id);
       const qs = params.toString();
       const data = await client.get(`/api/stats/processing-times${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_routing_stats") {
+      const parsed = routingStatsArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/routing${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_destination_stats") {
+      const parsed = destinationStatsArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      const qs = params.toString();
+      const data = await client.get(`/api/destinations/${parsed.destination_id}/stats${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
