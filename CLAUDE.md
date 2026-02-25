@@ -1635,6 +1635,7 @@ cd mcp-server && npm install && npm run build
 | `get_anonymization_diff` | Tag-level diff between raw and de-identified DICOM for a study (study_uid = DICOM UID, not DB UUID) |
 | `get_system_health_summary` | Cached (30s) system-wide health: API/sidecar status, pipeline activity (24h), DIMSE queue depths |
 | `list_study_relationships` | List all typed relationships for a study (baseline, follow_up, comparison, replicate) with related study details |
+| `list_digest_subscriptions` | List email digest subscriptions (weekly/monthly plain-text study counts); optional project_id filter |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
@@ -1657,6 +1658,8 @@ cd mcp-server && npm install && npm run build
 | `clone_project` | Duplicate a project with all settings (routing rules, profiles, templates, PHI config) |
 | `link_studies` | Create a typed relationship between two studies (baseline, follow_up, comparison, replicate) |
 | `unlink_studies` | Remove a study relationship by its relationship UUID (use list_study_relationships to find the ID) |
+| `create_digest_subscription` | Create a weekly or monthly email digest subscription for a project |
+| `delete_digest_subscription` | Delete a digest subscription by ID |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 
