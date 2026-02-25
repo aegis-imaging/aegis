@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -114,4 +115,37 @@ func (s *Server) DeleteAdminUser(w http.ResponseWriter, r *http.Request) {
 	model.CreateAuditEntry(r.Context(), s.db, "admin_user.deleted", actorEmail(r),
 		"admin_user", id, clientIP(r), nil)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// SendAdminUserInvite sends a dashboard invite email to a registered admin user.
+// POST /api/admin-users/{id}/send-invite
+//
+// The email contains the dashboard URL and a brief explanation of how to sign
+// in via SSO (Google, Microsoft, or AWS). No PHI is included.
+func (s *Server) SendAdminUserInvite(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	user, err := model.GetAdminUserByID(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	dashboardURL := s.cfg.AdminDashboardURL
+	subject, body := email.AdminDashboardInvite(user.Email, dashboardURL, user.Role)
+	if err := s.mailer.Send(r.Context(), user.Email, subject, body); err != nil {
+		log.Printf("send admin invite to %s: %v", user.Email, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to send invite email")
+		return
+	}
+
+	model.CreateAuditEntry(r.Context(), s.db, "admin_user.invite_sent", actorEmail(r),
+		"admin_user", id, clientIP(r), map[string]any{
+			"email":         user.Email,
+			"dashboard_url": dashboardURL,
+		})
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"status":        "sent",
+		"email":         user.Email,
+		"dashboard_url": dashboardURL,
+	})
 }
