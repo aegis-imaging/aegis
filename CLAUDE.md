@@ -1646,6 +1646,24 @@ Probes an external DICOM destination to verify network reachability before addin
 
 **MCP `test_destination` read tool:** `{destination_id}` → calls `POST /api/destinations/{id}/test`, returns connectivity result.
 
+### Destination Probe Scheduler (`api/handler/destination_probe.go`)
+
+Background goroutine that automatically probes all enabled DICOM destinations at a configurable interval, building up health history without requiring manual "Test" button clicks. Sends an email alert when a destination transitions from passing to failing (first failure after a success or never-tested state).
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `DEST_HEALTH_INTERVAL` | `0` (disabled) | Probe interval in seconds; `0` = scheduler disabled |
+| `DEST_HEALTH_ALERT_EMAIL` | *(empty)* | Recipient for failure-transition alerts; requires `SMTP_HOST` |
+
+**How it works:**
+- Goroutine started from `main.go` if `DEST_HEALTH_INTERVAL > 0`; no-op otherwise
+- On each cycle: loads all enabled destinations, calls `probeDestination()` for each, writes `destination.tested` audit entry with `"auto": true` in metadata
+- State change detection: queries the most recent existing audit entry before probing; if the new result is a failure and the previous was success (or never tested), sends email alert
+- `probeDestination()` is also used by the manual `POST /api/destinations/{id}/test` handler (shared logic, no duplication)
+- Manual test entries have the real user actor; scheduler entries use actor `"scheduler"`
+
 ### Destination Health History (`api/handler/destination_health.go`)
 
 Aggregated health statistics for DICOM destinations based on historical connectivity test results stored in the audit trail (`destination.tested` entries).

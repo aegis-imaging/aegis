@@ -1,14 +1,11 @@
 package handler
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/routing"
@@ -322,96 +319,20 @@ func (s *Server) TestDestination(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	res := s.probeDestination(r.Context(), *dest)
+
 	result := destinationTestResult{
 		DestinationID: dest.ID,
 		Type:          dest.Type,
+		Success:       res.Success,
+		LatencyMs:     res.LatencyMs,
+		StatusCode:    res.StatusCode,
+		Error:         res.Error,
 	}
 
-	switch dest.Type {
-	case "dicomweb":
-		testURL := strings.TrimRight(dest.DicomwebURL, "/") + "/studies?limit=1"
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, nil)
-		if err != nil {
-			result.Error = fmt.Sprintf("failed to build request: %v", err)
-			break
-		}
-		if dest.DicomwebAuthHeader != "" {
-			req.Header.Set("Authorization", dest.DicomwebAuthHeader)
-		}
-		req.Header.Set("Accept", "application/dicom+json")
-
-		t0 := time.Now()
-		resp, err := s.httpClient.Do(req)
-		result.LatencyMs = float64(time.Since(t0).Milliseconds())
-
-		if err != nil {
-			result.Error = fmt.Sprintf("request failed: %v", err)
-		} else {
-			resp.Body.Close()
-			code := resp.StatusCode
-			result.StatusCode = &code
-			// 405 Method Not Allowed is also a success: it means the server is
-			// reachable and responded (e.g. STOW-RS endpoints only accept POST).
-			result.Success = resp.StatusCode < 400 || resp.StatusCode == http.StatusMethodNotAllowed
-			if !result.Success {
-				result.Error = fmt.Sprintf("unexpected status %d", resp.StatusCode)
-			}
-		}
-
-	case "dimse":
-		if strings.TrimSpace(s.cfg.DimseReceiverURL) == "" {
-			result.Error = "dimse receiver service not configured"
-			break
-		}
-		echoURL := strings.TrimRight(s.cfg.DimseReceiverURL, "/") + "/echo"
-		payload, _ := json.Marshal(map[string]any{
-			"ae_title": dest.AETitle,
-			"host":     dest.Host,
-			"port":     dest.Port,
-		})
-
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, echoURL, bytes.NewReader(payload))
-		if err != nil {
-			result.Error = fmt.Sprintf("failed to build echo request: %v", err)
-			break
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-
-		t0 := time.Now()
-		resp, err := s.httpClient.Do(req)
-		result.LatencyMs = float64(time.Since(t0).Milliseconds())
-
-		if err != nil {
-			result.Error = fmt.Sprintf("dimse echo request failed: %v", err)
-		} else {
-			defer resp.Body.Close()
-			var echoResp struct {
-				Success   bool    `json:"success"`
-				LatencyMs float64 `json:"latency_ms"`
-				Detail    string  `json:"detail"`
-			}
-			if err := json.NewDecoder(resp.Body).Decode(&echoResp); err == nil && resp.StatusCode == http.StatusOK {
-				result.Success = echoResp.Success
-				result.LatencyMs = echoResp.LatencyMs
-				if !echoResp.Success {
-					result.Error = echoResp.Detail
-				}
-			} else {
-				result.Error = fmt.Sprintf("dimse echo returned status %d", resp.StatusCode)
-			}
-		}
-	}
-
-	meta := map[string]any{"type": dest.Type, "success": result.Success}
-	if result.Error != "" {
-		meta["error"] = result.Error
+	meta := map[string]any{"type": dest.Type, "success": res.Success, "latency_ms": res.LatencyMs}
+	if res.Error != "" {
+		meta["error"] = res.Error
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "destination.tested", actorEmail(r), "destination", id, clientIP(r), meta)
 	s.writeJSON(w, http.StatusOK, result)
