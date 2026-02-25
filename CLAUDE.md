@@ -1453,6 +1453,12 @@ Per-institution aggregate statistics derived from the studies table.
 - Query param: `limit` (default 20)
 - **Admin dashboard:** collapsible "Recent admin activity" table in the Audit Log tab
 
+**Daily ops summary** (`GET /api/stats/daily-summary`, admin-read):
+- System-wide briefing for the last N hours (default 24, max 168 = 7 days)
+- Returns: `ingestion` (received/approved/rejected/stuck in period), `pipeline` (current pending review/in-processing/failed snapshot), `routing` (attempts/success rate), `top_projects` (top 5 by received), `recent_events` (last 10 significant audit events)
+- Query params: `hours` (1–168, default 24)
+- Designed for AI agent "morning briefings" — single call for cross-system platform state
+
 **Daily ingestion timeline** (`GET /api/stats/timeline`, admin-read):
 - Returns `{days: [{day: "YYYY-MM-DD", received, approved}]}` for the last N days (default 30)
 - Query params: `days` (1–365), `project_id` (UUID, optional)
@@ -1636,6 +1642,7 @@ cd mcp-server && npm install && npm run build
 | `get_system_health_summary` | Cached (30s) system-wide health: API/sidecar status, pipeline activity (24h), DIMSE queue depths |
 | `list_study_relationships` | List all typed relationships for a study (baseline, follow_up, comparison, replicate) with related study details |
 | `list_digest_subscriptions` | List email digest subscriptions (weekly/monthly plain-text study counts); optional project_id filter |
+| `get_daily_summary` | System-wide ops briefing for last N hours (default 24, max 168): ingestion counts, pipeline state, routing stats, top 5 projects by received, last 10 significant audit events |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
