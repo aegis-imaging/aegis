@@ -3,7 +3,7 @@ import { useScrollAnimation } from '../hooks/useScrollAnimation'
 const STATS = [
   { value: '7', label: 'Automated Processing Services' },
   { value: '18', label: 'HIPAA Identifiers Addressed' },
-  { value: '370+', label: 'Automated Tests' },
+  { value: '400+', label: 'Automated Tests' },
   { value: '3', label: 'Cloud Platforms Supported' },
 ]
 

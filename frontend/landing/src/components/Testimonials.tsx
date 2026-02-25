@@ -17,12 +17,12 @@ const MARKET_CARDS = [
     stat: '~62%',
     label: 'Imaging studies lack compliant sharing',
     detail: 'Most institutions lack HIPAA-safe pipelines for multi-site collaboration. Manual de-identification is error-prone and does not scale.',
-    accent: '#ef4444',
+    accent: '#ea580c',
   },
   {
     stat: 'Day 1',
     label: 'Production-ready infrastructure',
-    detail: 'AEGIS is live on GCP and AWS — microservices architecture (Go API + 7 Python microservices), multi-cloud ready, with full audit trail built in.',
+    detail: 'AEGIS is live on GCP and AWS — microservices architecture (Go API + 7 Python microservices), Azure deploying now. Cross-cloud routing verified. Full audit trail built in.',
     accent: '#059669',
   },
 ]

@@ -3,8 +3,8 @@ import { useScrollAnimation } from '../hooks/useScrollAnimation'
 const MOMENTUM = [
   { value: '7',    label: 'days to production' },
   { value: '846+', label: 'commits in week one' },
-  { value: '122',  label: 'API routes' },
-  { value: '370+', label: 'automated tests' },
+  { value: '126+', label: 'API routes' },
+  { value: '400+', label: 'automated tests' },
 ]
 
 type MilestoneStatus = 'done' | 'active' | 'planned'
@@ -28,6 +28,7 @@ const MILESTONES: Milestone[] = [
       'Full HIPAA pipeline: tag de-identification, defacing, PHI scan, QC, BIDS, protocol compliance',
       'Terraform IaC + Cloud Build CI/CD — every merge to develop auto-deploys all services',
       'Admin dashboard with Weasis DWV viewer, RBAC, audit trail, routing rules engine',
+      'AI-native operations: MCP server with 52+ read tools, 29+ write tools, agent orchestrator with DICOM diagnostics',
     ],
     tags: [
       { label: '✓ Live', style: 'done' },
@@ -53,14 +54,14 @@ const MILESTONES: Milestone[] = [
     ],
   },
   {
-    status: 'active',
+    status: 'done',
     date: 'Q1 2026',
     title: 'AWS Deployment',
     items: [
-      'ECS Fargate (9 microservices), RDS PostgreSQL, S3, ALB + Cognito — live now',
+      'ECS Fargate (10 microservices), RDS PostgreSQL, S3, ALB + Cognito — fully live',
       'GitHub Actions CI/CD mirrors GCP Cloud Build — auto-deploy on every push to develop',
       'DIMSE receiver on EC2 with Elastic IP — same static-IP PACS pattern as GCP',
-      'Multi-cloud data federation — studies routable between GCP and AWS tenants',
+      'Cross-cloud DICOM routing verified live — GCP→AWS STOW-RS tested, bidirectional API key auth',
     ],
     tags: [
       { label: '✓ Live', style: 'done' },
@@ -70,19 +71,35 @@ const MILESTONES: Milestone[] = [
     liveUrl: 'https://aws.api.aegisimaging.ai/healthz',
   },
   {
+    status: 'active',
+    date: 'Feb 26, 2026 (Day 9)',
+    title: 'Azure Deployment',
+    items: [
+      'Azure Container Apps deployment — full three-cloud feature parity deploying now',
+      'Terraform IaC + GitHub Actions CI/CD (OIDC federated auth) — same auto-deploy pattern as GCP and AWS',
+      'Azure Database for PostgreSQL (Flexible Server), Azure Blob Storage, Azure Container Registry',
+      'DIMSE receiver on Azure Linux VM — static Elastic IP, TCP port 11112',
+    ],
+    tags: [
+      { label: '● Deploying', style: 'active' },
+      { label: 'Azure', style: 'cloud' },
+      { label: 'Day 9', style: 'neutral' },
+    ],
+  },
+  {
     status: 'planned',
     date: 'Q3 2026',
-    title: 'Azure + SOC 2 Type II',
+    title: 'SOC 2 Type II + Enterprise Integrations',
     items: [
-      'Azure Container Apps deployment — full three-cloud feature parity',
-      'SOC 2 Type II certification achieved',
+      'SOC 2 Type II certification — formal audit after 6-month observation period',
       'HL7 FHIR notifications — integrate with hospital EMR/RIS systems',
       'Cross-tenant federated sharing — peer AEGIS instances can exchange approved studies',
+      'AWS Marketplace listing for enterprise procurement',
     ],
     tags: [
       { label: 'Planned', style: 'neutral' },
-      { label: 'Azure', style: 'cloud' },
       { label: 'SOC 2 Type II', style: 'neutral' },
+      { label: 'Enterprise', style: 'neutral' },
     ],
   },
   {
@@ -143,7 +160,7 @@ export function Roadmap() {
           {MILESTONES.map((m, i) => (
             <div
               key={m.title}
-              className={`roadmap__milestone roadmap__milestone--${m.status} animate animate--fade-up animate--delay-${i + 1 as 1|2|3|4|5}${timelineVisible ? ' animate--visible' : ''}`}
+              className={`roadmap__milestone roadmap__milestone--${m.status} animate animate--fade-up animate--delay-${i + 1 as 1|2|3|4|5|6}${timelineVisible ? ' animate--visible' : ''}`}
             >
               <div className="roadmap__milestone-node" aria-hidden="true">
                 {m.status === 'done' ? '✓' : m.status === 'active' ? '●' : '○'}
