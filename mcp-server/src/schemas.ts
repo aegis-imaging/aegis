@@ -874,6 +874,14 @@ export const importProtocolTemplatesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Project BIDS availability ────────────────────────────────────────────────
+export const getProjectBidsInfoArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  status: z.enum(["approved", "received", "clean", "defaced"]).optional()
+    .describe("Study status filter (default: 'approved')")
+});
+
 // ─── Webhook stats + all deliveries ──────────────────────────────────────────
 export const getWebhookStatsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
@@ -973,7 +981,8 @@ export const readToolNames = [
   "export_protocol_templates",
   "get_webhook_stats",
   "list_all_webhook_deliveries",
-  "get_user_preferences"
+  "get_user_preferences",
+  "get_project_bids_info"
 ] as const;
 
 export const writeToolNames = [
