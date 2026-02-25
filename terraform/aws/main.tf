@@ -213,6 +213,29 @@ variable "mcp_aegis_api_token" {
   default     = ""
 }
 
+variable "landing_domain" {
+  description = "Custom FQDN for the landing page (e.g. aws.aegisimaging.ai). Empty = no landing page."
+  type        = string
+  default     = ""
+}
+
+variable "landing_image_tag" {
+  description = "Container image tag for the landing page ECS task. Empty = skip landing page resources."
+  type        = string
+  default     = ""
+}
+
+variable "landing_cpu" {
+  description = "CPU units for landing page ECS task definition"
+  type        = number
+  default     = 256
+}
+
+variable "landing_memory" {
+  description = "Memory (MiB) for landing page ECS task definition"
+  type        = number
+  default     = 512
+}
 
 provider "aws" {
   region = var.aws_region
@@ -378,6 +401,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "dicom" {
 
     expiration { days = 7 }
   }
+
+  rule {
+    id     = "archive-to-glacier"
+    status = "Enabled"
+
+    filter { prefix = "dicom/" }
+
+    transition {
+      days          = 30
+      storage_class = "GLACIER_IR"
+    }
+  }
 }
 
 # --- RDS (PostgreSQL) ---
@@ -440,7 +475,7 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver", "weasis", "mcp-server"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver", "weasis", "mcp-server", "landing"]
 
   api_image    = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
   admin_image  = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
@@ -1332,4 +1367,141 @@ output "ses_dkim_tokens" {
 output "ses_smtp_username" {
   description = "SES SMTP username (IAM access key ID)"
   value       = aws_iam_access_key.ses_smtp.id
+}
+
+output "nat_egress_ip" {
+  description = "Static NAT Gateway EIP — use for SMTP allowlisting and firewall rules"
+  value       = aws_eip.nat.public_ip
+}
+
+# ── Landing Page (optional) ──────────────────────────────────────────────────
+
+locals {
+  landing_enabled = var.landing_image_tag != ""
+  landing_image   = local.landing_enabled ? "${aws_ecr_repository.services["landing"].repository_url}:${var.landing_image_tag}" : ""
+  landing_fqdn    = var.landing_domain != "" ? var.landing_domain : aws_lb.main.dns_name
+}
+
+resource "aws_lb_target_group" "landing" {
+  count = local.landing_enabled ? 1 : 0
+
+  name        = "${var.project_name}-landing"
+  port        = 8080
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.main.id
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher             = "200-399"
+  }
+
+  tags = { Name = "${var.project_name}-landing-tg" }
+}
+
+resource "aws_ecs_task_definition" "landing" {
+  count = local.landing_enabled ? 1 : 0
+
+  family                   = "${var.project_name}-landing"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.landing_cpu)
+  memory                   = tostring(var.landing_memory)
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "landing"
+      image     = local.landing_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "VITE_API_BASE_URL", value = "https://${local.api_fqdn}" },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.main.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "landing"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Name        = "${var.project_name}-landing"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecs_service" "landing" {
+  count = local.landing_enabled ? 1 : 0
+
+  name            = "${var.project_name}-landing"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.landing[0].arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.landing[0].arn
+    container_name   = "landing"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.https]
+
+  tags = {
+    Name        = "${var.project_name}-landing"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+# Landing page uses host-based routing (priority 4, after api/admin/weasis subdomains).
+# No Cognito auth — public-facing marketing site.
+resource "aws_lb_listener_rule" "landing_subdomain" {
+  count        = local.landing_enabled && var.landing_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 4
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.landing[0].arn
+  }
+
+  condition {
+    host_header {
+      values = [var.landing_domain]
+    }
+  }
+}
+
+output "landing_base_url" {
+  description = "Landing page URL (empty when landing is not deployed)"
+  value       = local.landing_enabled ? "https://${local.landing_fqdn}/" : ""
 }
