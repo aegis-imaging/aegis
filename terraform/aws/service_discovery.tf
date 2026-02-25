@@ -51,10 +51,6 @@ resource "aws_service_discovery_service" "sidecars" {
     }
   }
 
-  health_check_custom_config {
-    failure_threshold = 1
-  }
-
   tags = {
     Name        = "${var.project_name}-${var.environment}-${each.key}"
     Environment = var.environment
