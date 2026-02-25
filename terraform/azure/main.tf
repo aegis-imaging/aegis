@@ -185,6 +185,12 @@ resource "azurerm_postgresql_flexible_server" "main" {
     update = "60m"
     delete = "60m"
   }
+
+  # Azure auto-assigns a zone on creation; ignore drift to prevent spurious
+  # in-place updates that Azure rejects when HA is not configured.
+  lifecycle {
+    ignore_changes = [zone]
+  }
 }
 
 resource "azurerm_postgresql_flexible_server_database" "aegis" {

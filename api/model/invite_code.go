@@ -12,13 +12,15 @@ import (
 
 // InviteCode is a unique per-person landing page access token.
 type InviteCode struct {
-	ID        string     `json:"id"`
-	Code      string     `json:"code"`
-	Label     string     `json:"label"`
-	Enabled   bool       `json:"enabled"`
-	CreatedAt time.Time  `json:"created_at"`
-	UsedAt    *time.Time `json:"used_at,omitempty"`
-	UsedByIP  *string    `json:"used_by_ip,omitempty"`
+	ID         string     `json:"id"`
+	Code       string     `json:"code"`
+	Label      string     `json:"label"`
+	Enabled    bool       `json:"enabled"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UsedAt     *time.Time `json:"used_at,omitempty"`
+	UsedByIP   *string    `json:"used_by_ip,omitempty"`
+	UserEmail  *string    `json:"user_email,omitempty"`
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 }
 
 // generateCode returns a random human-readable invite code in the form XXXX-XXXX-XXXX.
@@ -89,11 +91,21 @@ func ValidateAndRecordInviteCode(ctx context.Context, db *sql.DB, code, ip strin
 }
 
 // ListInviteCodes returns all invite codes ordered by creation date (newest first).
+// Each code includes the associated requester email (from invite_requests) and last
+// seen timestamp (derived from the audit trail) when available.
 func ListInviteCodes(ctx context.Context, db *sql.DB) ([]InviteCode, error) {
-	rows, err := db.QueryContext(ctx,
-		`SELECT id, code, label, enabled, created_at, used_at, used_by_ip
-		   FROM invite_codes
-		  ORDER BY created_at DESC`,
+	rows, err := db.QueryContext(ctx, `
+		SELECT ic.id, ic.code, ic.label, ic.enabled, ic.created_at, ic.used_at, ic.used_by_ip,
+		       ir.email,
+		       ls.last_seen
+		  FROM invite_codes ic
+		  LEFT JOIN invite_requests ir ON ir.invite_code_id = ic.id
+		  LEFT JOIN (
+		      SELECT actor, MAX(created_at) AS last_seen
+		        FROM audit_trail
+		       GROUP BY actor
+		  ) ls ON ls.actor = ir.email
+		 ORDER BY ic.created_at DESC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list invite codes: %w", err)
@@ -104,12 +116,32 @@ func ListInviteCodes(ctx context.Context, db *sql.DB) ([]InviteCode, error) {
 	for rows.Next() {
 		var ic InviteCode
 		if err := rows.Scan(&ic.ID, &ic.Code, &ic.Label, &ic.Enabled,
-			&ic.CreatedAt, &ic.UsedAt, &ic.UsedByIP); err != nil {
+			&ic.CreatedAt, &ic.UsedAt, &ic.UsedByIP,
+			&ic.UserEmail, &ic.LastSeenAt); err != nil {
 			return nil, err
 		}
 		codes = append(codes, ic)
 	}
 	return codes, rows.Err()
+}
+
+// GetInviteCodeUserEmail returns the email address associated with an invite code
+// (via the linked invite_request), or nil if none is linked.
+func GetInviteCodeUserEmail(ctx context.Context, db *sql.DB, id string) (*string, error) {
+	var email string
+	err := db.QueryRowContext(ctx,
+		`SELECT ir.email
+		   FROM invite_requests ir
+		  WHERE ir.invite_code_id = $1
+		  LIMIT 1`, id,
+	).Scan(&email)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get invite code user email: %w", err)
+	}
+	return &email, nil
 }
 
 // RevokeInviteCode disables an invite code by ID.
