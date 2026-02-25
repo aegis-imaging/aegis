@@ -36,6 +36,8 @@ const allowedGetPathPatterns = [
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/series$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels$/,
   /^\/api\/studies\/[0-9.]+\/dicom-tags$/,
+  /^\/api\/studies\/[0-9.]+\/anonymization-diff$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/relationships$/,
   /^\/api\/dimse\/retry\/details(?:\?.*)?$/,
   /^\/api\/dimse\/retry\/summary(?:\?.*)?$/,
   /^\/api\/study-uid\/[0-9.]+$/,
