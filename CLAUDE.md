@@ -84,13 +84,20 @@ AEGIS is cloud-agnostic at the application layer. The same Go API, Python sideca
 
 | Component | GCP | AWS | Azure | Local Dev |
 |-----------|-----|-----|-------|-----------|
-| **File storage** | GCS (`STORAGE_MODE=gcs`) | S3 (`STORAGE_MODE=s3`) | — | Filesystem (`STORAGE_MODE=local`) |
-| **Database** | Cloud SQL | RDS | Azure Database | Docker postgres |
-| **Containers** | Cloud Run | ECS Fargate | Container Apps | Docker Compose |
+| **File storage** | GCS (`STORAGE_MODE=gcs`) | S3 (`STORAGE_MODE=s3`) | Azure Blob Storage (`STORAGE_MODE=azure`) | Filesystem (`STORAGE_MODE=local`) |
+| **Database** | Cloud SQL | RDS | Azure Database for PostgreSQL - Flexible Server | Docker postgres |
+| **Containers** | Cloud Run | ECS Fargate | Azure Container Apps | Docker Compose |
 | **Auth** | IAP (`AUTH_PROVIDER=iap`) | ALB + Cognito (`AUTH_PROVIDER=aws`) | Easy Auth (`AUTH_PROVIDER=azure`) | Auto-auth (`AUTH_ENABLED=false`) |
-| **Terraform** | `terraform/project/` + `terraform/infra/` | `terraform/aws/` | — (planned) | N/A |
+| **Terraform** | `terraform/project/` + `terraform/infra/` | `terraform/aws/` | `terraform/azure/` | N/A |
 
 S3-compatible stores (MinIO, LocalStack) are supported via the `S3_ENDPOINT` env var.
+
+Azure env vars (only used when `STORAGE_MODE=azure`):
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `AZURE_STORAGE_ACCOUNT` | *(required)* | Storage account name |
+| `AZURE_STORAGE_CONTAINER` | `dicom` | Blob container name |
 
 ## Development
 
@@ -1685,7 +1692,9 @@ Only the container image is updated on each deploy; all env vars, secrets, CPU/m
 - Project-level IAM and API enables — VPC Service Controls perimeter, audit log config
 - Run manually: `cd terraform/project && terraform apply` after careful `terraform plan` review
 
-**`terraform/aws/` is intentionally manual** — AWS is a future multi-cloud deployment path, not the current production environment. GCP (`aegis-prod-488120`) is the live prod. AWS will be used for the first AWS beta deployment once GCP beta is stable. At that point a separate Cloud Build trigger (or GitHub Actions workflow) should be added.
+**`terraform/aws/` is intentionally manual** — AWS is live production (`us-east-1`). Deploy manually: `cd terraform/aws && terraform plan && terraform apply`.
+
+**`terraform/azure/` is intentionally manual** — Azure is the third cloud target. Deploy manually: `cd terraform/azure && terraform init && terraform plan && terraform apply`. Auto-deploy is handled by `.github/workflows/deploy-azure.yml` (GitHub Actions, fires on `develop` push). Terraform infra changes remain manual to avoid accidental resource destruction.
 
 Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
 
@@ -1707,6 +1716,7 @@ Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
 Manual workflow:
 - `.github/workflows/cloud-smoke.yml` (`workflow_dispatch`) runs `scripts/cloud_smoke_test.py` against a deployed environment.
 - Optional repo secret `CLOUD_SMOKE_ADMIN_HEADER` provides the admin auth header for protected endpoints.
+- `.github/workflows/deploy-azure.yml` — **Azure auto-deploy** (fires on push to `develop`): builds all 13 images, pushes to ACR, deploys all Container Apps. Requires GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_ACR_REGISTRY`, `AZURE_RESOURCE_GROUP`. Variables: `AZURE_WEASIS_URL`, `AZURE_API_URL`, `AZURE_DIMSE_VM_NAME` (optional).
 
 ### Python Sidecar Testing
 

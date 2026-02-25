@@ -90,6 +90,12 @@ func main() {
 			log.Fatalf("init s3 storage: %v", err)
 		}
 		store = s3Store
+	case "azure":
+		azStore, err := storage.NewAzureBlob(context.Background(), cfg.AzureStorageAccount, cfg.AzureStorageContainer)
+		if err != nil {
+			log.Fatalf("init azure storage: %v", err)
+		}
+		store = azStore
 	default:
 		store = storage.NewLocal(cfg.LocalStorageDir, cfg.APIBaseURL)
 	}

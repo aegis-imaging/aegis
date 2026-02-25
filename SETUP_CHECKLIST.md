@@ -328,6 +328,133 @@ Manual trigger via GitHub Actions:
   curl -f https://<alb_dns>/healthz
   ```
 
+## 4e. Terraform — Azure Infrastructure
+
+### Prerequisites
+
+- [ ] Install Azure CLI: `brew install azure-cli` (macOS)
+- [ ] Log in: `az login`
+- [ ] Set subscription: `az account set --subscription <SUBSCRIPTION_ID>`
+- [ ] Install Terraform: `brew install terraform`
+
+### One-time: Create Terraform state storage
+
+```bash
+az group create --name aegis-tfstate --location eastus
+az storage account create \
+  --name aegistfstate \
+  --resource-group aegis-tfstate \
+  --sku Standard_LRS \
+  --allow-blob-public-access false
+az storage container create \
+  --name tfstate \
+  --account-name aegistfstate
+```
+
+### One-time: Create OIDC federated service principal for GitHub Actions
+
+```bash
+# Create service principal
+SP=$(az ad sp create-for-rbac --name aegis-github-actions \
+  --role Contributor \
+  --scopes /subscriptions/<SUBSCRIPTION_ID> \
+  --output json)
+
+echo "Client ID:      $(echo $SP | jq -r .appId)"
+echo "Tenant ID:      $(az account show --query tenantId -o tsv)"
+echo "Subscription:   <SUBSCRIPTION_ID>"
+
+# Add federated credentials for the develop branch
+APP_ID=$(echo $SP | jq -r .appId)
+az ad app federated-credential create \
+  --id $APP_ID \
+  --parameters '{"name":"aegis-develop","issuer":"https://token.actions.githubusercontent.com","subject":"repo:aegis-imaging/aegis:ref:refs/heads/develop","audiences":["api://AzureADTokenExchange"]}'
+```
+
+Add the following as **GitHub Secrets** on the repository:
+- `AZURE_CLIENT_ID` — service principal App ID
+- `AZURE_TENANT_ID` — Azure AD tenant ID
+- `AZURE_SUBSCRIPTION_ID` — subscription ID
+- `AZURE_ACR_REGISTRY` — set after Terraform apply (see outputs)
+- `AZURE_RESOURCE_GROUP` — e.g. `aegis-prod`
+
+Add as **GitHub Variables**:
+- `AZURE_WEASIS_URL` — Weasis container app URL (set after first deploy)
+- `AZURE_API_URL` — API container app URL (set after first deploy)
+
+### Apply Terraform
+
+- [ ] Copy `terraform/azure/terraform.tfvars.example` to `terraform/azure/terraform.tfvars`
+- [ ] Fill required values:
+  - `azure_ad_tenant_id` (`az account show --query tenantId -o tsv`)
+  - `db_admin_password` (strong password, ≥ 16 chars)
+  - `alert_email`
+  - `first_admin_email`
+  - `api_domain` and `admin_domain` (optional — leave empty to use default ACA hostnames)
+- [ ] Run:
+  ```bash
+  terraform -chdir=terraform/azure init
+  terraform -chdir=terraform/azure fmt -check
+  terraform -chdir=terraform/azure validate
+  terraform -chdir=terraform/azure plan
+  terraform -chdir=terraform/azure apply
+  ```
+- [ ] Note the outputs:
+  ```bash
+  terraform -chdir=terraform/azure output
+  ```
+  Key outputs: `acr_login_server`, `api_url`, `admin_dashboard_url`, `acs_smtp_host`
+
+### First image push
+
+```bash
+# Build and push images manually for first deploy (before GitHub Actions is configured)
+ACR=$(terraform -chdir=terraform/azure output -raw acr_login_server)
+az acr login --name $ACR
+
+# Build all images
+docker build --platform linux/amd64 -t $ACR/api:latest api/
+docker build --platform linux/amd64 \
+  --build-arg VITE_WEASIS_BASE_URL=<weasis_url> \
+  --build-arg VITE_API_BASE_URL=<api_url> \
+  -t $ACR/admin-dashboard:latest frontend/admin-dashboard/
+# ... repeat for all 13 services
+
+docker push $ACR/api:latest
+# ... push all
+```
+
+### Email (Azure Communication Services)
+
+- [ ] After `terraform apply`, note the ACS SMTP config from outputs:
+  - Host: `smtp.azurecomm.net`, Port: `587`
+  - Username format: `<EntraAppClientId>|<TenantId>|<AcsResourceName>`
+  - Password: OAuth2 access token (short-lived; use the ACS connection string for simpler SMTP)
+- [ ] Alternatively: get the ACS connection string from Azure Portal → Communication Services → Keys
+  - Use connection string auth for simpler SMTP integration with standard relay tools
+- [ ] Set SMTP env vars on the API Container App:
+  ```bash
+  az containerapp update --name aegis-prod-api \
+    --resource-group aegis-prod \
+    --set-env-vars \
+      SMTP_HOST=smtp.azurecomm.net \
+      SMTP_PORT=587 \
+      SMTP_FROM=noreply@aegisimaging.ai \
+      SMTP_USERNAME="<EntraAppClientId>|<TenantId>|<AcsResourceName>" \
+      SMTP_PASSWORD="<oauth-token-or-access-key>"
+  ```
+
+### Verify deployment
+
+- [ ] API health check:
+  ```bash
+  curl -f https://<api_fqdn>/healthz | jq
+  ```
+- [ ] Auth test (Easy Auth injects header automatically when accessing admin dashboard):
+  - Open admin dashboard URL in browser → Azure AD login → redirects back
+  - Your Azure AD email must be added to `admin_users` table (via `FIRST_ADMIN_EMAIL` var)
+- [ ] Cross-cloud routing test: add Azure→GCP destination in admin dashboard, upload a study, verify STOW-RS forward
+
 ## 5. Sample DICOM Data for Local Testing
 
 - [ ] Download sample brain MRI DICOM files for testing (options below):

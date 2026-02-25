@@ -1,0 +1,44 @@
+# AEGIS — Azure Terraform variables example
+# Copy to terraform.tfvars and fill in your values.
+# Never commit terraform.tfvars — it contains secrets.
+
+azure_region       = "eastus"
+environment        = "prod"
+project_name       = "aegis"
+
+# ── Azure AD ──────────────────────────────────────────────────────────────────
+# Get from: az account show --query tenantId -o tsv
+azure_ad_tenant_id = "00000000-0000-0000-0000-000000000000"
+
+# ── Custom Domains (optional) ─────────────────────────────────────────────────
+# Leave empty to use the default .azurecontainerapps.io domains.
+api_domain   = "azure.api.aegisimaging.ai"
+admin_domain = "azure.admin.aegisimaging.ai"
+
+# ── Database ──────────────────────────────────────────────────────────────────
+db_admin_username = "aegis"
+db_admin_password = "CHANGE_ME_USE_A_STRONG_PASSWORD"
+db_sku_name       = "B_Standard_B2s"  # cheapest; use GP_Standard_D2s_v3 for prod load
+db_storage_mb     = 32768             # 32 GB
+
+# ── Monitoring ────────────────────────────────────────────────────────────────
+alert_email = "ops@aegisimaging.ai"
+
+# ── Email (Azure Communication Services) ─────────────────────────────────────
+smtp_from = "noreply@aegisimaging.ai"
+
+# ── First Admin Bootstrap ─────────────────────────────────────────────────────
+first_admin_email = "ops@aegisimaging.ai"
+
+# ── MCP Server ────────────────────────────────────────────────────────────────
+# Option A: Azure OpenAI
+# azure_openai_endpoint = "https://aegis.openai.azure.com/"
+# azure_openai_api_key  = "CHANGE_ME"
+
+# Option B: Anthropic API directly (leave azure_openai_endpoint empty)
+# anthropic_api_key = "sk-ant-CHANGE_ME"
+
+# ── DIMSE Receiver (optional) ────────────────────────────────────────────────
+# Leave empty to skip all DIMSE VM resources.
+# dimse_receiver_image = "<acr-name>.azurecr.io/dimse-receiver:latest"
+# dimse_vm_size        = "Standard_B2s"
