@@ -223,7 +223,10 @@ func main() {
 	mux.HandleFunc("PATCH /api/shares/{shareID}/extend", adminOnly(srv.ExtendShare))
 
 	// DICOMweb STOW-RS receiver — cross-cloud ingest endpoint, API-key authenticated.
+	// /api/stow          — AEGIS-specific path (legacy / direct)
+	// /api/stow/studies  — DICOMweb-standard path (routing engine appends /studies to dest URL)
 	mux.Handle("POST /api/stow", rateLimit(srv.StowReceiver))
+	mux.Handle("POST /api/stow/studies", rateLimit(srv.StowReceiver))
 
 	// Internal enterprise ingestion path.
 	mux.HandleFunc("POST /api/ingest", adminOnly(srv.InternalIngest))
