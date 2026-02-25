@@ -160,3 +160,59 @@ For DIMSE-based forwarding (port 11112) instead of STOW-RS:
 | `api/routing/engine.go` | Routing rules evaluation |
 | `terraform/aws/main.tf` | ALB public path rules (line ~507) |
 | `terraform/aws/dimse.tf` | AWS DIMSE receiver EC2 infrastructure |
+
+---
+
+## Azure Cross-Cloud Routing
+
+Azure Container Apps run the same Go API with `AUTH_PROVIDER=azure`. The STOW-RS endpoint (`/api/stow/studies`) accepts API key authentication at the handler level — no Azure AD required for machine-to-machine routing.
+
+### Azure → GCP
+
+1. Create an API key on the **GCP** admin dashboard (Settings → API Keys) — label it `azure-stow-sender`
+2. Note the raw key: `aegis_<...>`
+3. On the **Azure** admin dashboard, create a DICOMweb destination:
+   ```json
+   {
+     "name": "GCP STOW-RS",
+     "type": "dicomweb",
+     "dicomweb_url": "https://api.aegisimaging.ai/api/stow",
+     "dicomweb_auth_header": "Bearer aegis_<key-from-step-2>",
+     "enabled": true
+   }
+   ```
+4. Create a `route_to` routing rule on Azure pointing to this destination
+5. Test: `POST /api/destinations/{id}/test` on Azure → should get non-4xx
+
+### GCP → Azure
+
+1. Create an API key on the **Azure** admin dashboard — label it `gcp-stow-sender`
+2. On the **GCP** admin dashboard, create a DICOMweb destination:
+   ```json
+   {
+     "name": "Azure STOW-RS",
+     "type": "dicomweb",
+     "dicomweb_url": "https://<azure-api-fqdn>/api/stow",
+     "dicomweb_auth_header": "Bearer aegis_<azure-api-key>",
+     "enabled": true
+   }
+   ```
+3. Create a `route_to` routing rule on GCP pointing to this destination
+
+### AWS → Azure (and vice versa)
+
+Follow the same pattern — create API keys on the receiving cloud, create DICOMweb destinations on the sending cloud pointing to `/api/stow` with `Bearer <api-key>` auth header.
+
+The public path bypass rule must include `/api/stow` on the receiving cloud's load balancer:
+- **GCP**: `/api/stow` already in Cloud Armor bypass list
+- **AWS**: `stow` entry in `public_path_rules` in `terraform/aws/main.tf` (priority 85)
+- **Azure**: Application Gateway WAF — add a WAF exclusion or custom rule to allow `/api/stow` without AAD auth
+
+### Key Files (Azure)
+
+| File | Description |
+|------|-------------|
+| `terraform/azure/main.tf` | Core Azure infrastructure |
+| `terraform/azure/container_apps.tf` | Container App definitions |
+| `.github/workflows/deploy-azure.yml` | Azure auto-deploy CI/CD |
+| `api/storage/azure.go` | Azure Blob Storage backend |

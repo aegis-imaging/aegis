@@ -1,0 +1,270 @@
+name: Deploy to Azure
+
+# Mirrors the GCP Cloud Build deploy trigger (cloudbuild.yaml).
+# Fires on every push to `develop` and can also be triggered manually.
+#
+# Prerequisites (set in GitHub repo secrets / variables):
+#   Secrets:
+#     AZURE_CLIENT_ID          — Service principal / federated OIDC client ID
+#     AZURE_TENANT_ID          — Azure AD tenant ID
+#     AZURE_SUBSCRIPTION_ID    — Azure subscription ID
+#     AZURE_ACR_REGISTRY       — ACR login server (e.g. aegisprodacr.azurecr.io)
+#     AZURE_RESOURCE_GROUP     — Resource group name (e.g. aegis-prod)
+#   Variables:
+#     AZURE_WEASIS_URL          — Weasis container app URL (baked into admin-dashboard)
+#     AZURE_API_URL             — API container app URL (baked into landing + admin-dashboard)
+#     AZURE_DIMSE_VM_NAME       — DIMSE VM name (leave empty to skip DIMSE deploy)
+#
+# Auth uses OIDC federated identity — no long-lived credentials stored in GitHub.
+# Setup: https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  id-token: write  # OIDC token exchange
+  contents: read
+
+jobs:
+  # ── Phase 1: Build all images in parallel ──────────────────────────────────
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      ACR: ${{ secrets.AZURE_ACR_REGISTRY }}
+      WEASIS_URL: ${{ vars.AZURE_WEASIS_URL }}
+      API_URL: ${{ vars.AZURE_API_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name "$ACR"
+
+      - name: Build & push — api
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/api:$IMAGE_TAG" \
+            -t "$ACR/api:latest" \
+            api/
+          docker push "$ACR/api:$IMAGE_TAG"
+          docker push "$ACR/api:latest"
+
+      - name: Build & push — admin-dashboard
+        run: |
+          docker build --platform linux/amd64 \
+            --build-arg "VITE_WEASIS_BASE_URL=$WEASIS_URL" \
+            --build-arg "VITE_API_BASE_URL=$API_URL" \
+            -t "$ACR/admin-dashboard:$IMAGE_TAG" \
+            -t "$ACR/admin-dashboard:latest" \
+            frontend/admin-dashboard/
+          docker push "$ACR/admin-dashboard:$IMAGE_TAG"
+          docker push "$ACR/admin-dashboard:latest"
+
+      - name: Build & push — landing
+        run: |
+          docker build --platform linux/amd64 \
+            --build-arg "VITE_API_BASE_URL=$API_URL" \
+            -t "$ACR/landing:$IMAGE_TAG" \
+            -t "$ACR/landing:latest" \
+            frontend/landing/
+          docker push "$ACR/landing:$IMAGE_TAG"
+          docker push "$ACR/landing:latest"
+
+      - name: Build & push — weasis
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/weasis:$IMAGE_TAG" \
+            -t "$ACR/weasis:latest" \
+            weasis/
+          docker push "$ACR/weasis:$IMAGE_TAG"
+          docker push "$ACR/weasis:latest"
+
+      - name: Build & push — defacing
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/defacing:$IMAGE_TAG" \
+            -t "$ACR/defacing:latest" \
+            defacing/
+          docker push "$ACR/defacing:$IMAGE_TAG"
+          docker push "$ACR/defacing:latest"
+
+      - name: Build & push — phi-detection
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/phi-detection:$IMAGE_TAG" \
+            -t "$ACR/phi-detection:latest" \
+            phi-detection/
+          docker push "$ACR/phi-detection:$IMAGE_TAG"
+          docker push "$ACR/phi-detection:latest"
+
+      - name: Build & push — qc-service
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/qc-service:$IMAGE_TAG" \
+            -t "$ACR/qc-service:latest" \
+            qc-service/
+          docker push "$ACR/qc-service:$IMAGE_TAG"
+          docker push "$ACR/qc-service:latest"
+
+      - name: Build & push — bids-service
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/bids-service:$IMAGE_TAG" \
+            -t "$ACR/bids-service:latest" \
+            bids-service/
+          docker push "$ACR/bids-service:$IMAGE_TAG"
+          docker push "$ACR/bids-service:latest"
+
+      - name: Build & push — classification-service
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/classification-service:$IMAGE_TAG" \
+            -t "$ACR/classification-service:latest" \
+            classification-service/
+          docker push "$ACR/classification-service:$IMAGE_TAG"
+          docker push "$ACR/classification-service:latest"
+
+      - name: Build & push — protocol-service
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/protocol-service:$IMAGE_TAG" \
+            -t "$ACR/protocol-service:latest" \
+            protocol-service/
+          docker push "$ACR/protocol-service:$IMAGE_TAG"
+          docker push "$ACR/protocol-service:latest"
+
+      - name: Build & push — synth-service
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/synth-service:$IMAGE_TAG" \
+            -t "$ACR/synth-service:latest" \
+            synth-service/
+          docker push "$ACR/synth-service:$IMAGE_TAG"
+          docker push "$ACR/synth-service:latest"
+
+      - name: Build & push — mcp-server
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/mcp-server:$IMAGE_TAG" \
+            -t "$ACR/mcp-server:latest" \
+            mcp-server/
+          docker push "$ACR/mcp-server:$IMAGE_TAG"
+          docker push "$ACR/mcp-server:latest"
+
+      - name: Build & push — dimse-receiver
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/dimse-receiver:$IMAGE_TAG" \
+            -t "$ACR/dimse-receiver:latest" \
+            dimse-receiver/
+          docker push "$ACR/dimse-receiver:$IMAGE_TAG"
+          docker push "$ACR/dimse-receiver:latest"
+
+  # ── Phase 2: Deploy all Container Apps ────────────────────────────────────
+  deploy:
+    name: Deploy Container Apps
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      ACR: ${{ secrets.AZURE_ACR_REGISTRY }}
+      RG: ${{ secrets.AZURE_RESOURCE_GROUP }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy — api
+        run: az containerapp update --name aegis-prod-api --resource-group "$RG" --image "$ACR/api:$IMAGE_TAG"
+
+      - name: Deploy — admin-dashboard
+        run: az containerapp update --name aegis-prod-admin-dashboard --resource-group "$RG" --image "$ACR/admin-dashboard:$IMAGE_TAG"
+
+      - name: Deploy — landing
+        run: az containerapp update --name aegis-prod-landing --resource-group "$RG" --image "$ACR/landing:$IMAGE_TAG"
+
+      - name: Deploy — weasis
+        run: az containerapp update --name aegis-prod-weasis --resource-group "$RG" --image "$ACR/weasis:$IMAGE_TAG"
+
+      - name: Deploy — defacing
+        run: az containerapp update --name aegis-prod-defacing --resource-group "$RG" --image "$ACR/defacing:$IMAGE_TAG"
+
+      - name: Deploy — phi-detection
+        run: az containerapp update --name aegis-prod-phi-detection --resource-group "$RG" --image "$ACR/phi-detection:$IMAGE_TAG"
+
+      - name: Deploy — qc-service
+        run: az containerapp update --name aegis-prod-qc-service --resource-group "$RG" --image "$ACR/qc-service:$IMAGE_TAG"
+
+      - name: Deploy — bids-service
+        run: az containerapp update --name aegis-prod-bids-service --resource-group "$RG" --image "$ACR/bids-service:$IMAGE_TAG"
+
+      - name: Deploy — classification-service
+        run: az containerapp update --name aegis-prod-classification-service --resource-group "$RG" --image "$ACR/classification-service:$IMAGE_TAG"
+
+      - name: Deploy — protocol-service
+        run: az containerapp update --name aegis-prod-protocol-service --resource-group "$RG" --image "$ACR/protocol-service:$IMAGE_TAG"
+
+      - name: Deploy — synth-service
+        run: az containerapp update --name aegis-prod-synth-service --resource-group "$RG" --image "$ACR/synth-service:$IMAGE_TAG"
+
+      - name: Deploy — mcp-server
+        run: az containerapp update --name aegis-prod-mcp-server --resource-group "$RG" --image "$ACR/mcp-server:$IMAGE_TAG"
+
+  # ── Phase 3: Deploy DIMSE Receiver VM (if configured) ─────────────────────
+  # Only runs when AZURE_DIMSE_VM_NAME variable is set.
+  deploy-dimse:
+    name: Deploy DIMSE Receiver VM
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ vars.AZURE_DIMSE_VM_NAME != '' }}
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      ACR: ${{ secrets.AZURE_ACR_REGISTRY }}
+      RG: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      DIMSE_VM: ${{ vars.AZURE_DIMSE_VM_NAME }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update DIMSE VM — pull new image and restart container
+        run: |
+          az vm run-command invoke \
+            --resource-group "$RG" \
+            --name "$DIMSE_VM" \
+            --command-id RunShellScript \
+            --scripts "
+              set -euo pipefail
+              ACR_TOKEN=\$(az acr login --name \"$ACR\" --expose-token --output tsv --query accessToken 2>/dev/null)
+              docker login \"$ACR\" --username 00000000-0000-0000-0000-000000000000 --password \"\$ACR_TOKEN\"
+              docker pull \"$ACR/dimse-receiver:$IMAGE_TAG\"
+              docker rm -f dimse-receiver 2>/dev/null || true
+              PREV_ENV=\$(docker inspect --format '{{range .Config.Env}}-e {{.}} {{end}}' dimse-receiver 2>/dev/null || echo '')
+              docker run -d \
+                --name dimse-receiver \
+                --restart unless-stopped \
+                -p 11112:11112 \
+                \$PREV_ENV \
+                \"$ACR/dimse-receiver:$IMAGE_TAG\"
+            "

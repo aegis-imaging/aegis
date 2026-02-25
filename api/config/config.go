@@ -11,7 +11,7 @@ import (
 type Config struct {
 	Port            string
 	DatabaseURL     string
-	StorageMode     string // "local", "gcs", or "s3"
+	StorageMode     string // "local", "gcs", "s3", or "azure"
 	LocalStorageDir string
 	APIBaseURL          string // for generating local upload URLs
 	ExportPortalBaseURL string // base URL of the export portal UI — used in share email links
@@ -28,6 +28,10 @@ type Config struct {
 	S3Bucket   string
 	S3Region   string
 	S3Endpoint string // optional — set for S3-compatible stores (MinIO, LocalStack)
+
+	// Azure (only used when StorageMode = "azure")
+	AzureStorageAccount   string // AZURE_STORAGE_ACCOUNT — e.g. aegisproddicom
+	AzureStorageContainer string // AZURE_STORAGE_CONTAINER — default "dicom"
 
 	// Defacing service (Python Cloud Run sidecar)
 	// Empty string disables the defacing service call (pipeline still records status).
@@ -155,6 +159,9 @@ func Load() *Config {
 		S3Bucket:   os.Getenv("S3_BUCKET"),
 		S3Region:   envOr("S3_REGION", "us-east-1"),
 		S3Endpoint: os.Getenv("S3_ENDPOINT"), // e.g. http://localhost:4566 for LocalStack
+
+		AzureStorageAccount:   os.Getenv("AZURE_STORAGE_ACCOUNT"),
+		AzureStorageContainer: envOr("AZURE_STORAGE_CONTAINER", "dicom"),
 
 		DefacingServiceURL:       os.Getenv("DEFACING_SERVICE_URL"),       // e.g. http://localhost:8081
 		PhiDetectionServiceURL:   os.Getenv("PHI_DETECTION_SERVICE_URL"),  // e.g. http://localhost:8082
