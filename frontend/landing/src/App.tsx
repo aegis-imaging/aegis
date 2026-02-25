@@ -10,7 +10,7 @@ import Demo from './components/Demo'
 import PipelineDemo from './components/PipelineDemo'
 import { Trust } from './components/Trust'
 import { Audiences } from './components/Audiences'
-import { Testimonials } from './components/Testimonials'
+import { MarketOpportunity } from './components/MarketOpportunity'
 import { Architecture } from './components/Architecture'
 import { Roadmap } from './components/Roadmap'
 import { Contact } from './components/Contact'
@@ -48,8 +48,8 @@ export function App() {
       <CollapsibleSection id="audiences" label="Who It's For" collapsed={!!collapsed.audiences} onToggle={() => toggle('audiences')}>
         <Audiences />
       </CollapsibleSection>
-      <CollapsibleSection id="testimonials" label="Testimonials" collapsed={!!collapsed.testimonials} onToggle={() => toggle('testimonials')}>
-        <Testimonials />
+      <CollapsibleSection id="market" label="Market Opportunity" collapsed={!!collapsed.market} onToggle={() => toggle('market')}>
+        <MarketOpportunity />
       </CollapsibleSection>
       <CollapsibleSection id="architecture" label="Architecture" collapsed={!!collapsed.architecture} onToggle={() => toggle('architecture')}>
         <Architecture />
