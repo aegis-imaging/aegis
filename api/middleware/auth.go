@@ -270,7 +270,9 @@ func extractEmailFromALBJWT(region, token string) (string, error) {
 	}
 
 	// ── 5. Verify signature ───────────────────────────────────────────────────
-	sigBytes, err := base64.RawURLEncoding.DecodeString(sigB64)
+	// Strip any trailing padding characters before RawURLEncoding decode.
+	// Some ALB JWT implementations include "==" padding in the signature section.
+	sigBytes, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(sigB64, "="))
 	if err != nil {
 		return "", fmt.Errorf("decode JWT signature: %w", err)
 	}

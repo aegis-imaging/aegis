@@ -1,0 +1,77 @@
+name: Terraform Azure
+
+# Mirrors the GCP Cloud Build terraform-apply-on-develop trigger
+# (cloudbuild.terraform.yaml). Fires only when terraform/azure/** files change.
+#
+# Prerequisites (set in GitHub repo secrets):
+#   AZURE_CLIENT_ID          — Service principal / federated OIDC client ID
+#   AZURE_TENANT_ID          — Azure AD tenant ID
+#   AZURE_SUBSCRIPTION_ID    — Azure subscription ID
+#   AZURE_TERRAFORM_TFVARS   — Full contents of terraform/azure/terraform.tfvars
+#
+# Auth uses OIDC federated identity — no long-lived credentials stored in GitHub.
+# The service principal must have Contributor on the subscription and
+# Storage Blob Data Contributor on the aegis-tfstate storage account.
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - "terraform/azure/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write  # Required for OIDC token exchange
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform Apply (Azure)
+    runs-on: ubuntu-latest
+    env:
+      # Terraform azurerm provider authenticates via OIDC using these env vars.
+      # No ARM_CLIENT_SECRET needed — OIDC federated identity only.
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_CONTENT: ${{ secrets.AZURE_TERRAFORM_TFVARS }}
+        working-directory: terraform/azure
+        run: printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
+
+      - name: Terraform Init
+        working-directory: terraform/azure
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: terraform/azure
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: terraform/azure
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: terraform/azure
+        run: terraform apply -input=false -no-color tfplan

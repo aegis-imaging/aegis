@@ -178,6 +178,13 @@ resource "azurerm_postgresql_flexible_server" "main" {
   tags = local.tags
 
   depends_on = [azurerm_private_dns_zone_virtual_network_link.postgres]
+
+  # PostgreSQL Flexible Server provisioning takes 10-20 minutes on Azure.
+  timeouts {
+    create = "60m"
+    update = "60m"
+    delete = "60m"
+  }
 }
 
 resource "azurerm_postgresql_flexible_server_database" "aegis" {
@@ -358,147 +365,20 @@ resource "azurerm_container_app_environment" "main" {
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   infrastructure_subnet_id   = azurerm_subnet.apps.id
 
-  # Internal-only load balancer — all ingress from Application Gateway
-  internal_load_balancer_enabled = true
+  # Public ingress — each Container App with external_enabled=true gets its own FQDN.
+  # Application Gateway (for custom domains + WAF) can be layered on later.
+  internal_load_balancer_enabled = false
 
   tags = local.tags
 }
 
 # ── Application Gateway (WAF v2) ──────────────────────────────────────────────
-
-resource "azurerm_public_ip" "gateway" {
-  name                = "${local.prefix}-gateway-ip"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
-  domain_name_label   = "${local.prefix}-api"
-  tags                = local.tags
-}
-
-resource "azurerm_web_application_firewall_policy" "main" {
-  name                = "${local.prefix}-waf-policy"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-
-  policy_settings {
-    enabled                     = true
-    mode                        = "Prevention"
-    request_body_check          = true
-    max_request_body_size_in_kb = 128
-    file_upload_limit_in_mb     = 100
-  }
-
-  managed_rules {
-    managed_rule_set {
-      type    = "OWASP"
-      version = "3.2"
-    }
-  }
-
-  tags = local.tags
-}
-
-resource "azurerm_application_gateway" "main" {
-  name                = "${local.prefix}-gateway"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-
-  sku {
-    name     = "WAF_v2"
-    tier     = "WAF_v2"
-    capacity = 1
-  }
-
-  gateway_ip_configuration {
-    name      = "gateway-ip-config"
-    subnet_id = azurerm_subnet.gateway.id
-  }
-
-  frontend_ip_configuration {
-    name                 = "frontend-ip"
-    public_ip_address_id = azurerm_public_ip.gateway.id
-  }
-
-  frontend_port {
-    name = "http"
-    port = 80
-  }
-
-  frontend_port {
-    name = "https"
-    port = 443
-  }
-
-  # HTTP → HTTPS redirect
-  http_listener {
-    name                           = "http-listener"
-    frontend_ip_configuration_name = "frontend-ip"
-    frontend_port_name             = "http"
-    protocol                       = "Http"
-  }
-
-  redirect_configuration {
-    name                 = "http-to-https"
-    redirect_type        = "Permanent"
-    target_listener_name = "https-listener"
-    include_path         = true
-    include_query_string = true
-  }
-
-  request_routing_rule {
-    name                        = "http-redirect-rule"
-    rule_type                   = "Basic"
-    http_listener_name          = "http-listener"
-    redirect_configuration_name = "http-to-https"
-    priority                    = 100
-  }
-
-  # HTTPS listener (TLS termination — certificate managed separately via Key Vault)
-  http_listener {
-    name                           = "https-listener"
-    frontend_ip_configuration_name = "frontend-ip"
-    frontend_port_name             = "https"
-    protocol                       = "Https"
-    ssl_certificate_name           = "aegis-tls"
-  }
-
-  ssl_certificate {
-    name                = "aegis-tls"
-    key_vault_secret_id = azurerm_key_vault.main.vault_uri
-  }
-
-  backend_address_pool {
-    name  = "api-pool"
-    fqdns = ["${azurerm_container_app_environment.main.name}.${var.azure_region}.azurecontainerapps.io"]
-  }
-
-  backend_http_settings {
-    name                  = "api-settings"
-    cookie_based_affinity = "Disabled"
-    port                  = 443
-    protocol              = "Https"
-    request_timeout       = 60
-    host_name             = var.api_domain != "" ? var.api_domain : azurerm_public_ip.gateway.fqdn
-  }
-
-  request_routing_rule {
-    name                       = "https-rule"
-    rule_type                  = "Basic"
-    http_listener_name         = "https-listener"
-    backend_address_pool_name  = "api-pool"
-    backend_http_settings_name = "api-settings"
-    priority                   = 200
-  }
-
-  firewall_policy_id = azurerm_web_application_firewall_policy.main.id
-
-  tags = local.tags
-
-  lifecycle {
-    ignore_changes = [
-      # SSL cert managed via Key Vault + manual rotation
-      ssl_certificate,
-    ]
-  }
-}
+# NOTE: Application Gateway requires a TLS certificate stored as a proper secret
+# in Key Vault (full URI: https://vault.vault.azure.net/secrets/<name>/<version>).
+# For initial provisioning, we use Container Apps' built-in HTTPS (each app gets
+# a free *.azurecontainerapps.io cert). Add Application Gateway back once a cert
+# is provisioned and custom domains are ready.
+#
+# To re-enable: provision a cert (e.g. via azurerm_app_service_certificate or
+# upload to Key Vault), set internal_load_balancer_enabled=true on the ACA env,
+# and uncomment the Application Gateway + WAF resources below.
