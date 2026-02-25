@@ -27,6 +27,7 @@ import {
   getInstitutionStatsArgsSchema,
   getShareDownloadsArgsSchema,
   getStuckStudiesArgsSchema,
+  getExpiringStudiesArgsSchema,
   getStudyDicomTagsArgsSchema,
   getWebhookDeliveriesArgsSchema,
   listAllSharesArgsSchema,
@@ -559,6 +560,20 @@ const tools: Tool[] = [
         request_id: { type: "string" },
         minutes: { type: "integer", minimum: 1, maximum: 10080, description: "Age threshold in minutes (default 60)" },
         project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_expiring_studies",
+    description: "List approved studies that will be auto-expired by the retention policy within the next N days (default 7). Each result includes retention_days, expires_at (ISO 8601), and days_until_expiry. Only studies from projects with a non-null retention_days appear. Use this for proactive warnings before data is lost. Optionally scope to a single project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        days: { type: "integer", minimum: 1, maximum: 365, description: "Look-ahead window in days (default 7)" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" },
+        limit: { type: "integer", minimum: 1, maximum: 500, description: "Max results (default 200)" }
       },
       additionalProperties: false
     }
@@ -2725,6 +2740,17 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.project_id) params.set("project_id", parsed.project_id);
       const qs = params.toString();
       const data = await client.get(`/api/studies/stuck${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_expiring_studies") {
+      const parsed = getExpiringStudiesArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      if (parsed.limit !== undefined) params.set("limit", String(parsed.limit));
+      const qs = params.toString();
+      const data = await client.get(`/api/studies/expiring${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 

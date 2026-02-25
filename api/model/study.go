@@ -757,6 +757,81 @@ func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...st
 	return result, rows.Err()
 }
 
+// ExpiringStudyRow extends Study with retention metadata for the expiry endpoint.
+type ExpiringStudyRow struct {
+	Study
+	RetentionDays   int    `json:"retention_days"`
+	ExpiresAt       string `json:"expires_at"`
+	DaysUntilExpiry int    `json:"days_until_expiry"`
+}
+
+// GetExpiringStudies returns approved studies that will be soft-expired within
+// the next `days` days, based on their project's retention_days setting.
+// Only projects with a non-null retention_days are included.
+// Results are ordered by expiry date ascending (soonest first).
+func GetExpiringStudies(ctx context.Context, db *sql.DB, projectID string, days, limit int) ([]ExpiringStudyRow, error) {
+	query := `
+		SELECT
+		  s.id, s.project_id, s.upload_session_id, s.institution_id, s.study_instance_uid,
+		  s.modality, s.body_part, s.study_description, s.series_count, s.instance_count,
+		  s.status, s.defacing_required, s.dicom_store, s.source,
+		  s.phi_scan_required, s.phi_scan_status, s.qc_required, s.qc_status,
+		  s.bids_required, s.bids_status, s.classification_required, s.classification_status,
+		  s.protocol_required, s.protocol_status, s.export_required, s.export_status,
+		  s.deface_qa_score, s.subject_id, s.rejection_reason, s.study_size_bytes,
+		  s.priority_flag, s.created_at, s.updated_at,
+		  p.retention_days,
+		  (s.created_at + (p.retention_days * INTERVAL '1 day'))                              AS expires_at,
+		  GREATEST(0, EXTRACT(DAY FROM (s.created_at + (p.retention_days * INTERVAL '1 day') - now()))::int) AS days_until_expiry
+		FROM studies s
+		JOIN projects p ON p.id = s.project_id
+		WHERE s.status = 'approved'
+		  AND p.retention_days IS NOT NULL
+		  AND s.created_at + (p.retention_days * INTERVAL '1 day') > now()
+		  AND s.created_at + (p.retention_days * INTERVAL '1 day') <= now() + ($1 * INTERVAL '1 day')
+		  AND ($2 = '' OR s.project_id = $2::uuid)
+		ORDER BY expires_at ASC
+		LIMIT $3`
+
+	rows, err := db.QueryContext(ctx, query, days, projectID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ExpiringStudyRow
+	for rows.Next() {
+		var row ExpiringStudyRow
+		var expiresAt time.Time
+		if err := func() error {
+			return rows.Scan(
+				&row.ID, &row.ProjectID, &row.UploadSessionID, &row.InstitutionID, &row.StudyInstanceUID,
+				&row.Modality, &row.BodyPart, &row.StudyDescription, &row.SeriesCount, &row.InstanceCount,
+				&row.Status, &row.DefacingRequired, &row.DicomStore, &row.Source,
+				&row.PhiScanRequired, &row.PhiScanStatus, &row.QcRequired, &row.QcStatus,
+				&row.BidsRequired, &row.BidsStatus,
+				&row.ClassificationRequired, &row.ClassificationStatus,
+				&row.ProtocolRequired, &row.ProtocolStatus,
+				&row.ExportRequired, &row.ExportStatus,
+				&row.DefaceQaScore,
+				&row.SubjectID,
+				&row.RejectionReason,
+				&row.StudySizeBytes,
+				&row.PriorityFlag,
+				&row.CreatedAt, &row.UpdatedAt,
+				&row.RetentionDays,
+				&expiresAt,
+				&row.DaysUntilExpiry,
+			)
+		}(); err != nil {
+			return nil, err
+		}
+		row.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 // DeleteStudy permanently removes a study and all its dependent rows.
 // export_shares lacks ON DELETE CASCADE, so it is cleared explicitly first.
 // All other child tables (study_labels, study_sla_alerts, study_series,
