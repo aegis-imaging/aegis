@@ -517,6 +517,83 @@ export const routingRuleIdArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Project management ───────────────────────────────────────────────────────
+export const createProjectArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  name: z.string().min(1).max(128),
+  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "slug must be lowercase alphanumeric with dashes").optional(),
+  description: z.string().max(1024).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateProjectArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  name: z.string().min(1).max(128),
+  slug: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "slug must be lowercase alphanumeric with dashes").optional(),
+  description: z.string().max(1024).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const archiveRestoreProjectArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const setProjectRetentionArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  retention_days: z.number().int().positive().nullable(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const setProjectSLAThresholdArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  stuck_threshold_minutes: z.number().int().positive().nullable(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+// ─── Admin user management ────────────────────────────────────────────────────
+export const listAdminUsersArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional()
+});
+
+export const createAdminUserArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  email: z.string().email(),
+  name: z.string().min(1).max(255).optional(),
+  role: z.enum(["admin", "viewer"]),
+  notes: z.string().max(1024).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateAdminUserArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  user_id: z.string().uuid(),
+  email: z.string().email(),
+  name: z.string().min(1).max(255).optional(),
+  role: z.enum(["admin", "viewer"]),
+  enabled: z.boolean().optional(),
+  notes: z.string().max(1024).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const deleteAdminUserArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  user_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -566,7 +643,8 @@ export const readToolNames = [
   "get_system_health_summary",
   "list_study_relationships",
   "list_digest_subscriptions",
-  "get_daily_summary"
+  "get_daily_summary",
+  "list_admin_users"
 ] as const;
 
 export const writeToolNames = [
@@ -617,7 +695,16 @@ export const writeToolNames = [
   "create_webhook_subscription",
   "update_webhook_subscription",
   "delete_webhook_subscription",
-  "retry_webhook_delivery"
+  "retry_webhook_delivery",
+  "create_project",
+  "update_project",
+  "archive_project",
+  "restore_project",
+  "set_project_retention",
+  "set_project_sla_threshold",
+  "create_admin_user",
+  "update_admin_user",
+  "delete_admin_user"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
