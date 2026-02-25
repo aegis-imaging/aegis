@@ -1001,6 +1001,14 @@ export const reorderRoutingRulesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const bulkToggleRoutingRulesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  rule_ids: z.array(z.string().uuid()).min(1).max(200),
+  enabled: z.boolean(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -1158,7 +1166,8 @@ export const writeToolNames = [
   "set_user_preferences",
   "re_evaluate_project_routing",
   "import_routing_rules",
-  "reorder_routing_rules"
+  "reorder_routing_rules",
+  "bulk_toggle_routing_rules"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

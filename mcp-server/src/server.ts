@@ -104,6 +104,7 @@ import {
   exportRoutingRulesArgsSchema,
   importRoutingRulesArgsSchema,
   reorderRoutingRulesArgsSchema,
+  bulkToggleRoutingRulesArgsSchema,
   getProjectBidsInfoArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
@@ -2695,6 +2696,28 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "bulk_toggle_routing_rules",
+    description: "Enable or disable multiple routing rules in a single atomic operation. Pass an array of rule UUIDs and the desired enabled state. Returns {updated, rule_ids} with the count and IDs of rules that were changed. Unknown IDs are silently ignored. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["rule_ids", "enabled", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        rule_ids: {
+          type: "array",
+          minItems: 1,
+          maxItems: 200,
+          description: "UUIDs of routing rules to enable or disable",
+          items: { type: "string", format: "uuid" }
+        },
+        enabled: { type: "boolean", description: "true to enable, false to disable" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -3596,6 +3619,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleReorderRoutingRules(parsed.request_id ?? buildRequestId(), parsed);
       }
 
+      if (name === "bulk_toggle_routing_rules") {
+        const parsed = bulkToggleRoutingRulesArgsSchema.parse(args);
+        return handleBulkToggleRoutingRules(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       if (name === "batch_import_studies") {
         const parsed = batchImportStudiesArgsSchema.parse(args);
         return handleBatchImportStudies(parsed.request_id ?? buildRequestId(), parsed);
@@ -3988,6 +4016,9 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "reorder_routing_rules") {
     return Array.isArray(args.rules) ? `${(args.rules as unknown[]).length} rules` : null;
+  }
+  if (name === "bulk_toggle_routing_rules") {
+    return Array.isArray(args.rule_ids) ? `${(args.rule_ids as string[]).length} rules` : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -6540,6 +6571,31 @@ async function handleReorderRoutingRules(
   return formatSuccess(requestId, "reorder_routing_rules", {
     accepted: true,
     updated: parsed.rules.length,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleBulkToggleRoutingRules(
+  requestId: string,
+  parsed: {
+    rule_ids: string[];
+    enabled: boolean;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "bulk_toggle_routing_rules");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow bulk_toggle_routing_rules", false, "bulk_toggle_routing_rules");
+  }
+
+  const data = await client.post("/api/routing-rules/bulk-toggle", { rule_ids: parsed.rule_ids, enabled: parsed.enabled });
+  return formatSuccess(requestId, "bulk_toggle_routing_rules", {
+    accepted: true,
+    enabled: parsed.enabled,
     result: data,
     reason: parsed.reason
   });
