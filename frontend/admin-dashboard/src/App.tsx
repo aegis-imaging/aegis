@@ -2836,6 +2836,26 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
     }
   }
 
+  // Bulk re-evaluate routing
+  const [bulkReEvalLoading, setBulkReEvalLoading] = useState(false)
+  const [bulkReEvalResult, setBulkReEvalResult]   = useState<{evaluated: number; errors: string[]} | null>(null)
+
+  async function runBulkReEval() {
+    if (!projectId) { alert('Select a project first.'); return }
+    if (!confirm(`Re-evaluate routing rules for all studies in this project? This re-applies the current routing rules to every study.`)) return
+    setBulkReEvalLoading(true)
+    setBulkReEvalResult(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/re-evaluate-routing`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setBulkReEvalResult(await res.json())
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Re-evaluation failed')
+    } finally {
+      setBulkReEvalLoading(false)
+    }
+  }
+
   // Rule form
   const [ruleForm, setRuleForm]         = useState<Omit<RoutingRule, 'id' | 'created_at'>>(EMPTY_RULE)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
@@ -3556,6 +3576,36 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
           </div>
         )}
       </section>
+
+      {/* ── Bulk Re-evaluate Routing ── */}
+      {isAdmin && projectId && (
+        <section className="section-block" style={{ marginTop: 12 }}>
+          <div className="section-header">
+            <h2>Bulk Re-evaluate Routing</h2>
+            <p>Re-apply all enabled routing rules to every study in this project. Use after adding or changing routing rules.</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn--sm"
+              onClick={runBulkReEval}
+              disabled={bulkReEvalLoading}
+            >
+              {bulkReEvalLoading ? 'Re-evaluating…' : 'Re-evaluate all studies'}
+            </button>
+            {bulkReEvalResult && (
+              <span style={{ fontSize: '0.82rem', color: '#0f766e' }}>
+                ✓ Re-evaluated {bulkReEvalResult.evaluated} {bulkReEvalResult.evaluated === 1 ? 'study' : 'studies'}
+                {bulkReEvalResult.errors?.length > 0 && (
+                  <span style={{ color: '#ea580c', marginLeft: 8 }}>
+                    ({bulkReEvalResult.errors.length} error{bulkReEvalResult.errors.length === 1 ? '' : 's'})
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

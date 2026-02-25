@@ -1432,6 +1432,20 @@ Triggers export forwarding for all eligible approved studies in a project in one
 - Returns `{dispatched, study_ids[], message}`
 - Each study's `export_status` is reset to `pending` if previously `failed`, then claimed for forwarding
 
+### Bulk Routing Re-evaluation (`api/handler/routing_bulk_reeval.go`)
+
+Re-applies all enabled routing rules to every study in a project without re-uploading. Useful after adding or changing routing rules to retroactively route existing studies.
+
+**API:**
+- `POST /api/projects/{id}/re-evaluate-routing?status=<status>&limit=<n>` — re-evaluates routing for all matching studies
+- Query params: `status` (optional, filter by study status e.g. `received`, `approved`), `limit` (optional, default 500, max 2000)
+- Returns `{evaluated, status_filter, errors[]}`
+- Writes `routing.bulk_reeval` audit entry with count, filter, and error count
+
+**Admin dashboard:** "Bulk Re-evaluate Routing" section at the bottom of the Routing tab (admin-only). Button triggers the POST and shows evaluated count inline.
+
+**MCP write tool:** `re_evaluate_project_routing` — `{project_id, status?, limit?, confirm, reason}`
+
 ### Audit Trail CSV Export (`api/handler/audit_csv.go`)
 
 Streams the audit trail as a CSV download with the same filters as `GET /api/audit`.
@@ -1773,6 +1787,7 @@ cd mcp-server && npm install && npm run build
 | `revoke_share` | Revoke an export share |
 | `create_share` | Create a new export share |
 | `re_evaluate_routing` | Re-evaluate routing rules for a study |
+| `re_evaluate_project_routing` | Re-apply all enabled routing rules to every study in a project (bulk) |
 | `toggle_study_flag` | Set or clear the priority flag (★) on a study |
 | `clone_project` | Duplicate a project with all settings (routing rules, profiles, templates, PHI config) |
 | `link_studies` | Create a typed relationship between two studies (baseline, follow_up, comparison, replicate) |
