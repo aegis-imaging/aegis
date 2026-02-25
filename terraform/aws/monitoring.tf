@@ -59,7 +59,7 @@ resource "aws_wafv2_web_acl" "api" {
   count = var.enable_monitoring_alerts ? 1 : 0
 
   name        = "${var.project_name}-api-waf"
-  description = "Baseline WAF for AEGIS ALB — rate limiting and optional IP allowlisting"
+  description = "Baseline WAF for AEGIS ALB - rate limiting and optional IP allowlisting"
   scope       = "REGIONAL"
 
   default_action {
