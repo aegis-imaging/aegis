@@ -319,6 +319,31 @@ resource "azurerm_key_vault_secret" "anthropic_key" {
   key_vault_id = azurerm_key_vault.main.id
 }
 
+# Full DATABASE_URL stored as a Key Vault secret so the Container App
+# receives it via a secret reference rather than an inline plaintext env var.
+resource "azurerm_key_vault_secret" "database_url" {
+  name         = "database-url"
+  value        = "postgres://${var.db_admin_username}:${var.db_admin_password}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/aegis?sslmode=require"
+  key_vault_id = azurerm_key_vault.main.id
+}
+
+# ACS SMTP credentials (optional — stored when smtp_username/smtp_password are set).
+# After Terraform provisions ACS, retrieve credentials from Azure portal:
+#   Communication Services resource → Settings → Keys → copy resource name + Primary Key.
+resource "azurerm_key_vault_secret" "smtp_username" {
+  count        = var.smtp_username != "" ? 1 : 0
+  name         = "smtp-username"
+  value        = var.smtp_username
+  key_vault_id = azurerm_key_vault.main.id
+}
+
+resource "azurerm_key_vault_secret" "smtp_password" {
+  count        = var.smtp_password != "" ? 1 : 0
+  name         = "smtp-password"
+  value        = var.smtp_password
+  key_vault_id = azurerm_key_vault.main.id
+}
+
 # ── Azure Communication Services (Email) ─────────────────────────────────────
 # Provides SMTP relay at smtp.azurecomm.net:587 for transactional email.
 # The Go API uses standard SMTP env vars (SMTP_HOST/PORT/USERNAME/PASSWORD) —

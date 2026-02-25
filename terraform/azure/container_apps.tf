@@ -75,6 +75,13 @@ resource "azurerm_container_app" "api" {
     identity = local.identity_id
   }
 
+  # DATABASE_URL stored in Key Vault — not visible as plaintext in portal.
+  secret {
+    name                = "database-url"
+    key_vault_secret_id = azurerm_key_vault_secret.database_url.id
+    identity            = local.identity_id
+  }
+
   ingress {
     allow_insecure_connections = false
     external_enabled           = true
@@ -105,9 +112,10 @@ resource "azurerm_container_app" "api" {
         name  = "PORT"
         value = "8080"
       }
+      # DATABASE_URL via Key Vault secret reference — never exposed as plaintext.
       env {
-        name  = "DATABASE_URL"
-        value = "postgres://${var.db_admin_username}:${var.db_admin_password}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/aegis?sslmode=require"
+        name        = "DATABASE_URL"
+        secret_name = "database-url"
       }
       env {
         name  = "STORAGE_MODE"
@@ -165,6 +173,41 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "SYNTH_SERVICE_URL"
         value = "https://${local.prefix}-synth-service.internal.${local.aca_internal_domain}"
+      }
+      # ── Email / SMTP (Azure Communication Services) ──────────────────────────
+      # smtp.azurecomm.net:587 — blank SMTP_HOST disables email (Go API no-op).
+      env {
+        name  = "SMTP_HOST"
+        value = var.smtp_username != "" ? "smtp.azurecomm.net" : ""
+      }
+      env {
+        name  = "SMTP_PORT"
+        value = "587"
+      }
+      env {
+        name  = "SMTP_FROM"
+        value = var.smtp_from
+      }
+      env {
+        name  = "SMTP_USERNAME"
+        value = var.smtp_username
+      }
+      env {
+        name  = "SMTP_PASSWORD"
+        value = var.smtp_password
+      }
+      # ── Application URLs ─────────────────────────────────────────────────────
+      env {
+        name  = "CONTACT_EMAIL"
+        value = var.contact_email
+      }
+      env {
+        name  = "ADMIN_DASHBOARD_URL"
+        value = var.admin_dashboard_url
+      }
+      env {
+        name  = "LANDING_BASE_URL"
+        value = var.landing_base_url
       }
     }
   }

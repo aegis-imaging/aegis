@@ -79,6 +79,40 @@ variable "smtp_from" {
   default     = "noreply@aegisimaging.ai"
 }
 
+variable "smtp_username" {
+  description = "SMTP username for Azure Communication Services relay. After deploying ACS, find this in Azure portal → Communication Services resource → Settings → Keys. Leave empty to disable email."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "smtp_password" {
+  description = "SMTP password/access key for Azure Communication Services relay. Found at Azure portal → Communication Services resource → Settings → Keys → Primary key. Leave empty to disable email."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+# ── Application URLs ──────────────────────────────────────────────────────────
+
+variable "contact_email" {
+  description = "Recipient email address for contact form submissions"
+  type        = string
+  default     = "contact@aegisimaging.ai"
+}
+
+variable "admin_dashboard_url" {
+  description = "Admin dashboard URL used in invitation and notification emails"
+  type        = string
+  default     = "https://azure.admin.aegisimaging.ai"
+}
+
+variable "landing_base_url" {
+  description = "Landing page base URL used in invite code emails"
+  type        = string
+  default     = "https://aegisimaging.ai"
+}
+
 # ── Container Images ──────────────────────────────────────────────────────────
 
 variable "api_image_tag" {
