@@ -42,8 +42,8 @@ resource "aws_iam_role_policy" "ecs_task_execution_mcp_secret" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect  = "Allow"
-      Action  = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
+      Effect = "Allow"
+      Action = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
       Resource = [
         aws_secretsmanager_secret.mcp_aegis_api_token.arn,
         aws_kms_key.main.arn
@@ -113,13 +113,13 @@ resource "aws_ecs_task_definition" "mcp_server" {
         }
       ]
       environment = [
-        { name = "AEGIS_API_BASE_URL",             value = "https://${local.api_fqdn}" },
-        { name = "MCP_AGENT_HTTP_PORT",            value = "8080" },
-        { name = "MCP_AGENT_LLM_USE_AWS_BEDROCK",  value = "true" },
-        { name = "MCP_AGENT_LLM_AWS_REGION",       value = var.aws_region },
-        { name = "MCP_AGENT_LLM_MODEL",            value = "us.anthropic.claude-3-5-haiku-20241022-v1:0" },
-        { name = "MCP_AGENT_ALLOWED_ORIGIN",       value = "https://${local.admin_fqdn}" },
-        { name = "MCP_AGENT_REQUIRE_AUTH",         value = "false" },
+        { name = "AEGIS_API_BASE_URL", value = "https://${local.api_fqdn}" },
+        { name = "MCP_AGENT_HTTP_PORT", value = "8080" },
+        { name = "MCP_AGENT_LLM_USE_AWS_BEDROCK", value = "true" },
+        { name = "MCP_AGENT_LLM_AWS_REGION", value = var.aws_region },
+        { name = "MCP_AGENT_LLM_MODEL", value = "us.anthropic.claude-3-5-haiku-20241022-v1:0" },
+        { name = "MCP_AGENT_ALLOWED_ORIGIN", value = "https://${local.admin_fqdn}" },
+        { name = "MCP_AGENT_REQUIRE_AUTH", value = "false" },
       ]
       secrets = [
         { name = "AEGIS_API_TOKEN", valueFrom = aws_secretsmanager_secret.mcp_aegis_api_token.arn }
