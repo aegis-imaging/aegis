@@ -1359,6 +1359,15 @@ After defacing completes, the `deface_qa_score` field (NUMERIC(5,4), range 0.0�
 - A background worker (planned) will soft-expire approved studies older than `retention_days`
 - Emits `project.retention_updated` audit entry; returns updated project
 
+**Retention preview** (`GET /api/projects/{id}/retention-preview`, admin-read):
+- Dry-run preview — does NOT modify data
+- Query param: `days` (1–3650, default 90) — the simulated retention period to evaluate
+- Response: `{project_id, preview_days, would_expire_count, total_approved, age_distribution}`
+- `age_distribution`: array of 6 age buckets (0–7d, 8–30d, 31–90d, 91–180d, 181–365d, 365d+), each with `{label, min_days, max_days, count, would_expire}`
+- `would_expire`: true when `min_days >= days` (the whole bucket would be cleared by this policy)
+- Admin dashboard: "Preview impact" button in the Retention editor shows an inline table of age buckets and impact count before saving; rows are highlighted orange when they would be affected
+- MCP `get_retention_preview` read tool: `{project_id, days?}`
+
 **Project archive/restore:**
 - `POST /api/projects/{id}/archive` — marks project `archived=true`; emits `project.archived` audit entry
 - `POST /api/projects/{id}/restore` — clears `archived` flag; emits `project.restored` audit entry
@@ -1635,6 +1644,7 @@ cd mcp-server && npm install && npm run build
 | `get_pipeline_stats` | Study status counts (optionally scoped to a project) |
 | `get_stuck_studies` | Studies idle beyond a threshold (minutes, optional project_id) |
 | `get_expiring_studies` | Approved studies expiring within N days per retention policy (days, project_id, limit) |
+| `get_retention_preview` | Dry-run preview of how many studies would expire at a given retention period (project_id, days) |
 | `get_breakdown_stats` | Modality/body part breakdown (optional project_id) |
 | `get_storage_stats` | Raw/clean file counts (optional project_id) |
 | `get_processing_stats` | Per-stage processing-time statistics (avg/p95/min/max) derived from audit trail (optional project_id, days) |

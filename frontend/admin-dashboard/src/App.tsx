@@ -4841,6 +4841,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [retentionDraft, setRetentionDraft]           = useState<string>('')
   const [retentionSaving, setRetentionSaving]         = useState(false)
   const [retentionError, setRetentionError]           = useState<string | null>(null)
+  const [retentionPreview, setRetentionPreview]       = useState<{
+    would_expire_count: number; total_approved: number;
+    age_distribution: Array<{label: string; min_days: number; count: number; would_expire: boolean}>
+  } | null>(null)
+  const [retentionPreviewing, setRetentionPreviewing] = useState(false)
 
   // SLA threshold editor state
   const [slaProjectId, setSlaProjectId]   = useState<string | null>(null)
@@ -4898,6 +4903,21 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
     setRetentionProjectId(p.id)
     setRetentionDraft(p.retention_days != null ? String(p.retention_days) : '')
     setRetentionError(null)
+    setRetentionPreview(null)
+  }
+
+  async function previewRetention() {
+    if (!retentionProjectId) return
+    const days = parseInt(retentionDraft, 10)
+    if (isNaN(days) || days <= 0) { setRetentionError('Enter a positive integer to preview'); return }
+    setRetentionError(null)
+    setRetentionPreviewing(true)
+    try {
+      const res = await fetch(`/api/projects/${retentionProjectId}/retention-preview?days=${days}`)
+      if (res.ok) setRetentionPreview(await res.json())
+    } catch { /* non-fatal */ } finally {
+      setRetentionPreviewing(false)
+    }
   }
 
   async function saveRetention() {
@@ -5156,7 +5176,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
             <h3>Retention Policy — {projects.find(p => p.id === retentionProjectId)?.name}</h3>
             <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
               Approved studies older than this threshold are automatically marked as expired.
-              Leave blank to keep studies indefinitely.
+              Leave blank to keep studies indefinitely. Use "Preview" to see impact before saving.
             </div>
             {retentionError && <div className="form-error">{retentionError}</div>}
             <div className="form-grid">
@@ -5164,15 +5184,48 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 Retention period (days, blank = unlimited)
                 <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 90"
                   value={retentionDraft}
-                  onChange={e => setRetentionDraft(e.target.value)} />
+                  onChange={e => { setRetentionDraft(e.target.value); setRetentionPreview(null) }} />
               </label>
             </div>
             <div className="form-row form-row--actions">
               <button type="button" className="btn-primary" onClick={saveRetention} disabled={retentionSaving}>
                 {retentionSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setRetentionProjectId(null)}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={previewRetention} disabled={retentionPreviewing || !retentionDraft}>
+                {retentionPreviewing ? 'Checking…' : 'Preview impact'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => { setRetentionProjectId(null); setRetentionPreview(null) }}>Cancel</button>
             </div>
+            {retentionPreview && (
+              <div style={{ marginTop: 12, padding: '10px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                  Impact at {retentionDraft}-day retention:
+                  {' '}<span style={{ color: retentionPreview.would_expire_count > 0 ? '#ea580c' : '#0d9488' }}>
+                    {retentionPreview.would_expire_count} of {retentionPreview.total_approved} approved {retentionPreview.total_approved === 1 ? 'study' : 'studies'} would be expired
+                  </span>
+                </div>
+                <table style={{ fontSize: 12, borderCollapse: 'collapse', width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '3px 8px', color: '#6b7280' }}>Age bucket</th>
+                      <th style={{ textAlign: 'right', padding: '3px 8px', color: '#6b7280' }}>Studies</th>
+                      <th style={{ textAlign: 'left', padding: '3px 8px', color: '#6b7280' }}>Effect</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {retentionPreview.age_distribution.map(b => (
+                      <tr key={b.label} style={{ background: b.would_expire && b.count > 0 ? '#fff7ed' : 'transparent' }}>
+                        <td style={{ padding: '3px 8px', color: '#374151' }}>{b.label}</td>
+                        <td style={{ padding: '3px 8px', textAlign: 'right', fontWeight: b.count > 0 ? 600 : 400, color: '#111827' }}>{b.count}</td>
+                        <td style={{ padding: '3px 8px', color: b.would_expire ? '#ea580c' : '#6b7280', fontSize: 11 }}>
+                          {b.would_expire ? (b.count > 0 ? 'Would expire' : 'Would expire (none)') : 'Kept'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
