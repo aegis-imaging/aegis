@@ -157,6 +157,14 @@ resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
   resource_group_name   = azurerm_resource_group.main.name
 }
 
+# Import block for the case where the PostgreSQL server was created in a previous
+# partial apply but is not yet in terraform state. Terraform 1.5+ processes this
+# once; subsequent applies are no-ops when the resource is already in state.
+import {
+  to = azurerm_postgresql_flexible_server.main
+  id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${local.prefix}/providers/Microsoft.DBforPostgreSQL/flexibleServers/${local.prefix}-postgres"
+}
+
 resource "azurerm_postgresql_flexible_server" "main" {
   name                          = "${local.prefix}-postgres"
   resource_group_name           = azurerm_resource_group.main.name
