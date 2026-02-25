@@ -502,6 +502,10 @@ locals {
       priority = 80
       paths    = ["/dicomweb*", "/dicomweb-raw*"]
     }
+    stow = {
+      priority = 85
+      paths    = ["/api/stow", "/api/stow/*"]
+    }
   }
 }
 
