@@ -269,11 +269,13 @@ func main() {
 
 	// Destinations — external DICOM endpoints studies can be forwarded to.
 	mux.HandleFunc("GET /api/destinations", auth(srv.ListDestinations))
+	mux.HandleFunc("GET /api/destinations/health", auth(srv.GetAllDestinationsHealth))
 	mux.HandleFunc("POST /api/destinations", adminOnly(srv.CreateDestination))
 	mux.HandleFunc("PUT /api/destinations/{id}", adminOnly(srv.UpdateDestination))
 	mux.HandleFunc("DELETE /api/destinations/{id}", adminOnly(srv.DeleteDestination))
 	mux.HandleFunc("POST /api/destinations/{id}/test", adminOnly(srv.TestDestination))
 	mux.HandleFunc("GET /api/destinations/{id}/stats", auth(srv.GetDestinationStats))
+	mux.HandleFunc("GET /api/destinations/{id}/health", auth(srv.GetDestinationHealth))
 
 	// Routing rules — condition → action mappings evaluated on study ingest.
 	mux.HandleFunc("GET /api/routing-rules", auth(srv.ListRoutingRules))

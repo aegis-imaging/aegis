@@ -1606,6 +1606,25 @@ Probes an external DICOM destination to verify network reachability before addin
 
 **MCP `test_destination` read tool:** `{destination_id}` → calls `POST /api/destinations/{id}/test`, returns connectivity result.
 
+### Destination Health History (`api/handler/destination_health.go`)
+
+Aggregated health statistics for DICOM destinations based on historical connectivity test results stored in the audit trail (`destination.tested` entries).
+
+**API:**
+- `GET /api/destinations/{id}/health?limit=20` — single destination health summary + recent test log
+- `GET /api/destinations/health` — health summary for all destinations (no test log)
+
+**Response fields:**
+- `summary.status` — `healthy` (≥90% success), `degraded` (50–89%), `failing` (<50%), `unknown` (never tested)
+- `summary.test_count`, `success_count`, `failure_count`, `success_rate` (0.0–1.0; -1 = never tested)
+- `summary.last_tested_at`, `last_success`, `last_failure` — timestamps of last events
+- `summary.last_error` — error message from most recent failed test
+- `recent_tests` — ordered list of individual test events (tested_at, actor, success, error, latency_ms)
+
+**Admin dashboard:** Health badge per destination row in the Routing tab — colored status dot (`● healthy`, `◐ degraded`, `● failing`, `○ unknown`) with success rate %; loaded automatically when Routing tab opens.
+
+**MCP `get_destination_health` read tool:** `{destination_id?}` → single dest health (with test log) when ID provided, all-destinations summary otherwise.
+
 ### Per-IP Rate Limiting (`api/middleware/`)
 
 Token-bucket rate limiting on public upload endpoints prevents abuse without affecting authenticated admin traffic.
@@ -1654,6 +1673,7 @@ cd mcp-server && npm install && npm run build
 | `list_routing_rules` | All routing rules ordered by priority |
 | `list_destinations` | All DICOM forwarding destinations |
 | `test_destination` | Test connectivity to a DICOM destination (DICOMweb GET probe or DIMSE C-ECHO) |
+| `get_destination_health` | Historical health summary from past tests — status (healthy/degraded/failing/unknown), success rate, last errors; optional `destination_id` for single-dest detail |
 | `get_routing_stats` | Aggregate routing health overview across all destinations (optional days) |
 | `get_destination_stats` | Per-destination routing stats: success rate, recent errors, daily breakdown (destination_id required, optional days) |
 | `get_routing_rule_stats` | Per-rule hit analytics: hit counts, last matched, unused rules in period (optional days) |

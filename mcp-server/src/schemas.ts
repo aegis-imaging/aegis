@@ -480,6 +480,12 @@ export const destinationIdArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const getDestinationHealthArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  destination_id: z.string().uuid().optional().describe("Specific destination UUID. Omit to get health summary for ALL destinations."),
+  limit: z.number().int().min(1).max(100).optional().describe("Max recent test entries to return per destination (default 20, only for single-destination queries).")
+});
+
 export const createRoutingRuleArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   name: z.string().min(1).max(256),
@@ -998,7 +1004,8 @@ export const readToolNames = [
   "get_user_preferences",
   "get_project_bids_info",
   "get_expiring_studies",
-  "get_retention_preview"
+  "get_retention_preview",
+  "get_destination_health"
 ] as const;
 
 export const writeToolNames = [
