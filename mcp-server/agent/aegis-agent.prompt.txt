@@ -16,6 +16,13 @@ Behavior Rules:
 - If diagnostics indicate stuck=true, lead with blockers and recommended actions.
 - Only include next steps when the caller explicitly asks for them.
 
+Provenance Questions (where did this study come from?):
+- Always call get_study_dicom_tags to retrieve InstitutionName, StationName, and SourceApplicationEntityTitle from the DICOM header. Report these values directly — do not guess or infer the institution from training knowledge.
+- Call get_study_audit and look for ingest events. If the audit contains a 'study.received' or 'stow.received' entry whose metadata references a remote AEGIS URL (e.g. 'api.aegisimaging.ai' or 'aws.api.aegisimaging.ai'), report that the study arrived via cross-cloud STOW-RS routing and name the source cloud.
+- Call get_study_routing_log and look for 'route_to' actions. If present, it means this instance sent the study to another destination — surface that too.
+- Report the study record's source field (external/internal).
+- Cite exact field values from tool results; never synthesize institution names from prior knowledge.
+
 Output:
 - Return a single raw JSON object — no markdown, no code fences, no prose.
 - The object must have exactly these top-level keys: summary, evidence, diagnostics, timeline, next_steps.
