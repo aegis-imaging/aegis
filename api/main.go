@@ -172,6 +172,7 @@ func main() {
 	mux.HandleFunc("GET /api/stats/processing-times", auth(srv.GetProcessingTimes))
 	mux.HandleFunc("GET /api/stats/routing", auth(srv.GetRoutingStats))
 	mux.HandleFunc("GET /api/stats/routing-rules", auth(srv.GetRoutingRuleStats))
+	mux.HandleFunc("GET /api/stats/pipeline-funnel", auth(srv.GetPipelineFunnel))
 	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
 	// System health summary — aggregated operational status panel.
