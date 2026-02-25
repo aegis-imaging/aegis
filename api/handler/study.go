@@ -52,6 +52,8 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		Label:     q.Get("label"),
 		DateFrom:  dateFrom,
 		DateTo:    dateTo,
+		SortBy:    q.Get("sort_by"),
+		SortDir:   q.Get("sort_dir"),
 	}
 	if v := q.Get("flagged"); v == "true" {
 		t := true
