@@ -306,6 +306,19 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_study_processing_summary",
+    description: "Get a structured summary of all 7 pipeline steps (classification, phi_scan, protocol_check, defacing, qc_check, bids_conversion, export) for a study — shows required/status/terminal/in_progress/failed per step, overall pipeline_complete flag, and list of blockers. Use this for quick pipeline status checks without parsing the full study record.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_study_audit",
     description: "Get audit entries for a study UUID.",
     inputSchema: {
@@ -2817,6 +2830,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "get_study_diagnostics") {
       const parsed = studyIdArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/diagnostics`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_study_processing_summary") {
+      const parsed = studyIdArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${parsed.study_id}/processing-summary`);
       return formatSuccess(requestId, name, data);
     }
 
