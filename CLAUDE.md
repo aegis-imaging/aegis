@@ -1643,6 +1643,7 @@ cd mcp-server && npm install && npm run build
 | `list_study_relationships` | List all typed relationships for a study (baseline, follow_up, comparison, replicate) with related study details |
 | `list_digest_subscriptions` | List email digest subscriptions (weekly/monthly plain-text study counts); optional project_id filter |
 | `get_daily_summary` | System-wide ops briefing for last N hours (default 24, max 168): ingestion counts, pipeline state, routing stats, top 5 projects by received, last 10 significant audit events |
+| `list_admin_users` | List all registered admin dashboard users with roles, enabled state, and last-seen info |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
@@ -1671,6 +1672,15 @@ cd mcp-server && npm install && npm run build
 | `update_webhook_subscription` | Update a webhook subscription — change URL, events, secret, or enabled state |
 | `delete_webhook_subscription` | Permanently delete a webhook subscription and all its delivery history |
 | `retry_webhook_delivery` | Retry a specific failed webhook delivery by delivery UUID |
+| `create_project` | Create a new project (name required, slug auto-derived from name if omitted) |
+| `update_project` | Update project name, slug, or description |
+| `archive_project` | Archive a project (studies remain accessible; visually flagged in dashboard) |
+| `restore_project` | Restore (unarchive) a previously archived project |
+| `set_project_retention` | Set or clear the study retention policy in days (`null` = indefinite) |
+| `set_project_sla_threshold` | Set or clear per-project stuck-study SLA threshold in minutes (`null` = global default 60 min) |
+| `create_admin_user` | Register a new admin dashboard user with email and role (admin\|viewer) |
+| `update_admin_user` | Update an admin user's email, role, enabled state, or notes |
+| `delete_admin_user` | Permanently remove an admin user record |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 
