@@ -67,6 +67,13 @@ export const getStuckStudiesArgsSchema = z.object({
   project_id: z.string().uuid().optional()
 });
 
+export const getExpiringStudiesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  days: z.number().int().min(1).max(365).optional().describe("Look-ahead window in days (default 7). Returns studies expiring within this many days."),
+  project_id: z.string().uuid().optional().describe("Scope to a specific project UUID; omit for all projects."),
+  limit: z.number().int().min(1).max(500).optional().describe("Max results to return (default 200).")
+});
+
 export const projectScopedArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   project_id: z.string().uuid().optional()
@@ -982,7 +989,8 @@ export const readToolNames = [
   "get_webhook_stats",
   "list_all_webhook_deliveries",
   "get_user_preferences",
-  "get_project_bids_info"
+  "get_project_bids_info",
+  "get_expiring_studies"
 ] as const;
 
 export const writeToolNames = [
