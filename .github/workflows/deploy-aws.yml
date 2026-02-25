@@ -8,8 +8,13 @@
 #   AWS_SECRET_ACCESS_KEY  — corresponding secret key
 #   AWS_ACCOUNT_ID         — 12-digit AWS account ID
 #
-# Phase 1: Build all 11 service images in parallel (matrix) and push to ECR.
+# Phase 1: Build all 12 service images in parallel (matrix) and push to ECR.
 # Phase 2: Update all 10 ECS services (force new deployment) + reboot DIMSE EC2.
+#
+# NOTE: landing uses the monorepo root as build context (its Dockerfile copies
+# frontend/landing/server/ which requires the repo root to be the context).
+# aegis-landing ECS service is not yet provisioned in terraform/aws; add it to
+# the deploy loop once the terraform infrastructure is in place.
 
 name: Deploy to AWS
 
@@ -63,7 +68,7 @@ jobs:
             context: dimse-receiver
             dockerfile: dimse-receiver/Dockerfile
           - service: landing
-            context: frontend/landing
+            context: .
             dockerfile: frontend/landing/Dockerfile
             build_args: "--build-arg VITE_API_BASE_URL=https://aws.api.aegisimaging.ai"
 
@@ -133,8 +138,7 @@ jobs:
             aegis-bids-service \
             aegis-classification-service \
             aegis-protocol-service \
-            aegis-synth-service \
-            aegis-landing; do
+            aegis-synth-service; do
             echo "Updating $SVC..."
             aws ecs update-service \
               --cluster "$CLUSTER" \
