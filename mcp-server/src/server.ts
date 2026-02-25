@@ -49,6 +49,10 @@ import {
   listDigestSubscriptionsArgsSchema,
   createDigestSubscriptionArgsSchema,
   deleteDigestSubscriptionArgsSchema,
+  createWebhookSubscriptionArgsSchema,
+  updateWebhookSubscriptionArgsSchema,
+  deleteWebhookSubscriptionArgsSchema,
+  retryWebhookDeliveryArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -1051,6 +1055,84 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         subscription_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_webhook_subscription",
+    description: "Create a new webhook subscription to receive push notifications on study events. Payloads are signed with HMAC-SHA256 using the provided secret (X-AEGIS-Signature header). Supported events: study.approved, study.rejected, study.phi_flagged, study.export_complete, study.stuck. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["url", "events", "secret", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        url: { type: "string", format: "uri", description: "HTTPS endpoint that receives POST notifications" },
+        events: {
+          type: "array",
+          items: { type: "string", enum: ["study.approved", "study.rejected", "study.phi_flagged", "study.export_complete", "study.stuck"] },
+          minItems: 1,
+          description: "Event names to subscribe to"
+        },
+        secret: { type: "string", minLength: 8, maxLength: 256, description: "HMAC-SHA256 signing key for X-AEGIS-Signature header" },
+        project_id: { type: "string", format: "uuid", description: "Scope to one project (omit for all projects)" },
+        enabled: { type: "boolean", description: "Enable or disable subscription on creation (default true)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_webhook_subscription",
+    description: "Update an existing webhook subscription — change URL, events, secret, or enabled state. Use list_all_webhooks (get_webhook_deliveries with list) or the admin dashboard Notifications tab to find the subscription_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["subscription_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid" },
+        url: { type: "string", format: "uri", description: "New HTTPS endpoint URL (omit to keep current)" },
+        events: {
+          type: "array",
+          items: { type: "string", enum: ["study.approved", "study.rejected", "study.phi_flagged", "study.export_complete", "study.stuck"] },
+          minItems: 1,
+          description: "New event list (omit to keep current)"
+        },
+        secret: { type: "string", minLength: 8, maxLength: 256, description: "New HMAC-SHA256 signing key (omit to keep current)" },
+        enabled: { type: "boolean", description: "Enable or disable the subscription" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_webhook_subscription",
+    description: "Permanently delete a webhook subscription and all its delivery history. This cannot be undone — use update_webhook_subscription with enabled=false to pause without deleting. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["subscription_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "retry_webhook_delivery",
+    description: "Retry a specific failed webhook delivery attempt. Use get_webhook_deliveries to find a failed delivery_id, then use this tool to re-send it immediately. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["delivery_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        delivery_id: { type: "string", format: "uuid", description: "UUID of the delivery record to retry" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -2097,6 +2179,26 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleDeleteDigestSubscription(parsedDelSub.request_id ?? buildRequestId(), parsedDelSub);
       }
 
+      if (name === "create_webhook_subscription") {
+        const parsedCWH = createWebhookSubscriptionArgsSchema.parse(args);
+        return handleCreateWebhookSubscription(parsedCWH.request_id ?? buildRequestId(), parsedCWH);
+      }
+
+      if (name === "update_webhook_subscription") {
+        const parsedUWH = updateWebhookSubscriptionArgsSchema.parse(args);
+        return handleUpdateWebhookSubscription(parsedUWH.request_id ?? buildRequestId(), parsedUWH);
+      }
+
+      if (name === "delete_webhook_subscription") {
+        const parsedDWH = deleteWebhookSubscriptionArgsSchema.parse(args);
+        return handleDeleteWebhookSubscription(parsedDWH.request_id ?? buildRequestId(), parsedDWH);
+      }
+
+      if (name === "retry_webhook_delivery") {
+        const parsedRWD = retryWebhookDeliveryArgsSchema.parse(args);
+        return handleRetryWebhookDelivery(parsedRWD.request_id ?? buildRequestId(), parsedRWD);
+      }
+
       if (name === "add_study_note") {
         const parsedNote = addStudyNoteArgsSchema.parse(args);
         return handleAddStudyNote(parsedNote.request_id ?? buildRequestId(), parsedNote);
@@ -2368,6 +2470,15 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "create_digest_subscription" || name === "delete_digest_subscription") {
     return typeof args.project_id === "string" ? args.project_id : (typeof args.subscription_id === "string" ? args.subscription_id : null);
+  }
+  if (name === "create_webhook_subscription") {
+    return typeof args.url === "string" ? args.url : null;
+  }
+  if (name === "update_webhook_subscription" || name === "delete_webhook_subscription") {
+    return typeof args.subscription_id === "string" ? args.subscription_id : null;
+  }
+  if (name === "retry_webhook_delivery") {
+    return typeof args.delivery_id === "string" ? args.delivery_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -3424,6 +3535,100 @@ async function handleReactivateStudy(
     study_id: parsed.study_id,
     reason: parsed.reason,
     result: data
+  });
+}
+
+async function handleCreateWebhookSubscription(
+  requestId: string,
+  parsed: { url: string; events: string[]; secret: string; project_id?: string; enabled?: boolean; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_webhook_subscription");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_webhook_subscription", false, "create_webhook_subscription");
+  }
+
+  const body: Record<string, unknown> = {
+    url: parsed.url,
+    events: parsed.events,
+    secret: parsed.secret
+  };
+  if (parsed.project_id !== undefined) body.project_id = parsed.project_id;
+  if (parsed.enabled !== undefined) body.enabled = parsed.enabled;
+
+  const data = await client.post("/api/webhook-subscriptions", body);
+  return formatSuccess(requestId, "create_webhook_subscription", {
+    accepted: true,
+    url: parsed.url,
+    events: parsed.events,
+    subscription: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleUpdateWebhookSubscription(
+  requestId: string,
+  parsed: { subscription_id: string; url?: string; events?: string[]; secret?: string; enabled?: boolean; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_webhook_subscription");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_webhook_subscription", false, "update_webhook_subscription");
+  }
+
+  const body: Record<string, unknown> = {};
+  if (parsed.url !== undefined) body.url = parsed.url;
+  if (parsed.events !== undefined) body.events = parsed.events;
+  if (parsed.secret !== undefined) body.secret = parsed.secret;
+  if (parsed.enabled !== undefined) body.enabled = parsed.enabled;
+
+  const data = await client.put(`/api/webhook-subscriptions/${encodeURIComponent(parsed.subscription_id)}`, body);
+  return formatSuccess(requestId, "update_webhook_subscription", {
+    accepted: true,
+    subscription_id: parsed.subscription_id,
+    subscription: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteWebhookSubscription(
+  requestId: string,
+  parsed: { subscription_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_webhook_subscription");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_webhook_subscription", false, "delete_webhook_subscription");
+  }
+
+  await client.delete(`/api/webhook-subscriptions/${encodeURIComponent(parsed.subscription_id)}`);
+  return formatSuccess(requestId, "delete_webhook_subscription", {
+    accepted: true,
+    subscription_id: parsed.subscription_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleRetryWebhookDelivery(
+  requestId: string,
+  parsed: { delivery_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "retry_webhook_delivery");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow retry_webhook_delivery", false, "retry_webhook_delivery");
+  }
+
+  const data = await client.post(`/api/webhook-deliveries/${encodeURIComponent(parsed.delivery_id)}/retry`);
+  return formatSuccess(requestId, "retry_webhook_delivery", {
+    accepted: true,
+    delivery_id: parsed.delivery_id,
+    result: data,
+    reason: parsed.reason
   });
 }
 
