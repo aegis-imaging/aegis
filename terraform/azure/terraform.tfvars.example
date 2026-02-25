@@ -27,6 +27,19 @@ alert_email = "ops@aegisimaging.ai"
 # ── Email (Azure Communication Services) ─────────────────────────────────────
 smtp_from = "noreply@aegisimaging.ai"
 
+# After deploying ACS, retrieve SMTP credentials from the Azure portal:
+#   Communication Services resource → Settings → Keys
+#   smtp_username = the ACS resource name (e.g. "aegis-prod-acs")
+#   smtp_password = the Primary Key value shown on that page
+# Leave empty to disable email (SMTP_HOST will be blank → silent no-op in Go API).
+smtp_username = ""
+smtp_password = ""
+
+# ── Application URLs ──────────────────────────────────────────────────────────
+contact_email       = "contact@aegisimaging.ai"
+admin_dashboard_url = "https://azure.admin.aegisimaging.ai"
+landing_base_url    = "https://aegisimaging.ai"
+
 # ── First Admin Bootstrap ─────────────────────────────────────────────────────
 first_admin_email = "ops@aegisimaging.ai"
 
