@@ -1467,6 +1467,21 @@ Per-institution aggregate statistics derived from the studies table.
 - **Admin dashboard:** collapsible "Stage processing times (last 30 days)" table showing avg/P95/min/max per stage with human-readable duration formatting
 - **MCP:** `get_processing_stats` read tool (supports `days` and `project_id` params)
 
+### Destination Routing Health Stats (`api/handler/destination_stats.go`)
+
+Per-destination and aggregate routing success/failure analytics derived from the `routing_log` table.
+
+**API:**
+- `GET /api/stats/routing?days=30` — aggregate routing stats across all destinations; returns `{period_days, generated_at, totals: {attempts, successful, failed, success_rate}, by_destination: [{destination_id, destination_name, destination_type, attempts, successful, failed, success_rate, last_attempt_at}]}` ordered by attempt count descending
+- `GET /api/destinations/{id}/stats?days=30` — per-destination stats; returns totals + `recent_errors` (last 10 failure messages) + `daily_breakdown` (per-day counts)
+- Both endpoints: `days` param accepts 1–365, default 30
+
+**Admin dashboard:** collapsible "Routing Health" section at the bottom of the Routing tab showing aggregate totals + per-destination breakdown table with color-coded success rates (teal ≥ 95%, amber 80–94%, orange < 80%).
+
+**MCP:**
+- `get_routing_stats` read tool — aggregate routing health overview (`days` param)
+- `get_destination_stats` read tool — per-destination stats (`destination_id` required, `days` optional)
+
 ### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
 Export and import protocol templates for a project as a JSON file.
@@ -1571,6 +1586,8 @@ cd mcp-server && npm install && npm run build
 | `list_routing_rules` | All routing rules ordered by priority |
 | `list_destinations` | All DICOM forwarding destinations |
 | `test_destination` | Test connectivity to a DICOM destination (DICOMweb GET probe or DIMSE C-ECHO) |
+| `get_routing_stats` | Aggregate routing health overview across all destinations (optional days) |
+| `get_destination_stats` | Per-destination routing stats: success rate, recent errors, daily breakdown (destination_id required, optional days) |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 

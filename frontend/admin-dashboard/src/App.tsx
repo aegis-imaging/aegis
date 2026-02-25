@@ -2771,6 +2771,15 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   const [destTestResults, setDestTestResults] = useState<Record<string, DestTestResult>>({})
   const [destTesting, setDestTesting]         = useState<Record<string, boolean>>({})
 
+  // Routing health stats
+  type DestRoutingSummary = { destination_id: string; destination_name: string; destination_type: string; attempts: number; successful: number; failed: number; success_rate: number; last_attempt_at: string | null }
+  type RoutingTotals = { attempts: number; successful: number; failed: number; success_rate: number }
+  type RoutingHealth = { period_days: number; totals: RoutingTotals; by_destination: DestRoutingSummary[] }
+  const [routingHealth, setRoutingHealth]     = useState<RoutingHealth | null>(null)
+  const [healthDays, setHealthDays]           = useState(30)
+  const [healthLoading, setHealthLoading]     = useState(false)
+  const [healthOpen, setHealthOpen]           = useState(false)
+
   // Rule form
   const [ruleForm, setRuleForm]         = useState<Omit<RoutingRule, 'id' | 'created_at'>>(EMPTY_RULE)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
@@ -2798,6 +2807,18 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  const fetchRoutingHealth = useCallback(async (days: number) => {
+    setHealthLoading(true)
+    try {
+      const res = await fetch(`/api/stats/routing?days=${days}`)
+      if (res.ok) setRoutingHealth(await res.json())
+    } finally {
+      setHealthLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { if (healthOpen) fetchRoutingHealth(healthDays) }, [healthOpen, healthDays, fetchRoutingHealth])
 
   // ── Destination CRUD ────────────────────────────────────────────────────────
 
@@ -3172,6 +3193,84 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               })}
             </tbody>
           </table>
+        )}
+      </section>
+
+      {/* ── Routing Health ── */}
+      <section className="routing-section">
+        <div className="routing-section-header" style={{ cursor: 'pointer' }} onClick={() => setHealthOpen(o => !o)}>
+          <h2>Routing Health {healthOpen ? '▲' : '▼'}</h2>
+          <select
+            className="form-select"
+            aria-label="Period"
+            style={{ width: 'auto', marginLeft: 'auto' }}
+            value={healthDays}
+            onClick={e => e.stopPropagation()}
+            onChange={e => { const d = Number(e.target.value); setHealthDays(d); if (healthOpen) fetchRoutingHealth(d) }}
+          >
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </select>
+        </div>
+        {healthOpen && (
+          <div>
+            {healthLoading && <div className="state-loading">Loading routing health…</div>}
+            {!healthLoading && routingHealth && (
+              <>
+                <div style={{ display: 'flex', gap: '24px', margin: '12px 0', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Total attempts', value: routingHealth.totals.attempts },
+                    { label: 'Successful', value: routingHealth.totals.successful },
+                    { label: 'Failed', value: routingHealth.totals.failed },
+                    { label: 'Success rate', value: routingHealth.totals.attempts > 0
+                        ? `${(routingHealth.totals.success_rate * 100).toFixed(1)}%`
+                        : '—' }
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 20px', minWidth: '120px' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>{label}</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+                {routingHealth.by_destination.length === 0
+                  ? <div className="state-empty">No routing attempts recorded in this period.</div>
+                  : (
+                    <table className="routing-table">
+                      <thead>
+                        <tr>
+                          <th>Destination</th>
+                          <th>Type</th>
+                          <th>Attempts</th>
+                          <th>Successful</th>
+                          <th>Failed</th>
+                          <th>Success rate</th>
+                          <th>Last attempt</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {routingHealth.by_destination.map(d => {
+                          const rate = d.attempts > 0 ? d.success_rate * 100 : null
+                          const rateColor = rate === null ? 'inherit' : rate >= 95 ? '#0f766e' : rate >= 80 ? '#b45309' : '#9a3412'
+                          return (
+                            <tr key={d.destination_id}>
+                              <td><span className="routing-name">{d.destination_name}</span></td>
+                              <td><span className={`badge badge--${d.destination_type}`}>{d.destination_type}</span></td>
+                              <td>{d.attempts}</td>
+                              <td style={{ color: '#0f766e' }}>{d.successful}</td>
+                              <td style={{ color: d.failed > 0 ? '#9a3412' : 'inherit' }}>{d.failed}</td>
+                              <td style={{ color: rateColor, fontWeight: 600 }}>{rate !== null ? `${rate.toFixed(1)}%` : '—'}</td>
+                              <td className="td-subtle">{d.last_attempt_at ? new Date(d.last_attempt_at).toLocaleString() : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  )
+                }
+              </>
+            )}
+          </div>
         )}
       </section>
     </div>
