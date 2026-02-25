@@ -983,6 +983,17 @@ data "aws_iam_policy_document" "ecs_task_runtime" {
       "${aws_s3_bucket.dicom.arn}/*"
     ]
   }
+
+  # Required for KMS-encrypted S3 bucket: PutObject needs GenerateDataKey,
+  # GetObject needs Decrypt.
+  statement {
+    effect = "Allow"
+    actions = [
+      "kms:GenerateDataKey",
+      "kms:Decrypt"
+    ]
+    resources = [aws_kms_key.main.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "ecs_task_runtime" {
