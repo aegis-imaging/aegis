@@ -2934,6 +2934,47 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   const [bulkReEvalLoading, setBulkReEvalLoading] = useState(false)
   const [bulkReEvalResult, setBulkReEvalResult]   = useState<{evaluated: number; errors: string[]} | null>(null)
 
+  // Bulk toggle routing rules
+  const [selectedRuleIds, setSelectedRuleIds]     = useState<Set<string>>(new Set())
+  const [bulkToggleLoading, setBulkToggleLoading] = useState(false)
+  const [bulkToggleMsg, setBulkToggleMsg]         = useState<string | null>(null)
+
+  function toggleRuleSelection(id: string) {
+    setSelectedRuleIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function selectAllVisibleRules() {
+    const visible = rules.filter(r => !projectId || !r.project_id || r.project_id === projectId)
+    setSelectedRuleIds(new Set(visible.map(r => r.id)))
+  }
+
+  async function runBulkToggle(enabled: boolean) {
+    if (selectedRuleIds.size === 0) return
+    setBulkToggleLoading(true)
+    setBulkToggleMsg(null)
+    try {
+      const res = await fetch('/api/routing-rules/bulk-toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rule_ids: Array.from(selectedRuleIds), enabled }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setBulkToggleMsg(`${enabled ? 'Enabled' : 'Disabled'} ${data.updated} rule${data.updated === 1 ? '' : 's'}`)
+      setSelectedRuleIds(new Set())
+      fetchAll()
+    } catch (e: unknown) {
+      setBulkToggleMsg(e instanceof Error ? e.message : 'Bulk toggle failed')
+    } finally {
+      setBulkToggleLoading(false)
+    }
+  }
+
   async function runBulkReEval() {
     if (!projectId) { alert('Select a project first.'); return }
     if (!confirm(`Re-evaluate routing rules for all studies in this project? This re-applies the current routing rules to every study.`)) return
@@ -3374,9 +3415,29 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
         {rules.length === 0 && !showRuleForm ? (
           <div className="state-empty">No routing rules yet. Studies follow the default pipeline.</div>
         ) : rules.length > 0 && (
+          <>
+          {isAdmin && selectedRuleIds.size > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', marginBottom: 8, background: '#0f172a', borderRadius: 6, border: '1px solid #1e293b', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>{selectedRuleIds.size} rule{selectedRuleIds.size === 1 ? '' : 's'} selected</span>
+              <button type="button" className="btn btn--sm" disabled={bulkToggleLoading} onClick={() => runBulkToggle(true)} style={{ color: '#0d9488', borderColor: '#0d9488' }}>Enable selected</button>
+              <button type="button" className="btn btn--sm" disabled={bulkToggleLoading} onClick={() => runBulkToggle(false)} style={{ color: '#ea580c', borderColor: '#ea580c' }}>Disable selected</button>
+              <button type="button" className="btn btn--sm" onClick={() => setSelectedRuleIds(new Set())} style={{ color: '#64748b' }}>Clear selection</button>
+              {bulkToggleMsg && <span style={{ fontSize: '0.8rem', color: bulkToggleMsg.startsWith('HTTP') || bulkToggleMsg.includes('failed') ? '#ea580c' : '#0d9488' }}>{bulkToggleMsg}</span>}
+            </div>
+          )}
           <table className="routing-table">
             <thead>
               <tr>
+                <th style={{ width: 32 }}>
+                  {isAdmin && (
+                    <input
+                      type="checkbox"
+                      title="Select all visible rules"
+                      checked={selectedRuleIds.size > 0 && rules.filter(r => !projectId || !r.project_id || r.project_id === projectId).every(r => selectedRuleIds.has(r.id))}
+                      onChange={e => e.target.checked ? selectAllVisibleRules() : setSelectedRuleIds(new Set())}
+                    />
+                  )}
+                </th>
                 <th>Priority</th>
                 <th>Rule</th>
                 <th>Conditions</th>
@@ -3397,6 +3458,15 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 ].filter(Boolean)
                 return (
                   <tr key={r.id} className={r.enabled ? '' : 'routing-row--disabled'}>
+                    <td style={{ width: 32, textAlign: 'center' }}>
+                      {isAdmin && (
+                        <input
+                          type="checkbox"
+                          checked={selectedRuleIds.has(r.id)}
+                          onChange={() => toggleRuleSelection(r.id)}
+                        />
+                      )}
+                    </td>
                     <td className="routing-priority">
                       {r.priority}
                       {isAdmin && (
@@ -3452,6 +3522,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               })}
             </tbody>
           </table>
+          </>
         )}
       </section>
 
