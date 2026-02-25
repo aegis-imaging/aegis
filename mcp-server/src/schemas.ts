@@ -446,6 +446,15 @@ export const cloneProjectArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const reEvaluateProjectRoutingArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  status: z.string().optional(),
+  limit: z.number().int().min(1).max(2000).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const updateDestinationArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   destination_id: z.string().uuid(),
@@ -1109,7 +1118,8 @@ export const writeToolNames = [
   "import_tcia_series",
   "import_protocol_templates",
   "batch_import_studies",
-  "set_user_preferences"
+  "set_user_preferences",
+  "re_evaluate_project_routing"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

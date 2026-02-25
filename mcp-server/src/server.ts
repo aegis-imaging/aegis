@@ -105,6 +105,7 @@ import {
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
+  reEvaluateProjectRoutingArgsSchema,
   createDestinationArgsSchema,
   updateDestinationArgsSchema,
   destinationIdArgsSchema,
@@ -1593,6 +1594,23 @@ const tools: Tool[] = [
         project_id: { type: "string", format: "uuid" },
         name: { type: "string", minLength: 1, maxLength: 128, description: "New project name (default: 'Copy of <source>')" },
         slug: { type: "string", minLength: 1, maxLength: 128, description: "New project slug (auto-derived from name if omitted)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "re_evaluate_project_routing",
+    description: "Re-apply all enabled routing rules against every study in a project. Use after adding or modifying routing rules to retroactively apply them to existing studies without re-uploading. Optionally filter to a specific study status (e.g. 'approved', 'received') and limit the number of studies processed (default 500, max 2000). Returns {evaluated, status_filter, errors[]}. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID to re-evaluate" },
+        status: { type: "string", description: "Optional study status filter (e.g. 'received', 'approved')" },
+        limit: { type: "integer", minimum: 1, maximum: 2000, description: "Max studies to process (default 500)" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -3481,6 +3499,22 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleCloneProject(parsed.request_id ?? buildRequestId(), parsed);
       }
 
+      if (name === "re_evaluate_project_routing") {
+        const parsed = reEvaluateProjectRoutingArgsSchema.parse(args);
+        const requestId = parsed.request_id ?? buildRequestId();
+        const params = new URLSearchParams();
+        if (parsed.status) params.set("status", parsed.status);
+        if (parsed.limit) params.set("limit", String(parsed.limit));
+        const qs = params.toString() ? `?${params.toString()}` : "";
+        const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/re-evaluate-routing${qs}`, {});
+        return formatSuccess(requestId, "re_evaluate_project_routing", {
+          accepted: true,
+          project_id: parsed.project_id,
+          reason: parsed.reason,
+          result: data
+        });
+      }
+
       if (name === "extend_share") {
         const parsedExtend = extendShareArgsSchema.parse(args);
         return handleExtendShare(parsedExtend.request_id ?? buildRequestId(), parsedExtend);
@@ -3696,7 +3730,7 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   if (name === "revoke_share" || name === "extend_share") {
     return typeof args.share_id === "string" ? args.share_id : null;
   }
-  if (name === "export_project_batch" || name === "clone_project") {
+  if (name === "export_project_batch" || name === "clone_project" || name === "re_evaluate_project_routing") {
     return typeof args.project_id === "string" ? args.project_id : null;
   }
   if (name === "test_webhook") {
