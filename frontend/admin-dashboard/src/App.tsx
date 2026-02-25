@@ -7079,6 +7079,17 @@ export function App() {
     else setShowProcessingTimes(v => !v)
   }
 
+  type FunnelStage = { stage: string; count: number; pct_of_total: number; pct_of_prev: number }
+  const [funnel, setFunnel] = useState<FunnelStage[] | null>(null)
+  const [showFunnel, setShowFunnel] = useState(false)
+  const loadFunnel = async () => {
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const res = await fetch(`/api/stats/pipeline-funnel?${params}`)
+    if (res.ok) { const d = await res.json(); setFunnel(d.funnel ?? []); setShowFunnel(true) }
+    else setShowFunnel(v => !v)
+  }
+
   const fmtDuration = (secs: number): string => {
     if (secs < 60) return `${secs}s`
     const m = Math.floor(secs / 60)
@@ -7766,6 +7777,65 @@ export function App() {
                             <td>{fmtDuration(r.max_seconds)}</td>
                           </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  )}
+              </div>
+            )}
+          </div>
+
+          {/* Pipeline funnel toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="btn-secondary" onClick={loadFunnel} style={{fontSize:'0.8rem'}}>
+              {showFunnel ? '▲ Hide pipeline funnel' : '▼ Pipeline funnel (last 30 days)'}
+            </button>
+            {showFunnel && funnel && (
+              <div style={{marginTop:'6px',overflowX:'auto'}}>
+                {funnel.length === 0
+                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                  : (
+                    <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
+                      <thead>
+                        <tr>
+                          <th>Stage</th>
+                          <th style={{textAlign:'right'}}>Studies</th>
+                          <th style={{textAlign:'right'}}>% of received</th>
+                          <th style={{textAlign:'right'}}>Conversion rate</th>
+                          <th style={{minWidth:'120px'}}>Bar</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {funnel.map((s, i) => {
+                          const stageLabelMap: Record<string, string> = {
+                            received: 'Received',
+                            classified: 'Classified',
+                            phi_scanned: 'PHI Scanned',
+                            defaced: 'Defaced',
+                            qc_passed: 'QC Passed',
+                            bids_converted: 'BIDS Converted',
+                            approved: 'Approved',
+                            exported: 'Exported',
+                          }
+                          const pct = s.pct_of_total
+                          const barColor = pct >= 80 ? '#0d9488' : pct >= 50 ? '#b45309' : '#ea580c'
+                          return (
+                            <tr key={s.stage}>
+                              <td>{stageLabelMap[s.stage] ?? s.stage}</td>
+                              <td style={{textAlign:'right'}}>{s.count.toLocaleString()}</td>
+                              <td style={{textAlign:'right',color: pct >= 80 ? '#0f766e' : pct >= 50 ? '#b45309' : '#9a3412'}}>
+                                {s.pct_of_total.toFixed(1)}%
+                              </td>
+                              <td style={{textAlign:'right',color:'#64748b'}}>
+                                {i === 0 ? '—' : `${s.pct_of_prev.toFixed(1)}%`}
+                              </td>
+                              <td>
+                                <div style={{background:'#e2e8f0',borderRadius:'3px',height:'8px',width:'100%'}}>
+                                  <div style={{background:barColor,borderRadius:'3px',height:'8px',width:`${Math.min(pct,100)}%`}} />
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   )}

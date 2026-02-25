@@ -1495,6 +1495,21 @@ Per-rule hit counts from the `routing_log` table — identifies which rules are 
 
 **MCP:** `get_routing_rule_stats` read tool — returns hit analytics + unused rules list (`days` optional)
 
+### Pipeline Conversion Funnel (`api/handler/pipeline_funnel.go`)
+
+Shows how many studies pass through each pipeline stage from receipt to export, making it easy to spot where studies are dropping out.
+
+**API:**
+- `GET /api/stats/pipeline-funnel?days=30&project_id=<uuid>` — returns `{period_days, generated_at, project_id, funnel: [{stage, count, pct_of_total, pct_of_prev}]}`
+- Stages: `received` → `classified` → `phi_scanned` → `defaced` → `qc_passed` → `bids_converted` → `approved` → `exported`
+- `pct_of_total` = percentage of received studies that reached this stage
+- `pct_of_prev` = conversion rate from the immediately preceding stage
+- `days` param 1–365 (default 30); `project_id` is optional
+
+**Admin dashboard:** collapsible "Pipeline funnel (last 30 days)" toggle in the Studies tab showing stage counts, percentage of received, conversion rate, and a mini progress bar (teal ≥80%, amber 50–79%, orange <50%).
+
+**MCP:** `get_pipeline_funnel` read tool — returns full funnel breakdown (`days` and `project_id` optional)
+
 ### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
 Export and import protocol templates for a project as a JSON file.
@@ -1602,6 +1617,7 @@ cd mcp-server && npm install && npm run build
 | `get_routing_stats` | Aggregate routing health overview across all destinations (optional days) |
 | `get_destination_stats` | Per-destination routing stats: success rate, recent errors, daily breakdown (destination_id required, optional days) |
 | `get_routing_rule_stats` | Per-rule hit analytics: hit counts, last matched, unused rules in period (optional days) |
+| `get_pipeline_funnel` | Pipeline conversion funnel: per-stage counts and conversion rates (optional days, project_id) |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
