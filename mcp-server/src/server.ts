@@ -36,6 +36,7 @@ import {
   processingTimesArgsSchema,
   routingStatsArgsSchema,
   destinationStatsArgsSchema,
+  routingRuleStatsArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -643,6 +644,23 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         destination_id: { type: "string", format: "uuid", description: "UUID of the destination" },
+        days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 365,
+          description: "Look-back window in days (default 30)"
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_routing_rule_stats",
+    description: "Get per-rule hit analytics for the last N days. Returns {total_hits, active_rules, by_rule: [{rule_id, rule_name, rule_action, rule_enabled, destination_id, destination_name, hit_count, last_matched_at, first_matched_at}], unused_rules: [{rule_id, rule_name, rule_action, rule_enabled, destination_id}]}. Useful for identifying stale/unused routing rules, understanding which rules fire most, and auditing routing configuration health.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
         days: {
           type: "integer",
           minimum: 1,
@@ -1567,6 +1585,15 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.days !== undefined) params.set("days", String(parsed.days));
       const qs = params.toString();
       const data = await client.get(`/api/destinations/${parsed.destination_id}/stats${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_routing_rule_stats") {
+      const parsed = routingRuleStatsArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/routing-rules${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
