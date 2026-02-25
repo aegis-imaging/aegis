@@ -33,7 +33,7 @@ from app.ingest import (
 from app.operator_audit import get_actions, record_action
 from app.retry_alerts import evaluate_retry_alerts, get_alerts
 from app.scp import create_scp, start_scp
-from app.sender import forward_study, send_echo
+from app.sender import forward_study, send_cfind, send_echo
 
 logging.basicConfig(
     level=logging.INFO,
@@ -387,3 +387,27 @@ def echo(request: EchoRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
     return result
+
+
+class CfindRequest(BaseModel):
+    ae_title: str = Field(min_length=1)
+    host: str = Field(min_length=1)
+    port: int = Field(gt=0)
+    query_level: str = Field(default="STUDY", min_length=1)
+    query_params: dict = Field(default_factory=dict)
+
+
+@app.post("/query")
+def query(request: CfindRequest):
+    """Send C-FIND to a remote DIMSE AE and return matching dataset list."""
+    try:
+        results = send_cfind(
+            host=request.host,
+            port=request.port,
+            ae_title=request.ae_title,
+            query_level=request.query_level,
+            query_params=request.query_params,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"matches": results, "count": len(results)}
