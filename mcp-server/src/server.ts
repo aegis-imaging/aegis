@@ -101,6 +101,9 @@ import {
   batchImportStudiesArgsSchema,
   getUserPreferencesArgsSchema,
   setUserPreferencesArgsSchema,
+  exportRoutingRulesArgsSchema,
+  importRoutingRulesArgsSchema,
+  reorderRoutingRulesArgsSchema,
   getProjectBidsInfoArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
@@ -2601,6 +2604,84 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "export_routing_rules",
+    description: "Export all project-scoped routing rules for a project as a structured JSON payload. Returns {project_id, rules, count}. Only rules whose project_id matches the given project are included — global rules (project_id IS NULL) are excluded. Use to inspect, back up, or copy routing rules to another project via import_routing_rules.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "import_routing_rules",
+    description: "Bulk-import routing rules into a project from a structured array. Rules whose name already exists in the project are silently skipped (no overwrite). Returns {imported, skipped, errors[]}. Note: destination_id values are stripped during import because destinations are instance-specific — reassign route_to destinations via update_routing_rule after import. Use export_routing_rules to get the source format. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "rules", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Destination project UUID" },
+        rules: {
+          type: "array",
+          minItems: 1,
+          maxItems: 200,
+          description: "Array of routing rule objects to import",
+          items: {
+            type: "object",
+            required: ["name", "action"],
+            properties: {
+              name: { type: "string", minLength: 1, maxLength: 128 },
+              description: { type: "string", maxLength: 512 },
+              priority: { type: "number", minimum: 0 },
+              enabled: { type: "boolean" },
+              modality: { type: "string", maxLength: 16 },
+              body_part: { type: "string", maxLength: 64 },
+              source: { type: "string", enum: ["external", "internal"] },
+              action: { type: "string", minLength: 1, maxLength: 64 }
+            },
+            additionalProperties: false
+          }
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "reorder_routing_rules",
+    description: "Atomically update the priority of multiple routing rules in a single transaction. Pass an array of {id, priority} objects. The caller is responsible for providing a consistent, non-conflicting set of priorities. Use list_routing_rules to get current priorities. Returns {rules, updated} with the full updated rule list sorted by new priority. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["rules", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        rules: {
+          type: "array",
+          minItems: 1,
+          maxItems: 200,
+          description: "Array of {id, priority} pairs to update",
+          items: {
+            type: "object",
+            required: ["id", "priority"],
+            properties: {
+              id: { type: "string", format: "uuid", description: "Routing rule UUID" },
+              priority: { type: "number", minimum: 0, description: "New priority value (lower = evaluated first)" }
+            },
+            additionalProperties: false
+          }
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -2959,6 +3040,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "get_cohort_report") {
       const parsed = getCohortReportArgsSchema.parse(args);
       const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/cohort-report`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "export_routing_rules") {
+      const parsed = exportRoutingRulesArgsSchema.parse(args);
+      const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/routing-rules/export`);
       return formatSuccess(requestId, name, data);
     }
 
@@ -3480,6 +3567,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleImportProtocolTemplates(parsed.request_id ?? buildRequestId(), parsed);
       }
 
+      if (name === "import_routing_rules") {
+        const parsed = importRoutingRulesArgsSchema.parse(args);
+        return handleImportRoutingRules(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "reorder_routing_rules") {
+        const parsed = reorderRoutingRulesArgsSchema.parse(args);
+        return handleReorderRoutingRules(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       if (name === "batch_import_studies") {
         const parsed = batchImportStudiesArgsSchema.parse(args);
         return handleBatchImportStudies(parsed.request_id ?? buildRequestId(), parsed);
@@ -3866,6 +3963,12 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "set_user_preferences") {
     return typeof args.user_id === "string" ? args.user_id : null;
+  }
+  if (name === "import_routing_rules") {
+    return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "reorder_routing_rules") {
+    return Array.isArray(args.rules) ? `${(args.rules as unknown[]).length} rules` : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -6357,6 +6460,68 @@ async function handleSetUserPreferences(
     accepted: true,
     user_id: parsed.user_id,
     preferences: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleImportRoutingRules(
+  requestId: string,
+  parsed: {
+    project_id: string;
+    rules: Array<{
+      name: string;
+      description?: string;
+      priority?: number;
+      enabled?: boolean;
+      modality?: string;
+      body_part?: string;
+      source?: string | null;
+      action: string;
+    }>;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "import_routing_rules");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow import_routing_rules", false, "import_routing_rules");
+  }
+
+  const data = await client.post(
+    `/api/projects/${encodeURIComponent(parsed.project_id)}/routing-rules/import`,
+    { rules: parsed.rules }
+  );
+  return formatSuccess(requestId, "import_routing_rules", {
+    accepted: true,
+    project_id: parsed.project_id,
+    rule_count: parsed.rules.length,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleReorderRoutingRules(
+  requestId: string,
+  parsed: {
+    rules: Array<{ id: string; priority: number }>;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "reorder_routing_rules");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow reorder_routing_rules", false, "reorder_routing_rules");
+  }
+
+  const data = await client.post("/api/routing-rules/reorder", { rules: parsed.rules });
+  return formatSuccess(requestId, "reorder_routing_rules", {
+    accepted: true,
+    updated: parsed.rules.length,
+    result: data,
     reason: parsed.reason
   });
 }
