@@ -167,7 +167,7 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 | **Processing Pipeline** | Microservices architecture — 7 Python microservices (Cloud Run / ECS Fargate / Container Apps) + DIMSE receiver (Compute Engine VM / EC2 / Azure VM) + MCP server (Cloud Run) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation — auto-dispatched in dependency order; DIMSE C-STORE SCP on dedicated VM (static IP, port 11112); MCP server exposes 52+ read tools + 29+ write tools; agent orchestrator with DICOM tag provenance and diagnostic toolchain |
 | **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
 
-**Live deployments:** GCP — [admin.aegisimaging.ai](https://admin.aegisimaging.ai) (dashboard) · `api.aegisimaging.ai` (API) · AWS — `aws.api.aegisimaging.ai` · Azure Container Apps deploying (day 9).
+**Live deployments:** GCP — [admin.aegisimaging.ai](https://admin.aegisimaging.ai) (dashboard) · [api.aegisimaging.ai](https://api.aegisimaging.ai) (API) · AWS — [aws.admin.aegisimaging.ai](https://aws.admin.aegisimaging.ai) (dashboard) · [aws.api.aegisimaging.ai](https://aws.api.aegisimaging.ai) (API) · Azure — `azure.admin.aegisimaging.ai` (dashboard, deploying) · `azure.api.aegisimaging.ai` (API, deploying).
 
 **On the use of automated tools:** AEGIS uses automated tools to assist with — not replace — human review. Automated de-identification flags potential issues; a trained administrator reviews and approves every study before it is shared. Automated defacing quality is reviewed side-by-side against the original in the admin interface.
 
