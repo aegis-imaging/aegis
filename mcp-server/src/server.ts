@@ -45,6 +45,7 @@ import {
   listStudyRelationshipsArgsSchema,
   linkStudiesArgsSchema,
   unlinkStudiesArgsSchema,
+  getDailySummaryArgsSchema,
   listDigestSubscriptionsArgsSchema,
   createDigestSubscriptionArgsSchema,
   deleteDigestSubscriptionArgsSchema,
@@ -822,6 +823,18 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         study_id: { type: "string", format: "uuid" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_daily_summary",
+    description: "Get a system-wide ops briefing for the last N hours (default 24, max 168). Returns: ingestion counts (received/approved/rejected/stuck), current pipeline state (pending review, in-processing, failed), routing stats (attempts/success rate), top 5 projects by received count, and last 10 significant audit events. Use as a morning briefing or when triaging platform health.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        hours: { type: "integer", minimum: 1, maximum: 168, description: "Lookback window in hours (default 24, max 168 = 7 days)" }
       },
       additionalProperties: false
     }
@@ -1906,6 +1919,15 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "list_study_relationships") {
       const parsed = listStudyRelationshipsArgsSchema.parse(args);
       const data = await client.get(`/api/studies/${parsed.study_id}/relationships`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_daily_summary") {
+      const parsed = getDailySummaryArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.hours !== undefined) params.set("hours", String(parsed.hours));
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/daily-summary${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 

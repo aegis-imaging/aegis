@@ -146,6 +146,11 @@ export const unlinkStudiesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const getDailySummaryArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  hours: z.number().int().min(1).max(168).optional()
+});
+
 export const listDigestSubscriptionsArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   project_id: z.string().uuid().optional()
@@ -519,7 +524,8 @@ export const readToolNames = [
   "get_anonymization_diff",
   "get_system_health_summary",
   "list_study_relationships",
-  "list_digest_subscriptions"
+  "list_digest_subscriptions",
+  "get_daily_summary"
 ] as const;
 
 export const writeToolNames = [
