@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from .config import cfg
 from .phantom import generate_phantom_slices, write_dicom_series
+from .storage_backend import upload_synth_study
 
 logging.basicConfig(
     level=logging.INFO,
@@ -119,6 +120,12 @@ def generate(req: GenerateRequest) -> GenerateResponse:
         output_dir = str(Path(base_dir) / "synth" / study_uid)
 
         paths = write_dicom_series(slice_data, output_dir, size=size)
+
+        # On AWS (STORAGE_MODE=s3), upload generated files to S3 so the Go
+        # API's importSynthStudy can find them via storage.List("synth/...").
+        # On GCP, data_dir is GCS-FUSE mounted — upload_synth_study is a no-op.
+        upload_synth_study(study_uid, paths)
+
         duration = time.monotonic() - start
 
         log.info(
