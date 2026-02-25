@@ -91,7 +91,7 @@ resource "azurerm_container_app" "api" {
       name   = "api"
       image  = "${local.acr_server}/api:${var.api_image_tag}"
       cpu    = 1.0
-      memory = "2Gi"
+      memory = "2.0Gi"
 
       env {
         name  = "PORT"
@@ -162,6 +162,11 @@ resource "azurerm_container_app" "api" {
   }
 
   tags = local.tags
+
+  # CI/CD (az containerapp update) owns image updates — Terraform manages config only.
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 # ── Admin Dashboard ───────────────────────────────────────────────────────────
@@ -206,6 +211,10 @@ resource "azurerm_container_app" "admin_dashboard" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 # ── Landing Page ──────────────────────────────────────────────────────────────
@@ -250,6 +259,10 @@ resource "azurerm_container_app" "landing" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 # ── Weasis DWV Viewer ─────────────────────────────────────────────────────────
@@ -294,6 +307,10 @@ resource "azurerm_container_app" "weasis" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 # ── MCP Server ────────────────────────────────────────────────────────────────
@@ -333,7 +350,7 @@ resource "azurerm_container_app" "mcp_server" {
       name   = "mcp-server"
       image  = "${local.acr_server}/mcp-server:${var.api_image_tag}"
       cpu    = 0.5
-      memory = "1Gi"
+      memory = "1.0Gi"
 
       env {
         name  = "AEGIS_API_URL"
@@ -359,6 +376,10 @@ resource "azurerm_container_app" "mcp_server" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 # ── Python Sidecars ───────────────────────────────────────────────────────────
@@ -399,8 +420,8 @@ resource "azurerm_container_app" "defacing" {
     container {
       name   = "defacing"
       image  = "${local.acr_server}/defacing:${var.api_image_tag}"
-      cpu    = 0.5
-      memory = "2Gi"
+      cpu    = 1.0
+      memory = "2.0Gi"
 
       dynamic "env" {
         for_each = local.sidecar_common_env
@@ -417,6 +438,10 @@ resource "azurerm_container_app" "defacing" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 resource "azurerm_container_app" "phi_detection" {
@@ -479,6 +504,10 @@ resource "azurerm_container_app" "phi_detection" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 resource "azurerm_container_app" "qc_service" {
@@ -541,6 +570,10 @@ resource "azurerm_container_app" "qc_service" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 resource "azurerm_container_app" "bids_service" {
@@ -578,7 +611,7 @@ resource "azurerm_container_app" "bids_service" {
       name   = "bids-service"
       image  = "${local.acr_server}/bids-service:${var.api_image_tag}"
       cpu    = 0.5
-      memory = "1Gi"
+      memory = "1.0Gi"
 
       dynamic "env" {
         for_each = local.sidecar_common_env
@@ -595,6 +628,10 @@ resource "azurerm_container_app" "bids_service" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 resource "azurerm_container_app" "classification_service" {
@@ -653,6 +690,10 @@ resource "azurerm_container_app" "classification_service" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 resource "azurerm_container_app" "protocol_service" {
@@ -711,6 +752,10 @@ resource "azurerm_container_app" "protocol_service" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }
 
 resource "azurerm_container_app" "synth_service" {
@@ -748,7 +793,7 @@ resource "azurerm_container_app" "synth_service" {
       name   = "synth-service"
       image  = "${local.acr_server}/synth-service:${var.api_image_tag}"
       cpu    = 0.5
-      memory = "1Gi"
+      memory = "1.0Gi"
 
       dynamic "env" {
         for_each = local.sidecar_common_env
@@ -761,4 +806,8 @@ resource "azurerm_container_app" "synth_service" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
 }

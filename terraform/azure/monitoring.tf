@@ -240,8 +240,9 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "pipeline_failures" {
   location            = azurerm_resource_group.main.location
   description         = "One or more pipeline processing steps failed in the last 5 minutes"
   severity            = 2
-  evaluation_frequency = "PT5M"
-  window_duration      = "PT5M"
+  evaluation_frequency  = "PT5M"
+  window_duration       = "PT5M"
+  skip_query_validation = true # ContainerAppConsoleLogs_CL table is created lazily
 
   scopes = [azurerm_log_analytics_workspace.main.id]
 
@@ -282,8 +283,9 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "stuck_studies" {
   location            = azurerm_resource_group.main.location
   description         = "Studies have been stuck in the pipeline beyond the SLA threshold"
   severity            = 2
-  evaluation_frequency = "PT15M"
-  window_duration      = "PT15M"
+  evaluation_frequency  = "PT15M"
+  window_duration       = "PT15M"
+  skip_query_validation = true # ContainerAppConsoleLogs_CL table is created lazily
 
   scopes = [azurerm_log_analytics_workspace.main.id]
 
