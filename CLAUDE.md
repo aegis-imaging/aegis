@@ -1617,6 +1617,25 @@ Export and import project-scoped routing rules as a JSON file. Useful for copyin
 
 **Admin dashboard:** "Export JSON" and "Import JSON" buttons in the Routing Rules section header (Routing tab). Export only visible when a project is selected; import requires admin role. Import shows a success/error toast after file selection and refreshes the rules list.
 
+### Saved Study Filter Presets (`frontend/admin-dashboard/src/App.tsx`)
+
+Named filter presets stored in `localStorage` so operators can quickly recall frequently used study filter combinations without re-entering each field.
+
+**Key:** `aegis_saved_filters` (JSON array of `SavedFilter` objects in localStorage)
+
+**How it works:**
+- When filters are active, a **"Save filter"** button appears in the filter bar
+- Clicking it reveals an inline text input; entering a name and pressing Enter (or clicking Save) saves the current filter combination under that name
+- Saving with an existing name overwrites the previous preset (dedup by name, newest wins)
+- A **"Saved (N) ▾"** dropdown button is shown whenever at least one preset exists — clicking it opens a menu of all saved presets
+- Clicking a preset name applies all its filters immediately and closes the menu
+- Each preset row has an **✕** delete button to remove it from localStorage
+
+**Filter fields captured:**
+`status`, `modality`, `bodyPart` (body_part), `source`, `search`, `subject`, `label`, `dateFrom`, `dateTo`, `flagged`
+
+No backend changes — pure frontend localStorage feature. Works alongside the global project selector (project is part of the saved state).
+
 ### Protocol Template Export / Import (`api/handler/protocol_template.go`)
 
 Export and import protocol templates for a project as a JSON file.
