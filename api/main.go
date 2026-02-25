@@ -301,6 +301,9 @@ func main() {
 	mux.HandleFunc("POST /api/dimse/retry", adminOnly(srv.DimseRetryProxy))
 	mux.HandleFunc("POST /api/dimse/retry/{path...}", adminOnly(srv.DimseRetryProxy))
 
+	// DIMSE C-FIND SCU — query a remote PACS/AE for matching studies/series/instances.
+	mux.HandleFunc("POST /api/dimse/query", adminOnly(srv.DimseQuery))
+
 	// Email digest subscriptions — periodic summary emails per project.
 	mux.HandleFunc("GET /api/digest-subscriptions", auth(srv.ListDigestSubscriptions))
 	mux.HandleFunc("GET /api/projects/{projectID}/digest-subscriptions", auth(srv.ListDigestSubscriptions))
