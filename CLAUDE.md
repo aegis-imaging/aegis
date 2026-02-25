@@ -379,6 +379,10 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 | `label` | Case-insensitive substring match on any `study_labels.label` for the study |
 | `subject_id` | Exact match on `subject_id` field |
 | `flagged` | `true` to return only priority-flagged studies |
+| `sort_by` | Column to sort by: `created_at` (default), `updated_at`, `status`, `modality`, `body_part`, `source`, `instance_count` |
+| `sort_dir` | Sort direction: `desc` (default) or `asc` |
+
+**Admin dashboard:** Column headers for Modality, Body Part, Source, Status, Files, and Received are clickable to sort ascending/descending. Active sort column shows ▲/▼ indicator; inactive columns show ⇅. Sort preference is persisted to `localStorage` (`aegis_studies_sort`).
 
 ### Study Detail (`GET /api/studies/{id}`)
 

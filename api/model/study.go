@@ -134,6 +134,8 @@ type StudyFilters struct {
 	DateFrom  time.Time // created_at >= DateFrom (zero = no lower bound)
 	DateTo    time.Time // created_at <= DateTo   (zero = no upper bound)
 	Flagged   *bool     // if non-nil, filter by priority_flag value
+	SortBy    string    // created_at|updated_at|status|modality|body_part|source|instance_count (default: created_at)
+	SortDir   string    // asc|desc (default: desc)
 }
 
 func studyWhere(f StudyFilters) (string, []any) {
@@ -210,11 +212,30 @@ func studyWhere(f StudyFilters) (string, []any) {
 	return where, args
 }
 
+// allowedStudySortCols maps safe sort_by values to their SQL column names.
+var allowedStudySortCols = map[string]string{
+	"created_at":     "created_at",
+	"updated_at":     "updated_at",
+	"status":         "status",
+	"modality":       "modality",
+	"body_part":      "body_part",
+	"source":         "source",
+	"instance_count": "instance_count",
+}
+
 func ListStudies(ctx context.Context, db *sql.DB, f StudyFilters, limit, offset int) ([]Study, error) {
 	where, args := studyWhere(f)
 	argN := len(args) + 1
 
-	query := `SELECT` + studyColumns + ` FROM studies` + where + ` ORDER BY created_at DESC`
+	sortCol := "created_at"
+	if col, ok := allowedStudySortCols[f.SortBy]; ok {
+		sortCol = col
+	}
+	sortDir := "DESC"
+	if f.SortDir == "asc" {
+		sortDir = "ASC"
+	}
+	query := `SELECT` + studyColumns + ` FROM studies` + where + ` ORDER BY ` + sortCol + ` ` + sortDir
 
 	if limit > 0 {
 		query += fmt.Sprintf(` LIMIT $%d`, argN)
