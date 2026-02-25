@@ -1644,6 +1644,8 @@ cd mcp-server && npm install && npm run build
 | `list_digest_subscriptions` | List email digest subscriptions (weekly/monthly plain-text study counts); optional project_id filter |
 | `get_daily_summary` | System-wide ops briefing for last N hours (default 24, max 168): ingestion counts, pipeline state, routing stats, top 5 projects by received, last 10 significant audit events |
 | `list_admin_users` | List all registered admin dashboard users with roles, enabled state, and last-seen info |
+| `list_invite_codes` | List all beta invite codes with label, enabled state, and usage info (used_at, used_by_ip) |
+| `list_invite_requests` | List access requests from the landing page; optional `status=pending\|approved\|denied\|all` filter |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
@@ -1681,6 +1683,12 @@ cd mcp-server && npm install && npm run build
 | `create_admin_user` | Register a new admin dashboard user with email and role (admin\|viewer) |
 | `update_admin_user` | Update an admin user's email, role, enabled state, or notes |
 | `delete_admin_user` | Permanently remove an admin user record |
+| `create_invite_code` | Generate a new XXXX-XXXX-XXXX invite code with a human-readable label |
+| `revoke_invite_code` | Revoke (disable) an invite code so it can no longer be used |
+| `delete_invite_code` | Permanently delete an invite code record |
+| `send_invite_code` | Email an invite code directly to a recipient (requires SMTP) |
+| `approve_invite_request` | Approve a pending access request — creates invite code and emails it to the requester |
+| `deny_invite_request` | Deny a pending access request |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 

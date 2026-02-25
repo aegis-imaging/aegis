@@ -62,6 +62,12 @@ import {
   createAdminUserArgsSchema,
   updateAdminUserArgsSchema,
   deleteAdminUserArgsSchema,
+  listInviteCodesArgsSchema,
+  listInviteRequestsArgsSchema,
+  createInviteCodeArgsSchema,
+  inviteCodeIdArgsSchema,
+  sendInviteCodeArgsSchema,
+  inviteRequestActionArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -1310,6 +1316,121 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "list_invite_codes",
+    description: "List all beta invite codes with usage stats (used_at, used_by_ip). Use before create_invite_code to check existing codes, or to find a code_id for revoke/send/delete operations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_invite_requests",
+    description: "List access requests submitted by prospective users from the landing page. Returns {requests, total}. Filter by status=pending|approved|denied (omit for all pending). Use before approve_invite_request or deny_invite_request to find the invite_request_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        status: { type: "string", enum: ["pending", "approved", "denied", "all"], description: "Filter by request status (omit = all pending)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "create_invite_code",
+    description: "Generate a new XXXX-XXXX-XXXX invite code with a human-readable label (e.g. 'Dr. Smith – Stanford'). The code can be sent to the recipient via send_invite_code or shared manually via the landing page URL ?invite=CODE. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["label", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        label: { type: "string", minLength: 1, maxLength: 256, description: "Human-readable label identifying the intended recipient (e.g. 'Dr. Smith – Stanford')" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "revoke_invite_code",
+    description: "Revoke (disable) an invite code so it can no longer be used to access the landing page. The code record is kept for audit purposes. Use list_invite_codes to find the code_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["code_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        code_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "delete_invite_code",
+    description: "Permanently delete an invite code record. This cannot be undone — use revoke_invite_code to disable without deleting. Use list_invite_codes to find the code_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["code_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        code_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "send_invite_code",
+    description: "Email an invite code directly to a recipient. Requires SMTP to be configured on the server (SMTP_HOST env var). Use list_invite_codes to find the code_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["code_id", "email", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        code_id: { type: "string", format: "uuid" },
+        email: { type: "string", format: "email", description: "Recipient email address" },
+        name: { type: "string", minLength: 1, maxLength: 255, description: "Recipient name (defaults to code label if omitted)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "approve_invite_request",
+    description: "Approve a pending access request — creates a new invite code, emails it to the requester, and marks the request approved. Returns {status, invite_code}. Use list_invite_requests to find pending invite_request_id values. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["invite_request_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        invite_request_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "deny_invite_request",
+    description: "Deny a pending access request and mark it as denied. Use list_invite_requests to find pending invite_request_id values. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["invite_request_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        invite_request_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_study_dicom_tags",
     description: "Get all non-pixel DICOM tags from the first file of a study. Returns {tags: [{tag, keyword, vr, value}], file, store}. Use for debugging de-identification issues, verifying protocol parameters, or inspecting tag values after defacing. Reads from the study's current dicom_store (raw before defacing, clean after).",
     inputSchema: {
@@ -2279,6 +2400,21 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_invite_codes") {
+      listInviteCodesArgsSchema.parse(args);
+      const data = await client.get("/api/invite-codes");
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_invite_requests") {
+      const parsedIR = listInviteRequestsArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsedIR.status && parsedIR.status !== "all") params.set("status", parsedIR.status);
+      const qs = params.toString();
+      const data = await client.get(`/api/invite/requests${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -2418,6 +2554,36 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "delete_admin_user") {
         const parsedDAU = deleteAdminUserArgsSchema.parse(args);
         return handleDeleteAdminUser(parsedDAU.request_id ?? buildRequestId(), parsedDAU);
+      }
+
+      if (name === "create_invite_code") {
+        const parsedCIC = createInviteCodeArgsSchema.parse(args);
+        return handleCreateInviteCode(parsedCIC.request_id ?? buildRequestId(), parsedCIC);
+      }
+
+      if (name === "revoke_invite_code") {
+        const parsedRIC = inviteCodeIdArgsSchema.parse(args);
+        return handleRevokeInviteCode(parsedRIC.request_id ?? buildRequestId(), parsedRIC);
+      }
+
+      if (name === "delete_invite_code") {
+        const parsedDIC = inviteCodeIdArgsSchema.parse(args);
+        return handleDeleteInviteCode(parsedDIC.request_id ?? buildRequestId(), parsedDIC);
+      }
+
+      if (name === "send_invite_code") {
+        const parsedSIC = sendInviteCodeArgsSchema.parse(args);
+        return handleSendInviteCode(parsedSIC.request_id ?? buildRequestId(), parsedSIC);
+      }
+
+      if (name === "approve_invite_request") {
+        const parsedAIR = inviteRequestActionArgsSchema.parse(args);
+        return handleApproveInviteRequest(parsedAIR.request_id ?? buildRequestId(), parsedAIR);
+      }
+
+      if (name === "deny_invite_request") {
+        const parsedDIR = inviteRequestActionArgsSchema.parse(args);
+        return handleDenyInviteRequest(parsedDIR.request_id ?? buildRequestId(), parsedDIR);
       }
 
       if (name === "add_study_note") {
@@ -2718,6 +2884,19 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "update_admin_user" || name === "delete_admin_user") {
     return typeof args.user_id === "string" ? args.user_id : null;
+  }
+  if (name === "create_invite_code") {
+    return typeof args.label === "string" ? args.label : null;
+  }
+  if (
+    name === "revoke_invite_code" ||
+    name === "delete_invite_code" ||
+    name === "send_invite_code"
+  ) {
+    return typeof args.code_id === "string" ? args.code_id : null;
+  }
+  if (name === "approve_invite_request" || name === "deny_invite_request") {
+    return typeof args.invite_request_id === "string" ? args.invite_request_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -3774,6 +3953,129 @@ async function handleReactivateStudy(
     study_id: parsed.study_id,
     reason: parsed.reason,
     result: data
+  });
+}
+
+async function handleCreateInviteCode(
+  requestId: string,
+  parsed: { label: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_invite_code");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow create_invite_code", false, "create_invite_code");
+  }
+
+  const data = await client.post("/api/invite-codes", { label: parsed.label });
+  return formatSuccess(requestId, "create_invite_code", {
+    accepted: true,
+    label: parsed.label,
+    invite_code: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleRevokeInviteCode(
+  requestId: string,
+  parsed: { code_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "revoke_invite_code");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow revoke_invite_code", false, "revoke_invite_code");
+  }
+
+  const data = await client.post(`/api/invite-codes/${encodeURIComponent(parsed.code_id)}/revoke`);
+  return formatSuccess(requestId, "revoke_invite_code", {
+    accepted: true,
+    code_id: parsed.code_id,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDeleteInviteCode(
+  requestId: string,
+  parsed: { code_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "delete_invite_code");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow delete_invite_code", false, "delete_invite_code");
+  }
+
+  await client.delete(`/api/invite-codes/${encodeURIComponent(parsed.code_id)}`);
+  return formatSuccess(requestId, "delete_invite_code", {
+    accepted: true,
+    code_id: parsed.code_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleSendInviteCode(
+  requestId: string,
+  parsed: { code_id: string; email: string; name?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "send_invite_code");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow send_invite_code", false, "send_invite_code");
+  }
+
+  const body: Record<string, unknown> = { email: parsed.email };
+  if (parsed.name !== undefined) body.name = parsed.name;
+
+  const data = await client.post(`/api/invite-codes/${encodeURIComponent(parsed.code_id)}/send`, body);
+  return formatSuccess(requestId, "send_invite_code", {
+    accepted: true,
+    code_id: parsed.code_id,
+    email: parsed.email,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleApproveInviteRequest(
+  requestId: string,
+  parsed: { invite_request_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "approve_invite_request");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow approve_invite_request", false, "approve_invite_request");
+  }
+
+  const data = await client.post(`/api/invite/requests/${encodeURIComponent(parsed.invite_request_id)}/approve`);
+  return formatSuccess(requestId, "approve_invite_request", {
+    accepted: true,
+    invite_request_id: parsed.invite_request_id,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleDenyInviteRequest(
+  requestId: string,
+  parsed: { invite_request_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "deny_invite_request");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow deny_invite_request", false, "deny_invite_request");
+  }
+
+  const data = await client.post(`/api/invite/requests/${encodeURIComponent(parsed.invite_request_id)}/deny`);
+  return formatSuccess(requestId, "deny_invite_request", {
+    accepted: true,
+    invite_request_id: parsed.invite_request_id,
+    result: data,
+    reason: parsed.reason
   });
 }
 
