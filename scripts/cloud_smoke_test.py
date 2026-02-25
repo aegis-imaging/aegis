@@ -124,7 +124,12 @@ def main() -> int:
     parser.add_argument(
         "--iap-email",
         default="",
-        help="Convenience for IAP header injection. Sets X-Goog-Authenticated-User-Email automatically.",
+        help="Convenience for GCP IAP header injection. Sets X-Goog-Authenticated-User-Email automatically.",
+    )
+    parser.add_argument(
+        "--azure-email",
+        default="",
+        help="Convenience for Azure Easy Auth header injection. Sets X-MS-CLIENT-PRINCIPAL-NAME automatically.",
     )
     args = parser.parse_args()
 
@@ -133,6 +138,8 @@ def main() -> int:
     admin_headers = parse_headers(args.admin_header)
     if args.iap_email:
         admin_headers["X-Goog-Authenticated-User-Email"] = f"accounts.google.com:{args.iap_email}"
+    if args.azure_email:
+        admin_headers["X-MS-CLIENT-PRINCIPAL-NAME"] = args.azure_email
 
     smoke_uploader = f"smoke+{int(time.time())}@example.com"
     study_uid_seed = f"2.25.{uuid.uuid4().int}"
