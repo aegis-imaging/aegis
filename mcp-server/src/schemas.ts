@@ -969,6 +969,38 @@ export const setUserPreferencesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const exportRoutingRulesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid()
+});
+
+export const importRoutingRulesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  rules: z.array(z.object({
+    name: z.string().min(1).max(128),
+    description: z.string().max(512).optional(),
+    priority: z.number().int().min(0).optional(),
+    enabled: z.boolean().optional(),
+    modality: z.string().max(16).optional(),
+    body_part: z.string().max(64).optional(),
+    source: z.enum(["external", "internal"]).optional().nullable(),
+    action: z.string().min(1).max(64)
+  })).min(1).max(200),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const reorderRoutingRulesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  rules: z.array(z.object({
+    id: z.string().uuid(),
+    priority: z.number().int().min(0)
+  })).min(1).max(200),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -1032,7 +1064,8 @@ export const readToolNames = [
   "get_retention_preview",
   "get_destination_health",
   "simulate_routing",
-  "get_cohort_report"
+  "get_cohort_report",
+  "export_routing_rules"
 ] as const;
 
 export const writeToolNames = [
@@ -1122,7 +1155,9 @@ export const writeToolNames = [
   "import_protocol_templates",
   "batch_import_studies",
   "set_user_preferences",
-  "re_evaluate_project_routing"
+  "re_evaluate_project_routing",
+  "import_routing_rules",
+  "reorder_routing_rules"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
