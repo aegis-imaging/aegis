@@ -13,7 +13,10 @@ export const listStudiesArgsSchema = z.object({
   label: z.string().min(1).max(80).optional(),
   subject_id: z.string().min(1).max(256).optional(),
   date_from: z.string().datetime().optional(),
-  date_to: z.string().datetime().optional()
+  date_to: z.string().datetime().optional(),
+  flagged: z.boolean().optional(),
+  sort_by: z.enum(["created_at", "updated_at", "status", "modality", "body_part", "source", "instance_count"]).optional(),
+  sort_dir: z.enum(["asc", "desc"]).optional()
 });
 
 export const studyIdArgsSchema = z.object({

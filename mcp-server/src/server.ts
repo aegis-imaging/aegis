@@ -235,7 +235,7 @@ const client = new AegisApiClient(config.aegisApiBaseUrl, config.aegisApiToken);
 const tools: Tool[] = [
   {
     name: "list_studies",
-    description: "List studies with filters for operations triage. Supports filtering by label text and subject ID in addition to the standard filters.",
+    description: "List studies with filters for operations triage. Supports filtering by label text and subject ID in addition to the standard filters. Results can be sorted by any indexed column.",
     inputSchema: {
       type: "object",
       properties: {
@@ -251,7 +251,10 @@ const tools: Tool[] = [
         label: { type: "string", maxLength: 80, description: "Substring match on any study label (case-insensitive)" },
         subject_id: { type: "string", maxLength: 256, description: "Exact match on subject_id" },
         date_from: { type: "string", format: "date-time", description: "ISO 8601 lower bound on created_at (inclusive)" },
-        date_to: { type: "string", format: "date-time", description: "ISO 8601 upper bound on created_at (inclusive)" }
+        date_to: { type: "string", format: "date-time", description: "ISO 8601 upper bound on created_at (inclusive)" },
+        flagged: { type: "boolean", description: "If true, return only priority-flagged studies" },
+        sort_by: { type: "string", enum: ["created_at", "updated_at", "status", "modality", "body_part", "source", "instance_count"], description: "Column to sort by (default: created_at)" },
+        sort_dir: { type: "string", enum: ["asc", "desc"], description: "Sort direction (default: desc)" }
       },
       additionalProperties: false
     }
@@ -2708,6 +2711,9 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.subject_id) query.set("subject_id", parsed.subject_id);
       if (parsed.date_from) query.set("date_from", parsed.date_from);
       if (parsed.date_to) query.set("date_to", parsed.date_to);
+      if (parsed.flagged) query.set("flagged", "true");
+      if (parsed.sort_by) query.set("sort_by", parsed.sort_by);
+      if (parsed.sort_dir) query.set("sort_dir", parsed.sort_dir);
 
       const suffix = query.toString() ? `?${query.toString()}` : "";
       const data = await client.get(`/api/studies${suffix}`);

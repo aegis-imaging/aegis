@@ -8793,6 +8793,32 @@ export function App() {
               >
                 Next →
               </button>
+              {totalPages > 2 && (
+                <span className="pagination-jump">
+                  <label htmlFor="page-jump-input" className="pagination-jump__label">Page</label>
+                  <input
+                    id="page-jump-input"
+                    type="number"
+                    className="pagination-jump__input"
+                    min={1}
+                    max={totalPages}
+                    defaultValue={page + 1}
+                    key={page}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const v = parseInt((e.target as HTMLInputElement).value, 10)
+                        if (!isNaN(v)) setPage(Math.max(0, Math.min(totalPages - 1, v - 1)))
+                      }
+                    }}
+                    onBlur={e => {
+                      const v = parseInt(e.target.value, 10)
+                      if (!isNaN(v)) setPage(Math.max(0, Math.min(totalPages - 1, v - 1)))
+                    }}
+                    title={`Jump to page (1–${totalPages})`}
+                  />
+                  <span className="pagination-jump__of">of {totalPages}</span>
+                </span>
+              )}
             </div>
           )}
         </>
