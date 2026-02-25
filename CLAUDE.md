@@ -357,7 +357,7 @@ In the admin dashboard:
 - **Institutions tab** — manage institutions and their project memberships.
 - **Profiles tab** — manage per-project anonymization profiles (see below).
 - **Notifications tab** — manage email digest subscriptions (see below).
-- **Projects tab** — create and edit projects (name, slug, description); shows default anon profile badge.
+- **Projects tab** — create and edit projects (name, slug, description); shows default anon profile badge. Each project row has a **Health** button (opens `ProjectHealthPanel` modal — key metrics + pipeline funnel from `GET /api/stats/project-health`) and a **Compliance** button (opens `ComplianceReportPanel` modal). `frontend/admin-dashboard/src/components/ProjectHealthPanel.tsx`.
 - **Users tab** — manage authorised admin users and their roles (admin|viewer).
 
 **Global project selector:** A dropdown in the admin dashboard header scopes all tabs — studies list, stats banner, breakdown table, storage stats, timeline, and audit log — to a single project. Selecting "All Projects" restores the unfiltered view. The selection is persisted in `localStorage`. The stats banner, breakdown, and timeline panels auto-reload when the project changes.
