@@ -1648,6 +1648,9 @@ cd mcp-server && npm install && npm run build
 | `list_invite_requests` | List access requests from the landing page; optional `status=pending\|approved\|denied\|all` filter |
 | `get_tcia_series` | Browse available TCIA (The Cancer Imaging Archive) series for a collection (optional min_slices filter) |
 | `export_protocol_templates` | Export all protocol compliance templates for a project as a JSON structure |
+| `get_webhook_stats` | Per-subscription delivery statistics: total, success/failure counts, success rate, last delivery, breakdown by event |
+| `list_all_webhook_deliveries` | All webhook delivery attempts across all subscriptions; filterable by subscription_id and success status; paginated |
+| `get_user_preferences` | Get notification preferences for an admin user: digest frequency and subscribed notify events |
 
 **Write tools** (require `confirm: true` and a `reason` string):
 
@@ -1712,6 +1715,8 @@ cd mcp-server && npm install && npm run build
 | `bulk_pipeline_trigger` | Trigger a pipeline step (classify/phi_scan/protocol/deface/qc/bids/export) for multiple studies at once |
 | `import_tcia_series` | Download a TCIA series by SeriesInstanceUID and import it into AEGIS (triggers full pipeline) |
 | `import_protocol_templates` | Bulk-import protocol compliance templates into a project from a JSON array (skips duplicates by name) |
+| `batch_import_studies` | Import DICOM files from a server-local directory path into AEGIS; supports dry_run preview mode |
+| `set_user_preferences` | Update an admin user's personal notification preferences: digest frequency and subscribed notify events |
 
 All schemas validated with Zod at the MCP layer. Write operations use `RequireRole("admin")` on the underlying API endpoints.
 

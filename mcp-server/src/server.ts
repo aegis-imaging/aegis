@@ -91,6 +91,11 @@ import {
   importTCIASeriesArgsSchema,
   exportProtocolTemplatesArgsSchema,
   importProtocolTemplatesArgsSchema,
+  getWebhookStatsArgsSchema,
+  listAllWebhookDeliveriesArgsSchema,
+  batchImportStudiesArgsSchema,
+  getUserPreferencesArgsSchema,
+  setUserPreferencesArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
@@ -2403,6 +2408,89 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "get_webhook_stats",
+    description: "Get aggregate delivery statistics for a single webhook subscription: total deliveries, success/failure counts, success rate percent, last delivery time, and breakdown by event type. Useful for monitoring webhook health.",
+    inputSchema: {
+      type: "object",
+      required: ["subscription_id"],
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid", description: "Webhook subscription UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_all_webhook_deliveries",
+    description: "List all webhook delivery attempts across all subscriptions (or filtered to one subscription). Paginated. Optional success filter. Use get_webhook_deliveries for per-subscription history instead.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        subscription_id: { type: "string", format: "uuid", description: "Filter to one subscription" },
+        success: { type: "string", enum: ["true", "false"], description: "Filter by success/failure" },
+        limit: { type: "number", minimum: 1, maximum: 200, description: "Page size (default 50)" },
+        offset: { type: "number", minimum: 0, description: "Row offset for pagination" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "batch_import_studies",
+    description: "Import DICOM files from a server-local directory into AEGIS. The directory must be accessible on the server's filesystem. Files are assumed already de-identified (no re-anonymization is applied). Supports dry_run=true to preview what would be imported. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["dir", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        dir: { type: "string", minLength: 1, maxLength: 1024, description: "Absolute path on the server to a directory containing DICOM files" },
+        project_slug: { type: "string", minLength: 1, maxLength: 64, description: "Target project slug (default: 'default')" },
+        institution_id: { type: "string", format: "uuid", description: "Institution UUID for provenance (mutually exclusive with institution_slug)" },
+        institution_slug: { type: "string", minLength: 1, maxLength: 64, description: "Institution slug for provenance (mutually exclusive with institution_id)" },
+        source: { type: "string", enum: ["internal", "external"], description: "Study source designation (default: 'internal')" },
+        dry_run: { type: "boolean", description: "If true, scan and report without importing (default: false)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_user_preferences",
+    description: "Get notification preferences for a specific admin user: digest frequency (none/daily/weekly/monthly) and subscribed notify events (study.stuck, pipeline.failed, etc.). Use list_admin_users to find user IDs.",
+    inputSchema: {
+      type: "object",
+      required: ["user_id"],
+      properties: {
+        request_id: { type: "string" },
+        user_id: { type: "string", format: "uuid", description: "Admin user UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "set_user_preferences",
+    description: "Update notification preferences for an admin user. Sets the email digest frequency (none/daily/weekly/monthly) and which system events trigger personal email notifications. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["user_id", "digest_frequency", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        user_id: { type: "string", format: "uuid", description: "Admin user UUID" },
+        digest_frequency: { type: "string", enum: ["none", "daily", "weekly", "monthly"], description: "How often to receive email digests" },
+        notify_events: {
+          type: "array",
+          maxItems: 20,
+          items: { type: "string" },
+          description: "Event types that trigger immediate email: 'study.stuck', 'pipeline.failed', 'study.approved', 'study.rejected', 'study.phi_flagged', 'study.export_complete'"
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -2919,6 +3007,30 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "get_webhook_stats") {
+      const parsed = getWebhookStatsArgsSchema.parse(args);
+      const data = await client.get(`/api/webhook-subscriptions/${encodeURIComponent(parsed.subscription_id)}/stats`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "list_all_webhook_deliveries") {
+      const parsed = listAllWebhookDeliveriesArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.subscription_id) params.set("subscription_id", parsed.subscription_id);
+      if (parsed.success !== undefined) params.set("success", parsed.success);
+      if (parsed.limit !== undefined) params.set("limit", String(parsed.limit));
+      if (parsed.offset !== undefined) params.set("offset", String(parsed.offset));
+      const qs = params.toString();
+      const data = await client.get(`/api/webhook-deliveries${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_user_preferences") {
+      const parsed = getUserPreferencesArgsSchema.parse(args);
+      const data = await client.get(`/api/admin-users/${encodeURIComponent(parsed.user_id)}/preferences`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -3193,6 +3305,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "import_protocol_templates") {
         const parsed = importProtocolTemplatesArgsSchema.parse(args);
         return handleImportProtocolTemplates(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "batch_import_studies") {
+        const parsed = batchImportStudiesArgsSchema.parse(args);
+        return handleBatchImportStudies(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "set_user_preferences") {
+        const parsed = setUserPreferencesArgsSchema.parse(args);
+        return handleSetUserPreferences(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "add_study_note") {
@@ -3549,6 +3671,12 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   }
   if (name === "import_protocol_templates") {
     return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "batch_import_studies") {
+    return typeof args.dir === "string" ? args.dir : null;
+  }
+  if (name === "set_user_preferences") {
+    return typeof args.user_id === "string" ? args.user_id : null;
   }
   return typeof args.study_uid === "string" ? args.study_uid : null;
 }
@@ -5972,6 +6100,74 @@ async function handleImportProtocolTemplates(
     project_id: parsed.project_id,
     template_count: parsed.templates.length,
     result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleBatchImportStudies(
+  requestId: string,
+  parsed: {
+    dir: string;
+    project_slug?: string;
+    institution_id?: string;
+    institution_slug?: string;
+    source?: string;
+    dry_run?: boolean;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "batch_import_studies");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow batch_import_studies", false, "batch_import_studies");
+  }
+
+  const body: Record<string, unknown> = {
+    dir: parsed.dir,
+    project_slug: parsed.project_slug ?? "default",
+    source: parsed.source ?? "internal",
+    dry_run: parsed.dry_run ?? false
+  };
+  if (parsed.institution_id) body.institution_id = parsed.institution_id;
+  if (parsed.institution_slug) body.institution_slug = parsed.institution_slug;
+
+  const data = await client.post("/api/import/batch", body);
+  return formatSuccess(requestId, "batch_import_studies", {
+    accepted: true,
+    dir: parsed.dir,
+    dry_run: parsed.dry_run ?? false,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleSetUserPreferences(
+  requestId: string,
+  parsed: {
+    user_id: string;
+    digest_frequency: string;
+    notify_events?: string[];
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "set_user_preferences");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow set_user_preferences", false, "set_user_preferences");
+  }
+
+  const data = await client.put(`/api/admin-users/${encodeURIComponent(parsed.user_id)}/preferences`, {
+    digest_frequency: parsed.digest_frequency,
+    notify_events: parsed.notify_events ?? []
+  });
+  return formatSuccess(requestId, "set_user_preferences", {
+    accepted: true,
+    user_id: parsed.user_id,
+    preferences: data,
     reason: parsed.reason
   });
 }
