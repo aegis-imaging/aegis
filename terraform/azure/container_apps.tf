@@ -15,10 +15,10 @@
 # The Go API's *_SERVICE_URL env vars are set to these internal addresses.
 
 locals {
-  acr_server       = azurerm_container_registry.main.login_server
-  aca_env_id       = azurerm_container_app_environment.main.id
-  identity_id      = azurerm_user_assigned_identity.aca_workload.id
-  storage_account  = azurerm_storage_account.dicom.name
+  acr_server        = azurerm_container_registry.main.login_server
+  aca_env_id        = azurerm_container_app_environment.main.id
+  identity_id       = azurerm_user_assigned_identity.aca_workload.id
+  storage_account   = azurerm_storage_account.dicom.name
   storage_container = azurerm_storage_container.dicom.name
 
   # Internal ACA DNS suffix for service discovery
