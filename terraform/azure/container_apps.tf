@@ -82,24 +82,6 @@ resource "azurerm_container_app" "api" {
     identity            = local.identity_id
   }
 
-  # SMTP credentials stored in Key Vault (only when set — empty vars = email disabled).
-  dynamic "secret" {
-    for_each = var.smtp_username != "" ? [{ id = azurerm_key_vault_secret.smtp_username[0].id }] : []
-    content {
-      name                = "smtp-username"
-      key_vault_secret_id = secret.value.id
-      identity            = local.identity_id
-    }
-  }
-
-  dynamic "secret" {
-    for_each = var.smtp_password != "" ? [{ id = azurerm_key_vault_secret.smtp_password[0].id }] : []
-    content {
-      name                = "smtp-password"
-      key_vault_secret_id = secret.value.id
-      identity            = local.identity_id
-    }
-  }
 
   ingress {
     allow_insecure_connections = false
@@ -207,20 +189,14 @@ resource "azurerm_container_app" "api" {
         name  = "SMTP_FROM"
         value = var.smtp_from
       }
-      # SMTP credentials injected from Key Vault secret refs (only when configured).
-      dynamic "env" {
-        for_each = var.smtp_username != "" ? [{ name = "SMTP_USERNAME" }] : []
-        content {
-          name        = env.value.name
-          secret_name = "smtp-username"
-        }
+      # SMTP credentials passed as env vars (empty = email disabled via SMTP_HOST check).
+      env {
+        name  = "SMTP_USERNAME"
+        value = var.smtp_username
       }
-      dynamic "env" {
-        for_each = var.smtp_password != "" ? [{ name = "SMTP_PASSWORD" }] : []
-        content {
-          name        = env.value.name
-          secret_name = "smtp-password"
-        }
+      env {
+        name  = "SMTP_PASSWORD"
+        value = var.smtp_password
       }
       # ── Application URLs ─────────────────────────────────────────────────────
       env {
@@ -437,12 +413,9 @@ resource "azurerm_container_app" "mcp_server" {
         name        = "AEGIS_API_TOKEN"
         secret_name = "mcp-api-token"
       }
-      dynamic "env" {
-        for_each = var.azure_openai_endpoint != "" ? [{ value = var.azure_openai_endpoint }] : []
-        content {
-          name  = "AZURE_OPENAI_ENDPOINT"
-          value = env.value.value
-        }
+      env {
+        name  = "AZURE_OPENAI_ENDPOINT"
+        value = var.azure_openai_endpoint
       }
     }
   }
