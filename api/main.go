@@ -208,6 +208,23 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}/routing-rules/export", auth(srv.ExportRoutingRules))
 	mux.HandleFunc("POST /api/projects/{id}/routing-rules/import", adminOnly(srv.ImportRoutingRules))
 
+	// Auto-share rules — automatically create shares when studies are approved.
+	mux.HandleFunc("GET /api/projects/{projectID}/auto-share-rules", auth(srv.ListAutoShareRules))
+	mux.HandleFunc("POST /api/projects/{projectID}/auto-share-rules", adminOnly(srv.CreateAutoShareRule))
+	mux.HandleFunc("PUT /api/auto-share-rules/{id}", adminOnly(srv.UpdateAutoShareRule))
+	mux.HandleFunc("DELETE /api/auto-share-rules/{id}", adminOnly(srv.DeleteAutoShareRule))
+
+	// Review checklist — per-project review checklist items.
+	mux.HandleFunc("GET /api/projects/{projectID}/review-checklist", auth(srv.ListReviewChecklist))
+	mux.HandleFunc("POST /api/projects/{projectID}/review-checklist", adminOnly(srv.CreateReviewChecklistItem))
+	mux.HandleFunc("PUT /api/review-checklist/{id}", adminOnly(srv.UpdateReviewChecklistItem))
+	mux.HandleFunc("DELETE /api/review-checklist/{id}", adminOnly(srv.DeleteReviewChecklistItem))
+
+	// Project tags — categorize projects with tags.
+	mux.HandleFunc("GET /api/projects/{id}/tags", auth(srv.ListProjectTags))
+	mux.HandleFunc("POST /api/projects/{id}/tags", adminOnly(srv.AddProjectTag))
+	mux.HandleFunc("DELETE /api/projects/{id}/tags/{tagID}", adminOnly(srv.DeleteProjectTag))
+
 	// Anonymization profiles — per-project DICOM tag retention overrides.
 	mux.HandleFunc("GET /api/projects/{projectID}/anon-profiles", auth(srv.ListAnonProfiles))
 	mux.HandleFunc("POST /api/projects/{projectID}/anon-profiles", adminOnly(srv.CreateAnonProfile))
@@ -336,6 +353,27 @@ func main() {
 	mux.HandleFunc("POST /api/api-keys/{id}/rotate", adminOnly(srv.RotateAPIKey))
 	mux.HandleFunc("DELETE /api/api-keys/{id}", adminOnly(srv.DeleteAPIKey))
 
+	// Study assignment — assign studies to admin users for peer review.
+	mux.HandleFunc("POST /api/studies/{id}/assign", adminOnly(srv.AssignStudy))
+	mux.HandleFunc("DELETE /api/studies/{id}/assign", adminOnly(srv.UnassignStudy))
+
+	// Study comments — threaded discussion on studies.
+	mux.HandleFunc("GET /api/studies/{id}/comments", auth(srv.ListStudyComments))
+	mux.HandleFunc("POST /api/studies/{id}/comments", adminOnly(srv.CreateStudyComment))
+	mux.HandleFunc("DELETE /api/studies/{id}/comments/{commentID}", adminOnly(srv.DeleteStudyComment))
+
+	// Study watchers — subscribe to study events.
+	mux.HandleFunc("GET /api/studies/{id}/watchers", auth(srv.ListStudyWatchers))
+	mux.HandleFunc("POST /api/studies/{id}/watch", auth(srv.WatchStudy))
+	mux.HandleFunc("DELETE /api/studies/{id}/watch", auth(srv.UnwatchStudy))
+
+	// Study review checklist — per-study checklist responses.
+	mux.HandleFunc("GET /api/studies/{id}/checklist", auth(srv.ListStudyChecklistResponses))
+	mux.HandleFunc("POST /api/studies/{id}/checklist", adminOnly(srv.UpsertStudyChecklistResponse))
+
+	// Bulk study reassignment between projects.
+	mux.HandleFunc("POST /api/studies/bulk-reassign", adminOnly(srv.BulkReassignStudies))
+
 	// Study labels — free-text tags applied by admin users for structured triage.
 	mux.HandleFunc("GET /api/studies/{id}/labels", auth(srv.ListStudyLabels))
 	mux.HandleFunc("POST /api/studies/{id}/labels", adminOnly(srv.AddStudyLabel))
@@ -372,6 +410,17 @@ func main() {
 	mux.HandleFunc("PUT /api/federation-peers/{id}", adminOnly(srv.UpdateFederationPeer))
 	mux.HandleFunc("DELETE /api/federation-peers/{id}", adminOnly(srv.DeleteFederationPeer))
 
+	// Dashboard notifications — in-app notification bell.
+	mux.HandleFunc("GET /api/notifications", auth(srv.ListNotifications))
+	mux.HandleFunc("POST /api/notifications", adminOnly(srv.CreateNotification))
+	mux.HandleFunc("POST /api/notifications/{id}/read", auth(srv.MarkNotificationRead))
+	mux.HandleFunc("POST /api/notifications/read-all", auth(srv.MarkAllNotificationsRead))
+
+	// Audit bookmarks — save important audit entries for compliance tracking.
+	mux.HandleFunc("GET /api/audit-bookmarks", auth(srv.ListAuditBookmarks))
+	mux.HandleFunc("POST /api/audit-bookmarks", auth(srv.CreateAuditBookmark))
+	mux.HandleFunc("DELETE /api/audit-bookmarks/{id}", auth(srv.DeleteAuditBookmark))
+
 	// Admin users — authorised dashboard users and their roles.
 	mux.HandleFunc("GET /api/admin-users", auth(srv.ListAdminUsers))
 	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))
@@ -380,6 +429,10 @@ func main() {
 	mux.HandleFunc("POST /api/admin-users/{id}/send-invite", adminOnly(srv.SendAdminUserInvite))
 	mux.HandleFunc("GET /api/admin-users/{id}/preferences", auth(srv.GetUserPreferences))
 	mux.HandleFunc("PUT /api/admin-users/{id}/preferences", auth(srv.UpdateUserPreferences))
+	mux.HandleFunc("GET /api/admin-users/{id}/sessions", auth(srv.ListSessions))
+
+	// Auth session tracking.
+	mux.HandleFunc("POST /api/auth/session", auth(srv.RecordSession))
 
 	// Project-level batch export — dispatch all eligible approved studies.
 	mux.HandleFunc("POST /api/projects/{id}/export-batch", adminOnly(srv.ExportBatch))
