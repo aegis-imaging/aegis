@@ -21,11 +21,12 @@ import (
 
 // Payload is the JSON body posted to webhook subscriber URLs.
 type Payload struct {
-	Event            string `json:"event"`
-	StudyID          string `json:"study_id"`
-	StudyInstanceUID string `json:"study_instance_uid"`
-	ProjectID        string `json:"project_id"`
-	Timestamp        string `json:"timestamp"`
+	Event            string            `json:"event"`
+	StudyID          string            `json:"study_id"`
+	StudyInstanceUID string            `json:"study_instance_uid"`
+	ProjectID        string            `json:"project_id"`
+	Timestamp        string            `json:"timestamp"`
+	FHIRImagingStudy *FHIRImagingStudy `json:"fhir_imaging_study,omitempty"`
 }
 
 var client = &http.Client{Timeout: 10 * time.Second}
@@ -43,12 +44,14 @@ func Deliver(ctx context.Context, db *sql.DB, event string, study *model.Study) 
 		return
 	}
 
+	fhir := buildFHIRImagingStudy(study)
 	payload := Payload{
 		Event:            event,
 		StudyID:          study.ID,
 		StudyInstanceUID: study.StudyInstanceUID,
 		ProjectID:        study.ProjectID,
 		Timestamp:        time.Now().UTC().Format(time.RFC3339),
+		FHIRImagingStudy: &fhir,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
