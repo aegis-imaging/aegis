@@ -609,7 +609,7 @@ export const createAdminUserArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   email: z.string().email(),
   name: z.string().min(1).max(255).optional(),
-  role: z.enum(["admin", "viewer"]),
+  role: z.enum(["admin", "viewer", "researcher"]),
   notes: z.string().max(1024).optional(),
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
@@ -620,7 +620,7 @@ export const updateAdminUserArgsSchema = z.object({
   user_id: z.string().uuid(),
   email: z.string().email(),
   name: z.string().min(1).max(255).optional(),
-  role: z.enum(["admin", "viewer"]),
+  role: z.enum(["admin", "viewer", "researcher"]),
   enabled: z.boolean().optional(),
   notes: z.string().max(1024).optional(),
   reason: z.string().min(10).max(512),
@@ -1089,6 +1089,50 @@ export const bulkCreateSharesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Project member schemas ───────────────────────────────────────────────────
+export const listProjectMembersArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid()
+});
+
+export const addProjectMemberArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  admin_user_id: z.string().uuid(),
+  role: z.enum(["owner", "coordinator", "reviewer", "site_coordinator", "site_viewer"]),
+  institution_id: z.string().uuid().optional().nullable(),
+  notes: z.string().max(500).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const updateProjectMemberArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  member_id: z.string().uuid(),
+  role: z.enum(["owner", "coordinator", "reviewer", "site_coordinator", "site_viewer"]),
+  institution_id: z.string().uuid().optional().nullable(),
+  notes: z.string().max(500).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const removeProjectMemberArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  member_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const toggleProjectRestrictedArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid(),
+  restricted: z.boolean(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -1155,6 +1199,7 @@ export const readToolNames = [
   "simulate_routing",
   "get_cohort_report",
   "export_routing_rules",
+  "list_project_members",
   "query_pacs",
   "list_deleted_studies",
   "get_protocol_trend",
@@ -1262,7 +1307,11 @@ export const writeToolNames = [
   "retrieve_pacs_study",
   "soft_delete_study",
   "restore_study",
-  "bulk_create_shares"
+  "bulk_create_shares",
+  "add_project_member",
+  "update_project_member",
+  "remove_project_member",
+  "toggle_project_restricted"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

@@ -104,6 +104,7 @@ func main() {
 	srv := handler.NewServer(db, store, cfg)
 	auth := middleware.RequireAuth(db, cfg)
 	adminOnly := middleware.RequireRole("admin", db, cfg)
+	optionalAuth := middleware.OptionalAuth(db, cfg)
 
 	// Per-IP rate limiter for public endpoints (upload, ingest, contact).
 	// Enabled via RATE_LIMIT_ENABLED=true; defaults to 20 req/s, burst 50.
@@ -126,8 +127,9 @@ func main() {
 
 	mux.HandleFunc("GET /healthz", srv.Healthz)
 
-	// Upload portal needs project list and active anon profile.
-	mux.HandleFunc("GET /api/projects", srv.ListProjects)
+	// Upload portal and authenticated users — optionalAuth so unauthenticated callers
+	// still get the non-restricted project list while researchers get their scoped list.
+	mux.HandleFunc("GET /api/projects", optionalAuth(srv.ListProjects))
 	mux.HandleFunc("GET /api/projects/{slug}/active-anon-profile", srv.GetDefaultAnonProfile)
 
 	// Upload portal — public-facing, rate-limited.
@@ -207,6 +209,16 @@ func main() {
 	mux.HandleFunc("POST /api/projects/{id}/re-evaluate-routing", adminOnly(srv.BulkReEvaluateRouting))
 	mux.HandleFunc("GET /api/projects/{id}/routing-rules/export", auth(srv.ExportRoutingRules))
 	mux.HandleFunc("POST /api/projects/{id}/routing-rules/import", adminOnly(srv.ImportRoutingRules))
+
+	// Project restricted flag — platform admin only.
+	mux.HandleFunc("PUT /api/projects/{id}/restricted", adminOnly(srv.SetProjectRestricted))
+
+	// Project members — list uses auth; write ops use auth + handler-level role check
+	// (platform admin OR project owner are both allowed to manage members).
+	mux.HandleFunc("GET /api/projects/{id}/members", auth(srv.ListProjectMembers))
+	mux.HandleFunc("POST /api/projects/{id}/members", auth(srv.AddProjectMember))
+	mux.HandleFunc("PUT /api/projects/{id}/members/{memberID}", auth(srv.UpdateProjectMember))
+	mux.HandleFunc("DELETE /api/projects/{id}/members/{memberID}", auth(srv.RemoveProjectMember))
 
 	// Project dashboard summary — compact KPI snapshot.
 	mux.HandleFunc("GET /api/projects/{id}/summary", auth(srv.GetProjectDashboardSummary))
