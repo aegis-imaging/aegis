@@ -1037,6 +1037,28 @@ export const retrievePacsStudyArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Soft-delete / restore ────────────────────────────────────────────────────
+export const listDeletedStudiesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid().optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+  offset: z.number().int().min(0).optional()
+});
+
+export const softDeleteStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const restoreStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -1103,7 +1125,8 @@ export const readToolNames = [
   "simulate_routing",
   "get_cohort_report",
   "export_routing_rules",
-  "query_pacs"
+  "query_pacs",
+  "list_deleted_studies"
 ] as const;
 
 export const writeToolNames = [
@@ -1198,7 +1221,9 @@ export const writeToolNames = [
   "import_routing_rules",
   "reorder_routing_rules",
   "bulk_toggle_routing_rules",
-  "retrieve_pacs_study"
+  "retrieve_pacs_study",
+  "soft_delete_study",
+  "restore_study"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];

@@ -108,6 +108,9 @@ import {
   bulkToggleRoutingRulesArgsSchema,
   queryPacsArgsSchema,
   retrievePacsStudyArgsSchema,
+  listDeletedStudiesArgsSchema,
+  softDeleteStudyArgsSchema,
+  restoreStudyArgsSchema,
   getProjectBidsInfoArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
@@ -2776,6 +2779,50 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "list_deleted_studies",
+    description: "List soft-deleted studies (moved to trash). Returns studies where deleted_at is set, ordered newest deletion first. Complements list_studies which always excludes deleted studies. Use restore_study to recover a study or delete_study to permanently remove it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a specific project UUID; omit for all projects" },
+        limit: { type: "integer", minimum: 1, maximum: 200, description: "Page size (default 50)" },
+        offset: { type: "integer", minimum: 0, description: "Row offset for pagination (default 0)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "soft_delete_study",
+    description: "Move a study to the trash (soft-delete). The study is hidden from normal listings but not permanently removed — use restore_study to recover it or delete_study to permanently delete. Fires study.soft_deleted webhook event. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid", description: "Study UUID to soft-delete" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "restore_study",
+    description: "Restore a soft-deleted study from the trash, making it visible in normal listings again. Fires study.restored webhook event. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid", description: "Study UUID to restore from trash" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -3391,6 +3438,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_deleted_studies") {
+      const params = new URLSearchParams();
+      if (typeof args.project_id === "string") params.set("project_id", args.project_id);
+      if (typeof args.limit === "number") params.set("limit", String(args.limit));
+      if (typeof args.offset === "number") params.set("offset", String(args.offset));
+      const qs = params.toString();
+      const data = await client.get(`/api/studies/deleted${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (name === "query_pacs") {
       const parsed = queryPacsArgsSchema.parse(args);
       const body: Record<string, unknown> = {
@@ -3871,6 +3928,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleRetrievePacsStudy(parsed.request_id ?? buildRequestId(), parsed);
       }
 
+      if (name === "soft_delete_study") {
+        const parsed = softDeleteStudyArgsSchema.parse(args);
+        return handleSoftDeleteStudy(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "restore_study") {
+        const parsed = restoreStudyArgsSchema.parse(args);
+        return handleRestoreStudy(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       return denyWriteTool(requestId, name);
     }
 
@@ -4074,7 +4141,7 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   if (name === "set_storage_quota" || name === "update_phi_config") {
     return typeof args.project_id === "string" ? args.project_id : null;
   }
-  if (name === "delete_study") {
+  if (name === "delete_study" || name === "soft_delete_study" || name === "restore_study") {
     return typeof args.study_id === "string" ? args.study_id : null;
   }
   if (name === "bulk_pipeline_trigger") {
@@ -6735,6 +6802,52 @@ async function handleRetrievePacsStudy(
     study_instance_uid: parsed.study_instance_uid,
     move_destination: parsed.move_destination ?? null,
     result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleSoftDeleteStudy(
+  requestId: string,
+  parsed: {
+    study_id: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "soft_delete_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow soft_delete_study", false, "soft_delete_study");
+  }
+
+  await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/soft-delete`, {});
+  return formatSuccess(requestId, "soft_delete_study", {
+    accepted: true,
+    study_id: parsed.study_id,
+    reason: parsed.reason
+  });
+}
+
+async function handleRestoreStudy(
+  requestId: string,
+  parsed: {
+    study_id: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "restore_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow restore_study", false, "restore_study");
+  }
+
+  await client.post(`/api/studies/${encodeURIComponent(parsed.study_id)}/restore`, {});
+  return formatSuccess(requestId, "restore_study", {
+    accepted: true,
+    study_id: parsed.study_id,
     reason: parsed.reason
   });
 }
