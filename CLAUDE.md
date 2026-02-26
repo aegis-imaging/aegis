@@ -540,7 +540,7 @@ All mutations emit audit entries (`admin_user.created`, `admin_user.updated`, `a
 
 ### Authentication Middleware (`api/middleware/auth.go`)
 
-Per-route authentication middleware that protects all admin endpoints. Supports GCP Identity-Aware Proxy (IAP) and Microsoft Azure AD (Easy Auth) as identity providers.
+Per-route authentication middleware that protects all admin endpoints. Supports GCP Identity-Aware Proxy (IAP), Microsoft Azure AD (Easy Auth), AWS ALB + Cognito, and API key bearer tokens as identity providers.
 
 **Env vars:**
 
@@ -556,6 +556,8 @@ Per-route authentication middleware that protects all admin endpoints. Supports 
   - **GCP IAP**: `X-Goog-Authenticated-User-Email` (format: `accounts.google.com:user@example.com`)
   - **Azure AD Easy Auth**: `X-MS-CLIENT-PRINCIPAL-NAME` (user's email)
   - **AWS ALB + Cognito**: `X-Amzn-Oidc-Data` (JWT — ES256 signature verified against ALB regional public key endpoint; email extracted from payload claims)
+  - **API key fallback**: `Authorization: Bearer <api_key>` — when no identity-provider header is present, the middleware checks for a bearer token and validates it against the `api_keys` table (SHA-256 hash lookup). The key must be enabled and not expired. The authenticated user is resolved from the key's `created_by` email. `last_used_at` is updated asynchronously. This is used by the MCP server and other machine-to-machine clients.
+- All auth provider modes (`iap`, `azure`, `aws`, `auto`) fall back to API key authentication when no provider-specific header is present.
 - Looks up the email in `admin_users` table; rejects unknown or disabled users.
 - Injects `AuthUser` into request context; all audit entries now record the real user email.
 
@@ -571,7 +573,10 @@ Per-route authentication middleware that protects all admin endpoints. Supports 
 - `GET /api/auth/me` — returns the current authenticated user's `{id, email, name, role}`
 
 **Error responses:**
-- `401 {"error":"missing authentication header"}` — no identity header in production mode
+- `401 {"error":"missing authentication header"}` — no identity header or API key in production mode
+- `401 {"error":"invalid API key"}` — bearer token does not match any key in `api_keys`
+- `403 {"error":"API key is disabled"}` — API key exists but `enabled=false`
+- `403 {"error":"API key has expired"}` — API key past its `expires_at` timestamp
 - `403 {"error":"user not registered: user@example.com"}` — email not in `admin_users`
 - `403 {"error":"account is disabled"}` — user exists but `enabled=false`
 - `403 {"error":"insufficient permissions: requires admin role"}` — viewer attempting a write operation
@@ -1364,7 +1369,7 @@ Machine-to-machine bearer tokens for programmatic access to the admin API. Store
 - `PATCH /api/api-keys/{id}/enable` / `PATCH /api/api-keys/{id}/disable` — toggle enabled state
 - `DELETE /api/api-keys/{id}` — revoke and delete
 
-Key format: `aegis_<base64url(32 random bytes)>`. Use as `Authorization: Bearer <key>` header. The auth middleware validates API keys alongside IAP/Azure/AWS identity headers when `AUTH_ENABLED=true`.
+Key format: `aegis_<base64url(32 random bytes)>`. Use as `Authorization: Bearer <key>` header. The auth middleware validates API keys as a fallback when no IAP/Azure/AWS identity header is present — all provider modes (`iap`, `azure`, `aws`, `auto`) support this. The key's `created_by` email is resolved to an admin user for RBAC. Used by the MCP server (`AEGIS_API_TOKEN`) for machine-to-machine access.
 
 ### Per-Project PHI Detection Config (`api/handler/phi_config.go`)
 
