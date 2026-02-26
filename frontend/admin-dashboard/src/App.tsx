@@ -7843,6 +7843,39 @@ export function App() {
   const [expiringStudies, setExpiringStudies] = useState<Array<{id:string;study_instance_uid:string;modality:string;body_part:string;expires_at:string;days_until_expiry:number;retention_days:number}>>([])
   const [showExpiringPanel, setShowExpiringPanel] = useState(false)
 
+  // Deleted Studies (Trash) panel
+  type DeletedStudy = { id: string; study_instance_uid: string; modality: string; body_part: string; status: string; deleted_at: string }
+  const [showTrashPanel, setShowTrashPanel] = useState(false)
+  const [trashStudies, setTrashStudies] = useState<DeletedStudy[]>([])
+  const [trashTotal, setTrashTotal] = useState(0)
+  const [trashPage, setTrashPage] = useState(0)
+  const [trashLoading, setTrashLoading] = useState(false)
+  const TRASH_PAGE_SIZE = 50
+  const loadTrash = async (page = 0) => {
+    setTrashLoading(true)
+    const params = new URLSearchParams({ limit: String(TRASH_PAGE_SIZE), offset: String(page * TRASH_PAGE_SIZE) })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const res = await fetch(`/api/studies/deleted?${params}`)
+    const d = res.ok ? await res.json() : null
+    setTrashLoading(false)
+    if (d) { setTrashStudies(d.studies ?? []); setTrashTotal(d.total ?? 0) }
+  }
+  const toggleTrashPanel = () => {
+    if (!showTrashPanel) { setTrashPage(0); loadTrash(0) }
+    setShowTrashPanel(v => !v)
+  }
+  const restoreDeletedStudy = async (id: string) => {
+    if (!confirm('Restore this study? It will be visible in the studies list again.')) return
+    await fetch(`/api/studies/${id}/restore`, { method: 'POST' })
+    loadTrash(trashPage)
+    setRefreshTick(t => t + 1)
+  }
+  const permDeleteStudy = async (id: string, uid: string) => {
+    if (!confirm(`Permanently delete study ${uid}?\nThis removes all DICOM files and cannot be undone.`)) return
+    await fetch(`/api/studies/bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', study_ids: [id] }) })
+    loadTrash(trashPage)
+  }
+
   // Global project selector — persisted to localStorage.
   const [globalProjectId, setGlobalProjectId] = useState<string>(() => localStorage.getItem(GLOBAL_PROJECT_KEY) ?? '')
 
@@ -9330,6 +9363,83 @@ export function App() {
                   />
                   <span className="pagination-jump__of">of {totalPages}</span>
                 </span>
+              )}
+            </div>
+          )}
+          {/* Deleted Studies (Trash) panel */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleTrashPanel}>
+                  {showTrashPanel ? '▲ Hide deleted studies' : `▼ Deleted studies (trash)`}
+                </button>
+                {showTrashPanel && trashTotal > 0 && (
+                  <span style={{fontSize: '0.75rem', color: '#9a3412'}}>
+                    {trashTotal} soft-deleted {trashTotal === 1 ? 'study' : 'studies'}
+                  </span>
+                )}
+              </div>
+              {showTrashPanel && (
+                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  {trashLoading ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>Loading…</p>
+                  ) : trashStudies.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No soft-deleted studies.</p>
+                  ) : (
+                    <>
+                      <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                        <thead>
+                          <tr>
+                            <th>Study UID</th>
+                            <th>Status at deletion</th>
+                            <th>Modality</th>
+                            <th>Body part</th>
+                            <th>Deleted at</th>
+                            <th style={{textAlign: 'right'}}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {trashStudies.map(s => (
+                            <tr key={s.id}>
+                              <td style={{fontFamily: 'monospace', fontSize: '0.72rem'}}>{s.study_instance_uid}</td>
+                              <td>{s.status || <span className="td-muted">—</span>}</td>
+                              <td>{s.modality || <span className="td-muted">—</span>}</td>
+                              <td>{s.body_part || <span className="td-muted">—</span>}</td>
+                              <td>{s.deleted_at ? new Date(s.deleted_at).toLocaleString() : <span className="td-muted">—</span>}</td>
+                              <td style={{textAlign: 'right', whiteSpace: 'nowrap'}}>
+                                <button
+                                  type="button"
+                                  className="btn btn--approve"
+                                  style={{fontSize: '0.72rem', padding: '2px 8px', marginRight: 4}}
+                                  onClick={() => restoreDeletedStudy(s.id)}
+                                  title="Restore study — makes it visible in the studies list again"
+                                >
+                                  Restore
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn--reject"
+                                  style={{fontSize: '0.72rem', padding: '2px 8px'}}
+                                  onClick={() => permDeleteStudy(s.id, s.study_instance_uid)}
+                                  title="Permanently delete study and all DICOM files — cannot be undone"
+                                >
+                                  Delete permanently
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {trashTotal > TRASH_PAGE_SIZE && (
+                        <div style={{display: 'flex', gap: 8, marginTop: 8, alignItems: 'center'}}>
+                          <button type="button" className="btn btn--secondary" disabled={trashPage === 0} onClick={() => { setTrashPage(p => p - 1); loadTrash(trashPage - 1) }}>← Prev</button>
+                          <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Page {trashPage + 1} of {Math.ceil(trashTotal / TRASH_PAGE_SIZE)}</span>
+                          <button type="button" className="btn btn--secondary" disabled={(trashPage + 1) * TRASH_PAGE_SIZE >= trashTotal} onClick={() => { setTrashPage(p => p + 1); loadTrash(trashPage + 1) }}>Next →</button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
             </div>
           )}
