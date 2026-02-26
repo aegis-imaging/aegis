@@ -112,6 +112,8 @@ import {
   softDeleteStudyArgsSchema,
   restoreStudyArgsSchema,
   getProtocolTrendArgsSchema,
+  listStudyNotesArgsSchema,
+  bulkCreateSharesArgsSchema,
   getProjectBidsInfoArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
@@ -515,6 +517,25 @@ const tools: Tool[] = [
         note: { type: "string", maxLength: 512 },
         expiry_hours: { type: "integer", minimum: 1, maximum: 8760, description: "Share expiry in hours (default 168 = 7 days, max 8760 = 1 year)" },
         max_downloads: { type: "integer", minimum: 1, maximum: 1000, description: "Maximum number of times the share can be downloaded before it is automatically revoked (omit for unlimited)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "bulk_create_shares",
+    description: "Create export share links for multiple approved studies in one call (max 200 per call). Each study gets its own unique share token. Non-approved or not-found studies are reported in the errors array — partial success is supported. Sends notification email to recipient for each created share. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["study_ids", "recipient_email", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_ids: { type: "array", items: { type: "string", format: "uuid" }, minItems: 1, maxItems: 200, description: "Array of study UUIDs to share (max 200)" },
+        recipient_email: { type: "string", format: "email", description: "Email address of the share recipient" },
+        note: { type: "string", maxLength: 500 },
+        expiry_hours: { type: "integer", minimum: 1, maximum: 8760, description: "Share expiry in hours (default 168 = 7 days)" },
+        max_downloads: { type: "integer", minimum: 1, description: "Max downloads per share (omit for unlimited)" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -2837,6 +2858,19 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "list_study_notes",
+    description: "List all operator notes recorded for a study. Notes are stored as audit entries (action='study.note') and returned newest-first. Use add_study_note to add new notes. Note text and author (actor email) are included.",
+    inputSchema: {
+      type: "object",
+      required: ["study_id"],
+      properties: {
+        request_id: { type: "string" },
+        study_id: { type: "string", format: "uuid", description: "Study UUID (database ID, not DICOM UID)" }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -3472,6 +3506,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_study_notes") {
+      const parsed = listStudyNotesArgsSchema.parse(args);
+      const data = await client.get(`/api/studies/${encodeURIComponent(parsed.study_id)}/notes`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (name === "query_pacs") {
       const parsed = queryPacsArgsSchema.parse(args);
       const body: Record<string, unknown> = {
@@ -3796,6 +3836,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleAddStudyNote(parsedNote.request_id ?? buildRequestId(), parsedNote);
       }
 
+      if (name === "bulk_create_shares") {
+        const parsed = bulkCreateSharesArgsSchema.parse(args);
+        return handleBulkCreateShares(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       if (name === "toggle_study_flag") {
         const parsedFlag = toggleStudyFlagArgsSchema.parse(args);
         return handleToggleStudyFlag(parsedFlag.request_id ?? buildRequestId(), parsedFlag);
@@ -4069,7 +4114,7 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
   if (name === "create_api_key") {
     return typeof args.name === "string" ? args.name : null;
   }
-  if (name === "bulk_approve_studies" || name === "bulk_reject_studies" || name === "bulk_label_studies") {
+  if (name === "bulk_approve_studies" || name === "bulk_reject_studies" || name === "bulk_label_studies" || name === "bulk_create_shares") {
     const ids = args.study_ids;
     if (Array.isArray(ids) && ids.length > 0) {
       return `${ids.length} studies`;
@@ -5136,6 +5181,42 @@ async function handleAddStudyNote(
   return formatSuccess(requestId, "add_study_note", {
     accepted: true,
     study_id: parsed.study_id,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleBulkCreateShares(
+  requestId: string,
+  parsed: {
+    study_ids: string[];
+    recipient_email: string;
+    note?: string;
+    expiry_hours?: number;
+    max_downloads?: number;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "bulk_create_shares");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow bulk_create_shares", false, "bulk_create_shares");
+  }
+
+  const body: Record<string, unknown> = {
+    study_ids: parsed.study_ids,
+    recipient_email: parsed.recipient_email
+  };
+  if (parsed.note !== undefined) body.note = parsed.note;
+  if (parsed.expiry_hours !== undefined) body.expiry_hours = parsed.expiry_hours;
+  if (parsed.max_downloads !== undefined) body.max_downloads = parsed.max_downloads;
+
+  const data = await client.post("/api/studies/bulk-share", body);
+  return formatSuccess(requestId, "bulk_create_shares", {
+    accepted: true,
+    recipient_email: parsed.recipient_email,
     reason: parsed.reason,
     result: data
   });

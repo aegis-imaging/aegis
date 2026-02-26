@@ -1066,6 +1066,23 @@ export const restoreStudyArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Study notes + bulk share ─────────────────────────────────────────────────
+export const listStudyNotesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid()
+});
+
+export const bulkCreateSharesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_ids: z.array(z.string().uuid()).min(1).max(200),
+  recipient_email: z.string().email(),
+  note: z.string().max(500).optional(),
+  expiry_hours: z.number().int().min(1).max(8760).optional(),
+  max_downloads: z.number().int().min(1).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -1134,7 +1151,8 @@ export const readToolNames = [
   "export_routing_rules",
   "query_pacs",
   "list_deleted_studies",
-  "get_protocol_trend"
+  "get_protocol_trend",
+  "list_study_notes"
 ] as const;
 
 export const writeToolNames = [
@@ -1231,7 +1249,8 @@ export const writeToolNames = [
   "bulk_toggle_routing_rules",
   "retrieve_pacs_study",
   "soft_delete_study",
-  "restore_study"
+  "restore_study",
+  "bulk_create_shares"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
