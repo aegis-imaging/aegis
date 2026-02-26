@@ -88,6 +88,26 @@ jobs:
         working-directory: terraform/azure
         run: terraform init -input=false
 
+      - name: Bootstrap Key Vault access for OIDC principal
+        working-directory: terraform/azure
+        run: |
+          # Resolve resource group name from tfvars or use convention default
+          RG=$(grep -oP 'resource_group_name\s*=\s*"\K[^"]+' terraform.tfvars 2>/dev/null || true)
+          if [ -z "$RG" ]; then
+            PROJECT=$(grep -oP 'project_name\s*=\s*"\K[^"]+' terraform.tfvars 2>/dev/null || echo "aegis")
+            ENV=$(grep -oP 'environment\s*=\s*"\K[^"]+' terraform.tfvars 2>/dev/null || echo "prod")
+            RG="${PROJECT}-${ENV}"
+          fi
+          KV_NAME=$(az keyvault list --resource-group "$RG" --query '[0].name' -o tsv 2>/dev/null || true)
+          if [ -n "$KV_NAME" ]; then
+            echo "Bootstrapping Key Vault access: KV=$KV_NAME RG=$RG"
+            OID=$(az ad sp show --id "$ARM_CLIENT_ID" --query id -o tsv)
+            az keyvault set-policy --name "$KV_NAME" --object-id "$OID" \
+              --secret-permissions get list set delete purge --output none || true
+          else
+            echo "No Key Vault found in RG=$RG — skipping bootstrap (first run)"
+          fi
+
       - name: Terraform Validate
         working-directory: terraform/azure
         run: terraform validate

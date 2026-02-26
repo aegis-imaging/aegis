@@ -2,7 +2,7 @@
 # Copy to terraform.tfvars and fill in your values.
 # Never commit terraform.tfvars — it contains secrets.
 
-azure_region       = "eastus"
+azure_region       = "eastus2"
 environment        = "prod"
 project_name       = "aegis"
 
