@@ -109,9 +109,10 @@ jobs:
         run: |
           docker build --platform linux/amd64 \
             --build-arg "VITE_API_BASE_URL=$API_URL" \
+            -f frontend/landing/Dockerfile \
             -t "$ACR/landing:$IMAGE_TAG" \
             -t "$ACR/landing:latest" \
-            frontend/landing/
+            .
           docker push "$ACR/landing:$IMAGE_TAG"
           docker push "$ACR/landing:latest"
 
