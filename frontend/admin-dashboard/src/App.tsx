@@ -202,7 +202,23 @@ type Project = {
   stuck_threshold_minutes?: number | null
   storage_quota_bytes?: number | null
   archived?: boolean
+  restricted?: boolean
+  member_count?: number
   created_at: string
+}
+
+type ProjectMember = {
+  id: string
+  project_id: string
+  admin_user_id: string
+  role: 'owner' | 'coordinator' | 'reviewer' | 'site_coordinator' | 'site_viewer'
+  institution_id: string | null
+  notes: string
+  user_email: string
+  user_name: string
+  institution_name?: string
+  created_at: string
+  updated_at: string
 }
 
 type AnonProfile = {
@@ -253,7 +269,7 @@ type AdminUser = {
   id: string
   email: string
   name: string
-  role: 'admin' | 'viewer'
+  role: 'admin' | 'viewer' | 'researcher'
   enabled: boolean
   notes: string
   created_at: string
@@ -5398,11 +5414,17 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   // Archive/restore state
   const [archiving, setArchiving] = useState<string | null>(null)
 
+  // Restricted toggle state
+  const [restrictedToggling, setRestrictedToggling] = useState<string | null>(null)
+
   // Compliance report modal
   const [complianceProjectId, setComplianceProjectId] = useState<string | null>(null)
 
   // Health panel modal
   const [healthProject, setHealthProject] = useState<{ id: string; name: string } | null>(null)
+
+  // Members panel modal
+  const [membersProject, setMembersProject] = useState<{ id: string; name: string } | null>(null)
 
   async function openPhiConfig(projectId: string) {
     setPhiProjectId(projectId)
@@ -5578,6 +5600,28 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
       alert(err instanceof Error ? err.message : `Failed to ${action} project`)
     } finally {
       setArchiving(null)
+    }
+  }
+
+  const toggleRestricted = async (p: Project) => {
+    const newValue = !p.restricted
+    const label = newValue ? 'restrict' : 'open'
+    if (!confirm(`${newValue ? 'Restrict' : 'Un-restrict'} project "${p.name}"?\n\n${newValue
+      ? 'Only project members and platform admins will be able to see this project.'
+      : 'All authenticated users will be able to see this project.'}`)) return
+    setRestrictedToggling(p.id)
+    try {
+      const res = await fetch(`/api/projects/${p.id}/restricted`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restricted: newValue }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      fetchProjects()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : `Failed to ${label} project`)
+    } finally {
+      setRestrictedToggling(null)
     }
   }
 
@@ -5847,6 +5891,8 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Retention</th>
                 <th>SLA</th>
                 <th>Quota</th>
+                <th>Access</th>
+                <th>Members</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -5881,6 +5927,16 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {p.storage_quota_bytes != null
                       ? <span className="badge badge--status">{formatBytes(p.storage_quota_bytes)}</span>
                       : <span className="routing-desc">unlimited</span>}
+                  </td>
+                  <td>
+                    {p.restricted
+                      ? <span className="badge badge--warn" title="Only project members can see this project">Restricted</span>
+                      : <span className="routing-desc">Open</span>}
+                  </td>
+                  <td>
+                    {p.member_count != null
+                      ? <span className="badge badge--neutral">{p.member_count}</span>
+                      : <span className="routing-desc">—</span>}
                   </td>
                   <td className="td-date">{fmtDate(p.created_at)}</td>
                   <td>
@@ -5929,6 +5985,19 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           title="Duplicate this project with all settings (routing rules, profiles, templates)"
                           onClick={() => cloneProject(p)}>
                           Clone
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          title="Manage project members and their access levels"
+                          onClick={() => setMembersProject({ id: p.id, name: p.name })}>
+                          Members
+                        </button>
+                        <button type="button"
+                          className={p.restricted ? 'btn btn--action' : 'btn btn--action'}
+                          title={p.restricted ? 'Click to open this project to all authenticated users' : 'Click to restrict this project to members only'}
+                          disabled={restrictedToggling === p.id}
+                          style={p.restricted ? { borderColor: '#ea580c', color: '#9a3412' } : {}}
+                          onClick={() => toggleRestricted(p)}>
+                          {restrictedToggling === p.id ? '…' : p.restricted ? 'Restricted' : 'Restrict'}
                         </button>
                         <button type="button" className="btn btn--action"
                           title="View compliance metrics for this project"
@@ -5980,6 +6049,269 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           onClose={() => setHealthProject(null)}
         />
       )}
+
+      {membersProject && (
+        <ProjectMembersPanel
+          projectId={membersProject.id}
+          projectName={membersProject.name}
+          onClose={() => setMembersProject(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Project Members Panel ─────────────────────────────────────────────────────
+
+const PROJECT_MEMBER_ROLES: Array<{ value: ProjectMember['role']; label: string; needsInstitution: boolean }> = [
+  { value: 'owner',            label: 'Owner (Principal Investigator)',           needsInstitution: false },
+  { value: 'coordinator',      label: 'Coordinator (Data Manager)',               needsInstitution: false },
+  { value: 'reviewer',         label: 'Reviewer (QC / Statistician)',             needsInstitution: false },
+  { value: 'site_coordinator', label: 'Site Coordinator (uploader, own site)',    needsInstitution: true  },
+  { value: 'site_viewer',      label: 'Site Viewer (read-only, own site)',        needsInstitution: true  },
+]
+
+function ProjectMembersPanel({ projectId, projectName, onClose }: { projectId: string; projectName: string; onClose: () => void }) {
+  const [members, setMembers]         = useState<ProjectMember[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState<string | null>(null)
+
+  // For add/edit form
+  const [showForm, setShowForm]       = useState(false)
+  const [editingMember, setEditingMember] = useState<ProjectMember | null>(null)
+  const [users, setUsers]             = useState<AdminUser[]>([])
+  const [institutions, setInstitutions] = useState<Institution[]>([])
+  const [formUserId, setFormUserId]   = useState('')
+  const [formRole, setFormRole]       = useState<ProjectMember['role']>('reviewer')
+  const [formInstId, setFormInstId]   = useState('')
+  const [formNotes, setFormNotes]     = useState('')
+  const [formError, setFormError]     = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
+  const [removing, setRemoving]       = useState<string | null>(null)
+
+  const roleInfo = PROJECT_MEMBER_ROLES.find(r => r.value === formRole)
+  const needsInst = roleInfo?.needsInstitution ?? false
+
+  const fetchMembers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/members`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setMembers(data.members ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load members')
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId])
+
+  useEffect(() => { fetchMembers() }, [fetchMembers])
+
+  async function openAddForm() {
+    setEditingMember(null)
+    setFormUserId('')
+    setFormRole('reviewer')
+    setFormInstId('')
+    setFormNotes('')
+    setFormError(null)
+    setShowForm(true)
+    // Load users + institutions if not already loaded
+    if (users.length === 0) {
+      const [ur, ir] = await Promise.all([
+        fetch('/api/admin-users'),
+        fetch('/api/institutions'),
+      ])
+      if (ur.ok) setUsers(await ur.json())
+      if (ir.ok) setInstitutions(await ir.json())
+    }
+  }
+
+  function openEditForm(m: ProjectMember) {
+    setEditingMember(m)
+    setFormUserId(m.admin_user_id)
+    setFormRole(m.role)
+    setFormInstId(m.institution_id ?? '')
+    setFormNotes(m.notes)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function saveMember() {
+    if (!editingMember && !formUserId) { setFormError('Select a user'); return }
+    if (needsInst && !formInstId) { setFormError('Site roles require an institution'); return }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const body: Record<string, unknown> = {
+        role: formRole,
+        institution_id: needsInst ? (formInstId || null) : null,
+        notes: formNotes,
+      }
+      if (!editingMember) body.admin_user_id = formUserId
+
+      const url = editingMember
+        ? `/api/projects/${projectId}/members/${editingMember.id}`
+        : `/api/projects/${projectId}/members`
+      const method = editingMember ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      fetchMembers()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function removeMember(m: ProjectMember) {
+    if (!confirm(`Remove ${m.user_name || m.user_email} from this project?`)) return
+    setRemoving(m.id)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/members/${m.id}`, { method: 'DELETE' })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Remove failed') }
+      fetchMembers()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Remove failed')
+    } finally {
+      setRemoving(null)
+    }
+  }
+
+  const roleBadgeClass = (role: string) => {
+    switch (role) {
+      case 'owner':            return 'badge badge--enabled'
+      case 'coordinator':      return 'badge badge--status'
+      case 'reviewer':         return 'badge badge--neutral'
+      case 'site_coordinator': return 'badge badge--status'
+      case 'site_viewer':      return 'badge badge--neutral'
+      default:                 return 'badge badge--neutral'
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-panel" style={{ maxWidth: '780px' }}>
+        <div className="modal-header">
+          <h2>Project Members — {projectName}</h2>
+          <button type="button" className="modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modal-body">
+          <div className="routing-section-sub" style={{ marginBottom: '16px' }}>
+            Coordinating center roles (Owner / Coordinator / Reviewer) see all studies.
+            Site roles (Site Coordinator / Site Viewer) are scoped to a single institution's studies.
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+            <button type="button" className="btn-primary" onClick={openAddForm}>+ Add member</button>
+          </div>
+
+          {showForm && (
+            <div className="routing-form" style={{ marginBottom: '16px' }}>
+              <h3>{editingMember ? 'Edit member' : 'Add member'}</h3>
+              {formError && <div className="form-error">{formError}</div>}
+              <div className="form-grid">
+                {!editingMember && (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                    User
+                    <select className="form-input" value={formUserId} onChange={e => setFormUserId(e.target.value)}>
+                      <option value="">— select user —</option>
+                      {users.filter(u => u.enabled).map(u => (
+                        <option key={u.id} value={u.id}>{u.name} ({u.email}) — {u.role}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {editingMember && (
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                    User: <strong>{editingMember.user_name || editingMember.user_email}</strong>
+                  </div>
+                )}
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                  Role
+                  <select className="form-input" value={formRole} onChange={e => setFormRole(e.target.value as ProjectMember['role'])}>
+                    {PROJECT_MEMBER_ROLES.map(r => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                </label>
+                {needsInst && (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                    Institution (site)
+                    <select className="form-input" value={formInstId} onChange={e => setFormInstId(e.target.value)}>
+                      <option value="">— select institution —</option>
+                      {institutions.filter(i => i.enabled && (i.institution_type === 'sender' || i.institution_type === 'both')).map(i => (
+                        <option key={i.id} value={i.id}>{i.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <input className="form-input form-input--wide" placeholder="Notes (optional)"
+                  value={formNotes} onChange={e => setFormNotes(e.target.value)} />
+              </div>
+              <div className="form-row form-row--actions">
+                <button type="button" className="btn-primary" onClick={saveMember} disabled={saving}>
+                  {saving ? 'Saving…' : editingMember ? 'Save changes' : 'Add'}
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {loading && <div className="state-loading">Loading members…</div>}
+          {error && <div className="state-error">{error}</div>}
+          {!loading && !error && members.length === 0 && (
+            <div className="state-empty">No members yet. Add members to control who can access this project.</div>
+          )}
+          {!loading && members.length > 0 && (
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Scoped to</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map(m => (
+                  <tr key={m.id}>
+                    <td>
+                      <div className="routing-name">{m.user_name || m.user_email}</div>
+                      {m.user_name && <div className="routing-desc">{m.user_email}</div>}
+                    </td>
+                    <td><span className={roleBadgeClass(m.role)}>{m.role.replace(/_/g, ' ')}</span></td>
+                    <td>
+                      {m.institution_name
+                        ? <span className="badge badge--status">{m.institution_name}</span>
+                        : <span className="routing-desc">All sites</span>}
+                    </td>
+                    <td><span className="routing-desc">{m.notes || '—'}</span></td>
+                    <td>
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEditForm(m)}>Edit</button>
+                        <button type="button" className="btn btn--reject"
+                          disabled={removing === m.id}
+                          onClick={() => removeMember(m)}>
+                          {removing === m.id ? '…' : 'Remove'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
