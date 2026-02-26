@@ -236,6 +236,12 @@ export const listAllSharesArgsSchema = z.object({
   status: z.enum(["active", "expired", "revoked"]).optional()
 });
 
+export const exportSharesCsvArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid().optional(),
+  status: z.enum(["active", "expired", "revoked"]).optional()
+});
+
 export const approveStudyArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   study_id: z.string().uuid(),
@@ -1155,7 +1161,8 @@ export const readToolNames = [
   "list_study_notes",
   "get_label_usage",
   "get_modality_trend",
-  "get_source_trend"
+  "get_source_trend",
+  "get_export_shares_csv"
 ] as const;
 
 export const writeToolNames = [
