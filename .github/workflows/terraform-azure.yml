@@ -67,6 +67,59 @@ jobs:
         working-directory: terraform/azure
         run: terraform validate
 
+      - name: Import orphaned DIMSE resources
+        working-directory: terraform/azure
+        # These resources were created by a partial apply run that failed before
+        # writing state. Import them so the next plan sees them and skips creation.
+        # Each line uses || true so the step passes when resources are already in state.
+        run: |
+          SUB=/subscriptions/c1140c6f-a27f-4a02-a87d-8e8fc1e8f75f
+          RG=/resourceGroups/aegis-prod
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_subnet.dimse[0]' \
+            "${SUB}${RG}/providers/Microsoft.Network/virtualNetworks/aegis-prod-vnet/subnets/dimse" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_public_ip.dimse[0]' \
+            "${SUB}${RG}/providers/Microsoft.Network/publicIPAddresses/aegis-prod-dimse-ip" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_network_security_group.dimse[0]' \
+            "${SUB}${RG}/providers/Microsoft.Network/networkSecurityGroups/aegis-prod-dimse-nsg" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_network_interface.dimse[0]' \
+            "${SUB}${RG}/providers/Microsoft.Network/networkInterfaces/aegis-prod-dimse-nic" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_network_interface_security_group_association.dimse[0]' \
+            "${SUB}${RG}/providers/Microsoft.Network/networkInterfaces/aegis-prod-dimse-nic|${SUB}${RG}/providers/Microsoft.Network/networkSecurityGroups/aegis-prod-dimse-nsg" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_managed_disk.dimse_data[0]' \
+            "${SUB}${RG}/providers/Microsoft.Compute/disks/aegis-prod-dimse-data" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_user_assigned_identity.dimse[0]' \
+            "${SUB}/resourcegroups/aegis-prod/providers/Microsoft.ManagedIdentity/userAssignedIdentities/aegis-prod-dimse" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_role_assignment.dimse_acr_pull[0]' \
+            "${SUB}${RG}/providers/Microsoft.ContainerRegistry/registries/aegisprodacr/providers/Microsoft.Authorization/roleAssignments/fc71d619-33db-a195-ae65-92a3fc680021" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_role_assignment.dimse_blob[0]' \
+            "${SUB}${RG}/providers/Microsoft.Storage/storageAccounts/aegisproddicom/providers/Microsoft.Authorization/roleAssignments/9299be11-d5b4-a630-c5f9-4833096d8dd8" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_linux_virtual_machine.dimse[0]' \
+            "${SUB}${RG}/providers/Microsoft.Compute/virtualMachines/aegis-prod-dimse-receiver" || true
+
+          terraform import -var 'api_image_tag=placeholder' \
+            'azurerm_virtual_machine_data_disk_attachment.dimse[0]' \
+            "${SUB}${RG}/providers/Microsoft.Compute/virtualMachines/aegis-prod-dimse-receiver/dataDisks/aegis-prod-dimse-data" || true
+
       - name: Terraform Plan
         id: plan
         working-directory: terraform/azure
