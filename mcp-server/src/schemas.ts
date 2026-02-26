@@ -1037,6 +1037,13 @@ export const retrievePacsStudyArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// ─── Protocol compliance trend ────────────────────────────────────────────────
+export const getProtocolTrendArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid().optional(),
+  days: z.number().int().min(1).max(365).optional()
+});
+
 // ─── Soft-delete / restore ────────────────────────────────────────────────────
 export const listDeletedStudiesArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
@@ -1126,7 +1133,8 @@ export const readToolNames = [
   "get_cohort_report",
   "export_routing_rules",
   "query_pacs",
-  "list_deleted_studies"
+  "list_deleted_studies",
+  "get_protocol_trend"
 ] as const;
 
 export const writeToolNames = [
