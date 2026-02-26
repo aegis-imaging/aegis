@@ -178,6 +178,9 @@ func main() {
 	mux.HandleFunc("GET /api/stats/daily-summary", auth(srv.GetDailySummary))
 	mux.HandleFunc("GET /api/stats/protocol-trend", auth(srv.GetProtocolTrend))
 	mux.HandleFunc("GET /api/stats/phi-trend", auth(srv.GetPhiTrend))
+	mux.HandleFunc("GET /api/stats/modality-trend", auth(srv.GetModalityTrend))
+	mux.HandleFunc("GET /api/stats/label-usage", auth(srv.GetLabelUsage))
+	mux.HandleFunc("GET /api/stats/source-trend", auth(srv.GetSourceTrend))
 	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
 	// System health summary — aggregated operational status panel.
@@ -224,6 +227,7 @@ func main() {
 	mux.HandleFunc("DELETE /api/studies/{id}", adminOnly(srv.DeleteStudy))
 	mux.HandleFunc("GET /api/study-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/{id}/audit", auth(srv.ListStudyAudit))
+	mux.HandleFunc("GET /api/studies/{id}/audit.csv", auth(srv.ExportStudyAuditCSV))
 	mux.HandleFunc("POST /api/studies/{id}/viewed", auth(srv.RecordStudyView))
 	mux.HandleFunc("GET /api/studies/{id}/series", auth(srv.ListStudySeries))
 	mux.HandleFunc("GET /api/studies/{id}/diagnostics", auth(srv.GetStudyDiagnostics))

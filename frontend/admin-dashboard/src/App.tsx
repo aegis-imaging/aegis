@@ -2213,22 +2213,33 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         </div>
 
         {detailTab === 'audit' && (
-          <table className="detail-table">
-            <thead>
-              <tr><th>Time</th><th>Action</th><th>Actor</th><th>Detail</th></tr>
-            </thead>
-            <tbody>
-              {audit.length === 0 && <tr><td colSpan={4}>No audit entries.</td></tr>}
-              {audit.map(e => (
-                <tr key={e.id}>
-                  <td className="td-date">{fmtDate(e.created_at)}</td>
-                  <td><code>{e.action}</code></td>
-                  <td>{e.actor}</td>
-                  <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>
+              <a
+                href={`/api/studies/${studyId}/audit.csv`}
+                className="btn btn--secondary"
+                download
+                title="Download audit trail as CSV"
+                style={{fontSize:'0.8rem'}}
+              >↓ Export CSV</a>
+            </div>
+            <table className="detail-table">
+              <thead>
+                <tr><th>Time</th><th>Action</th><th>Actor</th><th>Detail</th></tr>
+              </thead>
+              <tbody>
+                {audit.length === 0 && <tr><td colSpan={4}>No audit entries.</td></tr>}
+                {audit.map(e => (
+                  <tr key={e.id}>
+                    <td className="td-date">{fmtDate(e.created_at)}</td>
+                    <td><code>{e.action}</code></td>
+                    <td>{e.actor}</td>
+                    <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
 
         {detailTab === 'routing' && (
@@ -7982,6 +7993,85 @@ export function App() {
     setShowPhiTrend(v => !v)
   }
 
+  // Modality trend panel (F3)
+  type ModalityTrendDay = { day: string; counts: Record<string, number>; total: number }
+  type ModalityTrend = { generated_at: string; period_days: number; project_id?: string; totals: Record<string, number>; days: ModalityTrendDay[] }
+  const [showModalityTrend, setShowModalityTrend] = useState(false)
+  const [modalityTrend, setModalityTrend] = useState<ModalityTrend | null>(null)
+  const [modalityTrendLoading, setModalityTrendLoading] = useState(false)
+  const loadModalityTrend = async () => {
+    setModalityTrendLoading(true)
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/modality-trend?${params}`)
+    const d = r.ok ? await r.json() : null
+    setModalityTrendLoading(false)
+    if (d) setModalityTrend(d)
+  }
+  const toggleModalityTrend = () => {
+    if (!showModalityTrend && !modalityTrend) loadModalityTrend()
+    setShowModalityTrend(v => !v)
+  }
+
+  // Label usage panel (F4)
+  type LabelUsageRow = { label: string; count: number; study_count: number }
+  type LabelUsage = { project_id?: string; total_labels: number; labels: LabelUsageRow[] }
+  const [showLabelUsage, setShowLabelUsage] = useState(false)
+  const [labelUsage, setLabelUsage] = useState<LabelUsage | null>(null)
+  const [labelUsageLoading, setLabelUsageLoading] = useState(false)
+  const loadLabelUsage = async () => {
+    setLabelUsageLoading(true)
+    const params = new URLSearchParams()
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/label-usage?${params}`)
+    const d = r.ok ? await r.json() : null
+    setLabelUsageLoading(false)
+    if (d) setLabelUsage(d)
+  }
+  const toggleLabelUsage = () => {
+    if (!showLabelUsage && !labelUsage) loadLabelUsage()
+    setShowLabelUsage(v => !v)
+  }
+
+  // Source trend panel (F6)
+  type SourceTrendDay = { day: string; external: number; internal: number; total: number }
+  type SourceTrend = { generated_at: string; period_days: number; project_id?: string; totals: { external: number; internal: number; total: number }; days: SourceTrendDay[] }
+  const [showSourceTrend, setShowSourceTrend] = useState(false)
+  const [sourceTrend, setSourceTrend] = useState<SourceTrend | null>(null)
+  const [sourceTrendLoading, setSourceTrendLoading] = useState(false)
+  const loadSourceTrend = async () => {
+    setSourceTrendLoading(true)
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/source-trend?${params}`)
+    const d = r.ok ? await r.json() : null
+    setSourceTrendLoading(false)
+    if (d) setSourceTrend(d)
+  }
+  const toggleSourceTrend = () => {
+    if (!showSourceTrend && !sourceTrend) loadSourceTrend()
+    setShowSourceTrend(v => !v)
+  }
+
+  // Institution breakdown panel (F8)
+  type InstitBreakdownRow = { institution_id: string | null; institution_name: string | null; study_count: number; approved: number; rejected: number; pending: number }
+  type InstitBreakdown = { project_id: string; generated_at: string; rows: InstitBreakdownRow[] }
+  const [showInstitBreakdown, setShowInstitBreakdown] = useState(false)
+  const [institBreakdown, setInstitBreakdown] = useState<InstitBreakdown | null>(null)
+  const [institBreakdownLoading, setInstitBreakdownLoading] = useState(false)
+  const loadInstitBreakdown = async () => {
+    if (!globalProjectId) return
+    setInstitBreakdownLoading(true)
+    const r = await fetch(`/api/projects/${globalProjectId}/institution-breakdown`)
+    const d = r.ok ? await r.json() : null
+    setInstitBreakdownLoading(false)
+    if (d) setInstitBreakdown(d)
+  }
+  const toggleInstitBreakdown = () => {
+    if (!showInstitBreakdown && !institBreakdown) loadInstitBreakdown()
+    setShowInstitBreakdown(v => !v)
+  }
+
   // Bulk share state (F4)
   const [bulkShareEmail, setBulkShareEmail] = useState('')
   const [bulkShareExpiry, setBulkShareExpiry] = useState('168')
@@ -9751,6 +9841,184 @@ export function App() {
                             <td style={{textAlign:'right'}}>{d.scanned}</td>
                             <td style={{textAlign:'right', color: d.flagged > 0 ? '#ea580c' : undefined}}>{d.flagged}</td>
                             <td style={{textAlign:'right'}}>{d.flag_rate_pct >= 0 ? `${d.flag_rate_pct.toFixed(1)}%` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Modality trend panel (F3) */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleModalityTrend}>
+                  {showModalityTrend ? '▲ Hide modality trend' : '▼ Modality trend (30d)'}
+                </button>
+                {showModalityTrend && modalityTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showModalityTrend && modalityTrend && !modalityTrendLoading && (
+                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  {Object.keys(modalityTrend.totals).length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies in this period.</p>
+                  ) : (
+                    <>
+                      <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
+                        <strong>Totals ({modalityTrend.period_days}d):</strong>{' '}
+                        {Object.entries(modalityTrend.totals).map(([mod, cnt]) => (
+                          <span key={mod} style={{marginRight: 12}}>{mod}: <strong>{cnt}</strong></span>
+                        ))}
+                      </div>
+                      {modalityTrend.days.length > 0 && (
+                        <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                          <thead>
+                            <tr>
+                              <th>Day</th>
+                              {Object.keys(modalityTrend.totals).map(mod => (
+                                <th key={mod} style={{textAlign:'right'}}>{mod}</th>
+                              ))}
+                              <th style={{textAlign:'right'}}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {modalityTrend.days.map(d => (
+                              <tr key={d.day}>
+                                <td style={{fontFamily:'monospace'}}>{d.day}</td>
+                                {Object.keys(modalityTrend.totals).map(mod => (
+                                  <td key={mod} style={{textAlign:'right'}}>{d.counts[mod] ?? 0}</td>
+                                ))}
+                                <td style={{textAlign:'right'}}><strong>{d.total}</strong></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Label usage panel (F4) */}
+          {isAdmin && globalProjectId && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleLabelUsage}>
+                  {showLabelUsage ? '▲ Hide label usage' : '▼ Label usage'}
+                </button>
+                {showLabelUsage && labelUsageLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showLabelUsage && labelUsage && !labelUsageLoading && (
+                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  {labelUsage.labels.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No labels applied to studies in this project.</p>
+                  ) : (
+                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Label</th>
+                          <th style={{textAlign:'right'}}>Applications</th>
+                          <th style={{textAlign:'right'}}>Unique Studies</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {labelUsage.labels.map(row => (
+                          <tr key={row.label}>
+                            <td><code>{row.label}</code></td>
+                            <td style={{textAlign:'right'}}>{row.count}</td>
+                            <td style={{textAlign:'right'}}>{row.study_count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Source trend panel (F6) */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleSourceTrend}>
+                  {showSourceTrend ? '▲ Hide source trend' : '▼ Source trend (30d)'}
+                </button>
+                {showSourceTrend && sourceTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showSourceTrend && sourceTrend && !sourceTrendLoading && (
+                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
+                    <strong>Overall ({sourceTrend.period_days}d):</strong>{' '}
+                    External: <strong>{sourceTrend.totals.external}</strong> ·{' '}
+                    Internal: <strong>{sourceTrend.totals.internal}</strong> ·{' '}
+                    Total: <strong>{sourceTrend.totals.total}</strong>
+                  </div>
+                  {sourceTrend.days.filter(d => d.total > 0).length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies ingested in this period.</p>
+                  ) : (
+                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Day</th>
+                          <th style={{textAlign:'right'}}>External</th>
+                          <th style={{textAlign:'right'}}>Internal</th>
+                          <th style={{textAlign:'right'}}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sourceTrend.days.filter(d => d.total > 0).map(d => (
+                          <tr key={d.day}>
+                            <td style={{fontFamily:'monospace'}}>{d.day}</td>
+                            <td style={{textAlign:'right'}}>{d.external}</td>
+                            <td style={{textAlign:'right'}}>{d.internal}</td>
+                            <td style={{textAlign:'right'}}><strong>{d.total}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Institution breakdown panel (F8) — requires a project to be selected */}
+          {isAdmin && globalProjectId && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleInstitBreakdown}>
+                  {showInstitBreakdown ? '▲ Hide institution breakdown' : '▼ Institution breakdown'}
+                </button>
+                {showInstitBreakdown && institBreakdownLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showInstitBreakdown && institBreakdown && !institBreakdownLoading && (
+                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  {institBreakdown.rows.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies in this project yet.</p>
+                  ) : (
+                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Institution</th>
+                          <th style={{textAlign:'right'}}>Studies</th>
+                          <th style={{textAlign:'right'}}>Approved</th>
+                          <th style={{textAlign:'right'}}>Rejected</th>
+                          <th style={{textAlign:'right'}}>Pending</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {institBreakdown.rows.map((row, i) => (
+                          <tr key={row.institution_id ?? `unknown-${i}`}>
+                            <td>{row.institution_name ?? <em style={{color:'#9ca3af'}}>Unknown</em>}</td>
+                            <td style={{textAlign:'right'}}>{row.study_count}</td>
+                            <td style={{textAlign:'right', color: row.approved > 0 ? '#0d9488' : undefined}}>{row.approved}</td>
+                            <td style={{textAlign:'right', color: row.rejected > 0 ? '#ea580c' : undefined}}>{row.rejected}</td>
+                            <td style={{textAlign:'right'}}>{row.pending}</td>
                           </tr>
                         ))}
                       </tbody>
