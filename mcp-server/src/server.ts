@@ -646,6 +646,18 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_label_usage",
+    description: "Get aggregated label usage statistics across all studies: label text, total count, and distinct study count per label. Optionally scope to a single project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_breakdown_stats",
     description: "Get study counts grouped by modality and body part. Useful for understanding the composition of the study corpus. Optionally scope to a single project.",
     inputSchema: {
@@ -3119,6 +3131,15 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.days !== undefined) params.set("days", String(parsed.days));
       const qs = params.toString();
       const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/retention-preview${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_label_usage") {
+      const parsed = projectScopedArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/label-usage${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
