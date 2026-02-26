@@ -10,7 +10,7 @@ Endpoints:
   POST /detect          — scan a study for burned-in PHI (synchronous)
 
 Environment variables:
-  PHI_TOOL                  — "auto" | "tesseract" | "google_vision" | "aws_textract"
+  PHI_TOOL                  — "auto" | "tesseract" | "google_vision" | "azure_vision" | "aws_textract"
   PHI_CONFIDENCE_THRESHOLD  — minimum OCR confidence 0.0–1.0 (default: 0.4)
   PHI_MIN_TEXT_LENGTH       — minimum text length to report (default: 3)
 """
@@ -27,6 +27,7 @@ from .config import cfg
 from .backends.base import PHIDetectionBackend
 from .backends.tesseract import TesseractBackend
 from .backends.google_vision import GoogleVisionBackend
+from .backends.azure_vision import AzureVisionBackend
 from .backends.aws_textract import AWSTextractBackend
 from .backends.gemini import GeminiBackend
 
@@ -51,6 +52,10 @@ def _select_backend() -> PHIDetectionBackend:
         confidence_threshold=cfg.confidence_threshold,
         min_text_length=cfg.min_text_length,
     )
+    azure_vision = AzureVisionBackend(
+        confidence_threshold=cfg.confidence_threshold,
+        min_text_length=cfg.min_text_length,
+    )
     aws_textract = AWSTextractBackend(
         confidence_threshold=cfg.confidence_threshold,
         min_text_length=cfg.min_text_length,
@@ -64,14 +69,16 @@ def _select_backend() -> PHIDetectionBackend:
         candidates = [tesseract]
     elif cfg.phi_tool == "google_vision":
         candidates = [google_vision]
+    elif cfg.phi_tool == "azure_vision":
+        candidates = [azure_vision]
     elif cfg.phi_tool == "aws_textract":
         candidates = [aws_textract]
     elif cfg.phi_tool == "gemini":
         candidates = [gemini]
     else:  # "auto"
         # Priority: Gemini highest (best accuracy), then Cloud Vision, then
-        # AWS Textract, then offline Tesseract fallback.
-        candidates = [gemini, google_vision, aws_textract, tesseract]
+        # Azure Vision, then AWS Textract, then offline Tesseract fallback.
+        candidates = [gemini, google_vision, azure_vision, aws_textract, tesseract]
 
     for backend in candidates:
         if backend.available():
@@ -81,6 +88,7 @@ def _select_backend() -> PHIDetectionBackend:
     raise RuntimeError(
         "No PHI detection backend is available. "
         "Install google-genai (Gemini), google-cloud-vision, "
+        "azure-ai-vision-imageanalysis (Azure), "
         "boto3 (AWS Textract), or tesseract-ocr+pytesseract."
     )
 

@@ -1,15 +1,17 @@
 # AEGIS Classification Service
 #
 # Backend controlled by CLASSIFY_TOOL env var:
-#   "auto" (default): gemini > google_vision > aws_rekognition > heuristic
+#   "auto" (default): gemini > google_vision > azure_vision > aws_rekognition > heuristic
 #   "gemini":         Gemini multimodal classification (google-genai SDK)
 #   "google_vision":  Cloud Vision label_detection augments heuristic
+#   "azure_vision":   Azure Computer Vision image tagging augments heuristic
 #   "aws_rekognition": Rekognition detect_labels augments heuristic
 #   "heuristic":      local DICOM tag analysis only (no cloud dependencies)
 #
 # Cloud backends are optional — build with:
 #   --build-arg INCLUDE_GEMINI=true
 #   --build-arg INCLUDE_GOOGLE_VISION=true
+#   --build-arg INCLUDE_AZURE_VISION=true
 #   --build-arg INCLUDE_AWS_REKOGNITION=true
 
 FROM python:3.12-slim
@@ -30,6 +32,12 @@ fi
 ARG INCLUDE_GOOGLE_VISION=false
 RUN if [ "$INCLUDE_GOOGLE_VISION" = "true" ]; then \
     pip install --no-cache-dir google-cloud-vision Pillow numpy; \
+fi
+
+# Azure Computer Vision (optional, ~30 MB) — includes Pillow+numpy for pixel rendering
+ARG INCLUDE_AZURE_VISION=false
+RUN if [ "$INCLUDE_AZURE_VISION" = "true" ]; then \
+    pip install --no-cache-dir azure-ai-vision-imageanalysis azure-identity Pillow numpy; \
 fi
 
 # AWS Rekognition via boto3 (optional, ~50 MB) — includes Pillow+numpy for pixel rendering

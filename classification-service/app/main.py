@@ -22,6 +22,7 @@ from .backends.base import ClassificationBackend
 from .backends.heuristic import HeuristicBackend
 from .backends.gemini import GeminiClassificationBackend
 from .backends.google_vision import GoogleVisionClassificationBackend
+from .backends.azure_vision import AzureVisionClassificationBackend
 from .backends.aws_rekognition import AWSRekognitionClassificationBackend
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -32,9 +33,10 @@ app = FastAPI(title="AEGIS Metadata Classification Service")
 # ── Backend selection ────────────────────────────────────────────────────────
 
 _BACKENDS: list[ClassificationBackend] = [
-    # Priority order: Gemini highest, then cloud vision/rekognition, then offline fallback.
+    # Priority order: Gemini highest, then cloud vision providers, then offline fallback.
     GeminiClassificationBackend(confidence_threshold=cfg.confidence_threshold),
     GoogleVisionClassificationBackend(confidence_threshold=cfg.confidence_threshold),
+    AzureVisionClassificationBackend(confidence_threshold=cfg.confidence_threshold),
     AWSRekognitionClassificationBackend(confidence_threshold=cfg.confidence_threshold),
     HeuristicBackend(),
 ]

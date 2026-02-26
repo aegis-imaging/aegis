@@ -106,6 +106,7 @@ services:
       context: ./phi-detection
       args:
         INCLUDE_GOOGLE_VISION: "${INCLUDE_GOOGLE_VISION:-false}"
+        INCLUDE_AZURE_VISION: "${INCLUDE_AZURE_VISION:-false}"
         INCLUDE_AWS_TEXTRACT: "${INCLUDE_AWS_TEXTRACT:-false}"
     environment:
       PHI_TOOL: "${PHI_TOOL:-auto}"
@@ -153,6 +154,7 @@ services:
       context: ./classification-service
       args:
         INCLUDE_GOOGLE_VISION: "${INCLUDE_GOOGLE_VISION:-false}"
+        INCLUDE_AZURE_VISION: "${INCLUDE_AZURE_VISION:-false}"
         INCLUDE_AWS_REKOGNITION: "${INCLUDE_AWS_REKOGNITION:-false}"
     environment:
       CLASSIFY_TOOL: "${CLASSIFY_TOOL:-auto}"

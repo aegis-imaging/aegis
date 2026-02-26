@@ -260,6 +260,36 @@ jobs:
       - name: Deploy — mcp-server
         run: az containerapp update --name aegis-prod-mcp-server --resource-group "$RG" --image "$ACR/mcp-server:$IMAGE_TAG"
 
+  # ── Phase 2b: Post-deploy health check ───────────────────────────────────
+  health-check:
+    name: Post-deploy health check
+    runs-on: ubuntu-latest
+    needs: deploy
+    env:
+      API_URL: ${{ vars.AZURE_API_URL }}
+    steps:
+      - name: Wait for rollout
+        run: sleep 30
+
+      - name: Verify API health
+        run: |
+          max_attempts=5
+          delay=15
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "Health check attempt $attempt/$max_attempts..."
+            status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "$API_URL/healthz" 2>/dev/null || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "API is healthy:"
+              cat /tmp/healthz.json | python3 -m json.tool 2>/dev/null || cat /tmp/healthz.json
+              exit 0
+            fi
+            echo "Got HTTP $status, retrying in ${delay}s..."
+            sleep "$delay"
+          done
+          echo "::error::API health check failed after $max_attempts attempts (last HTTP $status)"
+          cat /tmp/healthz.json 2>/dev/null || true
+          exit 1
+
   # ── Phase 3: Deploy DIMSE Receiver VM (if configured) ─────────────────────
   # Only runs when AZURE_DIMSE_VM_NAME variable is set.
   deploy-dimse:
@@ -292,8 +322,9 @@ jobs:
               ACR_TOKEN=\$(az acr login --name \"$ACR\" --expose-token --output tsv --query accessToken 2>/dev/null)
               docker login \"$ACR\" --username 00000000-0000-0000-0000-000000000000 --password \"\$ACR_TOKEN\"
               docker pull \"$ACR/dimse-receiver:$IMAGE_TAG\"
-              docker rm -f dimse-receiver 2>/dev/null || true
+              # Capture env vars from the running container BEFORE removing it.
               PREV_ENV=\$(docker inspect --format '{{range .Config.Env}}-e {{.}} {{end}}' dimse-receiver 2>/dev/null || echo '')
+              docker rm -f dimse-receiver 2>/dev/null || true
               docker run -d \
                 --name dimse-receiver \
                 --restart unless-stopped \
