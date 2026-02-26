@@ -28,15 +28,16 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f := model.StudyFilters{
-		ProjectID: q.Get("project_id"),
-		Status:    q.Get("status"),
-		Modality:  q.Get("modality"),
-		BodyPart:  q.Get("body_part"),
-		Source:    q.Get("source"),
-		Search:    q.Get("search"),
-		Label:     q.Get("label"),
-		DateFrom:  dateFrom,
-		DateTo:    dateTo,
+		ProjectID:     q.Get("project_id"),
+		Status:        q.Get("status"),
+		Modality:      q.Get("modality"),
+		BodyPart:      q.Get("body_part"),
+		Source:        q.Get("source"),
+		Search:        q.Get("search"),
+		Label:         q.Get("label"),
+		InstitutionID: q.Get("institution_id"),
+		DateFrom:      dateFrom,
+		DateTo:        dateTo,
 	}
 
 	studies, err := model.ListStudies(r.Context(), s.db, f, 10000, 0)
