@@ -70,7 +70,7 @@ resource "azurerm_monitor_metric_alert" "api_latency" {
 
   criteria {
     metric_namespace = "Microsoft.App/containerapps"
-    metric_name      = "RespondTime"
+    metric_name      = "ResponseTime"
     aggregation      = "Average"
     operator         = "GreaterThan"
     threshold        = 2000
