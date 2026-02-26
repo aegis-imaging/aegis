@@ -208,6 +208,17 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}/routing-rules/export", auth(srv.ExportRoutingRules))
 	mux.HandleFunc("POST /api/projects/{id}/routing-rules/import", adminOnly(srv.ImportRoutingRules))
 
+	// Project milestones — track project progress.
+	mux.HandleFunc("GET /api/projects/{id}/milestones", auth(srv.ListProjectMilestones))
+	mux.HandleFunc("POST /api/projects/{id}/milestones", adminOnly(srv.CreateProjectMilestone))
+	mux.HandleFunc("PATCH /api/projects/{id}/milestones/{milestoneID}", adminOnly(srv.UpdateProjectMilestone))
+	mux.HandleFunc("DELETE /api/projects/{id}/milestones/{milestoneID}", adminOnly(srv.DeleteProjectMilestone))
+
+	// Custom field definitions — per-project custom metadata fields.
+	mux.HandleFunc("GET /api/projects/{id}/custom-fields", auth(srv.ListCustomFieldDefinitions))
+	mux.HandleFunc("POST /api/projects/{id}/custom-fields", adminOnly(srv.CreateCustomFieldDefinition))
+	mux.HandleFunc("DELETE /api/projects/{id}/custom-fields/{fieldID}", adminOnly(srv.DeleteCustomFieldDefinition))
+
 	// Auto-share rules — automatically create shares when studies are approved.
 	mux.HandleFunc("GET /api/projects/{projectID}/auto-share-rules", auth(srv.ListAutoShareRules))
 	mux.HandleFunc("POST /api/projects/{projectID}/auto-share-rules", adminOnly(srv.CreateAutoShareRule))
@@ -240,6 +251,8 @@ func main() {
 	mux.HandleFunc("GET /api/studies/expiring", auth(srv.GetExpiringStudies))
 	mux.HandleFunc("GET /api/studies/deleted", auth(srv.ListDeletedStudies))
 	mux.HandleFunc("GET /api/studies/events", auth(srv.StudyEvents))
+	mux.HandleFunc("GET /api/studies/priority-queue", auth(srv.GetStudyPriorityQueue))
+	mux.HandleFunc("GET /api/studies/compare", auth(srv.CompareStudies))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
 	mux.HandleFunc("DELETE /api/studies/{id}", adminOnly(srv.DeleteStudy))
 	mux.HandleFunc("GET /api/study-uid/{studyUID}", auth(srv.GetStudyByUID))
@@ -303,6 +316,11 @@ func main() {
 	mux.HandleFunc("POST /api/institutions/{id}/projects", adminOnly(srv.AddInstitutionProject))
 	mux.HandleFunc("DELETE /api/institutions/{id}/projects/{projectID}", adminOnly(srv.RemoveInstitutionProject))
 
+	// Institution contacts — contact directory per institution.
+	mux.HandleFunc("GET /api/institutions/{id}/contacts", auth(srv.ListInstitutionContacts))
+	mux.HandleFunc("POST /api/institutions/{id}/contacts", adminOnly(srv.CreateInstitutionContact))
+	mux.HandleFunc("DELETE /api/institutions/{id}/contacts/{contactID}", adminOnly(srv.DeleteInstitutionContact))
+
 	// Destinations — external DICOM endpoints studies can be forwarded to.
 	mux.HandleFunc("GET /api/destinations", auth(srv.ListDestinations))
 	mux.HandleFunc("GET /api/destinations/health", auth(srv.GetAllDestinationsHealth))
@@ -361,6 +379,17 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{id}/comments", auth(srv.ListStudyComments))
 	mux.HandleFunc("POST /api/studies/{id}/comments", adminOnly(srv.CreateStudyComment))
 	mux.HandleFunc("DELETE /api/studies/{id}/comments/{commentID}", adminOnly(srv.DeleteStudyComment))
+
+	// Study activity timeline — unified feed of audit + comments.
+	mux.HandleFunc("GET /api/studies/{id}/activity", auth(srv.GetStudyActivity))
+
+	// Study transfer log — provenance tracking for project moves.
+	mux.HandleFunc("GET /api/studies/{id}/transfers", auth(srv.ListStudyTransfers))
+	mux.HandleFunc("POST /api/studies/{id}/transfer", adminOnly(srv.TransferStudy))
+
+	// Study custom fields — per-study metadata from project-defined fields.
+	mux.HandleFunc("GET /api/studies/{id}/custom-fields", auth(srv.ListStudyCustomFields))
+	mux.HandleFunc("POST /api/studies/{id}/custom-fields", adminOnly(srv.SetStudyCustomField))
 
 	// Study watchers — subscribe to study events.
 	mux.HandleFunc("GET /api/studies/{id}/watchers", auth(srv.ListStudyWatchers))
@@ -433,6 +462,22 @@ func main() {
 
 	// Auth session tracking.
 	mux.HandleFunc("POST /api/auth/session", auth(srv.RecordSession))
+
+	// Comment reactions — emoji reactions on study comments.
+	mux.HandleFunc("GET /api/comments/{id}/reactions", auth(srv.ListCommentReactions))
+	mux.HandleFunc("POST /api/comments/{id}/reactions", auth(srv.AddCommentReaction))
+	mux.HandleFunc("DELETE /api/comments/{id}/reactions", auth(srv.DeleteCommentReaction))
+
+	// Dashboard saved views — server-side filter presets.
+	mux.HandleFunc("GET /api/saved-views", auth(srv.ListSavedViews))
+	mux.HandleFunc("POST /api/saved-views", auth(srv.CreateSavedView))
+	mux.HandleFunc("PUT /api/saved-views/{id}", auth(srv.UpdateSavedView))
+	mux.HandleFunc("DELETE /api/saved-views/{id}", auth(srv.DeleteSavedView))
+
+	// Routing rule templates — shareable rule configurations.
+	mux.HandleFunc("GET /api/routing-rule-templates", auth(srv.ListRoutingRuleTemplates))
+	mux.HandleFunc("POST /api/routing-rule-templates", adminOnly(srv.CreateRoutingRuleTemplate))
+	mux.HandleFunc("DELETE /api/routing-rule-templates/{id}", adminOnly(srv.DeleteRoutingRuleTemplate))
 
 	// Project-level batch export — dispatch all eligible approved studies.
 	mux.HandleFunc("POST /api/projects/{id}/export-batch", adminOnly(srv.ExportBatch))
