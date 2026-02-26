@@ -39,6 +39,8 @@ type Study struct {
 	RejectionReason        *string   `json:"rejection_reason,omitempty"`
 	StudySizeBytes         int64     `json:"study_size_bytes"`
 	PriorityFlag           bool       `json:"priority_flag"`
+	AssignedTo             *string    `json:"assigned_to,omitempty"`
+	AssignedAt             *time.Time `json:"assigned_at,omitempty"`
 	DeletedAt              *time.Time `json:"deleted_at,omitempty"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
@@ -56,6 +58,8 @@ const studyColumns = `
 	rejection_reason,
 	study_size_bytes,
 	priority_flag,
+	assigned_to,
+	assigned_at,
 	deleted_at,
 	created_at, updated_at`
 
@@ -78,6 +82,8 @@ func scanStudy(row scannable, s *Study) error {
 		&s.RejectionReason,
 		&s.StudySizeBytes,
 		&s.PriorityFlag,
+		&s.AssignedTo,
+		&s.AssignedAt,
 		&s.DeletedAt,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
@@ -138,6 +144,7 @@ type StudyFilters struct {
 	DateFrom      time.Time // created_at >= DateFrom (zero = no lower bound)
 	DateTo        time.Time // created_at <= DateTo   (zero = no upper bound)
 	Flagged       *bool     // if non-nil, filter by priority_flag value
+	AssignedTo    string    // exact match on assigned_to UUID
 	SortBy        string    // created_at|updated_at|status|modality|body_part|source|instance_count (default: created_at)
 	SortDir       string    // asc|desc (default: desc)
 }
@@ -210,6 +217,11 @@ func studyWhere(f StudyFilters) (string, []any) {
 		args = append(args, *f.Flagged)
 		n++
 	}
+	if f.AssignedTo != "" {
+		clauses = append(clauses, fmt.Sprintf(`assigned_to = $%d`, n))
+		args = append(args, f.AssignedTo)
+		n++
+	}
 	_ = n
 
 	where := ""
@@ -231,6 +243,7 @@ var allowedStudySortCols = map[string]string{
 	"body_part":      "body_part",
 	"source":         "source",
 	"instance_count": "instance_count",
+	"assigned_at":    "assigned_at",
 }
 
 func ListStudies(ctx context.Context, db *sql.DB, f StudyFilters, limit, offset int) ([]Study, error) {
@@ -321,6 +334,22 @@ func GetUploaderEmail(ctx context.Context, db *sql.DB, studyID string) (string, 
 func SetDefacingRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies SET defacing_required = $1, updated_at = now() WHERE id = $2`, required, id)
+	return err
+}
+
+// AssignStudy assigns a study to an admin user for review.
+func AssignStudy(ctx context.Context, db *sql.DB, studyID, userID string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET assigned_to = $1, assigned_at = now(), updated_at = now()
+		WHERE id = $2`, userID, studyID)
+	return err
+}
+
+// UnassignStudy removes the assignment from a study.
+func UnassignStudy(ctx context.Context, db *sql.DB, studyID string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET assigned_to = NULL, assigned_at = NULL, updated_at = now()
+		WHERE id = $1`, studyID)
 	return err
 }
 
@@ -810,7 +839,7 @@ func GetExpiringStudies(ctx context.Context, db *sql.DB, projectID string, days,
 		  s.bids_required, s.bids_status, s.classification_required, s.classification_status,
 		  s.protocol_required, s.protocol_status, s.export_required, s.export_status,
 		  s.deface_qa_score, s.subject_id, s.rejection_reason, s.study_size_bytes,
-		  s.priority_flag, s.created_at, s.updated_at,
+		  s.priority_flag, s.assigned_to, s.assigned_at, s.created_at, s.updated_at,
 		  p.retention_days,
 		  (s.created_at + (p.retention_days * INTERVAL '1 day'))                              AS expires_at,
 		  GREATEST(0, EXTRACT(DAY FROM (s.created_at + (p.retention_days * INTERVAL '1 day') - now()))::int) AS days_until_expiry
@@ -849,6 +878,8 @@ func GetExpiringStudies(ctx context.Context, db *sql.DB, projectID string, days,
 				&row.RejectionReason,
 				&row.StudySizeBytes,
 				&row.PriorityFlag,
+				&row.AssignedTo,
+				&row.AssignedAt,
 				&row.CreatedAt, &row.UpdatedAt,
 				&row.RetentionDays,
 				&expiresAt,
