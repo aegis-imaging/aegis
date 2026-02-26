@@ -1,10 +1,11 @@
 """Optional Vertex AI Imagen backend for synthetic brain MRI generation.
 
 Only importable when the Dockerfile is built with INCLUDE_GEMINI=true, which
-installs google-cloud-aiplatform >= 1.40.0.
+installs google-genai >= 1.0.0.
 
-Model: imagegeneration@006 (Imagen 2) on Vertex AI
-Auth: Application Default Credentials — no API key needed on GCP Cloud Run.
+Uses the unified google-genai SDK. Supports two authentication modes:
+  - Vertex AI (default): Application Default Credentials / Workload Identity
+  - AI Studio: API key via GEMINI_API_KEY env var
 
 Import guard: callers must handle ImportError when this module is unavailable.
 """
@@ -18,10 +19,9 @@ from pydicom.uid import generate_uid
 
 
 def _imagen_available() -> bool:
-    """Return True if the Vertex AI Imagen SDK is importable."""
+    """Return True if the google-genai SDK is importable."""
     try:
-        import vertexai  # noqa: F401
-        from vertexai.preview.vision_models import ImageGenerationModel  # noqa: F401
+        from google import genai  # noqa: F401
         return True
     except ImportError:
         return False
@@ -38,23 +38,25 @@ def generate_gemini_slices(
     converts the response to grayscale numpy arrays, and returns SliceTuples
     compatible with phantom.write_dicom_series().
 
-    Requires google-cloud-aiplatform >= 1.40.0 (INCLUDE_GEMINI=true build arg).
+    Requires google-genai >= 1.0.0 (INCLUDE_GEMINI=true build arg).
     """
     import numpy as np
-    import vertexai
-    from vertexai.preview.vision_models import ImageGenerationModel
+    from google import genai
+    from google.genai import types
     from PIL import Image
 
     project_id = os.environ.get("GEMINI_PROJECT_ID", "")
     location = os.environ.get("GEMINI_LOCATION", "us-central1")
-    model_name = os.environ.get("IMAGEN_MODEL", "imagegeneration@006")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    model_name = os.environ.get("IMAGEN_MODEL", "imagen-3.0-generate-002")
 
-    init_kwargs: dict = {"location": location}
-    if project_id:
-        init_kwargs["project"] = project_id
-    vertexai.init(**init_kwargs)
-
-    model = ImageGenerationModel.from_pretrained(model_name)
+    if api_key:
+        client = genai.Client(api_key=api_key)
+    else:
+        init_kwargs: dict = {"vertexai": True, "location": location}
+        if project_id:
+            init_kwargs["project"] = project_id
+        client = genai.Client(**init_kwargs)
 
     study_uid = generate_uid()
     series_uid = generate_uid()
@@ -62,7 +64,7 @@ def generate_gemini_slices(
 
     for i in range(n_slices):
         # Vary the slice position descriptor in the prompt to encourage
-        # anatomical variation across the stack (superior → inferior).
+        # anatomical variation across the stack (superior -> inferior).
         z_fraction = i / max(n_slices - 1, 1)
         if z_fraction < 0.25:
             position_desc = "inferior, showing cerebellum and brainstem"
@@ -80,15 +82,17 @@ def generate_gemini_slices(
             "No annotations, no text overlays, clean background."
         )
 
-        response = model.generate_images(
+        response = client.models.generate_images(
+            model=model_name,
             prompt=prompt,
-            number_of_images=1,
-            seed=seed + i,
-            add_watermark=False,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                seed=seed + i,
+            ),
         )
 
-        # Convert Imagen PNG response bytes → PIL → grayscale numpy [0, 1]
-        img_bytes = response.images[0]._image_bytes
+        # Convert Imagen response bytes -> PIL -> grayscale numpy [0, 1]
+        img_bytes = response.generated_images[0].image.image_bytes
         pil_img = Image.open(io.BytesIO(img_bytes)).convert("L")
         pil_img = pil_img.resize((size, size), Image.LANCZOS)
         arr = np.array(pil_img, dtype=np.float32) / 255.0
