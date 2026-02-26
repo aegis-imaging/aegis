@@ -9,7 +9,7 @@ variable "use_oidc" {
 variable "azure_region" {
   description = "Primary Azure region"
   type        = string
-  default     = "eastus"
+  default     = "eastus2"
 }
 
 variable "environment" {
