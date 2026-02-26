@@ -208,6 +208,9 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}/routing-rules/export", auth(srv.ExportRoutingRules))
 	mux.HandleFunc("POST /api/projects/{id}/routing-rules/import", adminOnly(srv.ImportRoutingRules))
 
+	// Project dashboard summary — compact KPI snapshot.
+	mux.HandleFunc("GET /api/projects/{id}/summary", auth(srv.GetProjectDashboardSummary))
+
 	// Project milestones — track project progress.
 	mux.HandleFunc("GET /api/projects/{id}/milestones", auth(srv.ListProjectMilestones))
 	mux.HandleFunc("POST /api/projects/{id}/milestones", adminOnly(srv.CreateProjectMilestone))
@@ -253,6 +256,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/events", auth(srv.StudyEvents))
 	mux.HandleFunc("GET /api/studies/priority-queue", auth(srv.GetStudyPriorityQueue))
 	mux.HandleFunc("GET /api/studies/compare", auth(srv.CompareStudies))
+	mux.HandleFunc("GET /api/studies/duplicates", auth(srv.GetStudyDuplicates))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
 	mux.HandleFunc("DELETE /api/studies/{id}", adminOnly(srv.DeleteStudy))
 	mux.HandleFunc("GET /api/study-uid/{studyUID}", auth(srv.GetStudyByUID))
@@ -316,6 +320,9 @@ func main() {
 	mux.HandleFunc("POST /api/institutions/{id}/projects", adminOnly(srv.AddInstitutionProject))
 	mux.HandleFunc("DELETE /api/institutions/{id}/projects/{projectID}", adminOnly(srv.RemoveInstitutionProject))
 
+	// Institution activity — audit log per institution.
+	mux.HandleFunc("GET /api/institutions/{id}/activity", auth(srv.GetInstitutionActivity))
+
 	// Institution contacts — contact directory per institution.
 	mux.HandleFunc("GET /api/institutions/{id}/contacts", auth(srv.ListInstitutionContacts))
 	mux.HandleFunc("POST /api/institutions/{id}/contacts", adminOnly(srv.CreateInstitutionContact))
@@ -340,6 +347,7 @@ func main() {
 	mux.HandleFunc("PUT /api/routing-rules/{id}", adminOnly(srv.UpdateRoutingRule))
 	mux.HandleFunc("DELETE /api/routing-rules/{id}", adminOnly(srv.DeleteRoutingRule))
 	mux.HandleFunc("POST /api/routing-rules/evaluate/{studyID}", adminOnly(srv.EvaluateRoutingRules))
+	mux.HandleFunc("GET /api/routing-rules/{id}/changelog", auth(srv.GetRoutingRuleChangelog))
 	mux.HandleFunc("GET /api/studies/{studyID}/routing-log", auth(srv.GetStudyRoutingLog))
 
 	// DIMSE retry control proxy — admin-only API façade over sidecar /ingest/retry* endpoints.
@@ -380,6 +388,16 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{id}/comments", adminOnly(srv.CreateStudyComment))
 	mux.HandleFunc("DELETE /api/studies/{id}/comments/{commentID}", adminOnly(srv.DeleteStudyComment))
 
+	// Study approval signatures — sign-off history.
+	mux.HandleFunc("GET /api/studies/{id}/approvals", auth(srv.ListStudyApprovals))
+	mux.HandleFunc("POST /api/studies/{id}/approvals", adminOnly(srv.RecordStudyApproval))
+
+	// Study pinned notes — sticky notes visible at top of detail panel.
+	mux.HandleFunc("GET /api/studies/{id}/pinned-notes", auth(srv.ListStudyPinnedNotes))
+	mux.HandleFunc("POST /api/studies/{id}/pinned-notes", adminOnly(srv.CreateStudyPinnedNote))
+	mux.HandleFunc("PATCH /api/studies/{id}/pinned-notes/{noteID}", adminOnly(srv.UpdateStudyPinnedNote))
+	mux.HandleFunc("DELETE /api/studies/{id}/pinned-notes/{noteID}", adminOnly(srv.DeleteStudyPinnedNote))
+
 	// Study activity timeline — unified feed of audit + comments.
 	mux.HandleFunc("GET /api/studies/{id}/activity", auth(srv.GetStudyActivity))
 
@@ -409,6 +427,7 @@ func main() {
 	mux.HandleFunc("DELETE /api/studies/{id}/labels/{labelID}", adminOnly(srv.DeleteStudyLabel))
 	mux.HandleFunc("POST /api/studies/bulk-label", adminOnly(srv.BulkLabelStudies))
 	mux.HandleFunc("POST /api/studies/bulk-share", adminOnly(srv.BulkCreateShares))
+	mux.HandleFunc("POST /api/studies/bulk-custom-field", adminOnly(srv.BulkSetCustomField))
 
 	// Study relationships — link studies as baseline/follow_up/comparison/replicate pairs.
 	mux.HandleFunc("GET /api/studies/{id}/relationships", auth(srv.ListStudyRelationships))
@@ -451,6 +470,7 @@ func main() {
 	mux.HandleFunc("DELETE /api/audit-bookmarks/{id}", auth(srv.DeleteAuditBookmark))
 
 	// Admin users — authorised dashboard users and their roles.
+	mux.HandleFunc("GET /api/admin-users/activity", auth(srv.GetAdminUserActivity))
 	mux.HandleFunc("GET /api/admin-users", auth(srv.ListAdminUsers))
 	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))
 	mux.HandleFunc("PUT /api/admin-users/{id}", adminOnly(srv.UpdateAdminUser))
@@ -468,11 +488,21 @@ func main() {
 	mux.HandleFunc("POST /api/comments/{id}/reactions", auth(srv.AddCommentReaction))
 	mux.HandleFunc("DELETE /api/comments/{id}/reactions", auth(srv.DeleteCommentReaction))
 
+	// Comment mentions — @user mentions in comments.
+	mux.HandleFunc("GET /api/comments/{id}/mentions", auth(srv.ListCommentMentions))
+	mux.HandleFunc("POST /api/comments/{id}/mentions", adminOnly(srv.AddCommentMention))
+	mux.HandleFunc("GET /api/mentions", auth(srv.ListMyMentions))
+
 	// Dashboard saved views — server-side filter presets.
 	mux.HandleFunc("GET /api/saved-views", auth(srv.ListSavedViews))
 	mux.HandleFunc("POST /api/saved-views", auth(srv.CreateSavedView))
 	mux.HandleFunc("PUT /api/saved-views/{id}", auth(srv.UpdateSavedView))
 	mux.HandleFunc("DELETE /api/saved-views/{id}", auth(srv.DeleteSavedView))
+
+	// Export share templates — reusable share configurations.
+	mux.HandleFunc("GET /api/export-share-templates", auth(srv.ListExportShareTemplates))
+	mux.HandleFunc("POST /api/export-share-templates", adminOnly(srv.CreateExportShareTemplate))
+	mux.HandleFunc("DELETE /api/export-share-templates/{id}", adminOnly(srv.DeleteExportShareTemplate))
 
 	// Routing rule templates — shareable rule configurations.
 	mux.HandleFunc("GET /api/routing-rule-templates", auth(srv.ListRoutingRuleTemplates))
