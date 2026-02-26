@@ -333,6 +333,7 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{id}/labels", adminOnly(srv.AddStudyLabel))
 	mux.HandleFunc("DELETE /api/studies/{id}/labels/{labelID}", adminOnly(srv.DeleteStudyLabel))
 	mux.HandleFunc("POST /api/studies/bulk-label", adminOnly(srv.BulkLabelStudies))
+	mux.HandleFunc("POST /api/studies/bulk-share", adminOnly(srv.BulkCreateShares))
 
 	// Study relationships — link studies as baseline/follow_up/comparison/replicate pairs.
 	mux.HandleFunc("GET /api/studies/{id}/relationships", auth(srv.ListStudyRelationships))
