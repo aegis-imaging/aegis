@@ -8056,9 +8056,10 @@ export function App() {
   const [filterSearch,   setFilterSearch]   = useState('')
   const [filterSubject,  setFilterSubject]  = useState('')
   const [filterLabel,    setFilterLabel]    = useState('')
-  const [filterDateFrom, setFilterDateFrom] = useState('')
-  const [filterDateTo,   setFilterDateTo]   = useState('')
-  const [filterFlagged,  setFilterFlagged]  = useState(false)
+  const [filterDateFrom,    setFilterDateFrom]    = useState('')
+  const [filterDateTo,      setFilterDateTo]      = useState('')
+  const [filterFlagged,     setFilterFlagged]     = useState(false)
+  const [filterInstitution, setFilterInstitution] = useState('')
 
   // Saved filter presets (localStorage)
   type SavedFilter = {
@@ -8127,6 +8128,12 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>([])
   useEffect(() => {
     fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
+  }, [])
+
+  // Institutions for filter dropdown
+  const [allInstitutions, setAllInstitutions] = useState<Institution[]>([])
+  useEffect(() => {
+    fetch('/api/institutions').then(r => r.ok ? r.json() : null).then(d => { if (d) setAllInstitutions(d) }).catch(() => {})
   }, [])
 
   // Dashboard pipeline stats
@@ -8336,14 +8343,15 @@ export function App() {
     let cancelled = false
     setState('loading')
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) })
-    if (filterStatus)   params.set('status',     filterStatus)
-    if (filterModality) params.set('modality',   filterModality)
-    if (filterBodyPart) params.set('body_part',  filterBodyPart)
-    if (filterSource)   params.set('source',     filterSource)
-    if (filterProject)  params.set('project_id', filterProject)
-    if (filterSearch)   params.set('search',     filterSearch)
-    if (filterSubject)  params.set('subject_id', filterSubject)
-    if (filterLabel)    params.set('label',      filterLabel)
+    if (filterStatus)      params.set('status',         filterStatus)
+    if (filterModality)    params.set('modality',       filterModality)
+    if (filterBodyPart)    params.set('body_part',      filterBodyPart)
+    if (filterSource)      params.set('source',         filterSource)
+    if (filterProject)     params.set('project_id',     filterProject)
+    if (filterSearch)      params.set('search',         filterSearch)
+    if (filterSubject)     params.set('subject_id',     filterSubject)
+    if (filterLabel)       params.set('label',          filterLabel)
+    if (filterInstitution) params.set('institution_id', filterInstitution)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
     if (filterFlagged)  params.set('flagged',    'true')
@@ -8364,7 +8372,7 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterDateFrom, filterDateTo, filterFlagged, sortBy, sortDir, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterInstitution, filterDateFrom, filterDateTo, filterFlagged, sortBy, sortDir, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
@@ -8375,9 +8383,10 @@ export function App() {
   function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
   function setSubjectF(v: string)   { setFilterSubject(v);   setPage(0); setBulkSelected(new Set()) }
   function setLabelF(v: string)     { setFilterLabel(v);     setPage(0); setBulkSelected(new Set()) }
-  function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
-  function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
-  function setFlaggedF(v: boolean)  { setFilterFlagged(v);   setPage(0); setBulkSelected(new Set()) }
+  function setDateFromF(v: string)       { setFilterDateFrom(v);    setPage(0); setBulkSelected(new Set()) }
+  function setDateToF(v: string)         { setFilterDateTo(v);      setPage(0); setBulkSelected(new Set()) }
+  function setFlaggedF(v: boolean)       { setFilterFlagged(v);     setPage(0); setBulkSelected(new Set()) }
+  function setInstitutionF(v: string)    { setFilterInstitution(v); setPage(0); setBulkSelected(new Set()) }
 
   function setSortF(col: string) {
     const newDir: StudiesSortDir = sortBy === col && sortDir === 'desc' ? 'asc' : 'desc'
@@ -8393,12 +8402,13 @@ export function App() {
     return sortDir === 'asc' ? ' ▲' : ' ▼'
   }
 
-  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterDateFrom || filterDateTo || filterFlagged)
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterInstitution || filterDateFrom || filterDateTo || filterFlagged)
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
     setFilterSource(''); setFilterProject(''); setFilterSearch('')
-    setFilterSubject(''); setFilterLabel(''); setFilterDateFrom(''); setFilterDateTo('')
+    setFilterSubject(''); setFilterLabel(''); setFilterInstitution('')
+    setFilterDateFrom(''); setFilterDateTo('')
     setFilterFlagged(false); setPage(0)
     setBulkSelected(new Set())
   }
@@ -8515,13 +8525,14 @@ export function App() {
 
   const csvUrl = (() => {
     const params = new URLSearchParams()
-    if (filterStatus)   params.set('status',     filterStatus)
-    if (filterModality) params.set('modality',   filterModality)
-    if (filterBodyPart) params.set('body_part',  filterBodyPart)
-    if (filterSource)   params.set('source',     filterSource)
-    if (filterProject)  params.set('project_id', filterProject)
-    if (filterSearch)   params.set('search',     filterSearch)
-    if (filterLabel)    params.set('label',      filterLabel)
+    if (filterStatus)      params.set('status',         filterStatus)
+    if (filterModality)    params.set('modality',       filterModality)
+    if (filterBodyPart)    params.set('body_part',      filterBodyPart)
+    if (filterSource)      params.set('source',         filterSource)
+    if (filterProject)     params.set('project_id',     filterProject)
+    if (filterSearch)      params.set('search',         filterSearch)
+    if (filterLabel)       params.set('label',          filterLabel)
+    if (filterInstitution) params.set('institution_id', filterInstitution)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
     if (filterFlagged)  params.set('flagged',    'true')
@@ -9201,6 +9212,12 @@ export function App() {
               <option value="">All projects</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            {allInstitutions.length > 0 && (
+              <select className="filter-select" title="Filter by institution" value={filterInstitution} onChange={e => setInstitutionF(e.target.value)}>
+                <option value="">All institutions</option>
+                {allInstitutions.filter(i => i.enabled).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+              </select>
+            )}
             <input
               className="filter-input filter-input--subject"
               type="search"
