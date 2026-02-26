@@ -6,6 +6,7 @@ import (
 
 	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 type bulkStudyRequest struct {
@@ -31,8 +32,9 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Action != "approve" && req.Action != "reject" && req.Action != "delete" {
-		s.writeError(w, http.StatusBadRequest, "action must be 'approve', 'reject', or 'delete'")
+	validActions := map[string]bool{"approve": true, "reject": true, "delete": true, "soft_delete": true, "restore": true}
+	if !validActions[req.Action] {
+		s.writeError(w, http.StatusBadRequest, "action must be 'approve', 'reject', 'delete', 'soft_delete', or 'restore'")
 		return
 	}
 	if len(req.StudyIDs) == 0 {
@@ -116,6 +118,34 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 					_ = err
 				}
 			}
+
+		case "soft_delete":
+			if study.DeletedAt != nil {
+				resp.Errors = append(resp.Errors, bulkStudyError{StudyID: id, Error: "already soft-deleted"})
+				continue
+			}
+			if err := model.SoftDeleteStudy(r.Context(), s.db, id); err != nil {
+				resp.Errors = append(resp.Errors, bulkStudyError{StudyID: id, Error: "failed to soft-delete"})
+				continue
+			}
+			model.CreateAuditEntry(r.Context(), s.db, "study.soft_deleted", actor, "study", id, ip, map[string]any{
+				"study_instance_uid": study.StudyInstanceUID,
+			})
+			go webhook.Deliver(r.Context(), s.db, "study.soft_deleted", study)
+
+		case "restore":
+			if study.DeletedAt == nil {
+				resp.Errors = append(resp.Errors, bulkStudyError{StudyID: id, Error: "study is not soft-deleted"})
+				continue
+			}
+			if err := model.RestoreStudy(r.Context(), s.db, id); err != nil {
+				resp.Errors = append(resp.Errors, bulkStudyError{StudyID: id, Error: "failed to restore"})
+				continue
+			}
+			model.CreateAuditEntry(r.Context(), s.db, "study.restored", actor, "study", id, ip, map[string]any{
+				"study_instance_uid": study.StudyInstanceUID,
+			})
+			go webhook.Deliver(r.Context(), s.db, "study.restored", study)
 		}
 
 		resp.Processed++
