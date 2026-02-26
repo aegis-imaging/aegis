@@ -440,6 +440,7 @@ type redeemResponse struct {
 	Modality         string       `json:"modality"`
 	BodyPart         string       `json:"body_part"`
 	StudyDescription string       `json:"study_description"`
+	SeriesCount      int          `json:"series_count"`
 	InstanceCount    int          `json:"instance_count"`
 	ArchiveSizeBytes int64        `json:"archive_size_bytes"` // estimated ZIP size from study_size_bytes; 0 = unknown
 	ExpiresAt        time.Time    `json:"expires_at"`
@@ -516,6 +517,7 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 		Modality:         study.Modality,
 		BodyPart:         study.BodyPart,
 		StudyDescription: study.StudyDescription,
+		SeriesCount:      study.SeriesCount,
 		InstanceCount:    study.InstanceCount,
 		ArchiveSizeBytes: study.StudySizeBytes,
 		ExpiresAt:        share.ExpiresAt,

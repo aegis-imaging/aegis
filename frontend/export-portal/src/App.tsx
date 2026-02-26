@@ -351,6 +351,9 @@ export function App() {
                 <td className="label">Study UID</td>
                 <td className="study-uid-cell" title={data.study_uid}>{data.study_uid}</td>
               </tr>
+              {(data.series_count ?? 0) > 0 && (
+                <tr><td className="label">Series</td><td>{data.series_count} series</td></tr>
+              )}
               {data.instance_count > 0 && (
                 <tr><td className="label">Instances</td><td>{data.instance_count.toLocaleString()} DICOM image{data.instance_count !== 1 ? 's' : ''}</td></tr>
               )}
@@ -383,7 +386,7 @@ export function App() {
           {!isExpired ? (
             <a href={data.download_url} className="btn-download" download>
               Download All as ZIP
-              <span className="btn-download__sub">{data.files.length} file{data.files.length !== 1 ? 's' : ''}{data.instance_count > 0 ? ` · ${data.instance_count.toLocaleString()} image${data.instance_count !== 1 ? 's' : ''}` : ''}{data.archive_size_bytes && data.archive_size_bytes > 0 ? ` · ~${fmtBytes(data.archive_size_bytes)}` : ''}</span>
+              <span className="btn-download__sub">{data.files.length} file{data.files.length !== 1 ? 's' : ''}{(data.series_count ?? 0) > 0 ? ` · ${data.series_count} series` : ''}{data.instance_count > 0 ? ` · ${data.instance_count.toLocaleString()} image${data.instance_count !== 1 ? 's' : ''}` : ''}{data.archive_size_bytes && data.archive_size_bytes > 0 ? ` · ~${fmtBytes(data.archive_size_bytes)}` : ''}</span>
             </a>
           ) : (
             <p className="download-disabled">This share has expired. Please request a new link.</p>
