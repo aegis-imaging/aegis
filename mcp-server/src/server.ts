@@ -962,6 +962,20 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_compliance_report_csv",
+    description: "Fetch the compliance report for a project as CSV text. Returns section/metric/value rows covering studies, PHI detection, defacing, protocol compliance, and exports. Useful for downloading or processing compliance data programmatically.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        days: { type: "integer", minimum: 1, maximum: 365, description: "Look-back window in days (default 30)" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_cohort_report",
     description: "Get a per-subject cohort summary for a project. Returns total_subjects, subjects_multi_study (subjects with ≥2 studies), total_studies_with_subject, modality_coverage {modality: subject_count}, and subjects[] each with: subject_id, study_count, approved_count, rejected_count, pending_count, modalities[], earliest_study_at, latest_study_at, all_approved, has_defaced, has_exported. Use to identify data completeness gaps (e.g. missing follow-up scans), subjects with multiple modalities, and longitudinal cohort health.",
     inputSchema: {
@@ -3333,6 +3347,15 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.days !== undefined) params.set("days", String(parsed.days));
       const qs = params.toString();
       const data = await client.get(`/api/projects/${parsed.project_id}/compliance-report${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_compliance_report_csv") {
+      const parsed = complianceReportArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      const qs = params.toString();
+      const data = await client.get(`/api/projects/${parsed.project_id}/compliance-report.csv${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
