@@ -681,7 +681,7 @@ uvicorn app.main:app --port 8082
 | Var | Default | Notes |
 |-----|---------|-------|
 | `PHI_DETECTION_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
-| `PHI_TOOL` | `auto` | Backend selection: `auto`, `google_vision`, `aws_textract`, or `tesseract` |
+| `PHI_TOOL` | `auto` | Backend selection: `auto`, `gemini`, `google_vision`, `aws_textract`, or `tesseract` |
 | `PHI_CONFIDENCE_THRESHOLD` | `0.4` | Minimum OCR confidence (0.0–1.0) |
 | `PHI_MIN_TEXT_LENGTH` | `3` | Minimum text length to report |
 
@@ -689,6 +689,7 @@ uvicorn app.main:app --port 8082
 
 | Arg | Default | Installs |
 |-----|---------|----------|
+| `INCLUDE_GEMINI` | `false` | `google-genai>=1.0.0` (Gemini multimodal) |
 | `INCLUDE_GOOGLE_VISION` | `false` | `google-cloud-vision Pillow numpy` (~50 MB) |
 | `INCLUDE_AWS_TEXTRACT` | `false` | `boto3 Pillow numpy` (~50 MB) |
 
@@ -699,11 +700,12 @@ uvicorn app.main:app --port 8082
 **API:**
 - `POST /api/studies/{studyUID}/phi-scan` — trigger PHI scan (returns 202 Accepted, runs async)
 
-**Pluggable backends (auto-selection priority: google_vision > aws_textract > tesseract):**
+**Pluggable backends (auto-selection priority: gemini > google_vision > aws_textract > tesseract):**
 
 | Backend | SDK | Accuracy | Notes |
 |---------|-----|----------|-------|
-| `google_vision` | `google-cloud-vision` | Best | Cloud Vision `text_detection`; Application Default Credentials |
+| `gemini` | `google-genai` | Best | Gemini multimodal PHI detection; Vertex AI (ADC) or AI Studio (`GEMINI_API_KEY`) |
+| `google_vision` | `google-cloud-vision` | Good | Cloud Vision `text_detection`; Application Default Credentials |
 | `aws_textract` | `boto3` | Good | Textract `detect_document_text`; IAM roles or `AWS_ACCESS_KEY_ID` |
 | `tesseract` | `pytesseract` | Baseline | Local OCR; requires `tesseract-ocr` binary installed |
 
@@ -845,13 +847,14 @@ uvicorn app.main:app --port 8085
 | Var | Default | Notes |
 |-----|---------|-------|
 | `CLASSIFICATION_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
-| `CLASSIFY_TOOL` | `auto` | Backend selection: `auto`, `google_vision`, `aws_rekognition`, or `heuristic` |
+| `CLASSIFY_TOOL` | `auto` | Backend selection: `auto`, `gemini`, `google_vision`, `aws_rekognition`, or `heuristic` |
 | `CLASSIFY_CONFIDENCE_THRESHOLD` | `0.5` | Minimum confidence (0.0–1.0) to update metadata |
 
 **Dockerfile build args** (cloud SDKs installed conditionally):
 
 | Arg | Default | Installs |
 |-----|---------|----------|
+| `INCLUDE_GEMINI` | `false` | `google-genai>=1.0.0 Pillow numpy` (Gemini multimodal) |
 | `INCLUDE_GOOGLE_VISION` | `false` | `google-cloud-vision Pillow numpy` (~50 MB) |
 | `INCLUDE_AWS_REKOGNITION` | `false` | `boto3 Pillow numpy` (~50 MB) |
 
@@ -867,15 +870,17 @@ uvicorn app.main:app --port 8085
 2. **SOP Class UID** (0008,0016) → modality mapping (CT, MR, PT, US, CR, etc.) → confidence 0.90
 3. **SeriesDescription / ProtocolName** → body part regex (HEAD, CHEST, ABDOMEN, SPINE, EXTREMITY, NECK) → confidence 0.75
 4. **StudyDescription** → same patterns → confidence 0.65
-5. **Cloud image inference** (if heuristic confidence < threshold) — render DICOM pixels, run label detection → confidence 0.70
-6. **Fallback** → empty (inconclusive)
+5. **Gemini multimodal** (if heuristic confidence < threshold) — render DICOM pixels, classify via Gemini → confidence 0.75
+6. **Cloud image inference** (if heuristic confidence < threshold) — render DICOM pixels, run label detection → confidence 0.70
+7. **Fallback** → empty (inconclusive)
 
 Cloud backends inherit from HeuristicBackend and only call the API when heuristic strategies 1-4 produce low confidence. This avoids API cost when DICOM tags are present.
 
-**Pluggable backends (auto-selection priority: google_vision > aws_rekognition > heuristic):**
+**Pluggable backends (auto-selection priority: gemini > google_vision > aws_rekognition > heuristic):**
 
 | Backend | SDK | Notes |
 |---------|-----|-------|
+| `gemini` | `google-genai` | Gemini multimodal classification; Vertex AI (ADC) or AI Studio (`GEMINI_API_KEY`) |
 | `google_vision` | `google-cloud-vision` | Cloud Vision `label_detection` (20 labels) → body_part/modality mapping; Application Default Credentials |
 | `aws_rekognition` | `boto3` | Rekognition `detect_labels` → same mapping; IAM roles or `AWS_ACCESS_KEY_ID` |
 | `heuristic` | *(none)* | Local DICOM tag analysis only (strategies 1-4, no cloud dependencies) |
@@ -2040,7 +2045,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 
 | Service | Tests | Coverage |
 |---------|-------|----------|
-| classification-service | 49 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
+| classification-service | 57 | Heuristic classification (5 strategies), SOP UID mapping, body part regex, Gemini/Cloud Vision/Rekognition label mapping, cloud backend inheritance, pixel_utils, endpoint tests |
 | dimse-receiver | 68 | C-STORE file write/indexing, EVT_RELEASED ingest trigger, C-ECHO, DIMSE forward endpoint mapping, sender status/path helpers, ingest payload/error handling, retry queue/dead-letter behavior, retry deduplication (queue + dead-letter), bounded exponential backoff, operator action audit logging, optional API-key protection, retry status/actions/details/process/process-all/targeted-process/replay/targeted-replay/clear-pending/targeted-pending-clear/clear-dead-letter/targeted-dead-letter-clear endpoints |
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |

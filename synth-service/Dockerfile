@@ -21,12 +21,12 @@ RUN if [ "$INCLUDE_MONAI" = "true" ]; then \
 
 # ── Optional: Vertex AI Imagen backend ────────────────────────────────────────
 # Build with: docker build --build-arg INCLUDE_GEMINI=true ...
-# Adds ~120 MB (google-cloud-aiplatform + Pillow).
-# Uses Application Default Credentials — no API key needed on GCP Cloud Run.
+# Uses the unified google-genai SDK.
+# Supports Vertex AI (ADC / Workload Identity) and AI Studio (GEMINI_API_KEY).
 ARG INCLUDE_GEMINI=false
 RUN if [ "$INCLUDE_GEMINI" = "true" ]; then \
       pip install --no-cache-dir \
-        "google-cloud-aiplatform>=1.40.0" \
+        "google-genai>=1.0.0" \
         Pillow; \
     fi
 
