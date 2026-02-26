@@ -235,11 +235,11 @@ resource "azurerm_monitor_metric_alert" "api_memory" {
 # Queries Application Insights for "pipeline step failed" log entries.
 
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "pipeline_failures" {
-  name                = "${local.prefix}-pipeline-failures"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-  description         = "One or more pipeline processing steps failed in the last 5 minutes"
-  severity            = 2
+  name                  = "${local.prefix}-pipeline-failures"
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = azurerm_resource_group.main.location
+  description           = "One or more pipeline processing steps failed in the last 5 minutes"
+  severity              = 2
   evaluation_frequency  = "PT5M"
   window_duration       = "PT5M"
   skip_query_validation = true # ContainerAppConsoleLogs_CL table is created lazily
@@ -278,11 +278,11 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "pipeline_failures" {
 # ── Stuck Studies (Log-based) ─────────────────────────────────────────────────
 
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "stuck_studies" {
-  name                = "${local.prefix}-stuck-studies"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-  description         = "Studies have been stuck in the pipeline beyond the SLA threshold"
-  severity            = 2
+  name                  = "${local.prefix}-stuck-studies"
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = azurerm_resource_group.main.location
+  description           = "Studies have been stuck in the pipeline beyond the SLA threshold"
+  severity              = 2
   evaluation_frequency  = "PT15M"
   window_duration       = "PT15M"
   skip_query_validation = true # ContainerAppConsoleLogs_CL table is created lazily
