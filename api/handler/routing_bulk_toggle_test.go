@@ -130,3 +130,73 @@ func TestBulkToggleRoutingRules_Enable(t *testing.T) {
 	require.Len(t, resp.RuleIDs, 1)
 	assert.Equal(t, rule.ID, resp.RuleIDs[0])
 }
+
+func TestBulkToggleRoutingRules_Disable(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	rule := testutil.CreateTestRoutingRule(t, db, "disable-rule", "require_phi_scan")
+	// Rule starts enabled (default from CreateTestRoutingRule)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"rule_ids": []string{rule.ID},
+		"enabled":  false,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/routing-rules/bulk-toggle", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.BulkToggleRoutingRules(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Updated int `json:"updated"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 1, resp.Updated)
+
+	// Verify in DB
+	var enabled bool
+	err := db.QueryRow(`SELECT enabled FROM routing_rules WHERE id=$1`, rule.ID).Scan(&enabled)
+	require.NoError(t, err)
+	assert.False(t, enabled)
+}
+
+func TestBulkToggleRoutingRules_MultipleRules(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	r1 := testutil.CreateTestRoutingRule(t, db, "multi-toggle-1", "require_qc_check")
+	r2 := testutil.CreateTestRoutingRule(t, db, "multi-toggle-2", "require_phi_scan")
+	r3 := testutil.CreateTestRoutingRule(t, db, "multi-toggle-3", "require_defacing")
+
+	// Disable r1 and r2, leave r3 enabled
+	body, _ := json.Marshal(map[string]interface{}{
+		"rule_ids": []string{r1.ID, r2.ID},
+		"enabled":  false,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/routing-rules/bulk-toggle", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.BulkToggleRoutingRules(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Updated int      `json:"updated"`
+		RuleIDs []string `json:"rule_ids"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 2, resp.Updated)
+	assert.Len(t, resp.RuleIDs, 2)
+
+	// Verify r3 is still enabled
+	var enabled bool
+	err := db.QueryRow(`SELECT enabled FROM routing_rules WHERE id=$1`, r3.ID).Scan(&enabled)
+	require.NoError(t, err)
+	assert.True(t, enabled)
+}
