@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // SoftDeleteStudy marks a study as deleted without removing it from the database.
@@ -44,6 +45,7 @@ func (s *Server) SoftDeleteStudy(w http.ResponseWriter, r *http.Request) {
 		"study_instance_uid": study.StudyInstanceUID,
 		"status":             study.Status,
 	})
+	go webhook.Deliver(r.Context(), s.db, "study.soft_deleted", study)
 
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": id})
 }
@@ -81,6 +83,7 @@ func (s *Server) RestoreStudy(w http.ResponseWriter, r *http.Request) {
 	model.CreateAuditEntry(r.Context(), s.db, "study.restored", actor, "study", id, clientIP(r), map[string]any{
 		"study_instance_uid": study.StudyInstanceUID,
 	})
+	go webhook.Deliver(r.Context(), s.db, "study.restored", study)
 
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "restored", "id": id})
 }
