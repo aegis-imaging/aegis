@@ -6866,6 +6866,9 @@ const EMPTY_USER: Omit<AdminUser, 'id' | 'created_at'> = {
   email: '', name: '', role: 'admin', enabled: true, notes: '',
 }
 
+type AdminSession = { id: string; user_id: string; ip_address: string; user_agent: string; created_at: string }
+type UserActivityAudit = { id: string; action: string; resource_type: string; resource_id: string; ip_address: string; created_at: string }
+
 function UsersPanel() {
   const [users, setUsers]         = useState<AdminUser[]>([])
   const [loading, setLoading]     = useState(true)
@@ -6884,6 +6887,18 @@ function UsersPanel() {
   const [prefsEvents, setPrefsEvents]           = useState<string[]>([])
   const [prefsSaving, setPrefsSaving]           = useState(false)
   const [prefsError, setPrefsError]             = useState<string | null>(null)
+
+  // Send invite state
+  const [inviteSendingId, setInviteSendingId]   = useState<string | null>(null)
+  const [inviteSentMsg, setInviteSentMsg]       = useState<Record<string, string>>({})
+
+  // Per-user activity panel state
+  const [activityUserId, setActivityUserId]     = useState<string | null>(null)
+  const [activityUserName, setActivityUserName] = useState('')
+  const [activityEmail, setActivityEmail]       = useState('')
+  const [activitySessions, setActivitySessions] = useState<AdminSession[]>([])
+  const [activityAudit, setActivityAudit]       = useState<UserActivityAudit[]>([])
+  const [activityLoading, setActivityLoading]   = useState(false)
 
   const NOTIFY_EVENT_OPTIONS: {value: string; label: string}[] = [
     { value: 'study.stuck',       label: 'Study stuck (idle beyond SLA)' },
@@ -6993,6 +7008,43 @@ function UsersPanel() {
     setPrefsEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev])
   }
 
+  async function sendInvite(u: AdminUser) {
+    setInviteSendingId(u.id)
+    setInviteSentMsg(prev => ({ ...prev, [u.id]: '' }))
+    try {
+      const res = await fetch(`/api/admin-users/${u.id}/send-invite`, { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
+      setInviteSentMsg(prev => ({
+        ...prev,
+        [u.id]: res.ok ? `Invite sent to ${u.email}` : (body.error ?? 'Send failed'),
+      }))
+    } catch {
+      setInviteSentMsg(prev => ({ ...prev, [u.id]: 'Send failed' }))
+    } finally {
+      setInviteSendingId(null)
+    }
+  }
+
+  async function openActivity(u: AdminUser) {
+    if (activityUserId === u.id) { setActivityUserId(null); return }
+    setActivityUserId(u.id)
+    setActivityUserName(u.name || u.email)
+    setActivityEmail(u.email)
+    setActivitySessions([])
+    setActivityAudit([])
+    setActivityLoading(true)
+    const [sessRes, auditRes] = await Promise.all([
+      fetch(`/api/admin-users/${u.id}/sessions?limit=20`),
+      fetch(`/api/audit?actor=${encodeURIComponent(u.email)}&limit=20`),
+    ])
+    if (sessRes.ok) setActivitySessions(await sessRes.json())
+    if (auditRes.ok) {
+      const d = await auditRes.json()
+      setActivityAudit(d.entries ?? d ?? [])
+    }
+    setActivityLoading(false)
+  }
+
   if (loading) return <div className="state-loading">Loading users…</div>
   if (error)   return <div className="state-error">{error}</div>
 
@@ -7095,35 +7147,137 @@ function UsersPanel() {
             </thead>
             <tbody>
               {users.map(u => (
-                <tr key={u.id} className={u.enabled ? '' : 'routing-row--disabled'}>
-                  <td>
-                    <div className="routing-name">{u.name || u.email}</div>
-                    {u.name && <div className="routing-desc">{u.email}</div>}
-                  </td>
-                  <td>
-                    <span className={`routing-action routing-action--${u.role}`}>{u.role}</span>
-                  </td>
-                  <td>
-                    <span className={`badge badge--${u.enabled ? 'enabled' : 'disabled'}`}>
-                      {u.enabled ? 'enabled' : 'disabled'}
-                    </span>
-                  </td>
-                  <td className="routing-desc">{u.notes || '—'}</td>
-                  <td className="td-date">{fmtDate(u.created_at)}</td>
-                  <td>
-                    <div className="actions-cell">
-                      <button type="button" className="btn btn--edit" onClick={() => openEdit(u)}>Edit</button>
-                      <button type="button" className="btn btn--action" onClick={() => openPrefs(u)}
-                        title="Configure digest frequency and notification event preferences">
-                        Preferences
-                      </button>
-                      <button type="button" className="btn btn--secondary" onClick={() => toggleUser(u)}>
-                        {u.enabled ? 'Disable' : 'Enable'}
-                      </button>
-                      <button type="button" className="btn btn--revoke" onClick={() => deleteUser(u.id, u.email)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
+                <Fragment key={u.id}>
+                  <tr className={u.enabled ? '' : 'routing-row--disabled'}>
+                    <td>
+                      <div className="routing-name">{u.name || u.email}</div>
+                      {u.name && <div className="routing-desc">{u.email}</div>}
+                    </td>
+                    <td>
+                      <span className={`routing-action routing-action--${u.role}`}>{u.role}</span>
+                    </td>
+                    <td>
+                      <span className={`badge badge--${u.enabled ? 'enabled' : 'disabled'}`}>
+                        {u.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </td>
+                    <td className="routing-desc">{u.notes || '—'}</td>
+                    <td className="td-date">{fmtDate(u.created_at)}</td>
+                    <td>
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEdit(u)}>Edit</button>
+                        <button type="button" className="btn btn--action" onClick={() => openPrefs(u)}
+                          title="Configure digest frequency and notification event preferences">
+                          Prefs
+                        </button>
+                        <button type="button" className="btn btn--action"
+                          disabled={inviteSendingId === u.id}
+                          onClick={() => sendInvite(u)}
+                          title="Email a dashboard sign-in invite to this user">
+                          {inviteSendingId === u.id ? 'Sending…' : 'Send Invite'}
+                        </button>
+                        <button type="button"
+                          className={`btn ${activityUserId === u.id ? 'btn--active' : 'btn--secondary'}`}
+                          onClick={() => openActivity(u)}
+                          title="View login sessions and recent audit activity for this user">
+                          Activity
+                        </button>
+                        <button type="button" className="btn btn--secondary" onClick={() => toggleUser(u)}>
+                          {u.enabled ? 'Disable' : 'Enable'}
+                        </button>
+                        <button type="button" className="btn btn--revoke" onClick={() => deleteUser(u.id, u.email)}>Delete</button>
+                      </div>
+                      {inviteSentMsg[u.id] && (
+                        <div style={{ fontSize: '0.75rem', marginTop: '4px',
+                          color: inviteSentMsg[u.id].startsWith('Invite sent') ? 'var(--teal-700)' : 'var(--orange-700)' }}>
+                          {inviteSentMsg[u.id]}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                  {activityUserId === u.id && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: 0 }}>
+                        <div style={{ background: 'var(--bg-subtle, #f8fafc)', border: '1px solid var(--border)', borderRadius: '6px', margin: '4px 8px 8px', padding: '16px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                              Activity — {activityUserName}
+                              <span style={{ fontWeight: 400, color: 'var(--text-secondary)', marginLeft: '8px', fontSize: '0.8rem' }}>{activityEmail}</span>
+                            </div>
+                            <button type="button" className="btn btn--secondary" onClick={() => setActivityUserId(null)}>Close</button>
+                          </div>
+                          {activityLoading ? (
+                            <div className="state-loading" style={{ padding: '8px 0' }}>Loading activity…</div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                              {/* Login sessions */}
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: '0.8rem', marginBottom: '8px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  Login Sessions (last 20)
+                                </div>
+                                {activitySessions.length === 0 ? (
+                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No sessions recorded yet.</div>
+                                ) : (
+                                  <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>When</th>
+                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>IP</th>
+                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>Browser</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {activitySessions.map(s => (
+                                        <tr key={s.id} style={{ borderBottom: '1px solid var(--border-subtle, #f1f5f9)' }}>
+                                          <td style={{ padding: '3px 6px', whiteSpace: 'nowrap' }}>{fmtDate(s.created_at)}</td>
+                                          <td style={{ padding: '3px 6px', fontFamily: 'monospace' }}>{s.ip_address || '—'}</td>
+                                          <td style={{ padding: '3px 6px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                            title={s.user_agent}>
+                                            {s.user_agent ? s.user_agent.replace(/\s*\(.*?\)\s*/g, ' ').trim().slice(0, 40) : '—'}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                              {/* Recent audit */}
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: '0.8rem', marginBottom: '8px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  Recent Actions (last 20)
+                                </div>
+                                {activityAudit.length === 0 ? (
+                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No audit entries found.</div>
+                                ) : (
+                                  <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>When</th>
+                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>Action</th>
+                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>Resource</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {activityAudit.map(a => (
+                                        <tr key={a.id} style={{ borderBottom: '1px solid var(--border-subtle, #f1f5f9)' }}>
+                                          <td style={{ padding: '3px 6px', whiteSpace: 'nowrap' }}>{fmtDate(a.created_at)}</td>
+                                          <td style={{ padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.74rem' }}>{a.action}</td>
+                                          <td style={{ padding: '3px 6px', color: 'var(--text-secondary)' }}>
+                                            {a.resource_type}{a.resource_id ? <span style={{ fontFamily: 'monospace', fontSize: '0.7rem' }}> {a.resource_id.slice(0, 8)}…</span> : ''}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

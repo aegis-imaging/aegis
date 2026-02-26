@@ -52,6 +52,10 @@ func UserFromContext(ctx context.Context) *AuthUser {
 	return u
 }
 
+// sessionDedupWindow is the minimum gap between recorded login sessions for the
+// same user. Requests within this window do not create a new row.
+const sessionDedupWindow = 30 * time.Minute
+
 // RequireAuth returns a middleware that enforces authentication on a handler.
 // When cfg.AuthEnabled is false (local dev), it auto-authenticates using
 // cfg.DevUserEmail. When true (production), it extracts user identity from
@@ -73,10 +77,40 @@ func RequireAuth(db *sql.DB, cfg *config.Config) func(http.HandlerFunc) http.Han
 				return
 			}
 
+			// Record login session asynchronously, deduped per 30 minutes.
+			// Only record for real users (non-synthetic dev user ID).
+			if user.ID != "00000000-0000-0000-0000-000000000000" {
+				ip := clientIPFromRequest(r)
+				ua := r.UserAgent()
+				uid := user.ID
+				go func() {
+					_ = model.RecordAdminSessionWithDedup(context.Background(), db, uid, ip, ua, sessionDedupWindow)
+				}()
+			}
+
 			ctx := context.WithValue(r.Context(), authUserKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		}
 	}
+}
+
+// clientIPFromRequest extracts the real client IP from the request, respecting
+// X-Forwarded-For and X-Real-IP headers set by reverse proxies.
+func clientIPFromRequest(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	host := r.RemoteAddr
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		return host[:idx]
+	}
+	return host
 }
 
 // RequireRole wraps RequireAuth and additionally checks that the authenticated
