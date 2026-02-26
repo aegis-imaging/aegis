@@ -1,4 +1,4 @@
-"""Tests for GeminiBackend -- mocks vertexai GenerativeModel."""
+"""Tests for GeminiBackend -- mocks google-genai Client."""
 
 from unittest.mock import MagicMock, patch
 
@@ -65,35 +65,35 @@ class TestGeminiParseResponse:
         assert backend._parse_response("") == []
 
 
-def _make_vertexai_modules():
-    """Build fake sys.modules entries for vertexai so detect() can import Part."""
+def _make_genai_modules():
+    """Build fake sys.modules entries for google.genai so detect() can import types."""
+    mock_types = MagicMock()
     mock_part_cls = MagicMock()
-    mock_part_cls.from_data.return_value = MagicMock()
+    mock_part_cls.from_bytes.return_value = MagicMock()
+    mock_types.Part = mock_part_cls
 
-    mock_gm = MagicMock()
-    mock_gm.Part = mock_part_cls
-
-    mock_vertexai = MagicMock()
+    mock_genai = MagicMock()
 
     return {
-        "vertexai": mock_vertexai,
-        "vertexai.generative_models": mock_gm,
-    }, mock_part_cls
+        "google": MagicMock(),
+        "google.genai": mock_genai,
+        "google.genai.types": mock_types,
+    }, mock_types
 
 
 class TestGeminiDetect:
     def test_detect_calls_model_and_returns_findings(self, make_dicom_file):
         path = make_dicom_file(filename="gemini_test.dcm", pixel_value=100)
 
-        mock_model = MagicMock()
+        mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.text = '[{"text": "PATIENT NAME", "confidence": 0.95}]'
-        mock_model.generate_content.return_value = mock_response
+        mock_client.models.generate_content.return_value = mock_response
 
         backend = GeminiBackend(confidence_threshold=0.4, min_text_length=3)
-        backend._model = mock_model
+        backend._client = mock_client
 
-        mods, _ = _make_vertexai_modules()
+        mods, _ = _make_genai_modules()
         with patch.dict("sys.modules", mods):
             findings = backend.detect([path])
 
@@ -104,15 +104,15 @@ class TestGeminiDetect:
     def test_detect_returns_empty_when_model_returns_empty_array(self, make_dicom_file):
         path = make_dicom_file(filename="gemini_clean.dcm", pixel_value=100)
 
-        mock_model = MagicMock()
+        mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.text = "[]"
-        mock_model.generate_content.return_value = mock_response
+        mock_client.models.generate_content.return_value = mock_response
 
         backend = GeminiBackend()
-        backend._model = mock_model
+        backend._client = mock_client
 
-        mods, _ = _make_vertexai_modules()
+        mods, _ = _make_genai_modules()
         with patch.dict("sys.modules", mods):
             findings = backend.detect([path])
 
@@ -121,13 +121,13 @@ class TestGeminiDetect:
     def test_detect_skips_file_on_exception(self, make_dicom_file):
         path = make_dicom_file(filename="gemini_err.dcm", pixel_value=50)
 
-        mock_model = MagicMock()
-        mock_model.generate_content.side_effect = Exception("API error")
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = Exception("API error")
 
         backend = GeminiBackend()
-        backend._model = mock_model
+        backend._client = mock_client
 
-        mods, _ = _make_vertexai_modules()
+        mods, _ = _make_genai_modules()
         with patch.dict("sys.modules", mods):
             findings = backend.detect([path])
 
@@ -136,13 +136,13 @@ class TestGeminiDetect:
     def test_detect_skips_file_without_pixel_data(self, make_dicom_file):
         path = make_dicom_file(filename="no_pixels_gemini.dcm", include_pixel_data=False)
 
-        mock_model = MagicMock()
+        mock_client = MagicMock()
         backend = GeminiBackend()
-        backend._model = mock_model
+        backend._client = mock_client
 
-        mods, _ = _make_vertexai_modules()
+        mods, _ = _make_genai_modules()
         with patch.dict("sys.modules", mods):
             findings = backend.detect([path])
 
         assert findings == []
-        mock_model.generate_content.assert_not_called()
+        mock_client.models.generate_content.assert_not_called()

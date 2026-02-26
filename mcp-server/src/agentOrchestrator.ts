@@ -58,20 +58,14 @@ export const ALLOWED_BEDROCK_MODELS = new Set([
 ]);
 
 const ALLOWED_MODEL_OVERRIDES = new Set([
-  // Gemini 3 series (latest)
+  // Gemini 3 series (preview)
   "google/gemini-3.1-pro-preview",
   "google/gemini-3-pro-preview",
   "google/gemini-3-flash-preview",
-  // Gemini 2.5 series
+  // Gemini 2.5 series (stable — production recommended)
   "google/gemini-2.5-pro",
   "google/gemini-2.5-flash",
   "google/gemini-2.5-flash-lite",
-  // Gemini 2.0 series
-  "google/gemini-2.0-flash-001",
-  "google/gemini-2.0-flash-lite-001",
-  // Gemini 1.5 series (legacy)
-  "google/gemini-1.5-flash-001",
-  "google/gemini-1.5-pro-001",
 ]);
 
 function resolveModel(requested: string | undefined, config: LlmConfig): string {
@@ -750,7 +744,7 @@ export function buildLlmConfig(env: {
     return {
       baseUrl: env.baseUrl || vertexBaseUrl,
       apiKey: "",
-      model: env.model || "google/gemini-2.0-flash-001",
+      model: env.model || "google/gemini-2.5-flash",
       temperature: env.temperature,
       maxTokens: env.maxTokens,
       useGcpAuth: true,

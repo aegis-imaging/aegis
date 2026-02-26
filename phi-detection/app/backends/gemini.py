@@ -1,21 +1,22 @@
 """Gemini multimodal backend for burned-in PHI detection.
 
-Uses Vertex AI Gemini (gemini-2.0-flash) to visually inspect DICOM images
-and identify any burned-in text that could be patient PHI (names, dates,
-accession numbers, study IDs, etc.).
+Uses the unified google-genai SDK with Gemini (default: gemini-2.5-flash) to
+visually inspect DICOM images and identify any burned-in text that could be
+patient PHI (names, dates, accession numbers, study IDs, etc.).
 
-This backend uses Application Default Credentials (ADC) — no API key
-required when running on GCP Cloud Run with Workload Identity.
+Supports two authentication modes:
+  - Vertex AI (default): Application Default Credentials / Workload Identity
+  - AI Studio: API key via GEMINI_API_KEY env var
 
 Auto-selection priority: HIGHEST — before google_vision, aws_textract, tesseract.
 
 Environment variables:
+    GEMINI_API_KEY       — AI Studio API key (if set, uses AI Studio instead of Vertex AI)
     GEMINI_PROJECT_ID    — GCP project for Vertex AI (default: read from ADC metadata)
     GEMINI_LOCATION      — Vertex AI location (default: us-central1)
-    GEMINI_MODEL         — Gemini model to use (default: gemini-2.0-flash)
+    GEMINI_MODEL         — Gemini model to use (default: gemini-2.5-flash)
 """
 
-import base64
 import io
 import json
 import logging
@@ -43,7 +44,7 @@ Do not include any explanation — only the JSON array."""
 
 
 class GeminiBackend(PHIDetectionBackend):
-    """Gemini Vision PHI detection backend using Vertex AI."""
+    """Gemini Vision PHI detection backend using the unified google-genai SDK."""
 
     def __init__(
         self,
@@ -52,13 +53,15 @@ class GeminiBackend(PHIDetectionBackend):
         project_id: str | None = None,
         location: str | None = None,
         model: str | None = None,
+        api_key: str | None = None,
     ):
         self._confidence_threshold = confidence_threshold
         self._min_text_length = min_text_length
         self._project_id = project_id or os.environ.get("GEMINI_PROJECT_ID", "")
         self._location = location or os.environ.get("GEMINI_LOCATION", "us-central1")
-        self._model_name = model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
-        self._model = None  # lazy-initialised
+        self._model_name = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        self._api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        self._client = None  # lazy-initialised
 
     @property
     def name(self) -> str:
@@ -66,33 +69,35 @@ class GeminiBackend(PHIDetectionBackend):
 
     def available(self) -> bool:
         try:
-            import vertexai  # noqa: F401
-            from vertexai.generative_models import GenerativeModel  # noqa: F401
+            from google import genai  # noqa: F401
             return True
         except ImportError:
             return False
 
-    def _get_model(self):
-        if self._model is None:
-            import vertexai
-            from vertexai.generative_models import GenerativeModel
+    def _get_client(self):
+        if self._client is None:
+            from google import genai
 
-            init_kwargs: dict = {"location": self._location}
-            if self._project_id:
-                init_kwargs["project"] = self._project_id
-            vertexai.init(**init_kwargs)
-            self._model = GenerativeModel(
-                self._model_name,
-                system_instruction=_SYSTEM_PROMPT,
-            )
-        return self._model
+            if self._api_key:
+                # AI Studio mode — API key auth.
+                self._client = genai.Client(api_key=self._api_key)
+            else:
+                # Vertex AI mode — ADC / Workload Identity.
+                init_kwargs: dict = {
+                    "vertexai": True,
+                    "location": self._location,
+                }
+                if self._project_id:
+                    init_kwargs["project"] = self._project_id
+                self._client = genai.Client(**init_kwargs)
+        return self._client
 
     def detect(self, dicom_paths: list[str]) -> list[FileFinding]:
-        from vertexai.generative_models import Part
+        from google.genai import types
         from pathlib import Path
 
         findings: list[FileFinding] = []
-        model = self._get_model()
+        client = self._get_client()
 
         for path in dicom_paths:
             try:
@@ -105,13 +110,21 @@ class GeminiBackend(PHIDetectionBackend):
                 img.save(buf, format="JPEG", quality=85)
                 image_bytes = buf.getvalue()
 
-                image_part = Part.from_data(
+                image_part = types.Part.from_bytes(
                     data=image_bytes,
                     mime_type="image/jpeg",
                 )
 
-                response = model.generate_content(
-                    [image_part, "Identify all burned-in PHI text in this image."]
+                response = client.models.generate_content(
+                    model=self._model_name,
+                    contents=[
+                        image_part,
+                        "Identify all burned-in PHI text in this image.",
+                    ],
+                    config=types.GenerateContentConfig(
+                        system_instruction=_SYSTEM_PROMPT,
+                        response_mime_type="application/json",
+                    ),
                 )
 
                 regions = self._parse_response(response.text)
@@ -129,7 +142,8 @@ class GeminiBackend(PHIDetectionBackend):
         if not text:
             return []
 
-        # Gemini sometimes wraps JSON in markdown code fences — strip them.
+        # With response_mime_type="application/json" the SDK should return
+        # clean JSON, but handle code fences as a safety net.
         cleaned = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`").strip()
 
         # Extract the first JSON array from the text.
