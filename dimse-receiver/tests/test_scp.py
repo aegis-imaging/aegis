@@ -121,6 +121,7 @@ def test_handle_release_triggers_ingest_per_study():
 
 
 def test_handle_release_empty_state():
+    _association_state.clear()  # prevent id() reuse from leaking prior test state
     assoc = _Assoc()
     with patch("app.scp.submit_ingest", return_value=True) as mock_trigger:
         handle_release(_Event(assoc=assoc))
