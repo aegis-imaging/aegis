@@ -55,6 +55,6 @@ first_admin_email = "ops@aegisimaging.ai"
 # Set dimse_receiver_image to enable the DIMSE VM (Debian 12, Docker).
 # Leave empty to skip all DIMSE VM resources.
 dimse_receiver_image = "<acr-name>.azurecr.io/dimse-receiver:latest"
-dimse_vm_size        = "Standard_B2s"
+dimse_vm_size        = "Standard_D2s_v3"
 dimse_ssh_public_key = "ssh-rsa AAAAB3Nz... <your-public-key>"
 dimse_source_ranges  = ["203.0.113.0/24"]  # PLACEHOLDER — replace with real PACS IP ranges

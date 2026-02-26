@@ -144,7 +144,7 @@ variable "dimse_receiver_image" {
 variable "dimse_vm_size" {
   description = "Azure VM size for the DIMSE receiver"
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_D2s_v3"
 }
 
 variable "dimse_ssh_public_key" {
