@@ -84,7 +84,7 @@ resource "azurerm_container_app" "api" {
 
   # SMTP credentials stored in Key Vault (only when set — empty vars = email disabled).
   dynamic "secret" {
-    for_each = var.smtp_username != "" ? [1] : []
+    for_each = var.smtp_username != "" ? toset(["enabled"]) : toset([])
     content {
       name                = "smtp-username"
       key_vault_secret_id = azurerm_key_vault_secret.smtp_username[0].id
@@ -93,7 +93,7 @@ resource "azurerm_container_app" "api" {
   }
 
   dynamic "secret" {
-    for_each = var.smtp_password != "" ? [1] : []
+    for_each = var.smtp_password != "" ? toset(["enabled"]) : toset([])
     content {
       name                = "smtp-password"
       key_vault_secret_id = azurerm_key_vault_secret.smtp_password[0].id
@@ -209,14 +209,14 @@ resource "azurerm_container_app" "api" {
       }
       # SMTP credentials injected from Key Vault secret refs (only when configured).
       dynamic "env" {
-        for_each = var.smtp_username != "" ? [1] : []
+        for_each = var.smtp_username != "" ? toset(["enabled"]) : toset([])
         content {
           name        = "SMTP_USERNAME"
           secret_name = "smtp-username"
         }
       }
       dynamic "env" {
-        for_each = var.smtp_password != "" ? [1] : []
+        for_each = var.smtp_password != "" ? toset(["enabled"]) : toset([])
         content {
           name        = "SMTP_PASSWORD"
           secret_name = "smtp-password"
@@ -438,7 +438,7 @@ resource "azurerm_container_app" "mcp_server" {
         secret_name = "mcp-api-token"
       }
       dynamic "env" {
-        for_each = var.azure_openai_endpoint != "" ? [1] : []
+        for_each = var.azure_openai_endpoint != "" ? toset(["enabled"]) : toset([])
         content {
           name  = "AZURE_OPENAI_ENDPOINT"
           value = var.azure_openai_endpoint
