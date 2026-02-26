@@ -6047,6 +6047,7 @@ function InviteCodesPanel() {
   const [adminInviteRole, setAdminInviteRole]   = useState<'viewer' | 'admin'>('viewer')
   const [adminInviteSending, setAdminInviteSending] = useState(false)
   const [adminInviteResult, setAdminInviteResult]   = useState<{ ok: boolean; msg: string } | null>(null)
+  const [adminInviteHelpCloud, setAdminInviteHelpCloud] = useState<'gcp' | 'aws' | 'azure'>('gcp')
 
   // ── Requests state ───────────────────────────────────────────────────────
   const [requests, setRequests]     = useState<InviteRequest[]>([])
@@ -6583,6 +6584,63 @@ function InviteCodesPanel() {
                             {adminInviteResult.msg}
                           </span>
                         )}
+                      </div>
+                      {/* Cloud access help */}
+                      <div style={{ borderTop: '1px solid #1e293b', paddingTop: 10, marginTop: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 600 }}>
+                            ⚠ Cloud access also required
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>— sending the invite email is not enough; grant auth below too</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+                          {(['gcp', 'aws', 'azure'] as const).map(cloud => (
+                            <button
+                              key={cloud}
+                              type="button"
+                              className="btn-sm"
+                              onClick={() => setAdminInviteHelpCloud(cloud)}
+                              style={{
+                                fontSize: '0.7rem', padding: '2px 8px',
+                                color: adminInviteHelpCloud === cloud ? '#0d9488' : '#64748b',
+                                borderColor: adminInviteHelpCloud === cloud ? '#0d9488' : '#374151',
+                                background: adminInviteHelpCloud === cloud ? '#0f2e2c' : 'transparent',
+                              }}
+                            >{cloud.toUpperCase()}</button>
+                          ))}
+                        </div>
+                        {adminInviteHelpCloud === 'gcp' && (
+                          <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.73rem', color: '#94a3b8', lineHeight: 1.7 }}>
+                            <li>Open <a href="https://console.cloud.google.com/security/iap?project=aegis-prod-488120" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Cloud Console → Security → IAP</a></li>
+                            <li>Find <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3 }}>aegis-prod-admin-dashboard</code>, tick its checkbox</li>
+                            <li>Click <strong style={{ color: '#e2e8f0' }}>Add Principal</strong> → paste <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code></li>
+                            <li>Role: <strong style={{ color: '#e2e8f0' }}>Cloud IAP → IAP-secured Web App User</strong></li>
+                            <li>Click <strong style={{ color: '#e2e8f0' }}>Save</strong></li>
+                          </ol>
+                        )}
+                        {adminInviteHelpCloud === 'aws' && (
+                          <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.73rem', color: '#94a3b8', lineHeight: 1.7 }}>
+                            <li>Open <a href="https://us-east-1.console.aws.amazon.com/cognito/v2/idp/user-pools" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Cognito → User Pools</a> (us-east-1)</li>
+                            <li>Click the AEGIS user pool → <strong style={{ color: '#e2e8f0' }}>Users</strong> tab → <strong style={{ color: '#e2e8f0' }}>Create user</strong></li>
+                            <li>Email: <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code> — check <em>Send an email invitation</em></li>
+                            <li>Set a temporary password (user changes it on first login)</li>
+                            <li>Click <strong style={{ color: '#e2e8f0' }}>Create user</strong></li>
+                          </ol>
+                        )}
+                        {adminInviteHelpCloud === 'azure' && (
+                          <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.73rem', color: '#94a3b8', lineHeight: 1.7 }}>
+                            <li>Open <a href="https://portal.azure.com/#view/Microsoft_AAD_IAM/UsersManagementMenuBlade/~/AllUsers" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Azure AD → Users</a></li>
+                            <li>Click <strong style={{ color: '#e2e8f0' }}>+ New user → Invite external user</strong></li>
+                            <li>Email: <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code> → click <strong style={{ color: '#e2e8f0' }}>Review + invite</strong></li>
+                            <li>After they accept the invite, go to <a href="https://portal.azure.com/#view/Microsoft_AAD_IAM/StartboardApplicationsMenuBlade/~/AppAppsPreview" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Enterprise Applications</a> → find the AEGIS admin app → <strong style={{ color: '#e2e8f0' }}>Users and groups → Add user</strong></li>
+                            <li>Select <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code> → assign role → <strong style={{ color: '#e2e8f0' }}>Assign</strong></li>
+                          </ol>
+                        )}
+                        <div style={{ fontSize: '0.68rem', color: '#475569', marginTop: 8 }}>
+                          {adminInviteHelpCloud === 'gcp' && 'If the user has no Google account, they can create one at accounts.google.com — no Gmail address required.'}
+                          {adminInviteHelpCloud === 'aws' && 'The user will receive a Cognito invitation email and must set a permanent password before first login.'}
+                          {adminInviteHelpCloud === 'azure' && 'If the user already exists in your Azure AD tenant, skip steps 2–3 and go straight to step 4.'}
+                        </div>
                       </div>
                     </td>
                   </tr>
