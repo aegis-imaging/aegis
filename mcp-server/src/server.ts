@@ -116,6 +116,7 @@ import {
   bulkCreateSharesArgsSchema,
   getProjectBidsInfoArgsSchema,
   projectScopedArgsSchema,
+  exportSharesCsvArgsSchema,
   reactivateStudyArgsSchema,
   cloneProjectArgsSchema,
   reEvaluateProjectRoutingArgsSchema,
@@ -376,6 +377,19 @@ const tools: Tool[] = [
         request_id: { type: "string" },
         limit: { type: "number", minimum: 1, maximum: 200, description: "Page size (default 50)" },
         offset: { type: "number", minimum: 0 },
+        status: { type: "string", enum: ["active", "expired", "revoked"], description: "Filter by computed share status" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "get_export_shares_csv",
+    description: "Fetch the export shares CSV data as text. Returns all export shares matching the optional filters in CSV format. Useful for compliance reporting and bulk share auditing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Filter shares to studies in this project" },
         status: { type: "string", enum: ["active", "expired", "revoked"], description: "Filter by computed share status" }
       },
       additionalProperties: false
@@ -3079,6 +3093,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.status) params.set("status", parsed.status);
       const qs = params.toString();
       const data = await client.get(`/api/shares${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_export_shares_csv") {
+      const parsed = exportSharesCsvArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      if (parsed.status) params.set("status", parsed.status);
+      const qs = params.toString();
+      const data = await client.get(`/api/export-shares.csv${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
