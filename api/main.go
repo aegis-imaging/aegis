@@ -197,6 +197,7 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}/phi-config", auth(srv.GetProjectPhiConfig))
 	mux.HandleFunc("PUT /api/projects/{id}/phi-config", adminOnly(srv.UpdateProjectPhiConfig))
 	mux.HandleFunc("GET /api/projects/{id}/compliance-report", auth(srv.GetProjectComplianceReport))
+	mux.HandleFunc("GET /api/projects/{id}/compliance-report.csv", auth(srv.ExportComplianceReportCSV))
 	mux.HandleFunc("GET /api/projects/{id}/cohort-report", auth(srv.GetCohortReport))
 	mux.HandleFunc("POST /api/projects/{id}/re-evaluate-routing", adminOnly(srv.BulkReEvaluateRouting))
 	mux.HandleFunc("GET /api/projects/{id}/routing-rules/export", auth(srv.ExportRoutingRules))
