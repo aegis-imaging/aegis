@@ -84,19 +84,19 @@ resource "azurerm_container_app" "api" {
 
   # SMTP credentials stored in Key Vault (only when set — empty vars = email disabled).
   dynamic "secret" {
-    for_each = var.smtp_username != "" ? toset(["enabled"]) : toset([])
+    for_each = var.smtp_username != "" ? [{ id = azurerm_key_vault_secret.smtp_username[0].id }] : []
     content {
       name                = "smtp-username"
-      key_vault_secret_id = azurerm_key_vault_secret.smtp_username[0].id
+      key_vault_secret_id = secret.value.id
       identity            = local.identity_id
     }
   }
 
   dynamic "secret" {
-    for_each = var.smtp_password != "" ? toset(["enabled"]) : toset([])
+    for_each = var.smtp_password != "" ? [{ id = azurerm_key_vault_secret.smtp_password[0].id }] : []
     content {
       name                = "smtp-password"
-      key_vault_secret_id = azurerm_key_vault_secret.smtp_password[0].id
+      key_vault_secret_id = secret.value.id
       identity            = local.identity_id
     }
   }
@@ -209,16 +209,16 @@ resource "azurerm_container_app" "api" {
       }
       # SMTP credentials injected from Key Vault secret refs (only when configured).
       dynamic "env" {
-        for_each = var.smtp_username != "" ? toset(["enabled"]) : toset([])
+        for_each = var.smtp_username != "" ? [{ name = "SMTP_USERNAME" }] : []
         content {
-          name        = "SMTP_USERNAME"
+          name        = env.value.name
           secret_name = "smtp-username"
         }
       }
       dynamic "env" {
-        for_each = var.smtp_password != "" ? toset(["enabled"]) : toset([])
+        for_each = var.smtp_password != "" ? [{ name = "SMTP_PASSWORD" }] : []
         content {
-          name        = "SMTP_PASSWORD"
+          name        = env.value.name
           secret_name = "smtp-password"
         }
       }
@@ -438,10 +438,10 @@ resource "azurerm_container_app" "mcp_server" {
         secret_name = "mcp-api-token"
       }
       dynamic "env" {
-        for_each = var.azure_openai_endpoint != "" ? toset(["enabled"]) : toset([])
+        for_each = var.azure_openai_endpoint != "" ? [{ value = var.azure_openai_endpoint }] : []
         content {
           name  = "AZURE_OPENAI_ENDPOINT"
-          value = var.azure_openai_endpoint
+          value = env.value.value
         }
       }
     }
