@@ -34,10 +34,6 @@ type AgentPanelProps = {
 
 const GEMINI_MODELS = [
   { value: '', label: 'Server default (2.5 Flash)' },
-  // Gemini 3 series (preview)
-  { value: 'google/gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
-  { value: 'google/gemini-3-pro-preview',   label: 'Gemini 3 Pro (Preview)' },
-  { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
   // Gemini 2.5 series (stable — production recommended)
   { value: 'google/gemini-2.5-pro',        label: 'Gemini 2.5 Pro' },
   { value: 'google/gemini-2.5-flash',      label: 'Gemini 2.5 Flash (Recommended)' },

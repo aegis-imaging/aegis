@@ -58,10 +58,6 @@ export const ALLOWED_BEDROCK_MODELS = new Set([
 ]);
 
 const ALLOWED_MODEL_OVERRIDES = new Set([
-  // Gemini 3 series (preview)
-  "google/gemini-3.1-pro-preview",
-  "google/gemini-3-pro-preview",
-  "google/gemini-3-flash-preview",
   // Gemini 2.5 series (stable — production recommended)
   "google/gemini-2.5-pro",
   "google/gemini-2.5-flash",
