@@ -2529,6 +2529,41 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                 </tbody>
               </table>
             )}
+            {isAdmin && (
+              <div style={{marginTop: 12, display: 'flex', gap: 8, alignItems: 'flex-start'}}>
+                <textarea
+                  className="note-textarea"
+                  placeholder="Add a note…"
+                  value={noteText}
+                  onChange={e => { setNoteText(e.target.value); setNoteSaved(false) }}
+                  rows={2}
+                  maxLength={2000}
+                  style={{flex: 1, fontSize: '0.82rem'}}
+                />
+                <div style={{display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end'}}>
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={!noteText.trim() || noteSaving}
+                    onClick={async () => {
+                      setNoteSaving(true)
+                      await fetch(`/api/studies/${study.id}/notes`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ note: noteText }),
+                      })
+                      setNoteText('')
+                      setNoteSaved(true)
+                      setNoteSaving(false)
+                      loadData()
+                    }}
+                  >
+                    {noteSaving ? 'Saving…' : 'Add Note'}
+                  </button>
+                  {noteSaved && <span className="note-saved" style={{fontSize: '0.75rem'}}>Saved ✓</span>}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -5866,6 +5901,15 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => setComplianceProjectId(p.id)}>
                           Compliance
                         </button>
+                        {isAdmin && (
+                          <a
+                            href={`/api/projects/${p.id}/compliance-report.csv`}
+                            className="btn btn--secondary"
+                            title="Download compliance report as CSV"
+                            download>
+                            ↓ CSV
+                          </a>
+                        )}
                         <button type="button" className="btn btn--action"
                           title="View pipeline health snapshot for this project"
                           onClick={() => setHealthProject({ id: p.id, name: p.name })}>
@@ -7870,8 +7914,47 @@ export function App() {
   const [bulkLabelInput, setBulkLabelInput] = useState('')
   const [bulkPipelineStep, setBulkPipelineStep] = useState('qc')
   const [stuckCount, setStuckCount] = useState(0)
+  const [stuckStudies, setStuckStudies] = useState<Array<{id:string;study_instance_uid:string;status:string;modality:string;body_part:string;updated_at:string}>>([])
+  const [showStuckPanel, setShowStuckPanel] = useState(false)
   const [expiringStudies, setExpiringStudies] = useState<Array<{id:string;study_instance_uid:string;modality:string;body_part:string;expires_at:string;days_until_expiry:number;retention_days:number}>>([])
   const [showExpiringPanel, setShowExpiringPanel] = useState(false)
+
+  // Protocol compliance trend panel (F2)
+  type ProtocolTrendDay = { day: string; checked: number; compliant: number; minor_deviations: number; non_compliant: number; compliance_pct: number }
+  type ProtocolTrend = { generated_at: string; period_days: number; totals: { checked: number; compliant: number; minor_deviations: number; non_compliant: number; compliance_pct: number }; days: ProtocolTrendDay[] }
+  const [showProtocolTrend, setShowProtocolTrend] = useState(false)
+  const [protocolTrend, setProtocolTrend] = useState<ProtocolTrend | null>(null)
+  const [protocolTrendLoading, setProtocolTrendLoading] = useState(false)
+  const loadProtocolTrend = async () => {
+    setProtocolTrendLoading(true)
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/protocol-trend?${params}`)
+    const d = r.ok ? await r.json() : null
+    setProtocolTrendLoading(false)
+    if (d) setProtocolTrend(d)
+  }
+  const toggleProtocolTrend = () => {
+    if (!showProtocolTrend && !protocolTrend) loadProtocolTrend()
+    setShowProtocolTrend(v => !v)
+  }
+
+  // Bulk share state (F4)
+  const [bulkShareEmail, setBulkShareEmail] = useState('')
+  const [bulkShareExpiry, setBulkShareExpiry] = useState('168')
+  const doBulkShare = async () => {
+    if (!bulkShareEmail.trim()) { alert('Enter a recipient email.'); return }
+    const ids = Array.from(bulkSelected)
+    const res = await fetch('/api/studies/bulk-share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ study_ids: ids, recipient_email: bulkShareEmail.trim(), expiry_hours: Number(bulkShareExpiry) || 168 })
+    })
+    const d = res.ok ? await res.json() : null
+    if (d) { alert(`Created ${d.created} share${d.created !== 1 ? 's' : ''}${d.errors?.length ? ` (${d.errors.length} errors)` : ''}.`) }
+    setBulkSelected(new Set())
+    setBulkShareEmail('')
+  }
 
   // Deleted Studies (Trash) panel
   type DeletedStudy = { id: string; study_instance_uid: string; modality: string; body_part: string; status: string; deleted_at: string }
@@ -7932,14 +8015,14 @@ export function App() {
       .catch(() => { /* non-fatal — dev mode may not have auth */ })
   }, [])
 
-  // Poll stuck studies every 5 minutes for the warning badge.
+  // Poll stuck studies every 5 minutes for the warning badge + panel data.
   useEffect(() => {
     const fetchStuck = () => {
       const params = new URLSearchParams({ minutes: '60' })
       if (globalProjectId) params.set('project_id', globalProjectId)
       fetch(`/api/studies/stuck?${params}`)
         .then(r => r.ok ? r.json() : null)
-        .then(d => d && setStuckCount(d.total ?? 0))
+        .then(d => { if (d) { setStuckCount(d.total ?? 0); setStuckStudies(d.stuck ?? []) } })
         .catch(() => {})
     }
     fetchStuck()
@@ -8779,6 +8862,20 @@ export function App() {
                   </span>
                 </>
               )}
+              {protocolTrend && protocolTrend.totals.checked > 0 && (
+                <>
+                  <span className="stats-banner__sep" />
+                  <button
+                    type="button"
+                    className="stats-banner__shares"
+                    style={{background:'none',border:'none',cursor:'pointer',padding:0}}
+                    title="Protocol compliance rate — click to view trend"
+                    onClick={toggleProtocolTrend}
+                  >
+                    Protocol: {protocolTrend.totals.compliance_pct >= 0 ? `${protocolTrend.totals.compliance_pct.toFixed(1)}%` : '—'} compliant
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -9126,6 +9223,29 @@ export function App() {
               />
               {' '}Priority only
             </label>
+            {/* Date preset quick buttons */}
+            {[
+              { label: 'Today', days: 0 },
+              { label: '7d', days: 7 },
+              { label: '30d', days: 30 },
+            ].map(preset => (
+              <button
+                key={preset.label}
+                type="button"
+                className="btn btn--secondary"
+                style={{fontSize: '0.75rem', padding: '2px 7px'}}
+                title={preset.days === 0 ? 'Studies received today' : `Studies received in the last ${preset.days} days`}
+                onClick={() => {
+                  const to = new Date(); to.setHours(23, 59, 59, 999)
+                  const from = new Date(); from.setHours(0, 0, 0, 0)
+                  if (preset.days > 0) from.setDate(from.getDate() - (preset.days - 1))
+                  setDateFromF(from.toISOString().slice(0, 10))
+                  setDateToF(to.toISOString().slice(0, 10))
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
             <input
               type="date"
               className="filter-date"
@@ -9283,6 +9403,29 @@ export function App() {
                 <option value="export">Export</option>
               </select>
               <button type="button" className="btn btn--action" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
+              <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
+              <input
+                type="email"
+                className="audit-actor-input"
+                placeholder="Share to email…"
+                value={bulkShareEmail}
+                onChange={e => setBulkShareEmail(e.target.value)}
+                style={{width: '160px'}}
+                disabled={bulkWorking}
+              />
+              <input
+                type="number"
+                className="audit-actor-input"
+                placeholder="Hours"
+                value={bulkShareExpiry}
+                onChange={e => setBulkShareExpiry(e.target.value)}
+                style={{width: '64px'}}
+                min={1}
+                max={8760}
+                disabled={bulkWorking}
+                title="Expiry in hours (default 168 = 7 days)"
+              />
+              <button type="button" className="btn btn--action" disabled={bulkWorking || !bulkShareEmail.trim()} onClick={doBulkShare} title="Create export shares for all selected approved studies">Share selected</button>
               <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
             </div>
           )}
@@ -9396,6 +9539,120 @@ export function App() {
               )}
             </div>
           )}
+          {/* Protocol Compliance Trend panel (F2) */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleProtocolTrend}>
+                  {showProtocolTrend ? '▲ Hide protocol trend' : '▼ Protocol compliance trend (30d)'}
+                </button>
+                {showProtocolTrend && protocolTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showProtocolTrend && protocolTrend && !protocolTrendLoading && (
+                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
+                    <strong>Overall ({protocolTrend.period_days}d):</strong>{' '}
+                    {protocolTrend.totals.checked} checked ·{' '}
+                    <span style={{color: '#0d9488'}}>{protocolTrend.totals.compliant} compliant</span> ·{' '}
+                    <span style={{color: '#d97706'}}>{protocolTrend.totals.minor_deviations} minor</span> ·{' '}
+                    <span style={{color: '#ea580c'}}>{protocolTrend.totals.non_compliant} non-compliant</span>
+                    {protocolTrend.totals.compliance_pct >= 0 && (
+                      <strong style={{marginLeft: 8}}>{protocolTrend.totals.compliance_pct.toFixed(1)}% compliant</strong>
+                    )}
+                  </div>
+                  {protocolTrend.days.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No protocol checks recorded in this period.</p>
+                  ) : (
+                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Day</th>
+                          <th style={{textAlign:'right'}}>Checked</th>
+                          <th style={{textAlign:'right'}}>Compliant</th>
+                          <th style={{textAlign:'right'}}>Minor</th>
+                          <th style={{textAlign:'right'}}>Non-compliant</th>
+                          <th style={{textAlign:'right'}}>Compliance %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {protocolTrend.days.map(d => (
+                          <tr key={d.day}>
+                            <td style={{fontFamily:'monospace'}}>{d.day}</td>
+                            <td style={{textAlign:'right'}}>{d.checked}</td>
+                            <td style={{textAlign:'right', color:'#0d9488'}}>{d.compliant}</td>
+                            <td style={{textAlign:'right', color:'#d97706'}}>{d.minor_deviations}</td>
+                            <td style={{textAlign:'right', color:'#ea580c'}}>{d.non_compliant}</td>
+                            <td style={{textAlign:'right'}}>{d.compliance_pct >= 0 ? `${d.compliance_pct.toFixed(1)}%` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Stuck Studies panel (F10) */}
+          {isAdmin && stuckCount > 0 && (
+            <div style={{marginTop: 10, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={() => setShowStuckPanel(v => !v)}>
+                  {showStuckPanel ? '▲ Hide stuck studies' : `▼ Stuck studies (${stuckCount})`}
+                </button>
+                {showStuckPanel && (
+                  <span style={{fontSize: '0.75rem', color: '#9a3412'}}>
+                    Idle &gt; 60 min — click Re-run to re-evaluate routing
+                  </span>
+                )}
+              </div>
+              {showStuckPanel && stuckStudies.length > 0 && (
+                <div style={{background: '#fff', border: '1px solid #fed7aa', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <thead>
+                      <tr>
+                        <th>Study UID</th>
+                        <th>Status</th>
+                        <th>Modality</th>
+                        <th>Last updated</th>
+                        <th style={{textAlign:'right'}}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stuckStudies.map(s => (
+                        <tr key={s.id}>
+                          <td style={{fontFamily:'monospace', fontSize:'0.72rem'}}>{s.study_instance_uid}</td>
+                          <td><span className={`badge badge--${s.status}`}>{s.status}</span></td>
+                          <td>{s.modality || <span className="td-muted">—</span>}</td>
+                          <td>{s.updated_at ? new Date(s.updated_at).toLocaleString() : <span className="td-muted">—</span>}</td>
+                          <td style={{textAlign:'right'}}>
+                            <button
+                              type="button"
+                              className="btn btn--action"
+                              style={{fontSize:'0.72rem', padding:'2px 8px'}}
+                              title="Re-evaluate routing rules for this study to restart the pipeline"
+                              onClick={async () => {
+                                await fetch(`/api/routing-rules/evaluate/${s.id}`, { method: 'POST' })
+                                setRefreshTick(t => t + 1)
+                                setTimeout(() => {
+                                  const params = new URLSearchParams({ minutes: '60' })
+                                  if (globalProjectId) params.set('project_id', globalProjectId)
+                                  fetch(`/api/studies/stuck?${params}`).then(r => r.ok ? r.json() : null).then(d => { if (d) { setStuckCount(d.total ?? 0); setStuckStudies(d.stuck ?? []) } })
+                                }, 1000)
+                              }}
+                            >
+                              Re-run
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Deleted Studies (Trash) panel */}
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
