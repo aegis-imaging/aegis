@@ -80,7 +80,7 @@ def _select_backend() -> PHIDetectionBackend:
 
     raise RuntimeError(
         "No PHI detection backend is available. "
-        "Install google-cloud-aiplatform (Gemini), google-cloud-vision, "
+        "Install google-genai (Gemini), google-cloud-vision, "
         "boto3 (AWS Textract), or tesseract-ocr+pytesseract."
     )
 

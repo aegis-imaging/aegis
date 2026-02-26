@@ -24,11 +24,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Vertex AI / Gemini multimodal backend (optional, ~120 MB)
-# Uses Application Default Credentials — no API key needed on GCP Cloud Run.
+# Gemini multimodal backend via unified google-genai SDK (optional)
+# Supports Vertex AI (ADC / Workload Identity) and AI Studio (GEMINI_API_KEY).
 ARG INCLUDE_GEMINI=false
 RUN if [ "$INCLUDE_GEMINI" = "true" ]; then \
-    pip install --no-cache-dir "google-cloud-aiplatform>=1.40.0"; \
+    pip install --no-cache-dir "google-genai>=1.0.0"; \
 fi
 
 # Google Cloud Vision (optional, ~50 MB)

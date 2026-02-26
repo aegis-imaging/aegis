@@ -1,12 +1,14 @@
 # AEGIS Classification Service
 #
 # Backend controlled by CLASSIFY_TOOL env var:
-#   "auto" (default): google_vision > aws_rekognition > heuristic
+#   "auto" (default): gemini > google_vision > aws_rekognition > heuristic
+#   "gemini":         Gemini multimodal classification (google-genai SDK)
 #   "google_vision":  Cloud Vision label_detection augments heuristic
 #   "aws_rekognition": Rekognition detect_labels augments heuristic
 #   "heuristic":      local DICOM tag analysis only (no cloud dependencies)
 #
 # Cloud backends are optional — build with:
+#   --build-arg INCLUDE_GEMINI=true
 #   --build-arg INCLUDE_GOOGLE_VISION=true
 #   --build-arg INCLUDE_AWS_REKOGNITION=true
 
@@ -16,6 +18,13 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Gemini multimodal backend via unified google-genai SDK (optional)
+# Supports Vertex AI (ADC / Workload Identity) and AI Studio (GEMINI_API_KEY).
+ARG INCLUDE_GEMINI=false
+RUN if [ "$INCLUDE_GEMINI" = "true" ]; then \
+    pip install --no-cache-dir "google-genai>=1.0.0" Pillow numpy; \
+fi
 
 # Google Cloud Vision (optional, ~50 MB) — includes Pillow+numpy for pixel rendering
 ARG INCLUDE_GOOGLE_VISION=false

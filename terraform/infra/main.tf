@@ -1356,7 +1356,7 @@ resource "google_cloud_run_v2_service" "mcp_server" {
       }
       env {
         name  = "MCP_AGENT_LLM_MODEL"
-        value = "google/gemini-2.0-flash-001"
+        value = "google/gemini-2.5-flash"
       }
       env {
         name  = "MCP_AGENT_ALLOWED_ORIGIN"

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from .config import cfg
 from .backends.base import ClassificationBackend
 from .backends.heuristic import HeuristicBackend
+from .backends.gemini import GeminiClassificationBackend
 from .backends.google_vision import GoogleVisionClassificationBackend
 from .backends.aws_rekognition import AWSRekognitionClassificationBackend
 
@@ -31,7 +32,8 @@ app = FastAPI(title="AEGIS Metadata Classification Service")
 # ── Backend selection ────────────────────────────────────────────────────────
 
 _BACKENDS: list[ClassificationBackend] = [
-    # Priority order: cloud backends first, then offline fallback.
+    # Priority order: Gemini highest, then cloud vision/rekognition, then offline fallback.
+    GeminiClassificationBackend(confidence_threshold=cfg.confidence_threshold),
     GoogleVisionClassificationBackend(confidence_threshold=cfg.confidence_threshold),
     AWSRekognitionClassificationBackend(confidence_threshold=cfg.confidence_threshold),
     HeuristicBackend(),
