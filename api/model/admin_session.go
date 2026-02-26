@@ -25,6 +25,24 @@ func RecordAdminSession(ctx context.Context, db *sql.DB, userID, ip, ua string) 
 	return &s, err
 }
 
+// RecordAdminSessionWithDedup inserts a new session row only if no row for the
+// same user exists within the dedup window. This prevents flooding the table on
+// every authenticated request while still capturing distinct login events.
+// It is safe to call from a goroutine — errors are silently discarded by the caller.
+func RecordAdminSessionWithDedup(ctx context.Context, db *sql.DB, userID, ip, ua string, window time.Duration) error {
+	windowSec := int64(window.Seconds())
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO admin_sessions (user_id, ip_address, user_agent)
+		SELECT $1, $2, $3
+		WHERE NOT EXISTS (
+			SELECT 1 FROM admin_sessions
+			WHERE user_id = $1
+			  AND created_at > now() - ($4 * INTERVAL '1 second')
+		)`,
+		userID, ip, ua, windowSec)
+	return err
+}
+
 func ListAdminSessions(ctx context.Context, db *sql.DB, userID string, limit int) ([]AdminSession, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
