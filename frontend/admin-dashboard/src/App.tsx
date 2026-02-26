@@ -6967,6 +6967,234 @@ function UsersPanel() {
   )
 }
 
+// ── PACS Query Panel (C-FIND / C-MOVE) ────────────────────────────────────────
+
+type PACSQueryMatch = Record<string, string>
+
+function PACSQueryPanel() {
+  const [open, setOpen] = useState(false)
+  const [aeTitle, setAeTitle] = useState('')
+  const [host, setHost] = useState('')
+  const [port, setPort] = useState('')
+  const [queryLevel, setQueryLevel] = useState<'STUDY' | 'PATIENT' | 'SERIES'>('STUDY')
+  const [paramKey, setParamKey] = useState('')
+  const [paramValue, setParamValue] = useState('')
+  const [extraParams, setExtraParams] = useState<{ key: string; value: string }[]>([])
+  const [results, setResults] = useState<PACSQueryMatch[] | null>(null)
+  const [querying, setQuerying] = useState(false)
+  const [queryError, setQueryError] = useState<string | null>(null)
+  const [retrieveUID, setRetrieveUID] = useState('')
+  const [moveDest, setMoveDest] = useState('')
+  const [retrieving, setRetrieving] = useState(false)
+  const [retrieveMsg, setRetrieveMsg] = useState('')
+
+  const addParam = () => {
+    const k = paramKey.trim()
+    const v = paramValue.trim()
+    if (!k) return
+    setExtraParams(p => [...p, { key: k, value: v }])
+    setParamKey('')
+    setParamValue('')
+  }
+
+  const removeParam = (idx: number) => setExtraParams(p => p.filter((_, i) => i !== idx))
+
+  const runQuery = async () => {
+    const ae = aeTitle.trim()
+    const h = host.trim()
+    const p = parseInt(port.trim(), 10)
+    if (!ae || !h || !p) {
+      setQueryError('AE Title, Host, and Port are required')
+      return
+    }
+    setQuerying(true)
+    setQueryError(null)
+    setResults(null)
+    try {
+      const query_params: Record<string, string> = {}
+      for (const ep of extraParams) {
+        if (ep.key) query_params[ep.key] = ep.value
+      }
+      const res = await fetch('/api/dimse/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ae_title: ae, host: h, port: p, query_level: queryLevel, query_params })
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setQueryError(body?.error ?? body?.detail ?? `HTTP ${res.status}`)
+        return
+      }
+      setResults(body.matches ?? [])
+    } catch (err) {
+      setQueryError(err instanceof Error ? err.message : 'Query failed')
+    } finally {
+      setQuerying(false)
+    }
+  }
+
+  const runRetrieve = async (uid?: string) => {
+    const targetUID = uid ?? retrieveUID.trim()
+    const ae = aeTitle.trim()
+    const h = host.trim()
+    const p = parseInt(port.trim(), 10)
+    if (!ae || !h || !p || !targetUID) {
+      setRetrieveMsg('AE Title, Host, Port, and Study UID are required')
+      return
+    }
+    setRetrieving(true)
+    setRetrieveMsg('')
+    try {
+      const body: Record<string, unknown> = { ae_title: ae, host: h, port: p, study_instance_uid: targetUID }
+      if (moveDest.trim()) body.move_destination = moveDest.trim()
+      const res = await fetch('/api/dimse/retrieve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const respBody = await res.json()
+      if (!res.ok) {
+        setRetrieveMsg(`Retrieve failed: ${respBody?.error ?? respBody?.detail ?? `HTTP ${res.status}`}`)
+      } else {
+        setRetrieveMsg(`C-MOVE issued for ${targetUID} → destination: ${respBody.move_destination ?? 'AEGIS SCP'}`)
+      }
+    } catch (err) {
+      setRetrieveMsg(`Retrieve failed: ${err instanceof Error ? err.message : 'unknown error'}`)
+    } finally {
+      setRetrieving(false)
+    }
+  }
+
+  const columnKeys = results && results.length > 0
+    ? Array.from(new Set(results.flatMap(r => Object.keys(r)))).slice(0, 12)
+    : []
+
+  return (
+    <div className="routing-section">
+      <div className="routing-section-header" style={{ cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
+        <div className="routing-section-title">PACS Query (C-FIND / C-MOVE)</div>
+        <button className="btn btn-sm" type="button">{open ? '▲ Hide' : '▼ Show'}</button>
+      </div>
+
+      {open && (
+        <div style={{ padding: '12px 0' }}>
+          {/* Connection params */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            <div>
+              <label className="field-label">AE Title</label>
+              <input className="text-input" value={aeTitle} onChange={e => setAeTitle(e.target.value)} placeholder="PACS-SERVER" style={{ width: 140 }} />
+            </div>
+            <div>
+              <label className="field-label">Host</label>
+              <input className="text-input" value={host} onChange={e => setHost(e.target.value)} placeholder="10.0.0.1" style={{ width: 160 }} />
+            </div>
+            <div>
+              <label className="field-label">Port</label>
+              <input className="text-input" value={port} onChange={e => setPort(e.target.value)} placeholder="104" type="number" style={{ width: 80 }} />
+            </div>
+            <div>
+              <label className="field-label">Query Level</label>
+              <select className="select-input" value={queryLevel} onChange={e => setQueryLevel(e.target.value as typeof queryLevel)}>
+                <option value="STUDY">STUDY</option>
+                <option value="PATIENT">PATIENT</option>
+                <option value="SERIES">SERIES</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Extra query params */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+              <input className="text-input" value={paramKey} onChange={e => setParamKey(e.target.value)} placeholder="DICOM keyword (e.g. PatientID)" style={{ width: 200 }} />
+              <input className="text-input" value={paramValue} onChange={e => setParamValue(e.target.value)} placeholder="value (empty = wildcard)" style={{ width: 180 }} />
+              <button className="btn btn-sm" type="button" onClick={addParam}>+ Add filter</button>
+            </div>
+            {extraParams.map((ep, idx) => (
+              <div key={idx} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', background: '#f0faf8', borderRadius: 4, padding: '2px 8px', marginRight: 6, marginBottom: 4, fontSize: 12 }}>
+                <code>{ep.key}</code>{ep.value ? <span>= <code>{ep.value}</code></span> : <span style={{ color: '#6b7280' }}> (wildcard)</span>}
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ea580c', padding: '0 2px' }} onClick={() => removeParam(idx)}>✕</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+            <button className="btn btn-sm" type="button" onClick={runQuery} disabled={querying}>
+              {querying ? 'Querying…' : 'Run C-FIND Query'}
+            </button>
+          </div>
+
+          {queryError && <div className="state-error" style={{ marginBottom: 8 }}>{queryError}</div>}
+
+          {results !== null && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: '#374151', marginBottom: 6 }}>
+                Found <strong>{results.length}</strong> match{results.length !== 1 ? 'es' : ''}
+              </div>
+              {results.length === 0 ? (
+                <div className="state-empty">No matching studies found.</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="routing-table">
+                    <thead>
+                      <tr>
+                        {columnKeys.map(k => <th key={k}>{k}</th>)}
+                        <th>Retrieve</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.map((row, ri) => (
+                        <tr key={ri}>
+                          {columnKeys.map(k => <td key={k}><code style={{ fontSize: 11 }}>{row[k] ?? ''}</code></td>)}
+                          <td>
+                            {row['StudyInstanceUID'] ? (
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                disabled={retrieving}
+                                onClick={() => runRetrieve(row['StudyInstanceUID'])}
+                                title={`C-MOVE: ${row['StudyInstanceUID']}`}
+                              >
+                                Retrieve
+                              </button>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manual retrieve */}
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+            <div className="routing-section-title" style={{ marginBottom: 8 }}>Manual C-MOVE Retrieve</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 8 }}>
+              <div>
+                <label className="field-label">StudyInstanceUID</label>
+                <input className="text-input" value={retrieveUID} onChange={e => setRetrieveUID(e.target.value)} placeholder="1.2.840.xxxxx" style={{ width: 300 }} />
+              </div>
+              <div>
+                <label className="field-label">Move Destination AE (optional)</label>
+                <input className="text-input" value={moveDest} onChange={e => setMoveDest(e.target.value)} placeholder="AEGIS (default)" style={{ width: 160 }} />
+              </div>
+              <button className="btn btn-sm" type="button" onClick={() => runRetrieve()} disabled={retrieving}>
+                {retrieving ? 'Sending C-MOVE…' : 'Send C-MOVE'}
+              </button>
+            </div>
+            {retrieveMsg && (
+              <div className={retrieveMsg.startsWith('Retrieve failed') ? 'state-error' : 'state-ok'} style={{ fontSize: 13 }}>
+                {retrieveMsg}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DimseOpsPanel() {
   const [summary, setSummary] = useState<DimseRetrySummary | null>(null)
   const [details, setDetails] = useState<DimseRetryDetails | null>(null)
@@ -7381,6 +7609,8 @@ function DimseOpsPanel() {
           )}
         </div>
       )}
+
+      <PACSQueryPanel />
     </div>
   )
 }
