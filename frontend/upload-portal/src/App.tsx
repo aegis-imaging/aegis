@@ -17,6 +17,13 @@ interface Project {
   description: string
 }
 
+interface AuthUser {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'viewer' | 'researcher'
+}
+
 interface StudyGroup {
   uid: string
   files: ParsedDicomFile[]
@@ -115,6 +122,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [totalSize, setTotalSize] = useState(0)
 
+  // Auth state — fire-and-forget; non-blocking (auth is handled at infra level)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+
   // Project selector state
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState('default')
@@ -130,7 +140,16 @@ export function App() {
     writeDisplayTimezone(displayTimezoneMode, displayTimezoneCustom)
   }, [displayTimezoneMode, displayTimezoneCustom])
 
-  // Fetch projects on mount
+  // Fetch current user (non-blocking — auth handled at infra level by IAP/Easy Auth/ALB)
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.ok ? res.json() as Promise<AuthUser> : null)
+      .then(user => { if (user) setCurrentUser(user) })
+      .catch(() => { /* not authenticated or auth disabled — continue as public */ })
+  }, [])
+
+  // Fetch projects on mount — API filters by membership for researcher role,
+  // returns only non-restricted projects for unauthenticated callers.
   useEffect(() => {
     fetch('/api/projects')
       .then(res => res.ok ? res.json() as Promise<Project[]> : [])
@@ -377,6 +396,29 @@ export function App() {
       {/* Step 1: File selection */}
       {stage === 'select' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Auth context banner — shown when a scoped researcher is identified */}
+          {currentUser?.role === 'researcher' && (
+            <div style={{
+              padding: '10px 14px',
+              backgroundColor: '#f0fdfa',
+              border: '1px solid #99f6e4',
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: '#0f766e',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}>
+              <span>Logged in as <strong>{currentUser.name || currentUser.email}</strong>
+                {projects.length === 1
+                  ? ` — viewing project: ${projects[0].name}`
+                  : projects.length > 1
+                    ? ` — ${projects.length} projects available`
+                    : ' — no projects assigned'}
+              </span>
+            </div>
+          )}
+
           {/* Project selector */}
           {!projectsLoading && projects.length > 1 && (
             <div style={{

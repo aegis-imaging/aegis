@@ -7,13 +7,31 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
-	projects, err := model.ListProjects(r.Context(), s.db)
+	user := middleware.UserFromContext(r.Context())
+
+	var (
+		projects []model.Project
+		err      error
+	)
+	switch {
+	case user == nil:
+		// Unauthenticated (public call from upload portal etc.) — return non-restricted projects only.
+		projects, err = model.ListProjectsPublic(r.Context(), s.db)
+	case user.Role == "researcher":
+		// Researcher — return only projects they are a member of.
+		projects, err = model.ListProjectsForResearcher(r.Context(), s.db, user.ID)
+	default:
+		// Platform admin / viewer — return all projects (unchanged behaviour).
+		projects, err = model.ListProjects(r.Context(), s.db)
+	}
+
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list projects")
 		return
@@ -320,5 +338,38 @@ func (s *Server) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "project.updated", actorEmail(r),
 		"project", id, clientIP(r), map[string]any{"name": project.Name, "slug": project.Slug})
+	s.writeJSON(w, http.StatusOK, project)
+}
+
+// SetProjectRestricted toggles the restricted flag on a project.
+// PUT /api/projects/{id}/restricted
+// Body: {"restricted": true}
+func (s *Server) SetProjectRestricted(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	// Verify project exists.
+	if _, err := model.GetProjectByID(r.Context(), s.db, id); err != nil {
+		s.writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
+	var body struct {
+		Restricted bool `json:"restricted"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	if err := model.SetProjectRestricted(r.Context(), s.db, id, body.Restricted); err != nil {
+		log.Printf("set project restricted %s: %v", id, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to update project")
+		return
+	}
+
+	model.CreateAuditEntry(r.Context(), s.db, "project.restricted_updated", actorEmail(r),
+		"project", id, clientIP(r), map[string]any{"restricted": body.Restricted})
+
+	project, _ := model.GetProjectByID(r.Context(), s.db, id)
 	s.writeJSON(w, http.StatusOK, project)
 }

@@ -68,6 +68,11 @@ import {
   updateAdminUserArgsSchema,
   deleteAdminUserArgsSchema,
   sendAdminInviteArgsSchema,
+  listProjectMembersArgsSchema,
+  addProjectMemberArgsSchema,
+  updateProjectMemberArgsSchema,
+  removeProjectMemberArgsSchema,
+  toggleProjectRestrictedArgsSchema,
   listInviteCodesArgsSchema,
   listInviteRequestsArgsSchema,
   createInviteCodeArgsSchema,
@@ -757,11 +762,24 @@ const tools: Tool[] = [
   },
   {
     name: "list_projects",
-    description: "List all AEGIS projects. Returns array of {id, name, slug, description, archived, retention_days, stuck_threshold_minutes, created_at}. stuck_threshold_minutes is the per-project SLA threshold for get_stuck_studies (null = global default of 60 min). Use project IDs to scope other tools (list_studies, get_pipeline_stats, get_stuck_studies, etc.) to a specific project.",
+    description: "List all AEGIS projects. Returns array of {id, name, slug, description, archived, restricted, member_count, retention_days, stuck_threshold_minutes, created_at}. restricted=true means only project members and platform admins can see the project. member_count shows how many users are assigned to the project. Use project IDs to scope other tools (list_studies, get_pipeline_stats, get_stuck_studies, etc.) to a specific project.",
     inputSchema: {
       type: "object",
       properties: {
         request_id: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "list_project_members",
+    description: "List all members of a project and their access levels. Returns {members: [{id, admin_user_id, role, institution_id, institution_name, user_email, user_name, notes, created_at}]}. Coordinating center roles (owner/coordinator/reviewer) have institution_id=null and see all studies. Site roles (site_coordinator/site_viewer) are scoped to a single institution's studies.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" }
       },
       additionalProperties: false
     }
@@ -1482,7 +1500,7 @@ const tools: Tool[] = [
   },
   {
     name: "create_admin_user",
-    description: "Register a new admin dashboard user with email and role. Role 'admin' has full write access; 'viewer' is read-only. The user must already be authenticated via IAP/Azure/AWS — this just registers them in the access control table. Requires confirm=true and a reason.",
+    description: "Register a new admin dashboard user with email and role. Role 'admin' has full write access; 'viewer' is read-only; 'researcher' is project-scoped (access determined by project_members entries — use add_project_member after creating). The user must already be authenticated via IAP/Azure/AWS — this just registers them in the access control table. Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["email", "role", "reason", "confirm"],
@@ -1490,7 +1508,7 @@ const tools: Tool[] = [
         request_id: { type: "string" },
         email: { type: "string", format: "email", description: "User's email (must match their IAP/Easy Auth identity)" },
         name: { type: "string", minLength: 1, maxLength: 255 },
-        role: { type: "string", enum: ["admin", "viewer"] },
+        role: { type: "string", enum: ["admin", "viewer", "researcher"], description: "'researcher' = project-scoped; must also be added via add_project_member" },
         notes: { type: "string", maxLength: 1024 },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
@@ -1509,7 +1527,7 @@ const tools: Tool[] = [
         user_id: { type: "string", format: "uuid" },
         email: { type: "string", format: "email" },
         name: { type: "string", minLength: 1, maxLength: 255 },
-        role: { type: "string", enum: ["admin", "viewer"] },
+        role: { type: "string", enum: ["admin", "viewer", "researcher"] },
         enabled: { type: "boolean", description: "false to disable access without deleting" },
         notes: { type: "string", maxLength: 1024 },
         reason: { type: "string", minLength: 10, maxLength: 512 },
@@ -1542,6 +1560,76 @@ const tools: Tool[] = [
       properties: {
         request_id: { type: "string" },
         user_id: { type: "string", format: "uuid", description: "UUID of the admin user to invite" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "add_project_member",
+    description: "Add a user to a project with a specific role. Coordinating center roles (owner/coordinator/reviewer) leave institution_id null — they see all studies. Site roles (site_coordinator/site_viewer) require institution_id — they see only that institution's studies. Use list_admin_users to find the admin_user_id and list_institutions to find institution_id for site roles. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "admin_user_id", "role", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        admin_user_id: { type: "string", format: "uuid", description: "UUID of the admin/researcher user to add" },
+        role: { type: "string", enum: ["owner", "coordinator", "reviewer", "site_coordinator", "site_viewer"] },
+        institution_id: { type: "string", format: "uuid", description: "Required for site_coordinator and site_viewer; null for coordinating center roles" },
+        notes: { type: "string", maxLength: 500 },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "update_project_member",
+    description: "Update a project member's role or institution scoping. Use list_project_members to find the member_id. Changing from a site role to a center role requires clearing institution_id (null). Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "member_id", "role", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        member_id: { type: "string", format: "uuid" },
+        role: { type: "string", enum: ["owner", "coordinator", "reviewer", "site_coordinator", "site_viewer"] },
+        institution_id: { type: "string", format: "uuid", description: "Set for site roles; null clears site scoping (coordinating center roles)" },
+        notes: { type: "string", maxLength: 500 },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "remove_project_member",
+    description: "Remove a user from a project. The user loses access to the project immediately. Use list_project_members to find the member_id. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "member_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        member_id: { type: "string", format: "uuid" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "toggle_project_restricted",
+    description: "Set or clear the restricted flag on a project. When restricted=true, only project members and platform admins (admin/viewer role) can see the project — researcher-role users without membership cannot. When restricted=false (default), all authenticated users can see the project. Requires confirm=true and a reason.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id", "restricted", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid" },
+        restricted: { type: "boolean", description: "true to restrict to members only; false to open to all" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -3404,6 +3492,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "list_project_members") {
+      const parsed = listProjectMembersArgsSchema.parse(args);
+      const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/members`);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (name === "list_institutions") {
       emptyArgsSchema.parse(args);
       const data = await client.get("/api/institutions");
@@ -3782,6 +3876,26 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (name === "set_project_sla_threshold") {
         const parsedSLA = setProjectSLAThresholdArgsSchema.parse(args);
         return handleSetProjectSLAThreshold(parsedSLA.request_id ?? buildRequestId(), parsedSLA);
+      }
+
+      if (name === "add_project_member") {
+        const parsed = addProjectMemberArgsSchema.parse(args);
+        return handleAddProjectMember(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "update_project_member") {
+        const parsed = updateProjectMemberArgsSchema.parse(args);
+        return handleUpdateProjectMember(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "remove_project_member") {
+        const parsed = removeProjectMemberArgsSchema.parse(args);
+        return handleRemoveProjectMember(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "toggle_project_restricted") {
+        const parsed = toggleProjectRestrictedArgsSchema.parse(args);
+        return handleToggleProjectRestricted(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "create_admin_user") {
@@ -4291,6 +4405,15 @@ function extractWriteTarget(name: ToolName, args: Record<string, unknown>): stri
     name === "set_project_retention" ||
     name === "set_project_sla_threshold"
   ) {
+    return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "add_project_member") {
+    return typeof args.project_id === "string" ? args.project_id : null;
+  }
+  if (name === "update_project_member" || name === "remove_project_member") {
+    return typeof args.member_id === "string" ? args.member_id : null;
+  }
+  if (name === "toggle_project_restricted") {
     return typeof args.project_id === "string" ? args.project_id : null;
   }
   if (name === "create_admin_user") {
@@ -5721,9 +5844,76 @@ async function handleSetProjectSLAThreshold(
   });
 }
 
+async function handleAddProjectMember(
+  requestId: string,
+  parsed: { project_id: string; admin_user_id: string; role: string; institution_id?: string | null; notes?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "add_project_member");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow add_project_member", false, "add_project_member");
+  }
+  const body: Record<string, unknown> = {
+    admin_user_id: parsed.admin_user_id,
+    role: parsed.role,
+    institution_id: parsed.institution_id ?? null,
+  };
+  if (parsed.notes !== undefined) body.notes = parsed.notes;
+  const data = await client.post(`/api/projects/${encodeURIComponent(parsed.project_id)}/members`, body);
+  return formatSuccess(requestId, "add_project_member", { accepted: true, project_id: parsed.project_id, member: data, reason: parsed.reason });
+}
+
+async function handleUpdateProjectMember(
+  requestId: string,
+  parsed: { project_id: string; member_id: string; role: string; institution_id?: string | null; notes?: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_project_member");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow update_project_member", false, "update_project_member");
+  }
+  const body: Record<string, unknown> = {
+    role: parsed.role,
+    institution_id: parsed.institution_id ?? null,
+  };
+  if (parsed.notes !== undefined) body.notes = parsed.notes;
+  const data = await client.put(`/api/projects/${encodeURIComponent(parsed.project_id)}/members/${encodeURIComponent(parsed.member_id)}`, body);
+  return formatSuccess(requestId, "update_project_member", { accepted: true, member_id: parsed.member_id, member: data, reason: parsed.reason });
+}
+
+async function handleRemoveProjectMember(
+  requestId: string,
+  parsed: { project_id: string; member_id: string; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "remove_project_member");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow remove_project_member", false, "remove_project_member");
+  }
+  await client.delete(`/api/projects/${encodeURIComponent(parsed.project_id)}/members/${encodeURIComponent(parsed.member_id)}`);
+  return formatSuccess(requestId, "remove_project_member", { accepted: true, member_id: parsed.member_id, reason: parsed.reason });
+}
+
+async function handleToggleProjectRestricted(
+  requestId: string,
+  parsed: { project_id: string; restricted: boolean; reason: string; confirm: true }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "toggle_project_restricted");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow toggle_project_restricted", false, "toggle_project_restricted");
+  }
+  const data = await client.put(`/api/projects/${encodeURIComponent(parsed.project_id)}/restricted`, { restricted: parsed.restricted });
+  return formatSuccess(requestId, "toggle_project_restricted", { accepted: true, project_id: parsed.project_id, restricted: parsed.restricted, project: data, reason: parsed.reason });
+}
+
 async function handleCreateAdminUser(
   requestId: string,
-  parsed: { email: string; name?: string; role: "admin" | "viewer"; notes?: string; reason: string; confirm: true }
+  parsed: { email: string; name?: string; role: "admin" | "viewer" | "researcher"; notes?: string; reason: string; confirm: true }
 ) {
   if (config.mcpMode !== "operator") {
     return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "create_admin_user");
@@ -5748,7 +5938,7 @@ async function handleCreateAdminUser(
 
 async function handleUpdateAdminUser(
   requestId: string,
-  parsed: { user_id: string; email: string; name?: string; role: "admin" | "viewer"; enabled?: boolean; notes?: string; reason: string; confirm: true }
+  parsed: { user_id: string; email: string; name?: string; role: "admin" | "viewer" | "researcher"; enabled?: boolean; notes?: string; reason: string; confirm: true }
 ) {
   if (config.mcpMode !== "operator") {
     return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "update_admin_user");

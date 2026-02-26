@@ -52,6 +52,12 @@ func UserFromContext(ctx context.Context) *AuthUser {
 	return u
 }
 
+// AuthUserContextKey returns the context key used to store the AuthUser.
+// Exposed for test injection via context.WithValue.
+func AuthUserContextKey() any {
+	return authUserKey
+}
+
 // sessionDedupWindow is the minimum gap between recorded login sessions for the
 // same user. Requests within this window do not create a new row.
 const sessionDedupWindow = 30 * time.Minute
@@ -111,6 +117,40 @@ func clientIPFromRequest(r *http.Request) string {
 		return host[:idx]
 	}
 	return host
+}
+
+// OptionalAuth is like RequireAuth but never rejects unauthenticated requests.
+// If authentication succeeds, the user is injected into the request context.
+// If authentication fails (no headers, invalid key, etc.), the request continues
+// without a user in context — handlers check UserFromContext for nil.
+// Used on routes that need to tailor responses by user identity but also
+// serve unauthenticated callers (e.g. GET /api/projects).
+func OptionalAuth(db *sql.DB, cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			var user *AuthUser
+			var err error
+
+			if !cfg.AuthEnabled {
+				// Dev mode: auto-auth, but tolerate missing users gracefully.
+				user, err = devUser(r.Context(), db, cfg.DevUserEmail)
+				if err != nil {
+					next.ServeHTTP(w, r)
+					return
+				}
+			} else {
+				user, err = extractUser(r.Context(), db, r, cfg)
+				if err != nil {
+					// Auth failed silently — continue without user context.
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
+			ctx := context.WithValue(r.Context(), authUserKey, user)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}
+	}
 }
 
 // RequireRole wraps RequireAuth and additionally checks that the authenticated

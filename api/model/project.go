@@ -16,16 +16,19 @@ type Project struct {
 	StuckThresholdMinutes *int      `json:"stuck_threshold_minutes,omitempty"`  // nil = use request default (60)
 	StorageQuotaBytes     *int64    `json:"storage_quota_bytes,omitempty"`      // nil = unlimited
 	Archived              bool      `json:"archived"`
+	Restricted            bool      `json:"restricted"` // true = only project_members + platform admin can see
+	MemberCount           int       `json:"member_count,omitempty"` // populated by ListProjects when available
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }
 
-const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, stuck_threshold_minutes, storage_quota_bytes, archived, created_at, updated_at`
+const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, stuck_threshold_minutes, storage_quota_bytes, archived, restricted, created_at, updated_at`
 
 func scanProject(row scannable, p *Project) error {
-	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.StuckThresholdMinutes, &p.StorageQuotaBytes, &p.Archived, &p.CreatedAt, &p.UpdatedAt)
+	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.StuckThresholdMinutes, &p.StorageQuotaBytes, &p.Archived, &p.Restricted, &p.CreatedAt, &p.UpdatedAt)
 }
 
+// ListProjects returns all projects (used by platform admin/viewer and internal callers).
 func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT `+projectColumns+` FROM projects ORDER BY created_at`)
@@ -43,6 +46,64 @@ func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
 		projects = append(projects, p)
 	}
 	return projects, rows.Err()
+}
+
+// ListProjectsForResearcher returns only the projects that a researcher-role user is a member of,
+// with member_count populated. Used when admin_users.role = 'researcher'.
+func ListProjectsForResearcher(ctx context.Context, db *sql.DB, adminUserID string) ([]Project, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			p.id, p.name, p.slug, p.description, p.default_anon_profile_id,
+			p.retention_days, p.stuck_threshold_minutes, p.storage_quota_bytes,
+			p.archived, p.restricted, p.created_at, p.updated_at
+		FROM projects p
+		JOIN project_members pm ON pm.project_id = p.id
+		WHERE pm.admin_user_id = $1
+		ORDER BY p.created_at`,
+		adminUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []Project
+	for rows.Next() {
+		var p Project
+		if err := scanProject(rows, &p); err != nil {
+			return nil, err
+		}
+		projects = append(projects, p)
+	}
+	return projects, rows.Err()
+}
+
+// ListProjectsPublic returns non-restricted projects.
+// Used for unauthenticated callers (upload portal, public project list).
+func ListProjectsPublic(ctx context.Context, db *sql.DB) ([]Project, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT `+projectColumns+` FROM projects WHERE restricted = false ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []Project
+	for rows.Next() {
+		var p Project
+		if err := scanProject(rows, &p); err != nil {
+			return nil, err
+		}
+		projects = append(projects, p)
+	}
+	return projects, rows.Err()
+}
+
+// SetProjectRestricted updates the restricted flag on a project.
+func SetProjectRestricted(ctx context.Context, db *sql.DB, projectID string, restricted bool) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE projects SET restricted=$1, updated_at=now() WHERE id=$2`,
+		restricted, projectID)
+	return err
 }
 
 func GetProjectBySlug(ctx context.Context, db *sql.DB, slug string) (*Project, error) {
