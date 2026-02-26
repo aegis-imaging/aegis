@@ -304,6 +304,9 @@ func main() {
 	// DIMSE C-FIND SCU — query a remote PACS/AE for matching studies/series/instances.
 	mux.HandleFunc("POST /api/dimse/query", adminOnly(srv.DimseQuery))
 
+	// DIMSE C-MOVE SCU — request a remote PACS to push a study to the AEGIS SCP.
+	mux.HandleFunc("POST /api/dimse/retrieve", adminOnly(srv.DimseRetrieve))
+
 	// Email digest subscriptions — periodic summary emails per project.
 	mux.HandleFunc("GET /api/digest-subscriptions", auth(srv.ListDigestSubscriptions))
 	mux.HandleFunc("GET /api/projects/{projectID}/digest-subscriptions", auth(srv.ListDigestSubscriptions))
