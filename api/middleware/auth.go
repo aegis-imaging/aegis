@@ -140,15 +140,25 @@ func (e *authError) Error() string { return e.Message }
 
 // extractUser determines the authenticated user based on the configured provider.
 // Supported providers: "iap" (GCP), "azure" (Azure AD), "aws" (ALB + Cognito), "auto" (try all).
+// All modes fall back to API key authentication via Authorization: Bearer <key>.
 func extractUser(ctx context.Context, db *sql.DB, r *http.Request, cfg *config.Config) (*AuthUser, error) {
 	switch cfg.AuthProvider {
 	case "iap":
-		return iapUser(ctx, db, r)
+		if r.Header.Get("X-Goog-Authenticated-User-Email") != "" {
+			return iapUser(ctx, db, r)
+		}
+		return apiKeyUser(ctx, db, r)
 	case "azure":
-		return azureUser(ctx, db, r)
+		if r.Header.Get("X-MS-CLIENT-PRINCIPAL-NAME") != "" {
+			return azureUser(ctx, db, r)
+		}
+		return apiKeyUser(ctx, db, r)
 	case "aws":
-		return awsUser(ctx, db, r, cfg.AWSALBRegion)
-	default: // "auto" — try IAP, then Azure, then AWS
+		if r.Header.Get("X-Amzn-Oidc-Data") != "" {
+			return awsUser(ctx, db, r, cfg.AWSALBRegion)
+		}
+		return apiKeyUser(ctx, db, r)
+	default: // "auto" — try IAP, then Azure, then AWS, then API key
 		if r.Header.Get("X-Goog-Authenticated-User-Email") != "" {
 			return iapUser(ctx, db, r)
 		}
@@ -158,8 +168,41 @@ func extractUser(ctx context.Context, db *sql.DB, r *http.Request, cfg *config.C
 		if r.Header.Get("X-Amzn-Oidc-Data") != "" {
 			return awsUser(ctx, db, r, cfg.AWSALBRegion)
 		}
+		return apiKeyUser(ctx, db, r)
+	}
+}
+
+// apiKeyUser authenticates via Authorization: Bearer <api_key>.
+// Looks up the key by SHA-256 hash in the api_keys table, checks enabled + expiry,
+// then resolves the key's created_by email to an admin user.
+func apiKeyUser(ctx context.Context, db *sql.DB, r *http.Request) (*AuthUser, error) {
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
 		return nil, &authError{http.StatusUnauthorized, "missing authentication header"}
 	}
+	rawKey := strings.TrimPrefix(auth, "Bearer ")
+	if rawKey == "" {
+		return nil, &authError{http.StatusUnauthorized, "missing authentication header"}
+	}
+
+	hash := sha256.Sum256([]byte(rawKey))
+	keyHash := fmt.Sprintf("%x", hash)
+
+	apiKey, err := model.GetAPIKeyByHash(ctx, db, keyHash)
+	if err != nil {
+		return nil, &authError{http.StatusUnauthorized, "invalid API key"}
+	}
+	if !apiKey.Enabled {
+		return nil, &authError{http.StatusForbidden, "API key is disabled"}
+	}
+	if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
+		return nil, &authError{http.StatusForbidden, "API key has expired"}
+	}
+
+	// Update last_used_at asynchronously
+	go model.TouchAPIKey(context.Background(), db, apiKey.ID)
+
+	return lookupUser(ctx, db, apiKey.CreatedBy)
 }
 
 func devUser(ctx context.Context, db *sql.DB, email string) (*AuthUser, error) {
