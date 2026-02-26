@@ -220,6 +220,91 @@ def send_cfind(
     return results
 
 
+def send_cmove(
+    host: str,
+    port: int,
+    ae_title: str,
+    study_instance_uid: str,
+    move_destination: str,
+) -> dict:
+    """Send C-MOVE to a remote PACS to push a study to *move_destination* AE.
+
+    The remote PACS opens a new C-STORE association back to the specified
+    ``move_destination`` AE title (normally AEGIS's own SCP listening on
+    port 11112). Files arrive through the existing SCP path and are ingested
+    by the normal ``EVT_RELEASED`` handler.
+
+    Args:
+        host: Remote PACS host.
+        port: Remote PACS DIMSE port.
+        ae_title: Remote PACS AE title.
+        study_instance_uid: DICOM StudyInstanceUID to retrieve.
+        move_destination: Destination AE title that the PACS will push to.
+            Defaults to this SCP's own AE title when empty.
+
+    Returns:
+        dict with ``success``, ``study_instance_uid``, ``move_destination``,
+        and ``final_status`` (hex string or ``null``).
+
+    Raises:
+        RuntimeError: if association fails or C-MOVE returns an error status.
+    """
+    from pynetdicom.sop_class import (  # type: ignore[import]
+        StudyRootQueryRetrieveInformationModelMove,
+    )
+
+    import pydicom
+
+    dest = move_destination.strip() or config.DIMSE_AE_TITLE
+
+    AE = _load_pynetdicom_ae()
+    ae = AE(ae_title=config.DIMSE_AE_TITLE)
+    ae.add_requested_context(StudyRootQueryRetrieveInformationModelMove)
+
+    assoc = ae.associate(host, int(port), ae_title=ae_title)
+    if not assoc.is_established:
+        raise RuntimeError(
+            f"DIMSE association failed to {host}:{port} (AE={ae_title})"
+        )
+
+    ds = pydicom.dataset.Dataset()
+    ds.QueryRetrieveLevel = "STUDY"
+    ds.StudyInstanceUID = study_instance_uid
+
+    final_status_code = None
+    try:
+        responses = assoc.send_c_move(
+            ds, dest, StudyRootQueryRetrieveInformationModelMove
+        )
+        for status, _identifier in responses:
+            if status is not None:
+                code = getattr(status, "Status", None)
+                if code is not None:
+                    final_status_code = code
+    finally:
+        assoc.release()
+
+    if final_status_code is not None and final_status_code != 0x0000:
+        raise RuntimeError(
+            f"C-MOVE returned non-success status: {final_status_code:#06x}"
+        )
+
+    log.info(
+        "C-MOVE complete: host=%s port=%d ae=%s study=%s dest=%s",
+        host,
+        port,
+        ae_title,
+        study_instance_uid,
+        dest,
+    )
+    return {
+        "success": True,
+        "study_instance_uid": study_instance_uid,
+        "move_destination": dest,
+        "final_status": hex(final_status_code) if final_status_code is not None else None,
+    }
+
+
 def send_echo(host: str, port: int, ae_title: str) -> dict:
     """Send C-ECHO to a remote DIMSE destination and return latency.
 

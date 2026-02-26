@@ -33,7 +33,7 @@ from app.ingest import (
 from app.operator_audit import get_actions, record_action
 from app.retry_alerts import evaluate_retry_alerts, get_alerts
 from app.scp import create_scp, start_scp
-from app.sender import forward_study, send_cfind, send_echo
+from app.sender import forward_study, send_cfind, send_cmove, send_echo
 
 logging.basicConfig(
     level=logging.INFO,
@@ -411,3 +411,27 @@ def query(request: CfindRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"matches": results, "count": len(results)}
+
+
+class RetrieveRequest(BaseModel):
+    ae_title: str = Field(min_length=1)
+    host: str = Field(min_length=1)
+    port: int = Field(gt=0)
+    study_instance_uid: str = Field(min_length=1)
+    move_destination: str = Field(default="")
+
+
+@app.post("/retrieve")
+def retrieve(request: RetrieveRequest):
+    """Send C-MOVE to a remote PACS to push a study to the AEGIS SCP."""
+    try:
+        result = send_cmove(
+            host=request.host,
+            port=request.port,
+            ae_title=request.ae_title,
+            study_instance_uid=request.study_instance_uid,
+            move_destination=request.move_destination,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
