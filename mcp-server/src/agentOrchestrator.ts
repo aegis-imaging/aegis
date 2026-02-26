@@ -18,7 +18,7 @@ const agentDataSchema = z.object({
     blockers: z.array(z.string()),
     recommended_actions: z.array(z.string())
   }),
-  timeline: z.array(z.object({ event: z.string(), timestamp: z.string() })),
+  timeline: z.array(z.object({ event: z.string(), timestamp: z.string().nullable().default("") })),
   next_steps: z.array(z.string())
 });
 
