@@ -9,6 +9,7 @@ Checks:
 5) one pipeline progression check (study detail)
 6) study approve
 7) export share create/redeem/download
+8) DIMSE query endpoint validation (always) + optional C-FIND query (if --dimse-* args provided)
 """
 
 from __future__ import annotations
@@ -131,6 +132,22 @@ def main() -> int:
         default="",
         help="Convenience for Azure Easy Auth header injection. Sets X-MS-CLIENT-PRINCIPAL-NAME automatically.",
     )
+    parser.add_argument(
+        "--dimse-ae-title",
+        default="",
+        help="Remote PACS AE title for optional DIMSE C-FIND smoke check (e.g. ORTHANC).",
+    )
+    parser.add_argument(
+        "--dimse-host",
+        default="",
+        help="Remote PACS hostname/IP for optional DIMSE C-FIND smoke check.",
+    )
+    parser.add_argument(
+        "--dimse-port",
+        type=int,
+        default=0,
+        help="Remote PACS port for optional DIMSE C-FIND smoke check (e.g. 4242).",
+    )
     args = parser.parse_args()
 
     base_url = args.base_url.rstrip("/")
@@ -210,6 +227,19 @@ def main() -> int:
             results,
             "share.download",
             lambda: step_download_share(base_url, args.timeout, state),
+        )
+
+        run_step(
+            results,
+            "dimse.query.check",
+            lambda: step_dimse_query_check(
+                base_url,
+                admin_headers,
+                args.timeout,
+                args.dimse_ae_title,
+                args.dimse_host,
+                args.dimse_port,
+            ),
         )
     except SmokeFailure:
         print_summary(results, success=False)
@@ -445,6 +475,71 @@ def step_download_share(base_url: str, timeout: int, state: Dict[str, str]) -> s
     if len(body) == 0:
         raise SmokeFailure("share.download: empty response body")
     return f"bytes={len(body)}"
+
+
+def step_dimse_query_check(
+    base_url: str,
+    admin_headers: Dict[str, str],
+    timeout: int,
+    dimse_ae_title: str,
+    dimse_host: str,
+    dimse_port: int,
+) -> str:
+    """Verify the DIMSE query endpoint.
+
+    Phase 1 (always): Send a request with a missing required field — the
+    API must return 400 (validation), confirming the route is registered
+    and the handler is reachable.
+
+    Phase 2 (when --dimse-* args are all provided): Send a properly-formed
+    C-FIND query and expect 200 with a ``matches`` list (possibly empty) or
+    503 when the DIMSE receiver sidecar is not configured on this deployment.
+    A 502/timeout from the sidecar is also surfaced as informational (not a
+    hard failure) so the smoke suite does not fail on deployments where the
+    remote PACS is unreachable.
+    """
+    query_url = build_url(base_url, "/api/dimse/query")
+
+    # Phase 1: validation check — POST with no body fields → expect 400.
+    status, body, _ = http_request(
+        "POST", query_url, headers=admin_headers, json_body={}, timeout_s=timeout
+    )
+    if status != 400:
+        raise SmokeFailure(
+            f"dimse.query.check: expected 400 for missing required fields, got {status}; body={body[:200]!r}"
+        )
+
+    # Phase 2: live query (only when all three DIMSE params are provided).
+    if not (dimse_ae_title and dimse_host and dimse_port > 0):
+        return "validation=400 (live query skipped — pass --dimse-ae-title/--dimse-host/--dimse-port to enable)"
+
+    status2, body2, _ = http_request(
+        "POST",
+        query_url,
+        headers=admin_headers,
+        json_body={
+            "ae_title": dimse_ae_title,
+            "host": dimse_host,
+            "port": dimse_port,
+            "query_level": "STUDY",
+            "query_params": {},
+        },
+        timeout_s=timeout,
+    )
+
+    if status2 == 503:
+        return "validation=400, live=503 (DIMSE receiver not configured on this deployment)"
+    if status2 in (502, 504):
+        return f"validation=400, live={status2} (DIMSE sidecar unreachable — informational)"
+    if status2 != 200:
+        raise SmokeFailure(
+            f"dimse.query.check: live query returned {status2}; body={body2[:200]!r}"
+        )
+
+    resp2 = parse_json(body2, "dimse.query.check.live")
+    matches = resp2.get("matches", [])
+    count = resp2.get("count", len(matches))
+    return f"validation=400, live=200 count={count}"
 
 
 def print_summary(results: list[StepResult], success: bool) -> None:
