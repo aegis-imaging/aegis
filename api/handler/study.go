@@ -60,6 +60,9 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		t := true
 		f.Flagged = &t
 	}
+	if v := q.Get("assigned_to"); v != "" {
+		f.AssignedTo = v
+	}
 
 	total, err := model.CountStudies(r.Context(), s.db, f)
 	if err != nil {
