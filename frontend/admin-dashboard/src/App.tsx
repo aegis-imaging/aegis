@@ -1610,7 +1610,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [seriesList, setSeriesList] = useState<SeriesRow[]>([])
   const [relationships, setRelationships] = useState<RelationshipWithStudy[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships' | 'notes'>('audit')
+  type StudyNoteEntry = { id: string; actor: string; note: string; created_at: string }
+  const [studyNotes, setStudyNotes] = useState<StudyNoteEntry[]>([])
   const [newLabel, setNewLabel] = useState('')
   const [labelSaving, setLabelSaving] = useState(false)
 
@@ -1718,7 +1720,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/labels`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/series`).then(r => r.ok ? r.json() : { series: [] }),
       fetch(`/api/studies/${studyId}/relationships`).then(r => r.ok ? r.json() : { relationships: [] }),
-    ]).then(([s, a, rl, sh, diag, lbls, sr, relData]) => {
+      fetch(`/api/studies/${studyId}/notes`).then(r => r.ok ? r.json() : { notes: [] }),
+    ]).then(([s, a, rl, sh, diag, lbls, sr, relData, notesData]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
@@ -1729,6 +1732,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       setLabels(lbls ?? [])
       setSeriesList((sr?.series ?? []) as SeriesRow[])
       setRelationships((relData?.relationships ?? []) as RelationshipWithStudy[])
+      setStudyNotes((notesData?.notes ?? []) as StudyNoteEntry[])
       setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -2180,6 +2184,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           <button type="button" className={`tab-btn${detailTab === 'relationships' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('relationships')}>
             Related Studies ({relationships.length})
           </button>
+          <button type="button" className={`tab-btn${detailTab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('notes')}>
+            Notes {studyNotes.length > 0 ? `(${studyNotes.length})` : ''}
+          </button>
         </div>
 
         {detailTab === 'audit' && (
@@ -2498,6 +2505,29 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                   </table>
                 </div>
               </>
+            )}
+          </div>
+        )}
+
+        {detailTab === 'notes' && (
+          <div style={{padding: '10px 0'}}>
+            {studyNotes.length === 0 ? (
+              <p style={{color: '#6b7280', fontSize: '0.85rem'}}>No notes recorded for this study.</p>
+            ) : (
+              <table className="detail-table" style={{fontSize: '0.85rem'}}>
+                <thead>
+                  <tr><th style={{width: 140}}>Time</th><th style={{width: 160}}>Author</th><th>Note</th></tr>
+                </thead>
+                <tbody>
+                  {studyNotes.map(n => (
+                    <tr key={n.id}>
+                      <td className="td-date">{fmtDate(n.created_at)}</td>
+                      <td>{n.actor}</td>
+                      <td style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{n.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         )}
