@@ -38,9 +38,10 @@ type Study struct {
 	SubjectID              *string   `json:"subject_id,omitempty"`
 	RejectionReason        *string   `json:"rejection_reason,omitempty"`
 	StudySizeBytes         int64     `json:"study_size_bytes"`
-	PriorityFlag           bool      `json:"priority_flag"`
-	CreatedAt              time.Time `json:"created_at"`
-	UpdatedAt              time.Time `json:"updated_at"`
+	PriorityFlag           bool       `json:"priority_flag"`
+	DeletedAt              *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 const studyColumns = `
@@ -55,6 +56,7 @@ const studyColumns = `
 	rejection_reason,
 	study_size_bytes,
 	priority_flag,
+	deleted_at,
 	created_at, updated_at`
 
 type scannable interface {
@@ -76,6 +78,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.RejectionReason,
 		&s.StudySizeBytes,
 		&s.PriorityFlag,
+		&s.DeletedAt,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -139,7 +142,8 @@ type StudyFilters struct {
 }
 
 func studyWhere(f StudyFilters) (string, []any) {
-	var clauses []string
+	// Always exclude soft-deleted studies from normal listings.
+	clauses := []string{"deleted_at IS NULL"}
 	var args []any
 	n := 1
 
@@ -851,6 +855,87 @@ func GetExpiringStudies(ctx context.Context, db *sql.DB, projectID string, days,
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+// SoftDeleteStudy sets deleted_at on a study without removing it from the database.
+// The study is excluded from normal listings but can be retrieved via ListDeletedStudies
+// or restored with RestoreStudy.
+func SoftDeleteStudy(ctx context.Context, db *sql.DB, id string) error {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET deleted_at = now(), updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// RestoreStudy clears deleted_at on a soft-deleted study, making it visible
+// in normal listings again.
+func RestoreStudy(ctx context.Context, db *sql.DB, id string) error {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET deleted_at = NULL, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NOT NULL`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// ListDeletedStudies returns soft-deleted studies, newest first.
+// Optional projectID scopes the result to one project.
+func ListDeletedStudies(ctx context.Context, db *sql.DB, projectID string, limit, offset int) ([]Study, int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	where := "WHERE deleted_at IS NOT NULL"
+	args := []any{}
+	n := 1
+	if projectID != "" {
+		where += fmt.Sprintf(" AND project_id = $%d", n)
+		args = append(args, projectID)
+		n++
+	}
+
+	var total int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM studies `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	offsetArg := n
+	limitArg := n + 1
+	args = append(args, offset, limit)
+	rows, err := db.QueryContext(ctx,
+		`SELECT `+studyColumns+` FROM studies `+where+
+			fmt.Sprintf(` ORDER BY deleted_at DESC OFFSET $%d LIMIT $%d`, offsetArg, limitArg),
+		args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var studies []Study
+	for rows.Next() {
+		var s Study
+		if err := scanStudy(rows, &s); err != nil {
+			return nil, 0, err
+		}
+		studies = append(studies, s)
+	}
+	if studies == nil {
+		studies = []Study{}
+	}
+	return studies, total, rows.Err()
 }
 
 // DeleteStudy permanently removes a study and all its dependent rows.

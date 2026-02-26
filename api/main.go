@@ -214,6 +214,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies.csv", auth(srv.ExportStudiesCSV))
 	mux.HandleFunc("GET /api/studies/stuck", auth(srv.GetStuckStudies))
 	mux.HandleFunc("GET /api/studies/expiring", auth(srv.GetExpiringStudies))
+	mux.HandleFunc("GET /api/studies/deleted", auth(srv.ListDeletedStudies))
 	mux.HandleFunc("GET /api/studies/events", auth(srv.StudyEvents))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
 	mux.HandleFunc("DELETE /api/studies/{id}", adminOnly(srv.DeleteStudy))
@@ -234,6 +235,8 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
 	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
 	mux.HandleFunc("POST /api/studies/{id}/reactivate", adminOnly(srv.ReactivateStudy))
+	mux.HandleFunc("POST /api/studies/{id}/soft-delete", adminOnly(srv.SoftDeleteStudy))
+	mux.HandleFunc("POST /api/studies/{id}/restore", adminOnly(srv.RestoreStudy))
 	mux.HandleFunc("POST /api/studies/{id}/share", adminOnly(srv.CreateShare))
 	mux.HandleFunc("GET /api/studies/{id}/shares", auth(srv.ListShares))
 
