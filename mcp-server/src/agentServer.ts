@@ -46,7 +46,7 @@ type AgentResponse = {
       blockers: string[];
       recommended_actions: string[];
     };
-    timeline: Array<{ event: string; timestamp: string }>;
+    timeline: Array<{ event: string; timestamp: string | null }>;
     next_steps: string[];
   };
 };
