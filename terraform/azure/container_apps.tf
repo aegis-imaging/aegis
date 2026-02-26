@@ -82,6 +82,25 @@ resource "azurerm_container_app" "api" {
     identity            = local.identity_id
   }
 
+  # SMTP credentials stored in Key Vault (only when set — empty vars = email disabled).
+  dynamic "secret" {
+    for_each = var.smtp_username != "" ? [1] : []
+    content {
+      name                = "smtp-username"
+      key_vault_secret_id = azurerm_key_vault_secret.smtp_username[0].id
+      identity            = local.identity_id
+    }
+  }
+
+  dynamic "secret" {
+    for_each = var.smtp_password != "" ? [1] : []
+    content {
+      name                = "smtp-password"
+      key_vault_secret_id = azurerm_key_vault_secret.smtp_password[0].id
+      identity            = local.identity_id
+    }
+  }
+
   ingress {
     allow_insecure_connections = false
     external_enabled           = true
@@ -188,13 +207,20 @@ resource "azurerm_container_app" "api" {
         name  = "SMTP_FROM"
         value = var.smtp_from
       }
-      env {
-        name  = "SMTP_USERNAME"
-        value = var.smtp_username
+      # SMTP credentials injected from Key Vault secret refs (only when configured).
+      dynamic "env" {
+        for_each = var.smtp_username != "" ? [1] : []
+        content {
+          name        = "SMTP_USERNAME"
+          secret_name = "smtp-username"
+        }
       }
-      env {
-        name  = "SMTP_PASSWORD"
-        value = var.smtp_password
+      dynamic "env" {
+        for_each = var.smtp_password != "" ? [1] : []
+        content {
+          name        = "SMTP_PASSWORD"
+          secret_name = "smtp-password"
+        }
       }
       # ── Application URLs ─────────────────────────────────────────────────────
       env {
