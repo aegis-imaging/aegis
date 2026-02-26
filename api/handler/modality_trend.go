@@ -66,6 +66,10 @@ func (s *Server) GetModalityTrend(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&day, &modality, &cnt); err != nil {
 			continue
 		}
+		// Normalize: PostgreSQL DATE scanned as string may include time suffix.
+		if len(day) > 10 {
+			day = day[:10]
+		}
 		if _, ok := dayMap[day]; !ok {
 			dayMap[day] = &modalityTrendDay{Day: day, Counts: map[string]int{}}
 		}
