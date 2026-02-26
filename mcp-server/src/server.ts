@@ -111,6 +111,7 @@ import {
   listDeletedStudiesArgsSchema,
   softDeleteStudyArgsSchema,
   restoreStudyArgsSchema,
+  getProtocolTrendArgsSchema,
   getProjectBidsInfoArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
@@ -2823,6 +2824,19 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "get_protocol_trend",
+    description: "Returns daily protocol compliance counts over the last N days. Shows how many studies per day had compliant, minor_deviations, or non_compliant protocol status, plus a compliance_pct per day. Useful for spotting degrading scanner compliance over time.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a specific project UUID; omit for all projects" },
+        days: { type: "integer", minimum: 1, maximum: 365, description: "Look-back window in days (default 30)" }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -3445,6 +3459,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (typeof args.offset === "number") params.set("offset", String(args.offset));
       const qs = params.toString();
       const data = await client.get(`/api/studies/deleted${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_protocol_trend") {
+      const parsed = getProtocolTrendArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      if (parsed.days) params.set("days", String(parsed.days));
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/protocol-trend${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 
