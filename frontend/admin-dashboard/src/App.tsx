@@ -1057,7 +1057,17 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
             onChange={e => setEmailSearch(e.target.value)}
           />
         </div>
-        <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {isAdmin && (
+            <a
+              href={`/api/export-shares.csv${statusFilter ? `?status=${statusFilter}` : ''}`}
+              className="btn btn--secondary"
+              download
+              title="Download all shares as CSV"
+            >↓ CSV</a>
+          )}
+          <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
+        </div>
       </div>
 
       {analytics && (
@@ -1684,6 +1694,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
+  // Copy-to-clipboard state (F9)
+  const [uidCopied, setUidCopied] = useState(false)
+
   // Internal note state
   const [noteText, setNoteText] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
@@ -1847,6 +1860,16 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <button type="button" className="btn btn--secondary study-detail__back" onClick={onBack}>← Back to studies</button>
         <div className="study-detail__title-row">
           <h2 className="study-detail__title">{study.study_instance_uid}</h2>
+          <button
+            type="button"
+            className={`btn-copy-uid${uidCopied ? ' btn-copy-uid--copied' : ''}`}
+            title={uidCopied ? 'Copied!' : 'Copy full UID to clipboard'}
+            onClick={() => {
+              navigator.clipboard.writeText(study.study_instance_uid)
+              setUidCopied(true)
+              setTimeout(() => setUidCopied(false), 2000)
+            }}
+          >{uidCopied ? '✓' : '⎘'}</button>
           <Badge label={study.status} prefix="status" />
           <Badge label={study.source} prefix="source" />
           {study.priority_flag && <span className="badge badge--flagged">★ Priority</span>}
@@ -7939,6 +7962,26 @@ export function App() {
     setShowProtocolTrend(v => !v)
   }
 
+  // PHI scan trend panel (F6)
+  type PhiTrendDay = { day: string; scanned: number; flagged: number; flag_rate_pct: number }
+  type PhiTrend = { generated_at: string; period_days: number; totals: { scanned: number; flagged: number; flag_rate_pct: number }; days: PhiTrendDay[] }
+  const [showPhiTrend, setShowPhiTrend] = useState(false)
+  const [phiTrend, setPhiTrend] = useState<PhiTrend | null>(null)
+  const [phiTrendLoading, setPhiTrendLoading] = useState(false)
+  const loadPhiTrend = async () => {
+    setPhiTrendLoading(true)
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/phi-trend?${params}`)
+    const d = r.ok ? await r.json() : null
+    setPhiTrendLoading(false)
+    if (d) setPhiTrend(d)
+  }
+  const togglePhiTrend = () => {
+    if (!showPhiTrend && !phiTrend) loadPhiTrend()
+    setShowPhiTrend(v => !v)
+  }
+
   // Bulk share state (F4)
   const [bulkShareEmail, setBulkShareEmail] = useState('')
   const [bulkShareExpiry, setBulkShareExpiry] = useState('168')
@@ -9665,6 +9708,54 @@ export function App() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PHI Scan Trend panel (F6) */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={togglePhiTrend}>
+                  {showPhiTrend ? '▲ Hide PHI scan trend' : '▼ PHI scan trend (30d)'}
+                </button>
+                {showPhiTrend && phiTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showPhiTrend && phiTrend && !phiTrendLoading && (
+                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
+                    <strong>Overall ({phiTrend.period_days}d):</strong>{' '}
+                    {phiTrend.totals.scanned} scanned ·{' '}
+                    <span style={{color: '#ea580c'}}>{phiTrend.totals.flagged} flagged</span>
+                    {phiTrend.totals.flag_rate_pct >= 0 && (
+                      <strong style={{marginLeft: 8}}>{phiTrend.totals.flag_rate_pct.toFixed(1)}% flag rate</strong>
+                    )}
+                  </div>
+                  {phiTrend.days.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No PHI scans recorded in this period.</p>
+                  ) : (
+                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Day</th>
+                          <th style={{textAlign:'right'}}>Scanned</th>
+                          <th style={{textAlign:'right'}}>Flagged</th>
+                          <th style={{textAlign:'right'}}>Flag rate %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {phiTrend.days.map(d => (
+                          <tr key={d.day}>
+                            <td style={{fontFamily:'monospace'}}>{d.day}</td>
+                            <td style={{textAlign:'right'}}>{d.scanned}</td>
+                            <td style={{textAlign:'right', color: d.flagged > 0 ? '#ea580c' : undefined}}>{d.flagged}</td>
+                            <td style={{textAlign:'right'}}>{d.flag_rate_pct >= 0 ? `${d.flag_rate_pct.toFixed(1)}%` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               )}
             </div>
