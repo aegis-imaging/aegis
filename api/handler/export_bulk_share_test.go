@@ -200,6 +200,79 @@ func TestBulkCreateShares_PartialSuccess(t *testing.T) {
 	assert.Equal(t, pending.ID, resp.Errors[0].StudyID)
 }
 
+func TestBulkCreateShares_MixedNotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	_, err := db.Exec(`UPDATE studies SET status='approved' WHERE id=$1`, study.ID)
+	require.NoError(t, err)
+
+	fakeID := "00000000-0000-0000-0000-000000000099"
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"study_ids":       []string{study.ID, fakeID},
+		"recipient_email": "mixed@example.com",
+		"expiry_hours":    48,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/studies/bulk-share", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.BulkCreateShares(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	var resp struct {
+		Created int `json:"created"`
+		Errors  []struct {
+			StudyID string `json:"study_id"`
+			Error   string `json:"error"`
+		} `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 1, resp.Created)
+	require.Len(t, resp.Errors, 1)
+	assert.Equal(t, fakeID, resp.Errors[0].StudyID)
+	assert.Contains(t, resp.Errors[0].Error, "not found")
+}
+
+func TestBulkCreateShares_MultipleApproved(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	s1 := testutil.CreateTestStudy(t, db, proj.ID)
+	s2 := testutil.CreateTestStudy(t, db, proj.ID)
+	_, err := db.Exec(`UPDATE studies SET status='approved' WHERE id IN ($1, $2)`, s1.ID, s2.ID)
+	require.NoError(t, err)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"study_ids":       []string{s1.ID, s2.ID},
+		"recipient_email": "multi@example.com",
+		"expiry_hours":    168,
+		"note":            "Batch for Dr. Smith",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/studies/bulk-share", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.BulkCreateShares(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	var resp struct {
+		Created int           `json:"created"`
+		Errors  []interface{} `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 2, resp.Created)
+	assert.Empty(t, resp.Errors)
+}
+
 func TestBulkCreateShares_InvalidJSON(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
