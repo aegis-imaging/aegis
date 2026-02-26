@@ -153,6 +153,12 @@ variable "dimse_ssh_public_key" {
   default     = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0 placeholder-replace-with-real-key"
 }
 
+variable "dimse_source_ranges" {
+  description = "CIDR ranges allowed to reach DIMSE C-STORE on TCP 11112. Restrict to known PACS IPs in production."
+  type        = list(string)
+  default     = ["203.0.113.0/24"] # RFC 5737 TEST-NET-3 placeholder — replace with real PACS IP ranges
+}
+
 # ── MCP Server ────────────────────────────────────────────────────────────────
 
 variable "azure_openai_endpoint" {
