@@ -78,6 +78,8 @@ const allowedPostPathPatterns = [
   /^\/api\/studies\/[0-9.]+\/trigger-deface$/,
   /^\/api\/dimse\/retry\/process\/[0-9.]+$/,
   /^\/api\/dimse\/retry\/replay\/[0-9.]+$/,
+  /^\/api\/dimse\/query$/,
+  /^\/api\/dimse\/retrieve$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/approve$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/reject$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/share$/,
