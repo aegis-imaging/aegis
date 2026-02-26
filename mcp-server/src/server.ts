@@ -658,6 +658,19 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_modality_trend",
+    description: "Get daily study counts grouped by modality over the last N days. Returns per-day breakdown and aggregate totals. Optionally scope to a single project.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string" },
+        days: { type: "integer", minimum: 1, maximum: 365, description: "Look-back period in days (default 30)" },
+        project_id: { type: "string", format: "uuid", description: "Scope to a single project" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "get_breakdown_stats",
     description: "Get study counts grouped by modality and body part. Useful for understanding the composition of the study corpus. Optionally scope to a single project.",
     inputSchema: {
@@ -3140,6 +3153,16 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.project_id) params.set("project_id", parsed.project_id);
       const qs = params.toString();
       const data = await client.get(`/api/stats/label-usage${qs ? "?" + qs : ""}`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_modality_trend") {
+      const parsed = processingTimesArgsSchema.parse(args);
+      const params = new URLSearchParams();
+      if (parsed.days !== undefined) params.set("days", String(parsed.days));
+      if (parsed.project_id) params.set("project_id", parsed.project_id);
+      const qs = params.toString();
+      const data = await client.get(`/api/stats/modality-trend${qs ? "?" + qs : ""}`);
       return formatSuccess(requestId, name, data);
     }
 

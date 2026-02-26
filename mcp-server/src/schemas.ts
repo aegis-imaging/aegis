@@ -1153,7 +1153,8 @@ export const readToolNames = [
   "list_deleted_studies",
   "get_protocol_trend",
   "list_study_notes",
-  "get_label_usage"
+  "get_label_usage",
+  "get_modality_trend"
 ] as const;
 
 export const writeToolNames = [
