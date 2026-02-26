@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        module: [project, infra, aws]
+        module: [project, infra, aws, azure]
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -30,6 +30,8 @@ jobs:
         env:
           TF_VAR_acm_certificate_arn: "arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
           TF_VAR_cognito_domain_prefix: "aegis-ci"
+          TF_VAR_azure_ad_tenant_id: "00000000-0000-0000-0000-000000000000"
+          TF_VAR_db_admin_password: "ci-placeholder"
         run: terraform -chdir=terraform/${{ matrix.module }} validate
 
   go:

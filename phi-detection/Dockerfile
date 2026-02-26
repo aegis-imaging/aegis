@@ -1,15 +1,17 @@
 # AEGIS PHI Detection Service
 #
 # Backend is controlled by PHI_TOOL env var:
-#   "auto" (default): gemini > google_vision > aws_textract > tesseract
+#   "auto" (default): gemini > google_vision > azure_vision > aws_textract > tesseract
 #   "gemini":         Vertex AI Gemini multimodal (ADC / Workload Identity)
 #   "google_vision":  Google Cloud Vision text_detection
+#   "azure_vision":   Azure Computer Vision Read API
 #   "aws_textract":   AWS Textract detect_document_text
 #   "tesseract":      local Tesseract OCR (no cloud dependencies)
 #
 # Cloud backends are optional — build with:
 #   --build-arg INCLUDE_GEMINI=true
 #   --build-arg INCLUDE_GOOGLE_VISION=true
+#   --build-arg INCLUDE_AZURE_VISION=true
 #   --build-arg INCLUDE_AWS_TEXTRACT=true
 
 FROM python:3.12-slim
@@ -35,6 +37,12 @@ fi
 ARG INCLUDE_GOOGLE_VISION=false
 RUN if [ "$INCLUDE_GOOGLE_VISION" = "true" ]; then \
     pip install --no-cache-dir google-cloud-vision; \
+fi
+
+# Azure Computer Vision (optional, ~30 MB)
+ARG INCLUDE_AZURE_VISION=false
+RUN if [ "$INCLUDE_AZURE_VISION" = "true" ]; then \
+    pip install --no-cache-dir azure-ai-vision-imageanalysis azure-identity; \
 fi
 
 # AWS Textract via boto3 (optional, ~50 MB)
