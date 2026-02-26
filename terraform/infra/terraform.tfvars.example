@@ -66,11 +66,10 @@ enable_monitoring_alerts       = true
 
 # DIMSE receiver — Compute Engine VM for DICOM C-STORE SCP (TCP 11112).
 # Leave dimse_receiver_image empty to skip all DIMSE resources (default).
-# Set to the full Artifact Registry URI once you've built and pushed the image:
-#   dimse_receiver_image = "us-central1-docker.pkg.dev/<project>/aegis-services/dimse-receiver:latest"
-# dimse_receiver_image       = ""
+# Set to the full Artifact Registry URI once you've built and pushed the image.
+dimse_receiver_image        = "us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/dimse-receiver:latest"
+dimse_api_url               = "https://api.aegisimaging.ai"
+dimse_project_slug          = "default"
+dimse_source_ranges         = ["203.0.113.0/24"]  # PLACEHOLDER — replace with real PACS IP ranges
 # dimse_receiver_machine_type = "e2-small"
 # dimse_receiver_zone         = ""   # defaults to <region>-a
-# dimse_api_url               = "https://api.aegisimaging.ai"
-# dimse_project_slug          = "default"
-# dimse_source_ranges         = ["0.0.0.0/0"]   # restrict to PACS IPs in production

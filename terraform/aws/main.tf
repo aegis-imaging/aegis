@@ -158,6 +158,12 @@ variable "dimse_receiver_image" {
   default     = ""
 }
 
+variable "dimse_source_ranges" {
+  description = "CIDR ranges allowed to reach DIMSE C-STORE on TCP 11112. Restrict to known PACS IPs in production."
+  type        = list(string)
+  default     = ["203.0.113.0/24"] # RFC 5737 TEST-NET-3 placeholder — replace with real PACS IP ranges
+}
+
 variable "weasis_domain" {
   description = "Custom FQDN for Weasis viewer (e.g. aws.weasis.aegisimaging.ai). Empty = use raw ALB DNS."
   type        = string

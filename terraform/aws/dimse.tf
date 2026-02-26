@@ -126,15 +126,13 @@ resource "aws_security_group" "dimse" {
   name_prefix = "${var.project_name}-dimse-"
   vpc_id      = aws_vpc.main.id
 
-  # DICOM C-STORE from PACS systems — restrict this to known PACS IP ranges
-  # in production (kept open here for initial bring-up; tighten via NACL or
-  # separate SG rule once PACS source IPs are known)
+  # DICOM C-STORE from PACS systems — restrict to known PACS IP ranges
   ingress {
     description = "DICOM C-STORE SCP"
     from_port   = 11112
     to_port     = 11112
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.dimse_source_ranges
   }
 
   # HTTP ops API — internal callers only (Go API → /ingest/retry* endpoints)

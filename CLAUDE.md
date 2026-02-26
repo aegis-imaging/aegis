@@ -1055,6 +1055,14 @@ python3 scripts/dimse_pacs_e2e_harness.py
 | `DIMSE_OPERATOR_API_KEY` | *(empty)* | Optional API key for `/ingest/retry*` endpoints via `X-AEGIS-Operator-Key` or `Authorization: Bearer` |
 | `DIMSE_MAX_ASSOCIATIONS` | `10` | Max simultaneous DICOM associations |
 
+**Terraform firewall variable** (`dimse_source_ranges`): All three clouds restrict inbound DICOM traffic on TCP 11112 via a `dimse_source_ranges` variable (list of CIDRs). Default is `["203.0.113.0/24"]` (RFC 5737 TEST-NET-3 placeholder on Azure/AWS) or `["0.0.0.0/0"]` (GCP). Replace with real PACS IP ranges before production use.
+
+| Cloud | Resource | File |
+|-------|----------|------|
+| GCP | `google_compute_firewall.dimse_ingress` | `terraform/infra/dimse.tf` |
+| Azure | `azurerm_network_security_group.dimse` | `terraform/azure/dimse.tf` |
+| AWS | `aws_security_group.dimse` | `terraform/aws/dimse.tf` |
+
 **Operational endpoints:**
 - If `DIMSE_OPERATOR_API_KEY` is set, all `/ingest/retry*` endpoints require that key.
 - Admin dashboard/API integration: `/api/dimse/retry*` (admin-only) proxies to the DIMSE sidecar `/ingest/retry*` endpoints and forwards `DIMSE_OPERATOR_API_KEY` when configured.

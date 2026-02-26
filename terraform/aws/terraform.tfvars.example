@@ -44,4 +44,5 @@ admin_domain = "aws.admin.aegisimaging.ai"
 
 # DIMSE receiver EC2 instance — set to a full ECR image URI to enable.
 # Leave empty (default) to skip all DIMSE resources.
-# dimse_receiver_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/aegis/dimse-receiver:latest"
+dimse_receiver_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/aegis/dimse-receiver:latest"
+dimse_source_ranges  = ["203.0.113.0/24"]  # PLACEHOLDER — replace with real PACS IP ranges

@@ -39,15 +39,15 @@ resource "azurerm_network_security_group" "dimse" {
   resource_group_name = azurerm_resource_group.main.name
 
   security_rule {
-    name                       = "allow-dicom-inbound"
-    priority                   = 100
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "11112"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
+    name                         = "allow-dicom-inbound"
+    priority                     = 100
+    direction                    = "Inbound"
+    access                       = "Allow"
+    protocol                     = "Tcp"
+    source_port_range            = "*"
+    destination_port_range       = "11112"
+    source_address_prefixes      = var.dimse_source_ranges
+    destination_address_prefix   = "*"
   }
 
   security_rule {

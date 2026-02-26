@@ -289,7 +289,7 @@ All frontends are cloud-agnostic React apps. They proxy to the Go API which hand
 | **Auth** | IAP | ALB + Cognito | Easy Auth (Azure AD) |
 | **CI/CD** | Cloud Build (auto) | Manual | GitHub Actions (auto) |
 | **Terraform CI** | Cloud Build trigger | Manual | GitHub Actions workflow |
-| **DIMSE hosting** | Compute Engine VM | Not provisioned | Azure Linux VM |
+| **DIMSE hosting** | Compute Engine VM | EC2 instance | Azure Linux VM |
 | **Email** | Standard SMTP | Standard SMTP | Azure Communication Services |
 | **Monitoring** | Cloud Monitoring (9 alerts) | CloudWatch (planned) | Azure Monitor (9 alerts) |
 | **Secrets** | Secret Manager | Secrets Manager | Key Vault |
@@ -323,7 +323,57 @@ All frontends are cloud-agnostic React apps. They proxy to the Go API which hand
 
 ---
 
-## 8. Deployment Checklist (Now That Quota Is Approved)
+## 8. DIMSE Receiver Enablement (All Three Clouds)
+
+The DIMSE receiver (DICOM C-STORE SCP on TCP 11112) is opt-in on all three clouds — set `dimse_receiver_image` to a non-empty value in `terraform.tfvars` to provision the VM and networking.
+
+All three clouds use `dimse_source_ranges` to restrict inbound DICOM traffic. The default placeholder (`203.0.113.0/24`, RFC 5737 TEST-NET-3) is non-routable — **replace with real PACS IP ranges before production use**.
+
+### GCP (Compute Engine)
+
+```hcl
+# terraform/infra/terraform.tfvars
+dimse_receiver_image = "us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/dimse-receiver:latest"
+dimse_api_url        = "https://api.aegisimaging.ai"
+dimse_project_slug   = "default"
+dimse_source_ranges  = ["203.0.113.0/24"]  # replace with PACS IPs
+```
+
+CI/CD: Cloud Build updates the VM metadata and resets the instance on each push to `develop`.
+
+### Azure (Linux VM)
+
+```hcl
+# terraform/azure/terraform.tfvars
+dimse_receiver_image = "<acr-name>.azurecr.io/dimse-receiver:latest"
+dimse_vm_size        = "Standard_B2s"
+dimse_ssh_public_key = "ssh-rsa AAAAB3Nz..."
+dimse_source_ranges  = ["203.0.113.0/24"]  # replace with PACS IPs
+```
+
+Also set the GitHub variable `AZURE_DIMSE_VM_NAME` to the VM name (e.g. `aegis-prod-dimse-receiver`) to enable CI/CD deploys via `az vm run-command invoke`.
+
+### AWS (EC2)
+
+```hcl
+# terraform/aws/terraform.tfvars
+dimse_receiver_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/aegis/dimse-receiver:latest"
+dimse_source_ranges  = ["203.0.113.0/24"]  # replace with PACS IPs
+```
+
+CI/CD: GitHub Actions updates the SSM parameter `/aegis/dimse-image` and reboots the instance.
+
+### Firewall / Security Group Details
+
+| Cloud | Resource | Variable | Default |
+|-------|----------|----------|---------|
+| GCP | `google_compute_firewall.dimse_ingress` | `dimse_source_ranges` | `["0.0.0.0/0"]` |
+| Azure | `azurerm_network_security_group.dimse` (NSG rule) | `dimse_source_ranges` | `["203.0.113.0/24"]` |
+| AWS | `aws_security_group.dimse` (ingress rule) | `dimse_source_ranges` | `["203.0.113.0/24"]` |
+
+---
+
+## 9. Deployment Checklist (Now That Quota Is Approved)
 
 ### Pre-Deployment (One-Time Setup)
 
@@ -382,7 +432,7 @@ All frontends are cloud-agnostic React apps. They proxy to the Go API which hand
 - [ ] Create initial project and routing rules
 - [ ] Test full pipeline: upload -> classify -> deface -> QC -> BIDS -> approve -> export
 - [ ] Enable monitoring alerts (set `alert_email` in terraform.tfvars)
-- [ ] (Optional) Set up DIMSE receiver for PACS integration
+- [ ] (Optional) Enable DIMSE receiver — set `dimse_receiver_image` in terraform.tfvars and `AZURE_DIMSE_VM_NAME` GitHub variable (see section 8)
 
 ### Recommended Fixes Before Production
 
@@ -394,7 +444,7 @@ All frontends are cloud-agnostic React apps. They proxy to the Go API which hand
 
 ---
 
-## 9. Environment Variables Reference (Azure-Specific)
+## 10. Environment Variables Reference (Azure-Specific)
 
 ### Go API
 
@@ -428,7 +478,7 @@ All frontends are cloud-agnostic React apps. They proxy to the Go API which hand
 
 ---
 
-## 10. Cost Estimates (Azure Pricing, US East)
+## 11. Cost Estimates (Azure Pricing, US East)
 
 | Resource | SKU | Estimated Monthly Cost |
 |----------|-----|----------------------|
