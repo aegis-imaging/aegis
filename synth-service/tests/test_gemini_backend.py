@@ -1,13 +1,34 @@
 """Tests for the Vertex AI Imagen gemini_backend module.
 
-All Vertex AI / PIL calls are mocked — no cloud credentials required.
+All google-genai / PIL calls are mocked — no cloud credentials required.
 """
 
 import io
-from unittest.mock import MagicMock, patch, PropertyMock
+import sys
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Helper: build fake sys.modules entries for google.genai
+# ---------------------------------------------------------------------------
+
+def _make_genai_modules():
+    """Build fake sys.modules entries for google.genai."""
+    mock_types = MagicMock()
+    mock_genai = MagicMock()
+    mock_genai.types = mock_types
+
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+
+    return {
+        "google": mock_google,
+        "google.genai": mock_genai,
+        "google.genai.types": mock_types,
+    }, mock_genai
 
 
 # ---------------------------------------------------------------------------
@@ -15,39 +36,20 @@ import pytest
 # ---------------------------------------------------------------------------
 
 class TestImagenAvailable:
-    def test_available_when_vertexai_importable(self):
-        """Returns True when vertexai and ImageGenerationModel can be imported."""
-        mock_module = MagicMock()
-        with patch.dict("sys.modules", {
-            "vertexai": mock_module,
-            "vertexai.preview": mock_module,
-            "vertexai.preview.vision_models": mock_module,
-        }):
+    def test_available_when_genai_importable(self):
+        """Returns True when google-genai SDK can be imported."""
+        mods, _ = _make_genai_modules()
+        with patch.dict("sys.modules", mods):
             from app.gemini_backend import _imagen_available
-            # Reset the cached import state by calling directly
             result = _imagen_available()
-        # When mocked as importable, should return True
-        assert isinstance(result, bool)
+        assert result is True
 
     def test_unavailable_when_import_fails(self):
-        """Returns False when vertexai cannot be imported."""
-        import sys
-        # Temporarily remove from sys.modules to force ImportError
-        saved = sys.modules.pop("vertexai", None)
-        saved_preview = sys.modules.pop("vertexai.preview", None)
-        saved_vm = sys.modules.pop("vertexai.preview.vision_models", None)
-        try:
-            with patch.dict("sys.modules", {"vertexai": None}):
-                from app.gemini_backend import _imagen_available
-                result = _imagen_available()
-            assert result is False
-        finally:
-            if saved is not None:
-                sys.modules["vertexai"] = saved
-            if saved_preview is not None:
-                sys.modules["vertexai.preview"] = saved_preview
-            if saved_vm is not None:
-                sys.modules["vertexai.preview.vision_models"] = saved_vm
+        """Returns False when google-genai cannot be imported."""
+        with patch.dict("sys.modules", {"google": None, "google.genai": None}):
+            from app.gemini_backend import _imagen_available
+            result = _imagen_available()
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -65,38 +67,35 @@ def _make_mock_png(size: int = 64) -> bytes:
 
 class TestGenerateGeminiSlices:
     def _run_generate(self, n_slices=3, size=32, seed=0, png_bytes=None):
-        """Run generate_gemini_slices with all Vertex AI calls mocked."""
+        """Run generate_gemini_slices with all google-genai calls mocked."""
         if png_bytes is None:
             png_bytes = _make_mock_png(64)
 
-        mock_image = MagicMock()
-        mock_image._image_bytes = png_bytes
+        # Build mock response matching google-genai SDK structure
+        mock_image_obj = MagicMock()
+        mock_image_obj.image_bytes = png_bytes
+
+        mock_generated_image = MagicMock()
+        mock_generated_image.image = mock_image_obj
 
         mock_response = MagicMock()
-        mock_response.images = [mock_image]
+        mock_response.generated_images = [mock_generated_image]
 
-        mock_model = MagicMock()
-        mock_model.generate_images.return_value = mock_response
+        mock_client = MagicMock()
+        mock_client.models.generate_images.return_value = mock_response
 
-        mock_igm = MagicMock()
-        mock_igm.from_pretrained.return_value = mock_model
+        mods, mock_genai = _make_genai_modules()
+        mock_genai.Client.return_value = mock_client
 
-        mock_vertexai = MagicMock()
-
-        with patch.dict("sys.modules", {
-            "vertexai": mock_vertexai,
-            "vertexai.preview": mock_vertexai,
-            "vertexai.preview.vision_models": MagicMock(
-                ImageGenerationModel=mock_igm
-            ),
-        }), patch("app.gemini_backend.generate_uid", side_effect=[
-            "1.2.3.4.5.6.7.8.9",  # study_uid
-            "1.2.3.4.5.6.7.8.0",  # series_uid
-        ]):
+        with patch.dict("sys.modules", mods), \
+             patch("app.gemini_backend.generate_uid", side_effect=[
+                 "1.2.3.4.5.6.7.8.9",  # study_uid
+                 "1.2.3.4.5.6.7.8.0",  # series_uid
+             ]):
             from app.gemini_backend import generate_gemini_slices
             slices = generate_gemini_slices(n_slices=n_slices, size=size, seed=seed)
 
-        return slices, mock_model
+        return slices, mock_client
 
     def test_returns_correct_number_of_slices(self):
         slices, _ = self._run_generate(n_slices=3, size=32)
@@ -129,13 +128,13 @@ class TestGenerateGeminiSlices:
 
     def test_generate_images_called_per_slice(self):
         n = 3
-        _, mock_model = self._run_generate(n_slices=n, size=32)
-        assert mock_model.generate_images.call_count == n
+        _, mock_client = self._run_generate(n_slices=n, size=32)
+        assert mock_client.models.generate_images.call_count == n
 
     def test_prompt_varies_by_position(self):
         """Prompt should vary for inferior vs superior slices."""
-        _, mock_model = self._run_generate(n_slices=4, size=32)
-        calls = mock_model.generate_images.call_args_list
+        _, mock_client = self._run_generate(n_slices=4, size=32)
+        calls = mock_client.models.generate_images.call_args_list
         prompts = [c[1]["prompt"] for c in calls]
         # Not all prompts should be identical (position varies)
         assert len(set(prompts)) > 1
