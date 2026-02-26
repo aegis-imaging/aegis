@@ -106,6 +106,8 @@ import {
   importRoutingRulesArgsSchema,
   reorderRoutingRulesArgsSchema,
   bulkToggleRoutingRulesArgsSchema,
+  queryPacsArgsSchema,
+  retrievePacsStudyArgsSchema,
   getProjectBidsInfoArgsSchema,
   projectScopedArgsSchema,
   reactivateStudyArgsSchema,
@@ -2734,6 +2736,46 @@ const tools: Tool[] = [
       },
       additionalProperties: false
     }
+  },
+  {
+    name: "query_pacs",
+    description: "Send a DICOM C-FIND query to a remote PACS to discover studies, series, or patients. Returns a list of matching datasets as key/value pairs. Useful for finding studies before retrieving them with retrieve_pacs_study. Requires the DIMSE receiver sidecar to be configured.",
+    inputSchema: {
+      type: "object",
+      required: ["ae_title", "host", "port"],
+      properties: {
+        request_id: { type: "string" },
+        ae_title: { type: "string", minLength: 1, maxLength: 64, description: "Remote PACS AE title (e.g. PACS-SERVER)" },
+        host: { type: "string", minLength: 1, maxLength: 256, description: "Remote PACS hostname or IP address" },
+        port: { type: "integer", minimum: 1, maximum: 65535, description: "Remote PACS DICOM port (typically 104 or 11112)" },
+        query_level: { type: "string", enum: ["PATIENT", "STUDY", "SERIES"], description: "Query/retrieve level (default: STUDY)" },
+        query_params: {
+          type: "object",
+          description: "Optional DICOM keyword filter map (e.g. {\"PatientID\": \"12345\", \"StudyDate\": \"20240101-20241231\"}). Empty-string values act as wildcard matches.",
+          additionalProperties: { type: "string" }
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  {
+    name: "retrieve_pacs_study",
+    description: "Send a DICOM C-MOVE request to a remote PACS to push a study to the AEGIS SCP (move_destination AE). Files arrive via the existing DIMSE SCP ingest path. Requires confirm=true and a reason. The move_destination AE must be configured on the remote PACS to allow the push.",
+    inputSchema: {
+      type: "object",
+      required: ["ae_title", "host", "port", "study_instance_uid", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        ae_title: { type: "string", minLength: 1, maxLength: 64, description: "Remote PACS AE title" },
+        host: { type: "string", minLength: 1, maxLength: 256, description: "Remote PACS hostname or IP address" },
+        port: { type: "integer", minimum: 1, maximum: 65535, description: "Remote PACS DICOM port" },
+        study_instance_uid: { type: "string", minLength: 4, maxLength: 256, pattern: "^[0-9.]+$", description: "DICOM StudyInstanceUID to retrieve" },
+        move_destination: { type: "string", maxLength: 64, description: "Destination AE title for the push (defaults to AEGIS SCP AE when omitted)" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   }
 ];
 
@@ -3349,6 +3391,19 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       return formatSuccess(requestId, name, data);
     }
 
+    if (name === "query_pacs") {
+      const parsed = queryPacsArgsSchema.parse(args);
+      const body: Record<string, unknown> = {
+        ae_title: parsed.ae_title,
+        host: parsed.host,
+        port: parsed.port,
+        query_level: parsed.query_level ?? "STUDY"
+      };
+      if (parsed.query_params) body.query_params = parsed.query_params;
+      const data = await client.post("/api/dimse/query", body);
+      return formatSuccess(requestId, name, data);
+    }
+
     if (writeToolNames.includes(name)) {
       if (name === "retry_dimse_study") {
         const parsed = retryDimseArgsSchema.parse(args);
@@ -3809,6 +3864,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
 
       if (name === "trigger_phi_scan") {
         return handleTriggerPhiScan(requestId, parsed);
+      }
+
+      if (name === "retrieve_pacs_study") {
+        const parsed = retrievePacsStudyArgsSchema.parse(args);
+        return handleRetrievePacsStudy(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       return denyWriteTool(requestId, name);
@@ -6637,6 +6697,43 @@ async function handleBulkToggleRoutingRules(
   return formatSuccess(requestId, "bulk_toggle_routing_rules", {
     accepted: true,
     enabled: parsed.enabled,
+    result: data,
+    reason: parsed.reason
+  });
+}
+
+async function handleRetrievePacsStudy(
+  requestId: string,
+  parsed: {
+    ae_title: string;
+    host: string;
+    port: number;
+    study_instance_uid: string;
+    move_destination?: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "retrieve_pacs_study");
+  }
+  if (!config.enableWriteTools) {
+    return formatError(requestId, "FORBIDDEN", "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow retrieve_pacs_study", false, "retrieve_pacs_study");
+  }
+
+  const body: Record<string, unknown> = {
+    ae_title: parsed.ae_title,
+    host: parsed.host,
+    port: parsed.port,
+    study_instance_uid: parsed.study_instance_uid
+  };
+  if (parsed.move_destination) body.move_destination = parsed.move_destination;
+
+  const data = await client.post("/api/dimse/retrieve", body);
+  return formatSuccess(requestId, "retrieve_pacs_study", {
+    accepted: true,
+    study_instance_uid: parsed.study_instance_uid,
+    move_destination: parsed.move_destination ?? null,
     result: data,
     reason: parsed.reason
   });

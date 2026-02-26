@@ -1017,6 +1017,26 @@ export const bulkToggleRoutingRulesArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+export const queryPacsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  ae_title: z.string().min(1).max(64),
+  host: z.string().min(1).max(256),
+  port: z.number().int().min(1).max(65535),
+  query_level: z.enum(["PATIENT", "STUDY", "SERIES"]).default("STUDY"),
+  query_params: z.record(z.string(), z.string()).optional()
+});
+
+export const retrievePacsStudyArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  ae_title: z.string().min(1).max(64),
+  host: z.string().min(1).max(256),
+  port: z.number().int().min(1).max(65535),
+  study_instance_uid: z.string().min(4).max(256).regex(/^[0-9.]+$/),
+  move_destination: z.string().max(64).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -1082,7 +1102,8 @@ export const readToolNames = [
   "get_destination_health",
   "simulate_routing",
   "get_cohort_report",
-  "export_routing_rules"
+  "export_routing_rules",
+  "query_pacs"
 ] as const;
 
 export const writeToolNames = [
@@ -1176,7 +1197,8 @@ export const writeToolNames = [
   "re_evaluate_project_routing",
   "import_routing_rules",
   "reorder_routing_rules",
-  "bulk_toggle_routing_rules"
+  "bulk_toggle_routing_rules",
+  "retrieve_pacs_study"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
