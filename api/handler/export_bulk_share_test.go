@@ -116,7 +116,7 @@ func TestBulkCreateShares_NonApprovedStudy(t *testing.T) {
 	srv.BulkCreateShares(w, req)
 
 	// Request succeeds but the study error is captured in the errors array
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusCreated, w.Code)
 	var resp struct {
 		Created int `json:"created"`
 		Errors  []struct {
@@ -152,7 +152,7 @@ func TestBulkCreateShares_ApprovedStudy(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.BulkCreateShares(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusCreated, w.Code)
 	var resp struct {
 		Created int `json:"created"`
 		Errors  []interface{} `json:"errors"`
@@ -187,7 +187,7 @@ func TestBulkCreateShares_PartialSuccess(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.BulkCreateShares(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusCreated, w.Code)
 	var resp struct {
 		Created int `json:"created"`
 		Errors  []struct {
