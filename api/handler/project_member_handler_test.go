@@ -43,10 +43,9 @@ func TestListProjectMembers_EmptyProject(t *testing.T) {
 
 	req := httptest.NewRequest("GET", fmt.Sprintf("/api/projects/%s/members", proj.ID), nil)
 	req = withAdmin(req, db, admin.Email)
+	req.SetPathValue("id", proj.ID)
 	rr := httptest.NewRecorder()
-	srv.ListProjectMembers(rr, req.WithContext(
-		context.WithValue(req.Context(), "id", proj.ID),
-	))
+	srv.ListProjectMembers(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
 	var resp struct {
@@ -75,10 +74,9 @@ func TestAddProjectMember_CoordinatorRole(t *testing.T) {
 	req := httptest.NewRequest("POST", fmt.Sprintf("/api/projects/%s/members", proj.ID), bytes.NewReader(body))
 	req = withAdmin(req, db, admin.Email)
 	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", proj.ID)
 	rr := httptest.NewRecorder()
-	srv.AddProjectMember(rr, req.WithContext(
-		context.WithValue(req.Context(), "id", proj.ID),
-	))
+	srv.AddProjectMember(rr, req)
 
 	assert.Equal(t, http.StatusCreated, rr.Code)
 	var m model.ProjectMember
@@ -105,10 +103,9 @@ func TestAddProjectMember_SiteRoleRequiresInstitution(t *testing.T) {
 	req := httptest.NewRequest("POST", fmt.Sprintf("/api/projects/%s/members", proj.ID), bytes.NewReader(body))
 	req = withAdmin(req, db, admin.Email)
 	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", proj.ID)
 	rr := httptest.NewRecorder()
-	srv.AddProjectMember(rr, req.WithContext(
-		context.WithValue(req.Context(), "id", proj.ID),
-	))
+	srv.AddProjectMember(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
@@ -126,17 +123,16 @@ func TestAddProjectMember_SiteRoleWithInstitution(t *testing.T) {
 
 	instID := inst.ID
 	body, _ := json.Marshal(map[string]any{
-		"admin_user_id": researcher.ID,
-		"role":          "site_coordinator",
+		"admin_user_id":  researcher.ID,
+		"role":           "site_coordinator",
 		"institution_id": instID,
 	})
 	req := httptest.NewRequest("POST", fmt.Sprintf("/api/projects/%s/members", proj.ID), bytes.NewReader(body))
 	req = withAdmin(req, db, admin.Email)
 	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", proj.ID)
 	rr := httptest.NewRecorder()
-	srv.AddProjectMember(rr, req.WithContext(
-		context.WithValue(req.Context(), "id", proj.ID),
-	))
+	srv.AddProjectMember(rr, req)
 
 	assert.Equal(t, http.StatusCreated, rr.Code)
 	var m model.ProjectMember
