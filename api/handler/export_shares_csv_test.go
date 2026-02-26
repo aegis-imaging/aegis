@@ -45,7 +45,7 @@ func TestExportSharesCSV_WithShare(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.Exec(`
 		INSERT INTO export_shares (id, study_id, token_hash, recipient_email, expires_at, created_by)
-		VALUES (gen_random_uuid(), $1, encode(gen_random_bytes(32), 'hex'), 'csv@example.com',
+		VALUES (gen_random_uuid(), $1, 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 'csv@example.com',
 		        now() + interval '48 hours', 'test')`, study.ID)
 	require.NoError(t, err)
 
