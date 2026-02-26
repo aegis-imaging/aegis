@@ -177,6 +177,7 @@ func main() {
 	mux.HandleFunc("GET /api/stats/project-health", auth(srv.GetProjectHealth))
 	mux.HandleFunc("GET /api/stats/daily-summary", auth(srv.GetDailySummary))
 	mux.HandleFunc("GET /api/stats/protocol-trend", auth(srv.GetProtocolTrend))
+	mux.HandleFunc("GET /api/stats/phi-trend", auth(srv.GetPhiTrend))
 	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
 	// System health summary — aggregated operational status panel.
@@ -199,6 +200,7 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}/compliance-report", auth(srv.GetProjectComplianceReport))
 	mux.HandleFunc("GET /api/projects/{id}/compliance-report.csv", auth(srv.ExportComplianceReportCSV))
 	mux.HandleFunc("GET /api/projects/{id}/cohort-report", auth(srv.GetCohortReport))
+	mux.HandleFunc("GET /api/projects/{id}/institution-breakdown", auth(srv.GetInstitutionBreakdown))
 	mux.HandleFunc("POST /api/projects/{id}/re-evaluate-routing", adminOnly(srv.BulkReEvaluateRouting))
 	mux.HandleFunc("GET /api/projects/{id}/routing-rules/export", auth(srv.ExportRoutingRules))
 	mux.HandleFunc("POST /api/projects/{id}/routing-rules/import", adminOnly(srv.ImportRoutingRules))
@@ -243,6 +245,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{id}/shares", auth(srv.ListShares))
 
 	mux.HandleFunc("GET /api/shares", auth(srv.ListAllShares))
+	mux.HandleFunc("GET /api/export-shares.csv", auth(srv.ExportSharesCSV))
 	mux.HandleFunc("GET /api/shares/{shareID}/downloads", auth(srv.GetShareDownloads))
 	mux.HandleFunc("GET /api/export-analytics", auth(srv.GetExportAnalytics))
 	mux.HandleFunc("DELETE /api/shares/{shareID}", adminOnly(srv.RevokeShare))
