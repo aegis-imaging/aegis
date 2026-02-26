@@ -1162,7 +1162,8 @@ export const readToolNames = [
   "get_label_usage",
   "get_modality_trend",
   "get_source_trend",
-  "get_export_shares_csv"
+  "get_export_shares_csv",
+  "get_institution_breakdown"
 ] as const;
 
 export const writeToolNames = [

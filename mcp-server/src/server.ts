@@ -1914,6 +1914,19 @@ const tools: Tool[] = [
     }
   },
   {
+    name: "get_institution_breakdown",
+    description: "Get study counts grouped by institution for a project: total studies, approved, rejected, and pending per institution. Useful for understanding which institutions contribute the most studies.",
+    inputSchema: {
+      type: "object",
+      required: ["project_id"],
+      properties: {
+        request_id: { type: "string" },
+        project_id: { type: "string", format: "uuid", description: "Project UUID" }
+      },
+      additionalProperties: false
+    }
+  },
+  {
     name: "list_protocol_templates",
     description: "List all MRI protocol compliance templates for a project. Each template defines expected acquisition parameters (TR, TE, flip angle, slice thickness, etc.) for a specific scanner/sequence combination. Use before running a protocol check to understand what rules will be applied.",
     inputSchema: {
@@ -3476,6 +3489,12 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
     if (name === "get_institution_stats") {
       const parsed = getInstitutionStatsArgsSchema.parse(args);
       const data = await client.get(`/api/institutions/${parsed.institution_id}/stats`);
+      return formatSuccess(requestId, name, data);
+    }
+
+    if (name === "get_institution_breakdown") {
+      const parsed = complianceReportArgsSchema.parse(args);
+      const data = await client.get(`/api/projects/${encodeURIComponent(parsed.project_id)}/institution-breakdown`);
       return formatSuccess(requestId, name, data);
     }
 
