@@ -90,6 +90,10 @@ func (s *Server) GetSourceTrend(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&d.Day, &d.External, &d.Internal, &d.Total); err != nil {
 			continue
 		}
+		// Normalize: PostgreSQL DATE scanned as string may include time suffix.
+		if len(d.Day) > 10 {
+			d.Day = d.Day[:10]
+		}
 		dayRows = append(dayRows, d)
 	}
 
