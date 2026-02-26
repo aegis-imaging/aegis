@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -62,6 +63,17 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := q.Get("assigned_to"); v != "" {
 		f.AssignedTo = v
+	}
+
+	// Site-scoped access control: researcher users with a site role (site_coordinator
+	// or site_viewer) may only see studies from their own institution.
+	// If a project_id is provided, resolve the user's access for that project.
+	if user := middleware.UserFromContext(r.Context()); user != nil && user.Role == "researcher" && f.ProjectID != "" {
+		access, err := model.GetUserAccessForProject(r.Context(), s.db, user.ID, f.ProjectID)
+		if err == nil && access != nil && access.IsSiteScoped() {
+			// Force institution_id filter — user cannot see other sites' data.
+			f.InstitutionID = *access.InstitutionID
+		}
 	}
 
 	total, err := model.CountStudies(r.Context(), s.db, f)
