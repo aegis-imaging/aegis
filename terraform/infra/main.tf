@@ -1887,6 +1887,28 @@ resource "google_logging_metric" "study_stuck" {
   }
 }
 
+resource "google_logging_metric" "destination_probe_failures" {
+  name   = "aegis-${var.environment}-destination-probe-failures"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"destination.tested\" AND textPayload:\"success\\\":false\""
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "AEGIS destination probe failures"
+  }
+}
+
+resource "google_logging_metric" "dimse_dead_letter" {
+  name   = "aegis-${var.environment}-dimse-dead-letter"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"dead-letter\""
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "AEGIS DIMSE dead-letter indicators"
+  }
+}
+
 # Counts every "pipeline: dispatching ..." log line from the Go API.
 # Each dispatch fires once per pipeline service dispatched per study, so this
 # metric tracks pipeline throughput / study processing activity over time.
@@ -1907,6 +1929,8 @@ resource "time_sleep" "wait_for_log_metrics" {
   depends_on = [
     google_logging_metric.pipeline_failures,
     google_logging_metric.study_stuck,
+    google_logging_metric.destination_probe_failures,
+    google_logging_metric.dimse_dead_letter,
   ]
   create_duration = "600s"
 }
@@ -2013,6 +2037,76 @@ resource "google_monitoring_alert_policy" "pipeline_failure_alert" {
 
   user_labels = {
     service  = "pipeline"
+    severity = "critical"
+  }
+}
+
+resource "google_monitoring_alert_policy" "destination_probe_failure_alert" {
+  display_name = "AEGIS destination probe failures (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+  depends_on   = [time_sleep.wait_for_log_metrics]
+
+  conditions {
+    display_name = "Destination probe failures > 0 in 5m"
+    condition_threshold {
+      filter          = "metric.type = \"logging.googleapis.com/user/${google_logging_metric.destination_probe_failures.name}\" AND resource.type = \"cloud_run_revision\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "Destination connectivity probes are failing. Check destination configuration, egress network rules, and /api/destinations/{id}/test results."
+  }
+
+  user_labels = {
+    service  = "routing"
+    severity = "warning"
+  }
+}
+
+resource "google_monitoring_alert_policy" "dimse_dead_letter_alert" {
+  display_name = "AEGIS DIMSE dead-letter risk (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+  depends_on   = [time_sleep.wait_for_log_metrics]
+
+  conditions {
+    display_name = "DIMSE dead-letter indicators > 0 in 5m"
+    condition_threshold {
+      filter          = "metric.type = \"logging.googleapis.com/user/${google_logging_metric.dimse_dead_letter.name}\" AND resource.type = \"cloud_run_revision\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "DIMSE dead-letter/retry risk detected. Check DIMSE retry status endpoints and ingest queue health before data loss risk increases."
+  }
+
+  user_labels = {
+    service  = "dimse"
     severity = "critical"
   }
 }

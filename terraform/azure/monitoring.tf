@@ -317,3 +317,90 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "stuck_studies" {
 
   tags = local.tags
 }
+
+# ── Destination Probe Failures (Log-based) ───────────────────────────────────
+
+resource "azurerm_monitor_scheduled_query_rules_alert_v2" "destination_probe_failures" {
+  name                  = "${local.prefix}-destination-probe-failures"
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = azurerm_resource_group.main.location
+  description           = "Destination connectivity probes are failing"
+  severity              = 2
+  evaluation_frequency  = "PT5M"
+  window_duration       = "PT5M"
+  skip_query_validation = true
+
+  scopes = [azurerm_log_analytics_workspace.main.id]
+
+  criteria {
+    query = <<-EOQ
+      ContainerAppConsoleLogs_CL
+      | where ContainerAppName_s contains "aegis-${var.environment}-api"
+      | where Log_s contains "destination.tested"
+      | where Log_s contains "success\":false"
+      | summarize count() by bin(TimeGenerated, 5m)
+      | where count_ > 0
+    EOQ
+
+    time_aggregation_method = "Count"
+    threshold               = 0
+    operator                = "GreaterThan"
+
+    failing_periods {
+      minimum_failing_periods_to_trigger_alert = 1
+      number_of_evaluation_periods             = 1
+    }
+  }
+
+  dynamic "action" {
+    for_each = local.action_group_ids
+    content {
+      action_groups = [action.value]
+    }
+  }
+
+  tags = local.tags
+}
+
+# ── DIMSE Dead-letter Risk (Log-based) ───────────────────────────────────────
+
+resource "azurerm_monitor_scheduled_query_rules_alert_v2" "dimse_dead_letter" {
+  name                  = "${local.prefix}-dimse-dead-letter"
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = azurerm_resource_group.main.location
+  description           = "DIMSE dead-letter/retry risk indicators detected"
+  severity              = 1
+  evaluation_frequency  = "PT5M"
+  window_duration       = "PT5M"
+  skip_query_validation = true
+
+  scopes = [azurerm_log_analytics_workspace.main.id]
+
+  criteria {
+    query = <<-EOQ
+      ContainerAppConsoleLogs_CL
+      | where ContainerAppName_s contains "aegis-${var.environment}-api"
+      | where Log_s contains "dead-letter"
+      | summarize count() by bin(TimeGenerated, 5m)
+      | where count_ > 0
+    EOQ
+
+    time_aggregation_method = "Count"
+    threshold               = 0
+    operator                = "GreaterThan"
+
+    failing_periods {
+      minimum_failing_periods_to_trigger_alert = 1
+      number_of_evaluation_periods             = 1
+    }
+  }
+
+  dynamic "action" {
+    for_each = local.action_group_ids
+    content {
+      action_groups = [action.value]
+    }
+  }
+
+  tags = local.tags
+}
