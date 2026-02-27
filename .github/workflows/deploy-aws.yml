@@ -8,13 +8,13 @@
 #   AWS_SECRET_ACCESS_KEY  — corresponding secret key
 #   AWS_ACCOUNT_ID         — 12-digit AWS account ID
 #
-# Phase 1: Build all 12 service images in parallel (matrix) and push to ECR.
-# Phase 2: Update all 10 ECS services (force new deployment) + reboot DIMSE EC2.
+# Phase 1: Build all 13 service images in parallel (matrix) and push to ECR.
+# Phase 2: Update all ECS services (force new deployment) + reboot DIMSE EC2.
 #
 # NOTE: landing uses the monorepo root as build context (its Dockerfile copies
 # frontend/landing/server/ which requires the repo root to be the context).
-# aegis-landing ECS service is not yet provisioned in terraform/aws; add it to
-# the deploy loop once the terraform infrastructure is in place.
+# Landing deploy is conditional: workflow updates `aegis-landing` only when the
+# ECS service exists (optional in terraform/aws via landing_image_tag).
 
 name: Deploy to AWS
 
@@ -64,6 +64,9 @@ jobs:
           - service: synth-service
             context: synth-service
             dockerfile: synth-service/Dockerfile
+          - service: mcp-server
+            context: mcp-server
+            dockerfile: mcp-server/Dockerfile
           - service: dimse-receiver
             context: dimse-receiver
             dockerfile: dimse-receiver/Dockerfile
@@ -128,6 +131,25 @@ jobs:
       - name: Force new deployment for all ECS services
         run: |
           CLUSTER="aegis-cluster"
+          deploy_if_exists() {
+            local service_name="$1"
+            if aws ecs describe-services \
+              --cluster "$CLUSTER" \
+              --services "$service_name" \
+              --query 'services[0].status' \
+              --output text \
+              --no-cli-pager 2>/dev/null | grep -q ACTIVE; then
+              echo "Updating $service_name..."
+              aws ecs update-service \
+                --cluster "$CLUSTER" \
+                --service "$service_name" \
+                --force-new-deployment \
+                --no-cli-pager
+            else
+              echo "Skipping $service_name (service not provisioned)."
+            fi
+          }
+
           for SVC in \
             aegis-api \
             aegis-admin-dashboard \
@@ -138,14 +160,12 @@ jobs:
             aegis-bids-service \
             aegis-classification-service \
             aegis-protocol-service \
-            aegis-synth-service; do
-            echo "Updating $SVC..."
-            aws ecs update-service \
-              --cluster "$CLUSTER" \
-              --service  "$SVC" \
-              --force-new-deployment \
-              --no-cli-pager
+            aegis-synth-service \
+            aegis-mcp-server; do
+            deploy_if_exists "$SVC"
           done
+
+          deploy_if_exists "aegis-landing"
 
   deploy-dimse:
     name: Deploy DIMSE EC2
