@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -16,23 +15,9 @@ import (
 //   - Platform admin (admin_users.role='admin') → always allowed
 //   - Project owner (project_members.role='owner') → allowed for their project
 //   - All other roles (viewer, researcher coordinator/reviewer/site_*) → denied
-func (s *Server) canManageProjectMembers(r *http.Request, projectID string) bool {
-	user := middleware.UserFromContext(r.Context())
-	if user == nil {
-		return false
-	}
-	if user.Role == "admin" {
-		return true
-	}
-	if user.Role != "researcher" {
-		return false
-	}
-	// Researcher: must be owner of this project.
-	access, err := model.GetUserAccessForProject(r.Context(), s.db, user.ID, projectID)
-	if err != nil || access == nil {
-		return false
-	}
-	return access.Role == "owner"
+func (s *Server) canManageProjectMembers(w http.ResponseWriter, r *http.Request, projectID string) bool {
+	_, ok := s.requireProjectWriteAccess(w, r, projectID, projectWriteIntentManageProject)
+	return ok
 }
 
 // ListProjectMembers returns all members of a project.
@@ -40,15 +25,8 @@ func (s *Server) canManageProjectMembers(r *http.Request, projectID string) bool
 func (s *Server) ListProjectMembers(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 
-	// Verify the project exists and the caller has read access to it.
-	user := middleware.UserFromContext(r.Context())
-	if !middleware.IsPlatformAdmin(user) {
-		// Researcher: must have any membership in this project.
-		access, err := model.GetUserAccessForProject(r.Context(), s.db, user.ID, projectID)
-		if err != nil || access == nil {
-			s.writeError(w, http.StatusNotFound, "project not found")
-			return
-		}
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
+		return
 	}
 
 	members, err := model.ListProjectMembers(r.Context(), s.db, projectID)
@@ -71,8 +49,7 @@ func (s *Server) ListProjectMembers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) AddProjectMember(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 
-	if !s.canManageProjectMembers(r, projectID) {
-		s.writeError(w, http.StatusForbidden, "only project owners and platform admins can manage project members")
+	if !s.canManageProjectMembers(w, r, projectID) {
 		return
 	}
 
@@ -171,8 +148,7 @@ func (s *Server) UpdateProjectMember(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	memberID := r.PathValue("memberID")
 
-	if !s.canManageProjectMembers(r, projectID) {
-		s.writeError(w, http.StatusForbidden, "only project owners and platform admins can manage project members")
+	if !s.canManageProjectMembers(w, r, projectID) {
 		return
 	}
 
@@ -253,8 +229,7 @@ func (s *Server) RemoveProjectMember(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	memberID := r.PathValue("memberID")
 
-	if !s.canManageProjectMembers(r, projectID) {
-		s.writeError(w, http.StatusForbidden, "only project owners and platform admins can manage project members")
+	if !s.canManageProjectMembers(w, r, projectID) {
 		return
 	}
 
