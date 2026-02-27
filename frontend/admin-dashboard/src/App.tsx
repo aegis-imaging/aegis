@@ -296,6 +296,22 @@ type AuthIdentity = {
   role: string
 }
 
+type ProjectRole = ProjectMember['role']
+
+type ProjectCapabilities = {
+  canStudyMutation: boolean
+  canApproveReject: boolean
+  canManageProject: boolean
+}
+
+function capabilitiesForProjectRole(role: ProjectRole | null | undefined): ProjectCapabilities {
+  return {
+    canStudyMutation: role === 'owner' || role === 'coordinator' || role === 'reviewer' || role === 'site_coordinator',
+    canApproveReject: role === 'owner' || role === 'coordinator' || role === 'reviewer',
+    canManageProject: role === 'owner',
+  }
+}
+
 type DimseRetrySnapshot = {
   pending: number
   dead_letter: number
@@ -1580,14 +1596,14 @@ function pipelineColorClass(status: string): string {
 
 const IN_FLIGHT_STATUSES = ['scanning', 'checking', 'converting', 'classifying', 'defacing', 'exporting']
 
-function PipelineNode({ stage, studyId, isAdmin, onRerun }: {
+function PipelineNode({ stage, studyId, canRerunPipeline, onRerun }: {
   stage: PipelineStage
   studyId: string
-  isAdmin: boolean
+  canRerunPipeline: boolean
   onRerun: () => void
 }) {
   const [rerunning, setRerunning] = useState(false)
-  const canRerun = isAdmin && stage.required && !IN_FLIGHT_STATUSES.includes(stage.status) && stage.status !== 'pending'
+  const canRerun = canRerunPipeline && stage.required && !IN_FLIGHT_STATUSES.includes(stage.status) && stage.status !== 'pending'
 
   const handleRerun = async () => {
     setRerunning(true)
@@ -1621,11 +1637,12 @@ function PipelineNode({ stage, studyId, isAdmin, onRerun }: {
   )
 }
 
-function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
+function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
   studyId: string
   onBack: () => void
   onAction: () => void
   isAdmin: boolean
+  currentUser: AuthIdentity | null
 }) {
   const [study, setStudy] = useState<Study | null>(null)
   const [audit, setAudit] = useState<AuditEntry[]>([])
@@ -1717,6 +1734,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [noteText, setNoteText] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
   const [noteSaved, setNoteSaved] = useState(false)
+  const [projectRole, setProjectRole] = useState<ProjectRole | null>(null)
 
   // Subject ID editor state
   const [subjectEdit, setSubjectEdit] = useState(false)
@@ -1769,6 +1787,26 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
 
   useEffect(() => { loadData() }, [loadData])
 
+  useEffect(() => {
+    if (!study || !currentUser || currentUser.role !== 'researcher') {
+      setProjectRole(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/projects/${study.project_id}/members`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (cancelled || !data) return
+        const members = (data.members ?? []) as ProjectMember[]
+        const me = members.find(m => m.admin_user_id === currentUser.id || m.user_email === currentUser.email)
+        setProjectRole((me?.role as ProjectRole | undefined) ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setProjectRole(null)
+      })
+    return () => { cancelled = true }
+  }, [study, currentUser])
+
   const hasLiveShareCountdown = shares.some(
     s => shareStatusLabel(s, nowMs) === 'active' && shareRemainingSeconds(s, nowMs) !== null,
   )
@@ -1804,6 +1842,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const canBidsDownload = study.bids_status === 'complete'
   const canClassify = study.classification_required && study.classification_status === 'pending'
   const canProtocolCheck = study.protocol_required && study.protocol_status === 'pending'
+  const projectCaps = isAdmin ? { canStudyMutation: true, canApproveReject: true, canManageProject: true } : capabilitiesForProjectRole(projectRole)
 
   const doAction = async (url: string) => {
     await fetch(url, { method: 'POST' })
@@ -1961,7 +2000,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="pipeline-row">
           {stages.map((stage, i) => (
             <div key={stage.label} className="pipeline-step">
-              <PipelineNode stage={stage} studyId={study.id} isAdmin={isAdmin} onRerun={loadData} />
+              <PipelineNode stage={stage} studyId={study.id} canRerunPipeline={projectCaps.canStudyMutation} onRerun={loadData} />
               {i < stages.length - 1 && <div className="pipeline-arrow">→</div>}
             </div>
           ))}
@@ -1972,9 +2011,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       <div className="study-detail__section">
         <h3 className="study-detail__section-title">Actions</h3>
         <div className="study-detail__actions">
-          {isAdmin && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
-          {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>}
-          {isAdmin && canReactivate && <button type="button" className="btn btn--approve" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
+          {projectCaps.canApproveReject && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
+          {projectCaps.canApproveReject && canReject && <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>}
+          {projectCaps.canApproveReject && canReactivate && <button type="button" className="btn btn--approve" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
           {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
           {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
           {isAdmin && canProtocolCheck && <button type="button" className="btn btn--protocol-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/protocol-check`)}>Check Protocol</button>}
@@ -2007,7 +2046,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             <button type="button" className="btn btn--secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
           </div>
         )}
-        {isAdmin && rejectModalOpen && (
+        {projectCaps.canApproveReject && rejectModalOpen && (
           <div style={{ marginTop: 12, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px' }}>
             <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#9a3412' }}>Reject study</p>
             <textarea
@@ -2158,7 +2197,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       )}
 
       {/* Internal admin note (admin only) */}
-      {isAdmin && (
+      {projectCaps.canStudyMutation && (
         <div className="study-detail__section">
           <h3 className="study-detail__section-title">Add Internal Note</h3>
           <div className="note-inline">
@@ -2629,6 +2668,7 @@ function StudyRow({
   onSelect,
   onAskAgent,
   isAdmin,
+  projectRole,
   checked,
   onToggle,
   showDescCol
@@ -2638,6 +2678,7 @@ function StudyRow({
   onSelect: () => void
   onAskAgent: () => void
   isAdmin: boolean
+  projectRole: ProjectRole | null
   checked: boolean
   onToggle: () => void
   showDescCol?: boolean
@@ -2695,6 +2736,7 @@ function StudyRow({
   const canBidsDownload = study.bids_status === 'complete'
   const canClassify = study.classification_required && study.classification_status === 'pending'
   const canProtocolCheck = study.protocol_required && study.protocol_status === 'pending'
+  const projectCaps = isAdmin ? { canStudyMutation: true, canApproveReject: true, canManageProject: true } : capabilitiesForProjectRole(projectRole)
 
   const handlePhiScan = async () => {
     await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
@@ -2742,9 +2784,9 @@ function StudyRow({
           <button
             type="button"
             className={`btn-flag${study.priority_flag ? ' btn-flag--on' : ''}`}
-            onClick={isAdmin ? handleToggleFlag : undefined}
-            title={isAdmin ? (study.priority_flag ? 'Remove priority flag' : 'Mark as priority') : (study.priority_flag ? 'Priority' : '')}
-            style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+            onClick={projectCaps.canStudyMutation ? handleToggleFlag : undefined}
+            title={projectCaps.canStudyMutation ? (study.priority_flag ? 'Remove priority flag' : 'Mark as priority') : (study.priority_flag ? 'Priority' : '')}
+            style={{ cursor: projectCaps.canStudyMutation ? 'pointer' : 'default' }}
           >
             {study.priority_flag ? '★' : '☆'}
           </button>
@@ -2783,13 +2825,13 @@ function StudyRow({
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
           <div className="actions-cell">
-            {isAdmin && canApprove && (
+            {projectCaps.canApproveReject && canApprove && (
               <button type="button" className="btn btn--approve" onClick={handleApprove}>Approve</button>
             )}
-            {isAdmin && canReject && (
+            {projectCaps.canApproveReject && canReject && (
               <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>
             )}
-            {isAdmin && canReactivate && (
+            {projectCaps.canApproveReject && canReactivate && (
               <button type="button" className="btn btn--approve" onClick={async () => { if (confirm('Reactivate this expired study?')) { await fetch(`/api/studies/${study.id}/reactivate`, { method: 'POST' }); onAction() } }} title="Restore expired study to approved">Reactivate</button>
             )}
             {isAdmin && canShare && (
@@ -8672,6 +8714,7 @@ export function App() {
   // Auth state
   const [currentUser, setCurrentUser] = useState<AuthIdentity | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [projectRoleById, setProjectRoleById] = useState<Record<string, ProjectRole | null>>({})
   const validCustomTimeZone = normalizeIanaTimeZone(displayTimezoneCustom) ?? ''
   const localTimeZone = browserTimeZone()
 
@@ -8691,6 +8734,39 @@ export function App() {
       })
       .catch(() => { /* non-fatal — dev mode may not have auth */ })
   }, [])
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'researcher') {
+      setProjectRoleById({})
+      return
+    }
+    const uniqueProjectIDs = Array.from(new Set(studies.map(s => s.project_id).filter(Boolean)))
+    const missing = uniqueProjectIDs.filter(id => !(id in projectRoleById))
+    if (missing.length === 0) return
+    let cancelled = false
+    Promise.all(
+      missing.map(async projectID => {
+        try {
+          const res = await fetch(`/api/projects/${projectID}/members`)
+          if (!res.ok) return [projectID, null] as const
+          const data = await res.json()
+          const members = (data.members ?? []) as ProjectMember[]
+          const me = members.find(m => m.admin_user_id === currentUser.id || m.user_email === currentUser.email)
+          return [projectID, (me?.role as ProjectRole | undefined) ?? null] as const
+        } catch {
+          return [projectID, null] as const
+        }
+      }),
+    ).then(entries => {
+      if (cancelled) return
+      setProjectRoleById(prev => {
+        const next = { ...prev }
+        for (const [projectID, role] of entries) next[projectID] = role
+        return next
+      })
+    })
+    return () => { cancelled = true }
+  }, [currentUser, studies, projectRoleById])
 
   // Poll stuck studies every 5 minutes for the warning badge + panel data.
   useEffect(() => {
@@ -9502,6 +9578,7 @@ export function App() {
           onBack={() => selectStudy(null)}
           onAction={() => setRefreshTick(t => t + 1)}
           isAdmin={isAdmin}
+          currentUser={currentUser}
         />
       )}
       {tab === 'agent' && (
@@ -10168,6 +10245,7 @@ export function App() {
                         setTab('agent')
                       }}
                       isAdmin={isAdmin}
+                      projectRole={projectRoleById[study.project_id] ?? null}
                       checked={bulkSelected.has(study.id)}
                       onToggle={() => setBulkSelected(prev => {
                         const next = new Set(prev)
