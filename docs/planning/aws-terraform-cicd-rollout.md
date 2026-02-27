@@ -5,7 +5,7 @@ Goal: move `terraform/aws` from manual apply to controlled CI/CD with explicit s
 ## Current State
 
 - App deploys are already CI/CD via `.github/workflows/deploy-aws.yml` on push to `develop`.
-- AWS infrastructure (`terraform/aws`) is manual by policy.
+- AWS infrastructure (`terraform/aws`) runs CI/CD with automatic plan and push-triggered apply gated by `aws-prod` environment approval.
 
 ## Target State
 
@@ -151,4 +151,4 @@ Use a dedicated role for Terraform with:
 
 ## Recommendation
 
-Start with **Phase 1 plan-only** for one week, then enable **Phase 2**. Promote to **Phase 3** after 3-5 successful approved applies with no rollback.
+Keep `aws-prod` required reviewers enabled and treat approved apply runs as controlled change windows.
