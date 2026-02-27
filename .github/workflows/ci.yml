@@ -103,6 +103,7 @@ jobs:
           - scripts/aws_install_poc.sh
           - scripts/check-aws-deploy-parity.sh
           - scripts/check-auth-guardrails.sh
+          - scripts/check-cross-cloud-conformance.sh
           - scripts/check-edge-security-parity.sh
           - scripts/check-hipaa-day1-controls.sh
           - scripts/check-monitoring-alert-parity.sh
@@ -151,6 +152,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate HIPAA day-1 control baseline
         run: ./scripts/check-hipaa-day1-controls.sh
+
+  cross-cloud-conformance:
+    name: Cross-cloud conformance check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment/control conformance
+        run: ./scripts/check-cross-cloud-conformance.sh
 
   python-test:
     name: "Python tests (${{ matrix.service }})"
