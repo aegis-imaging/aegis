@@ -4,8 +4,9 @@
 # Triggers on every push to develop, runs in parallel with the GCP Cloud Build.
 #
 # Required GitHub Secrets:
-#   AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN — IAM role ARN for OIDC-based deploy auth
-#   AWS_ACCOUNT_ID         — 12-digit AWS account ID
+#   AWS_ACCOUNT_ID                  — 12-digit AWS account ID
+#   AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN — optional explicit IAM role ARN for OIDC deploy auth
+#                                      (if unset, workflow derives arn:aws:iam::<AWS_ACCOUNT_ID>:role/aegis-github-actions-deploy)
 #
 # Phase 1: Build all 13 service images in parallel (matrix) and push to ECR.
 # Phase 2: Update all ECS services (force new deployment) + reboot DIMSE EC2.
@@ -32,6 +33,7 @@ jobs:
     env:
       AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' && secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN || format('arn:aws:iam::{0}:role/aegis-github-actions-deploy', secrets.AWS_ACCOUNT_ID) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,7 +44,6 @@ jobs:
       - name: Validate required AWS deploy secrets
         run: |
           missing=()
-          [[ -n "$AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN" ]] || missing+=("AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN")
           [[ -n "$AWS_ACCOUNT_ID" ]] || missing+=("AWS_ACCOUNT_ID")
           if [[ ${#missing[@]} -gt 0 ]]; then
             echo "Missing required GitHub Actions secrets for AWS deploy workflow:"
@@ -50,7 +51,12 @@ jobs:
             echo "Set these in: GitHub repo -> Settings -> Secrets and variables -> Actions"
             exit 1
           fi
-          echo "Required AWS deploy secrets are present."
+          if [[ -n "$AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN" ]]; then
+            echo "Using explicit AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN secret."
+          else
+            echo "AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN is unset; deriving role ARN from AWS_ACCOUNT_ID."
+          fi
+          echo "Using OIDC role ARN: $AWS_DEPLOY_ROLE_ARN"
 
   # ── Phase 1: Build and push all images ──────────────────────────────────────
 
@@ -59,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     env:
-      AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' && secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN || format('arn:aws:iam::{0}:role/aegis-github-actions-deploy', secrets.AWS_ACCOUNT_ID) }}
 
     strategy:
       fail-fast: false
@@ -114,7 +120,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Log in to ECR
@@ -151,13 +157,13 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' && secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN || format('arn:aws:iam::{0}:role/aegis-github-actions-deploy', secrets.AWS_ACCOUNT_ID) }}
 
     steps:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Force new deployment for all ECS services
@@ -204,13 +210,13 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' && secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN || format('arn:aws:iam::{0}:role/aegis-github-actions-deploy', secrets.AWS_ACCOUNT_ID) }}
 
     steps:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Update DIMSE image SSM parameter
