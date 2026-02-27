@@ -80,3 +80,10 @@ Completed:
 - continue incremental runbook tightening and alert-noise reduction without changing core deploy logic,
 - next: periodically review failure-signal summaries for signal quality (false-positive rate, branch scope, and triage clarity) and apply low-risk wording/runbook refinements as needed.
 - next: continue periodic signal-quality reviews and only ship incremental, low-risk tuning when repeated duplicate windows or unclear triage summaries are observed.
+
+### Phase E Status Note — Post-merge signal snapshot (2026-02-27)
+
+- **Terraform AWS Failure Alert**: recent runs observed as `skipped` on `develop` (e.g., `22495628324`, `22495503435`, `22494768989`), consistent with alert-on-failure-only behavior.
+- **Terraform Azure Failure Alert**: recent sequence includes historical `failure` runs (`22497034941`, `22496444844`, `22495765287`, `22495674643`) followed by `skipped` (`22497146718`) after failure conditions cleared.
+- **GCP Cloud Build Failure Alert**: manual validation remains green (`22502258584` success), with scheduled run `22502537637` continuing to detect real failed Cloud Build events when present.
+- **Assessment**: current Phase E hardening is operating as intended; maintain periodic signal reviews and keep future changes low-risk and incremental.
