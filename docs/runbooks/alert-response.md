@@ -25,7 +25,41 @@ Use this quick index to jump to the right deployment or failure surface.
 
 - **App deploy pipeline**: Cloud Build trigger using `cloudbuild.yaml`
 - **Terraform infra pipeline**: Cloud Build trigger using `cloudbuild.terraform.yaml`
+- **Cloud Build failure signal**: GitHub Actions → `GCP Cloud Build Failure Alert`
 - **Primary health check endpoint**: `https://api.aegisimaging.ai/healthz`
+- **Failure signal auth secrets**: `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`
+
+## GCP Cloud Build Failure Signal
+
+Use this section when `GCP Cloud Build Failure Alert` reports one or more failed builds.
+
+### Triage a reported failure
+
+1. Open **Actions → GCP Cloud Build Failure Alert** and review the failed build links in the run summary.
+2. Open the Cloud Build run URL for the most recent failed build.
+3. Check the failed step first (build image, push image, deploy, or terraform apply).
+4. Confirm whether failure is app deploy (`cloudbuild.yaml`) or infra deploy (`cloudbuild.terraform.yaml`).
+5. Re-run the failed pipeline only after the underlying issue is corrected.
+
+### Fast checks
+
+- Verify the build trigger and branch match expected production flow (`develop`).
+- Confirm Artifact Registry image push success before deploy steps.
+- For Terraform failures, check state backend access and provider authentication first.
+
+### Manual investigation commands
+
+```bash
+gcloud builds list --project=aegis-prod-488120 --sort-by=~createTime --limit=10
+```
+
+```bash
+gcloud builds log <BUILD_ID> --project=aegis-prod-488120
+```
+
+```bash
+gcloud builds describe <BUILD_ID> --project=aegis-prod-488120 --format=json | jq '.status, .images, .substitutions'
+```
 
 ## AWS Terraform Apply Approval Gate (`aws-prod`)
 
