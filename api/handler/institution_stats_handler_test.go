@@ -68,3 +68,24 @@ func TestGetInstitutionStats_ResearcherRequiresProjectScope(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
 }
+
+func TestGetInstitutionStats_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	inst := testutil.CreateTestInstitution(t, db, "Researcher Scope Denied Inst")
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "inst-stats-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/institutions/"+inst.ID+"/stats?project_id="+proj.ID, nil)
+	req.SetPathValue("id", inst.ID)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetInstitutionStats(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}

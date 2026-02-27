@@ -71,3 +71,22 @@ func TestExportAuditCSV_ResearcherRequiresProjectScope(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
 }
+
+func TestExportAuditCSV_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "audit-csv-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/audit.csv?project_id="+proj.ID, nil)
+	req = withResearcherCSVAudit(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ExportAuditCSV(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}

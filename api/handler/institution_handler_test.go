@@ -178,3 +178,19 @@ func TestListInstitutions_ResearcherWithProjectScopeAllowed(t *testing.T) {
 	require.Len(t, out, 1)
 	assert.Equal(t, inst.ID, out[0].ID)
 }
+
+func TestListInstitutions_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "inst-researcher-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/institutions?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListInstitutions(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}

@@ -108,11 +108,11 @@ func TestGetStorageStats_Empty(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	var resp struct {
-		RawFileCount   int   `json:"raw_file_count"`
-		CleanFileCount int   `json:"clean_file_count"`
-		TotalFileCount int   `json:"total_file_count"`
-		TotalStudies   int   `json:"total_studies"`
-		TotalSizeBytes int64 `json:"total_size_bytes"`
+		RawFileCount   int    `json:"raw_file_count"`
+		CleanFileCount int    `json:"clean_file_count"`
+		TotalFileCount int    `json:"total_file_count"`
+		TotalStudies   int    `json:"total_studies"`
+		TotalSizeBytes int64  `json:"total_size_bytes"`
 		GeneratedAt    string `json:"generated_at"`
 	}
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
@@ -232,4 +232,63 @@ func TestGetTimeline_StudiesCountInToday(t *testing.T) {
 	today := resp.Timeline[0]
 	assert.Equal(t, 3, today.Received) // all 3 created today (count(*) regardless of status)
 	assert.Equal(t, 1, today.Approved)
+}
+
+func TestStatsExtended_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "stats-ext-researcher@test.com", "researcher")
+
+	tests := []struct {
+		name string
+		path string
+		h    func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "breakdown", path: "/api/stats/breakdown", h: srv.GetBreakdownStats},
+		{name: "storage", path: "/api/storage/stats", h: srv.GetStorageStats},
+		{name: "timeline", path: "/api/stats/timeline", h: srv.GetTimeline},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req = withResearcherUser(req, researcher.ID, researcher.Email)
+			rr := httptest.NewRecorder()
+
+			tc.h(rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+		})
+	}
+}
+
+func TestStatsExtended_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "stats-ext-denied@test.com", "researcher")
+
+	tests := []struct {
+		name string
+		path string
+		h    func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "breakdown", path: "/api/stats/breakdown?project_id=" + proj.ID, h: srv.GetBreakdownStats},
+		{name: "storage", path: "/api/storage/stats?project_id=" + proj.ID, h: srv.GetStorageStats},
+		{name: "timeline", path: "/api/stats/timeline?project_id=" + proj.ID, h: srv.GetTimeline},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req = withResearcherUser(req, researcher.ID, researcher.Email)
+			rr := httptest.NewRecorder()
+
+			tc.h(rr, req)
+
+			assert.Equal(t, http.StatusNotFound, rr.Code)
+			assert.Contains(t, rr.Body.String(), "project not found")
+		})
+	}
 }
