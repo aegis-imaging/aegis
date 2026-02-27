@@ -21,9 +21,8 @@ import (
 // ApproveStudy transitions a study to 'approved', making it eligible for export sharing.
 func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentApproveReject)
+	if !ok {
 		return
 	}
 	if study.Status == "approved" || study.Status == "rejected" {
@@ -60,9 +59,8 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 // Accepts an optional JSON body: {"reason": "..."} (max 500 chars).
 func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentApproveReject)
+	if !ok {
 		return
 	}
 	if study.Status == "rejected" {
@@ -112,9 +110,8 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 // POST /api/studies/{id}/reactivate
 func (s *Server) ReactivateStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentApproveReject)
+	if !ok {
 		return
 	}
 	if study.Status != "expired" {

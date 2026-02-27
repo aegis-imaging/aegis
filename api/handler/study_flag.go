@@ -2,8 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"database/sql"
-	"errors"
 	"net/http"
 
 	"github.com/aegis-imaging/aegis/api/model"
@@ -25,12 +23,7 @@ func (s *Server) PatchStudyFlag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := model.GetStudyByID(r.Context(), s.db, id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			s.writeError(w, http.StatusNotFound, "study not found")
-			return
-		}
-		s.writeError(w, http.StatusInternalServerError, "database error")
+	if _, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentStudyMutation); !ok {
 		return
 	}
 
