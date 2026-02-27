@@ -254,7 +254,7 @@ resource "azurerm_container_app" "admin_dashboard" {
   ingress {
     allow_insecure_connections = false
     external_enabled           = true
-    target_port                = 80
+    target_port                = 8080
 
     traffic_weight {
       latest_revision = true
@@ -303,7 +303,7 @@ resource "azurerm_container_app" "landing" {
   ingress {
     allow_insecure_connections = false
     external_enabled           = true
-    target_port                = 80
+    target_port                = 8080
 
     traffic_weight {
       latest_revision = true
@@ -352,7 +352,7 @@ resource "azurerm_container_app" "weasis" {
   ingress {
     allow_insecure_connections = false
     external_enabled           = true
-    target_port                = 80
+    target_port                = 8080
 
     traffic_weight {
       latest_revision = true
