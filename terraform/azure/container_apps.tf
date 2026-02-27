@@ -142,11 +142,11 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "AUTH_ENABLED"
-        value = "false"
+        value = "true"
       }
       env {
         name  = "AUTH_PROVIDER"
-        value = "auto"
+        value = "azure"
       }
       env {
         name  = "PIPELINE_AUTO"
@@ -251,6 +251,11 @@ resource "azurerm_container_app" "admin_dashboard" {
     identity = local.identity_id
   }
 
+  secret {
+    name  = "microsoft-provider-authentication-secret"
+    value = azuread_application_password.admin_easyauth.value
+  }
+
   ingress {
     allow_insecure_connections = false
     external_enabled           = true
@@ -271,6 +276,15 @@ resource "azurerm_container_app" "admin_dashboard" {
       image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/admin-dashboard:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
+
+      env {
+        name  = "API_URL"
+        value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
+      }
+      env {
+        name  = "MCP_SERVER_URL"
+        value = "https://${azurerm_container_app.mcp_server.ingress[0].fqdn}"
+      }
     }
   }
 
