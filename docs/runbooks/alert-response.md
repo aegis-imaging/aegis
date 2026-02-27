@@ -28,6 +28,7 @@ Use this quick index to jump to the right deployment or failure surface.
 - **App deploy pipeline**: Cloud Build trigger using `cloudbuild.yaml`
 - **Terraform infra pipeline**: Cloud Build trigger using `cloudbuild.terraform.yaml`
 - **Cloud Build failure signal**: GitHub Actions → `GCP Cloud Build Failure Alert`
+- **Failure check cadence/default window**: every 30 minutes with 30-minute default lookback on scheduled runs (`workflow_dispatch` default remains 60 minutes)
 - **Primary health check endpoint**: `https://api.aegisimaging.ai/healthz`
 - **Failure signal auth secrets**: `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`
 

@@ -13,6 +13,7 @@ Recent completed milestones:
 - Azure Terraform workflow run succeeded after permission remediation (`22497085026`).
 - GCP failure-signal parity added via GitHub Actions workflow (`GCP Cloud Build Failure Alert`) with direct Cloud Build run URLs.
 - Terraform AWS/Azure failure alert workflows scoped to `develop` failures only to reduce non-prod alert noise (PR #355).
+- GCP failure checker default lookback tuned to 30 minutes for scheduled runs (manual checks remain 60-minute default) to reduce duplicate alert windows in recurring schedules.
 
 ---
 
@@ -78,3 +79,4 @@ Completed:
 - keep GCP Cloud Build failure signal workflow validated end-to-end with OIDC (`22502258584`),
 - continue incremental runbook tightening and alert-noise reduction without changing core deploy logic,
 - next: periodically review failure-signal summaries for signal quality (false-positive rate, branch scope, and triage clarity) and apply low-risk wording/runbook refinements as needed.
+- next: continue periodic signal-quality reviews and only ship incremental, low-risk tuning when repeated duplicate windows or unclear triage summaries are observed.
