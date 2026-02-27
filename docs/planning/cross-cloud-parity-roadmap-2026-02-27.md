@@ -12,6 +12,7 @@ Recent completed milestones:
 - Azure Terraform permission runbook automation scripts added and validated end-to-end (PR #348).
 - Azure Terraform workflow run succeeded after permission remediation (`22497085026`).
 - GCP failure-signal parity added via GitHub Actions workflow (`GCP Cloud Build Failure Alert`) with direct Cloud Build run URLs.
+- Terraform AWS/Azure failure alert workflows scoped to `develop` failures only to reduce non-prod alert noise (PR #355).
 
 ---
 
@@ -75,4 +76,5 @@ Completed:
 - keep AWS deploy OIDC-only with optional role-ARN override and account-derived fallback (validated success run `22501374876`),
 - keep Azure deploy path on OIDC with latest successful validation (`22501374891`),
 - keep GCP Cloud Build failure signal workflow validated end-to-end with OIDC (`22502258584`),
-- continue incremental runbook tightening and alert-noise reduction without changing core deploy logic.
+- continue incremental runbook tightening and alert-noise reduction without changing core deploy logic,
+- next: periodically review failure-signal summaries for signal quality (false-positive rate, branch scope, and triage clarity) and apply low-risk wording/runbook refinements as needed.
