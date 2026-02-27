@@ -34,11 +34,11 @@ This document is planning-only. No code changes are included here.
 
 ## Status (Updated 2026-02-27)
 
-- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`, Phase 2 `P0-20`, `P0-21`, `P0-22`, Phase 3 `P1-30`
+- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`, Phase 2 `P0-20`, `P0-21`, `P0-22`, Phase 3 `P1-30`, `P1-31`, Phase 4 `P1-40`, `P1-41`, Phase 5 `P2-50`, `P2-51`
   - `docs/planning/access-matrix-project-site-scoping.md`
   - `docs/planning/access-test-catalog-project-site-scoping.md`
-- **Next active:** Phase 3 — `P1-31` (project/site context UX hardening)
-- **Queued:** Phase 2+
+- **Next active:** none (this plan complete)
+- **Queued:** follow-on hardening backlog
 
 ---
 
@@ -210,6 +210,8 @@ This document is planning-only. No code changes are included here.
 ### Ticket P1-40: Institution Attribution for Browser Uploads
 **Goal:** Ensure uploaded studies are reliably tagged with site institution.
 
+**Status:** ✅ Completed (2026-02-27)
+
 **Primary targets**
 - `client/src/upload/client.ts`
 - `frontend/upload-portal` upload flow
@@ -227,6 +229,8 @@ This document is planning-only. No code changes are included here.
 ### Ticket P1-41: Attribution-Failure Monitoring Signals
 **Goal:** Detect drift where uploads miss institution assignment.
 
+**Status:** ✅ Completed (2026-02-27)
+
 **Acceptance Criteria**
 - Operational metric or audit query for `project-restricted studies with null institution_id`.
 - Runbook note for triage/remediation.
@@ -238,11 +242,15 @@ This document is planning-only. No code changes are included here.
 ### Ticket P2-50: Endpoint Access Lint/Guardrail
 **Goal:** Reduce future scoping drift.
 
+**Status:** ✅ Completed (2026-02-27)
+
 **Acceptance Criteria**
 - CI check or static review checklist ensures new authenticated endpoints declare access category.
 
 ### Ticket P2-51: Quarterly Access Model Review
 **Goal:** Keep policy aligned with trial operations.
+
+**Status:** ✅ Completed (2026-02-27)
 
 **Acceptance Criteria**
 - Scheduled review includes role matrix validation, cloud-auth parity, and sampling of access logs.

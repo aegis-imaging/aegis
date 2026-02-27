@@ -12,3 +12,7 @@ Store HIPAA day-1 control execution evidence here.
 ## Naming convention
 
 `YYYY-MM-DD_<control>_<owner>.<ext>`
+
+## Templates
+
+- `global/quarterly-access-model-review-template.md` — quarterly access model review evidence record
