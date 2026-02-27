@@ -34,6 +34,12 @@ jobs:
     name: Validate required configuration
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate authentication guardrails
+        run: ./scripts/check-auth-guardrails.sh
+
       - name: Check required variables and secrets
         env:
           WEASIS_URL:      ${{ vars.AZURE_WEASIS_URL }}
