@@ -10,10 +10,10 @@ import (
 )
 
 type studyNote struct {
-	ID        string          `json:"id"`
-	Actor     string          `json:"actor"`
-	Note      string          `json:"note"`
-	CreatedAt time.Time       `json:"created_at"`
+	ID        string    `json:"id"`
+	Actor     string    `json:"actor"`
+	Note      string    `json:"note"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // ListStudyNotes returns all admin notes recorded for a study (stored as
@@ -78,8 +78,7 @@ func (s *Server) AddStudyNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := model.GetStudyByID(r.Context(), s.db, id); err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	if _, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentStudyMutation); !ok {
 		return
 	}
 
