@@ -263,6 +263,23 @@ func TestListAllShares_ResearcherWithProjectScopeAllowed(t *testing.T) {
 	assert.Len(t, result.Shares, 1)
 }
 
+func TestListAllShares_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "shares-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/shares?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAllShares(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}
+
 func TestGetExportAnalytics_ResearcherRequiresProjectScope(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
@@ -276,4 +293,20 @@ func TestGetExportAnalytics_ResearcherRequiresProjectScope(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestGetExportAnalytics_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "analytics-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/export-analytics?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetExportAnalytics(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
 }

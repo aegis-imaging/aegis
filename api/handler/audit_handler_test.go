@@ -212,3 +212,19 @@ func TestListAudit_ResearcherScopedToProjectStudyEvents(t *testing.T) {
 	require.Len(t, result.Entries, 1)
 	assert.Equal(t, studyA.ID, result.Entries[0].ResourceID)
 }
+
+func TestListAudit_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "audit-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/audit?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAudit(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}
