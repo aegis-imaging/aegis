@@ -1,0 +1,34 @@
+name: Terraform AWS Failure Alert
+
+on:
+  workflow_run:
+    workflows: ["Terraform AWS"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  alert:
+    name: Alert on Terraform AWS failure
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Emit failure summary
+        run: |
+          echo "Terraform AWS failed for branch '${{ github.event.workflow_run.head_branch }}' (event: '${{ github.event.workflow_run.event }}')."
+          echo "Run URL: ${{ github.event.workflow_run.html_url }}"
+
+          {
+            echo "## Terraform AWS failure detected"
+            echo ""
+            echo "- Branch: \\`${{ github.event.workflow_run.head_branch }}\\`"
+            echo "- Event: \\`${{ github.event.workflow_run.event }}\\`"
+            echo "- Conclusion: \\`${{ github.event.workflow_run.conclusion }}\\`"
+            echo "- Run: ${{ github.event.workflow_run.html_url }}"
+            echo ""
+            echo "Open the failed \\`Terraform Plan (AWS)\\` or \\`Terraform Apply (AWS)\\` job and triage from the first failed step."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit 1

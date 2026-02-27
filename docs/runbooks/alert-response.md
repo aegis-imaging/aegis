@@ -3,6 +3,37 @@
 This runbook maps each Terraform-provisioned alert policy to a triage procedure.
 All alerts fire to the email address set in `alert_email` (terraform/infra/terraform.tfvars).
 
+## AWS Terraform Apply Approval Gate (`aws-prod`)
+
+Use this section whenever the `Terraform AWS` workflow is waiting for deployment approval.
+
+### Approve a pending apply
+
+1. Open **Actions → Terraform AWS** and select the most recent run on `develop`.
+2. Confirm the `Terraform Plan (AWS)` job completed successfully.
+3. Open the pending deployment card for environment `aws-prod`.
+4. Click **Review deployments** and then **Approve and deploy**.
+5. Monitor `Terraform Apply (AWS)` until completion.
+
+### Reject a pending apply
+
+1. Open the pending deployment card for `aws-prod`.
+2. Click **Review deployments** and choose **Reject**.
+3. Add a short reason (for example: unexpected resource replacement).
+4. Open a follow-up issue/PR to fix the plan before re-running.
+
+### Fast checks before approving
+
+- Verify the run is from `develop` and repository `aegis-imaging/aegis`.
+- Open `tfplan.txt` artifact and confirm no unexpected destructive changes.
+- Confirm the triggering commit/PR matches the intended infrastructure change.
+
+### If apply fails
+
+- Open **Actions → Terraform AWS Failure Alert** for the failure summary and direct run URL.
+- Triage from the failed step in `Terraform Apply (AWS)` first.
+- If state lock-related, wait for lock expiry or clear lock only with operator approval.
+
 ---
 
 ## API 5xx Rate High
