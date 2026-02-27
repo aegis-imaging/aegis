@@ -12,6 +12,7 @@ import (
 	"github.com/suyashkumar/dicom/pkg/tag"
 	"github.com/suyashkumar/dicom/pkg/uid"
 
+	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/storage"
 	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
@@ -107,9 +108,11 @@ func TestGetAnonDiff_Success_ShowsRemovedTags(t *testing.T) {
 	var resp struct {
 		StudyID string `json:"study_id"`
 		Diff    struct {
-			Removed  []struct{ Keyword string `json:"keyword"` } `json:"removed"`
-			Modified []any                                       `json:"modified"`
-			Added    []any                                       `json:"added"`
+			Removed []struct {
+				Keyword string `json:"keyword"`
+			} `json:"removed"`
+			Modified []any `json:"modified"`
+			Added    []any `json:"added"`
 		} `json:"diff"`
 	}
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
@@ -149,4 +152,36 @@ func TestGetAnonDiff_IdenticalFiles_EmptyDiff(t *testing.T) {
 	assert.Empty(t, resp.Diff.Removed)
 	assert.Empty(t, resp.Diff.Modified)
 	assert.Empty(t, resp.Diff.Added)
+}
+
+func TestGetAnonDiff_SiteScopedOutOfSiteDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, _ := dicomTestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	instA := createInstitution(t, db, "sender", "PACS_DIFF_A", true)
+	instB := createInstitution(t, db, "sender", "PACS_DIFF_B", true)
+
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, instA.ID, study.ID)
+	require.NoError(t, err)
+
+	researcher := testutil.CreateTestAdminUser(t, db, "anon-diff-site@test.com", "researcher")
+	instBID := instB.ID
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_coordinator",
+		InstitutionID: &instBID,
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/studies/"+study.StudyInstanceUID+"/anonymization-diff", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetAnonDiff(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "study not found")
 }

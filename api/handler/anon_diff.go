@@ -9,8 +9,6 @@ import (
 
 	dicomlib "github.com/suyashkumar/dicom"
 	"github.com/suyashkumar/dicom/pkg/tag"
-
-	"github.com/aegis-imaging/aegis/api/model"
 )
 
 type anonDiffTag struct {
@@ -28,11 +26,11 @@ type anonDiffResult struct {
 }
 
 type anonDiffResponse struct {
-	StudyID   string         `json:"study_id"`
-	DicomStore string        `json:"dicom_store"`
-	Diff      anonDiffResult `json:"diff"`
-	RawFile   string         `json:"raw_file"`
-	CleanFile string         `json:"clean_file"`
+	StudyID    string         `json:"study_id"`
+	DicomStore string         `json:"dicom_store"`
+	Diff       anonDiffResult `json:"diff"`
+	RawFile    string         `json:"raw_file"`
+	CleanFile  string         `json:"clean_file"`
 }
 
 // GetAnonDiff computes the tag-level diff between the raw and clean DICOM
@@ -46,9 +44,8 @@ type anonDiffResponse struct {
 func (s *Server) GetAnonDiff(w http.ResponseWriter, r *http.Request) {
 	studyUID := r.PathValue("studyUID")
 
-	study, err := model.GetStudyByUID(r.Context(), s.db, studyUID)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyReadAccessByUID(w, r, studyUID)
+	if !ok {
 		return
 	}
 
