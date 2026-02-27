@@ -7,28 +7,28 @@ import (
 
 // cohortSubjectRow represents aggregate data for a single research subject.
 type cohortSubjectRow struct {
-	SubjectID              string    `json:"subject_id"`
-	StudyCount             int       `json:"study_count"`
-	ApprovedCount          int       `json:"approved_count"`
-	RejectedCount          int       `json:"rejected_count"`
-	PendingCount           int       `json:"pending_count"` // all non-terminal states
-	Modalities             []string  `json:"modalities"`     // distinct, sorted
-	EarliestStudyAt        time.Time `json:"earliest_study_at"`
-	LatestStudyAt          time.Time `json:"latest_study_at"`
-	AllApproved            bool      `json:"all_approved"`
-	HasDefaced             bool      `json:"has_defaced"`
-	HasExported            bool      `json:"has_exported"`
+	SubjectID       string    `json:"subject_id"`
+	StudyCount      int       `json:"study_count"`
+	ApprovedCount   int       `json:"approved_count"`
+	RejectedCount   int       `json:"rejected_count"`
+	PendingCount    int       `json:"pending_count"` // all non-terminal states
+	Modalities      []string  `json:"modalities"`    // distinct, sorted
+	EarliestStudyAt time.Time `json:"earliest_study_at"`
+	LatestStudyAt   time.Time `json:"latest_study_at"`
+	AllApproved     bool      `json:"all_approved"`
+	HasDefaced      bool      `json:"has_defaced"`
+	HasExported     bool      `json:"has_exported"`
 }
 
 // cohortReportResponse is the full response for GET /api/projects/{id}/cohort-report.
 type cohortReportResponse struct {
-	ProjectID             string             `json:"project_id"`
-	GeneratedAt           string             `json:"generated_at"`
-	TotalSubjects         int                `json:"total_subjects"`
-	SubjectsMultiStudy    int                `json:"subjects_multi_study"`   // subject with >= 2 studies
-	TotalStudiesWithSubject int              `json:"total_studies_with_subject"`
-	ModalityCoverage      map[string]int     `json:"modality_coverage"`      // modality → subject count
-	Subjects              []cohortSubjectRow `json:"subjects"`
+	ProjectID               string             `json:"project_id"`
+	GeneratedAt             string             `json:"generated_at"`
+	TotalSubjects           int                `json:"total_subjects"`
+	SubjectsMultiStudy      int                `json:"subjects_multi_study"` // subject with >= 2 studies
+	TotalStudiesWithSubject int                `json:"total_studies_with_subject"`
+	ModalityCoverage        map[string]int     `json:"modality_coverage"` // modality → subject count
+	Subjects                []cohortSubjectRow `json:"subjects"`
 }
 
 // GetCohortReport returns a per-subject cohort summary for a project,
@@ -39,6 +39,9 @@ func (s *Server) GetCohortReport(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	if projectID == "" {
 		s.writeError(w, http.StatusBadRequest, "project_id required")
+		return
+	}
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
 		return
 	}
 
@@ -126,13 +129,13 @@ func (s *Server) GetCohortReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, cohortReportResponse{
-		ProjectID:              projectID,
-		GeneratedAt:            time.Now().UTC().Format(time.RFC3339),
-		TotalSubjects:          len(subjects),
-		SubjectsMultiStudy:     multiStudy,
+		ProjectID:               projectID,
+		GeneratedAt:             time.Now().UTC().Format(time.RFC3339),
+		TotalSubjects:           len(subjects),
+		SubjectsMultiStudy:      multiStudy,
 		TotalStudiesWithSubject: totalWithSubject,
-		ModalityCoverage:       modalityCoverage,
-		Subjects:               subjects,
+		ModalityCoverage:        modalityCoverage,
+		Subjects:                subjects,
 	})
 }
 

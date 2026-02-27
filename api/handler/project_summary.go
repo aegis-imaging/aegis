@@ -10,6 +10,9 @@ import (
 // Returns a compact KPI summary for a project: study counts, modality breakdown, recent activity.
 func (s *Server) GetProjectDashboardSummary(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
+		return
+	}
 
 	// Study status counts.
 	counts, err := model.GetStudyStatusCounts(r.Context(), s.db, projectID)

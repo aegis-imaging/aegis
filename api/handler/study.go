@@ -1,13 +1,10 @@
 package handler
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -65,15 +62,12 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		f.AssignedTo = v
 	}
 
-	// Site-scoped access control: researcher users with a site role (site_coordinator
-	// or site_viewer) may only see studies from their own institution.
-	// If a project_id is provided, resolve the user's access for that project.
-	if user := middleware.UserFromContext(r.Context()); user != nil && user.Role == "researcher" && f.ProjectID != "" {
-		access, err := model.GetUserAccessForProject(r.Context(), s.db, user.ID, f.ProjectID)
-		if err == nil && access != nil && access.IsSiteScoped() {
-			// Force institution_id filter — user cannot see other sites' data.
-			f.InstitutionID = *access.InstitutionID
-		}
+	access, ok := s.requireResearcherProjectScope(w, r, f.ProjectID)
+	if !ok {
+		return
+	}
+	if access != nil && access.IsSiteScoped() {
+		f.InstitutionID = *access.InstitutionID
 	}
 
 	total, err := model.CountStudies(r.Context(), s.db, f)
@@ -102,13 +96,8 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 // GetStudy returns a single study by ID.
 func (s *Server) GetStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		s.writeError(w, http.StatusNotFound, "study not found")
-		return
-	}
-	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+	study, _, ok := s.requireStudyReadAccessByID(w, r, id)
+	if !ok {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, study)
@@ -118,13 +107,8 @@ func (s *Server) GetStudy(w http.ResponseWriter, r *http.Request) {
 // Useful for integrations that only have the DICOM UID and not the DB UUID.
 func (s *Server) GetStudyByUID(w http.ResponseWriter, r *http.Request) {
 	uid := r.PathValue("studyUID")
-	study, err := model.GetStudyByUID(r.Context(), s.db, uid)
-	if errors.Is(err, sql.ErrNoRows) {
-		s.writeError(w, http.StatusNotFound, "study not found")
-		return
-	}
-	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+	study, _, ok := s.requireStudyReadAccessByUID(w, r, uid)
+	if !ok {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, study)
@@ -135,12 +119,8 @@ func (s *Server) GetStudyByUID(w http.ResponseWriter, r *http.Request) {
 func (s *Server) DeleteStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		s.writeError(w, http.StatusNotFound, "study not found")
-		return
-	}
 	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		s.writeError(w, http.StatusNotFound, "study not found")
 		return
 	}
 
@@ -170,6 +150,9 @@ func (s *Server) DeleteStudy(w http.ResponseWriter, r *http.Request) {
 // Fire-and-forget from the dashboard; creates a study.viewed audit entry.
 func (s *Server) RecordStudyView(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, _, ok := s.requireStudyReadAccessByID(w, r, id); !ok {
+		return
+	}
 	actor := actorEmail(r)
 	ip := clientIP(r)
 	model.CreateAuditEntry(r.Context(), s.db, "study.viewed", actor, "study", id, ip, nil)
@@ -179,15 +162,7 @@ func (s *Server) RecordStudyView(w http.ResponseWriter, r *http.Request) {
 // ListStudyAudit returns all audit entries for a specific study.
 func (s *Server) ListStudyAudit(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-
-	// Verify the study exists.
-	_, err := model.GetStudyByID(r.Context(), s.db, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		s.writeError(w, http.StatusNotFound, "study not found")
-		return
-	}
-	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+	if _, _, ok := s.requireStudyReadAccessByID(w, r, id); !ok {
 		return
 	}
 
