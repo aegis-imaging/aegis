@@ -259,7 +259,7 @@ func main() {
 	mux.HandleFunc("PUT /api/anon-profiles/{id}", adminOnly(srv.UpdateAnonProfile))
 	mux.HandleFunc("DELETE /api/anon-profiles/{id}", adminOnly(srv.DeleteAnonProfile))
 
-	// Studies — list, detail, and shares readable by all; mutations require admin.
+	// Studies — list/detail are readable via auth; selected mutations enforce capability checks in handlers.
 	mux.HandleFunc("GET /api/studies", auth(srv.ListStudies))
 	mux.HandleFunc("GET /api/studies.csv", auth(srv.ExportStudiesCSV))
 	mux.HandleFunc("GET /api/studies/stuck", auth(srv.GetStuckStudies))
@@ -283,12 +283,12 @@ func main() {
 	mux.HandleFunc("POST /api/studies/bulk", adminOnly(srv.BulkStudyAction))
 	mux.HandleFunc("POST /api/studies/bulk-pipeline-trigger", adminOnly(srv.BulkPipelineTrigger))
 	mux.HandleFunc("GET /api/studies/{id}/notes", auth(srv.ListStudyNotes))
-	mux.HandleFunc("POST /api/studies/{id}/notes", adminOnly(srv.AddStudyNote))
-	mux.HandleFunc("PATCH /api/studies/{id}/flag", adminOnly(srv.PatchStudyFlag))
-	mux.HandleFunc("POST /api/studies/{id}/reset-pipeline-step", adminOnly(srv.ResetPipelineStep))
-	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
-	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
-	mux.HandleFunc("POST /api/studies/{id}/reactivate", adminOnly(srv.ReactivateStudy))
+	mux.HandleFunc("POST /api/studies/{id}/notes", auth(srv.AddStudyNote))
+	mux.HandleFunc("PATCH /api/studies/{id}/flag", auth(srv.PatchStudyFlag))
+	mux.HandleFunc("POST /api/studies/{id}/reset-pipeline-step", auth(srv.ResetPipelineStep))
+	mux.HandleFunc("POST /api/studies/{id}/approve", auth(srv.ApproveStudy))
+	mux.HandleFunc("POST /api/studies/{id}/reject", auth(srv.RejectStudy))
+	mux.HandleFunc("POST /api/studies/{id}/reactivate", auth(srv.ReactivateStudy))
 	mux.HandleFunc("POST /api/studies/{id}/soft-delete", adminOnly(srv.SoftDeleteStudy))
 	mux.HandleFunc("POST /api/studies/{id}/restore", adminOnly(srv.RestoreStudy))
 	mux.HandleFunc("POST /api/studies/{id}/share", adminOnly(srv.CreateShare))
@@ -352,8 +352,8 @@ func main() {
 
 	// Routing rules — condition → action mappings evaluated on study ingest.
 	mux.HandleFunc("GET /api/routing-rules", auth(srv.ListRoutingRules))
-	mux.HandleFunc("POST /api/routing-rules/simulate", auth(srv.SimulateRoutingRules))  // must be before {id} patterns
-	mux.HandleFunc("POST /api/routing-rules/reorder", adminOnly(srv.ReorderRoutingRules))       // must be before {id} patterns
+	mux.HandleFunc("POST /api/routing-rules/simulate", auth(srv.SimulateRoutingRules))           // must be before {id} patterns
+	mux.HandleFunc("POST /api/routing-rules/reorder", adminOnly(srv.ReorderRoutingRules))        // must be before {id} patterns
 	mux.HandleFunc("POST /api/routing-rules/bulk-toggle", adminOnly(srv.BulkToggleRoutingRules)) // must be before {id} patterns
 	mux.HandleFunc("POST /api/routing-rules", adminOnly(srv.CreateRoutingRule))
 	mux.HandleFunc("PUT /api/routing-rules/{id}", adminOnly(srv.UpdateRoutingRule))
