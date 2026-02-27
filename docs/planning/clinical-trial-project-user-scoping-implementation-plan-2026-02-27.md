@@ -32,12 +32,22 @@ This document is planning-only. No code changes are included here.
 - **Phase 4 (P1):** make browser upload institution attribution deterministic for satellite workflows.
 - **Phase 5 (P2):** hardening, observability, and regression protection.
 
+## Status (Updated 2026-02-27)
+
+- **Completed:** Phase 0 (`P0-01`, `P0-02`)
+  - `docs/planning/access-matrix-project-site-scoping.md`
+  - `docs/planning/access-test-catalog-project-site-scoping.md`
+- **Next active:** Phase 1 — `P0-10` (scope non-primary study reads)
+- **Queued:** `P0-11`, `P0-12`, Phase 2+
+
 ---
 
 ## Phase 0 — Access Policy Matrix and Endpoint Inventory (P0)
 
 ### Ticket P0-01: Authoritative Access Matrix
 **Goal:** Define canonical access categories and map each API route.
+
+**Status:** ✅ Completed (2026-02-27)
 
 **Deliverables**
 - `docs/planning/access-matrix-project-site-scoping.md` containing:
@@ -52,6 +62,8 @@ This document is planning-only. No code changes are included here.
 
 ### Ticket P0-02: Gap Baseline Test Catalog
 **Goal:** Define baseline regression scenarios before behavior changes.
+
+**Status:** ✅ Completed (2026-02-27)
 
 **Deliverables**
 - Test checklist (doc) with actor personas:
@@ -69,6 +81,8 @@ This document is planning-only. No code changes are included here.
 
 ### Ticket P0-10: Scope Non-Primary Study Reads
 **Goal:** Ensure all study-derived reads use shared project/site access checks.
+
+**Status:** 🔄 Next Active
 
 **Primary targets**
 - `api/handler/study_diagnostics.go`
