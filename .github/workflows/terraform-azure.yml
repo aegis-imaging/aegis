@@ -109,12 +109,24 @@ jobs:
             terraform/azure/tfplan
             terraform/azure/tfplan.txt
 
-  terraform-apply:
-    name: Terraform Apply (Azure)
+  terraform-approval:
+    name: Terraform Apply Approval (Azure)
     if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
     needs: terraform-plan
     runs-on: ubuntu-latest
     environment: azure-prod
+
+    steps:
+      - name: Await protected environment approval
+        run: echo "Approval granted for azure-prod. Proceeding to apply job."
+
+  terraform-apply:
+    name: Terraform Apply (Azure)
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    needs:
+      - terraform-plan
+      - terraform-approval
+    runs-on: ubuntu-latest
     env:
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
