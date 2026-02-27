@@ -11,7 +11,7 @@ permissions:
 jobs:
   alert:
     name: Alert on Terraform AWS failure
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'develop' }}
     runs-on: ubuntu-latest
 
     steps:
