@@ -507,4 +507,11 @@ steps:
             ;;
         esac
 
-        echo "Smoke check passed (API + admin endpoint)"
+          echo "## Smoke Check Summary"
+          echo ""
+          echo "- Platform: GCP"
+          echo "- API URL: ${API_URL}"
+          echo "- API /healthz HTTP: ${api_status}"
+          echo "- Admin URL: ${ADMIN_URL}"
+          echo "- Admin HEAD HTTP: ${admin_status}"
+          echo "- Result: passed"
