@@ -1,0 +1,12 @@
+id,task,owner,status,due_date,blocker,evidence_path,notes
+P0-0.1.1,Assign executive sponsor,TBD,not_started,,,docs/evidence/hardening-phase-0/global/,
+P0-0.1.2,Assign technical/security/compliance/ops leads,TBD,not_started,,,docs/evidence/hardening-phase-0/global/,
+P0-0.1.3,Assign per-cloud owners (GCP AWS Azure),TBD,not_started,,,docs/evidence/hardening-phase-0/global/,
+P0-0.1.4,Assign incident commander and security officer,TBD,not_started,,,docs/evidence/hardening-phase-0/global/,
+P0-0.2.1,Create single implementation tracker,TBD,in_progress,,,docs/planning/phase-0-hardening/phase-0-tracker.csv,Initialized in repo
+P0-0.2.2,Define required tracker fields,TBD,completed,,,docs/planning/phase-0-hardening/phase-0-tracker.csv,Fields included in header
+P0-0.2.3,Create evidence folder structure,TBD,completed,,,docs/evidence/hardening-phase-0/,Created gcp aws azure global folders
+P0-0.3.1,Define in-scope environments,TBD,not_started,,,docs/planning/phase-0-hardening/environment-policy.md,
+P0-0.3.2,Define non-dev auth invariant AUTH_ENABLED=true,TBD,completed,,,docs/planning/phase-0-hardening/environment-policy.md,Policy documented
+P0-0.3.3,Define allowed AUTH_PROVIDER values by env,TBD,completed,,,docs/planning/phase-0-hardening/environment-policy.md,Policy documented
+P0-0.3.4,Approve environment policy,TBD,not_started,,,docs/evidence/hardening-phase-0/global/,
