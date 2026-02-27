@@ -1,0 +1,84 @@
+name: Terraform AWS
+
+# Phase 1 (plan-only): validates and plans terraform/aws changes.
+# No terraform apply is executed in this workflow.
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   AWS_ACCOUNT_ID (optional for diagnostics)
+#   AWS_TERRAFORM_TFVARS (full contents of terraform/aws/terraform.tfvars)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "terraform/aws/**"
+  push:
+    branches: [develop]
+    paths:
+      - "terraform/aws/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-aws-plan
+  cancel-in-progress: true
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan (AWS)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: terraform/aws
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_CONTENT: ${{ secrets.AWS_TERRAFORM_TFVARS }}
+        run: |
+          if [ -z "$TFVARS_CONTENT" ]; then
+            echo "AWS_TERRAFORM_TFVARS secret is empty or missing"
+            exit 1
+          fi
+          printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
+
+      - name: Terraform fmt check
+        run: terraform fmt -check
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: |
+          terraform plan -input=false -no-color -out=tfplan | tee tfplan.txt
+
+      - name: Upload plan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-aws-plan-${{ github.run_id }}
+          path: |
+            terraform/aws/tfplan
+            terraform/aws/tfplan.txt
