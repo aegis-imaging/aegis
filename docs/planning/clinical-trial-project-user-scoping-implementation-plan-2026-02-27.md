@@ -10,7 +10,7 @@ Implement project/user scoping that matches the clinical-trial operating model f
 - Platform superuser access is preserved for a single global owner/operator (current platform `admin` behavior).
 - Behavior remains consistent across GCP, AWS, and Azure.
 
-This document is planning-only. No code changes are included here.
+This document now serves as a completion record plus operational maintenance checklist.
 
 ---
 
@@ -19,11 +19,11 @@ This document is planning-only. No code changes are included here.
 1. Preserve global superuser visibility for platform `admin` users across all projects.
 2. Do not weaken existing site-scoped read protections already present on core study endpoints.
 3. Keep rollout incremental, with one logical authorization surface per PR.
-4. Require parity checks on all three cloud auth providers (`iap`, `azure`, `aws`) before completion.
+4. Require parity checks on all three cloud auth providers (`iap`, `azure`, `aws`) before merge for auth-surface changes.
 
 ---
 
-## Delivery Strategy
+## Delivered Scope Summary (Historical)
 
 - **Phase 0 (Preparation):** access policy matrix + endpoint inventory.
 - **Phase 1 (P0):** close backend read-surface scoping gaps.
@@ -37,7 +37,7 @@ This document is planning-only. No code changes are included here.
 - **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`, Phase 2 `P0-20`, `P0-21`, `P0-22`, Phase 3 `P1-30`, `P1-31`, Phase 4 `P1-40`, `P1-41`, Phase 5 `P2-50`, `P2-51`
   - `docs/planning/access-matrix-project-site-scoping.md`
   - `docs/planning/access-test-catalog-project-site-scoping.md`
-- **Next active:** none (this plan complete)
+- **Next active:** none (implementation complete; operational maintenance continues)
 - **Queued:** follow-on hardening backlog
 
 ---
@@ -199,6 +199,8 @@ This document is planning-only. No code changes are included here.
 ### Ticket P1-31: Project/Site Context UX Hardening
 **Goal:** Reduce operator mistakes in multi-project multi-site use.
 
+**Status:** ✅ Completed (2026-02-27)
+
 **Acceptance Criteria**
 - Active project/scope is always visible in header context.
 - Site-scoped users cannot clear into unsafe “all projects” mode for endpoints requiring project scope.
@@ -257,9 +259,24 @@ This document is planning-only. No code changes are included here.
 
 ---
 
-## Cloud Parity Validation Plan (Required for P0/P1 completion)
+## Post-Completion Operational Next Steps (Required to Sustain Desired State)
 
-For each phase that changes authorization behavior:
+The implementation scope in this plan is complete. To maintain the desired operating state over time:
+
+1. Run the quarterly access-model review process and file evidence using:
+  - `docs/planning/quarterly-access-model-review.md`
+  - `docs/evidence/hardening-phase-5/global/quarterly-access-model-review-template.md`
+2. Keep endpoint/matrix parity enforced in CI via:
+  - `scripts/check-access-matrix-coverage.sh`
+  - `.github/workflows/ci.yml`
+3. For every future auth or route-surface change, require cloud parity validation across GCP IAP, Azure Easy Auth, and AWS ALB/Cognito before merge.
+4. Treat new authenticated endpoints as blocked from merge until they are added to the access matrix and covered by regression tests.
+
+---
+
+## Cloud Auth Parity Maintenance Checklist
+
+For each change that affects authorization behavior:
 
 1. Validate in local/dev with `AUTH_PROVIDER=auto` and test users.
 2. Validate in cloud-staged paths for:
@@ -268,21 +285,7 @@ For each phase that changes authorization behavior:
    - AWS ALB/Cognito JWT headers.
 3. Confirm identical authorization outcomes for representative personas and routes.
 
-Completion requires parity sign-off across all three providers for changed surfaces.
-
----
-
-## Suggested PR Sequencing
-
-1. PR-A: Phase 0 docs (`access matrix` + `test catalog`).
-2. PR-B: P0-10 scoped study read endpoints + tests.
-3. PR-C: P0-11 global surfaces scoping + tests.
-4. PR-D: P0-20/P0-21 write capability guards + tests.
-5. PR-E: P1-30 frontend capability gating.
-6. PR-F: P1-40 upload institution attribution.
-7. PR-G: P2 hardening guardrails.
-
-Each PR should be small, single-purpose, and include explicit “platform admin preserved” verification.
+Require parity sign-off across all three providers before merge for changed surfaces.
 
 ---
 
