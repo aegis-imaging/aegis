@@ -37,6 +37,24 @@ variable "admin_domain" {
   default     = ""
 }
 
+variable "enable_application_gateway_waf" {
+  description = "Enable Azure Application Gateway WAF v2 edge ingress for API/admin"
+  type        = bool
+  default     = false
+}
+
+variable "app_gateway_certificate_secret_id" {
+  description = "Key Vault certificate secret version URI used by Application Gateway TLS listener"
+  type        = string
+  default     = ""
+}
+
+variable "app_gateway_capacity" {
+  description = "Application Gateway WAF_v2 capacity units"
+  type        = number
+  default     = 2
+}
+
 # ── Database ──────────────────────────────────────────────────────────────────
 
 variable "db_admin_username" {

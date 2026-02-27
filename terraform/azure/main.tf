@@ -412,12 +412,10 @@ resource "azurerm_container_app_environment" "main" {
 }
 
 # ── Application Gateway (WAF v2) ──────────────────────────────────────────────
-# NOTE: Application Gateway requires a TLS certificate stored as a proper secret
-# in Key Vault (full URI: https://vault.vault.azure.net/secrets/<name>/<version>).
-# For initial provisioning, we use Container Apps' built-in HTTPS (each app gets
-# a free *.azurecontainerapps.io cert). Add Application Gateway back once a cert
-# is provisioned and custom domains are ready.
+# Optional edge path is implemented in app_gateway_waf.tf and controlled by:
+# - enable_application_gateway_waf
+# - app_gateway_certificate_secret_id
+# - api_domain / admin_domain
 #
-# To re-enable: provision a cert (e.g. via azurerm_app_service_certificate or
-# upload to Key Vault), set internal_load_balancer_enabled=true on the ACA env,
-# and uncomment the Application Gateway + WAF resources below.
+# Defaults keep this disabled for initial provisioning; enable for staging/prod
+# once custom domains and certificate secret are available.
