@@ -17,8 +17,8 @@ resource "azuread_service_principal" "admin_easyauth" {
 }
 
 resource "azuread_application_password" "admin_easyauth" {
-  application_id = azuread_application.admin_easyauth.id
-  display_name   = "container-apps-easyauth"
+  application_id    = azuread_application.admin_easyauth.id
+  display_name      = "container-apps-easyauth"
   end_date_relative = "17520h"
 }
 
