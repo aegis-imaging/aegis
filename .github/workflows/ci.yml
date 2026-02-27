@@ -102,6 +102,7 @@ jobs:
           - scripts/aws_apply_infra.sh
           - scripts/aws_install_poc.sh
           - scripts/check-aws-deploy-parity.sh
+          - scripts/check-auth-guardrails.sh
           - scripts/check-edge-security-parity.sh
           - scripts/gcp_setup_cloudbuild.sh
     steps:
@@ -124,6 +125,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate cross-cloud edge security resources
         run: ./scripts/check-edge-security-parity.sh
+
+  auth-guardrails:
+    name: Authentication guardrails check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate non-dev auth invariants
+        run: ./scripts/check-auth-guardrails.sh
 
   python-test:
     name: "Python tests (${{ matrix.service }})"
