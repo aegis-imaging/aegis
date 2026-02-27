@@ -34,10 +34,10 @@ This document is planning-only. No code changes are included here.
 
 ## Status (Updated 2026-02-27)
 
-- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`
+- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`, Phase 2 `P0-20`
   - `docs/planning/access-matrix-project-site-scoping.md`
   - `docs/planning/access-test-catalog-project-site-scoping.md`
-- **Next active:** Phase 2 — `P0-20` (capability-based write guard helpers)
+- **Next active:** Phase 2 — `P0-21` (migrate selected write routes off platform-admin-only)
 - **Queued:** Phase 2+
 
 ---
@@ -136,6 +136,8 @@ This document is planning-only. No code changes are included here.
 
 ### Ticket P0-20: Capability-Based Write Guard Helpers
 **Goal:** Introduce reusable guard functions keyed to project member role capabilities.
+
+**Status:** ✅ Completed (2026-02-27)
 
 **Implementation direction**
 - Use `GetUserAccessForProject` and role capability semantics (`owner`, `coordinator`, `reviewer`, `site_coordinator`, `site_viewer`).
