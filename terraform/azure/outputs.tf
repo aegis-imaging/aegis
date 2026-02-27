@@ -77,3 +77,13 @@ output "dimse_public_ip" {
   description = "DIMSE receiver VM static public IP (only set when dimse_receiver_image is configured)"
   value       = local.dimse_enabled ? azurerm_public_ip.dimse[0].ip_address : null
 }
+
+output "app_gateway_public_ip" {
+  description = "Application Gateway public IP (only when WAF edge path is enabled)"
+  value       = var.enable_application_gateway_waf ? azurerm_public_ip.app_gateway[0].ip_address : null
+}
+
+output "app_gateway_waf_policy_id" {
+  description = "Application Gateway WAF policy ID (only when enabled)"
+  value       = var.enable_application_gateway_waf ? azurerm_web_application_firewall_policy.app_gateway[0].id : null
+}
