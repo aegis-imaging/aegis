@@ -520,7 +520,7 @@ resource "aws_cloudwatch_log_metric_filter" "pipeline_dispatches" {
 resource "aws_cloudwatch_log_metric_filter" "destination_probe_failures" {
   name           = "${var.project_name}-destination-probe-failures"
   log_group_name = aws_cloudwatch_log_group.main.name
-  pattern        = "\"destination.tested\" \"success\":false"
+  pattern        = "\"destination.tested\" \"success\" \"false\""
 
   metric_transformation {
     name          = "DestinationProbeFailures"
