@@ -71,10 +71,8 @@ Completed:
 
 ## Immediate Next Candidate (if approved)
 
-**Operational validation pass**:
-- run one deploy smoke check cycle per cloud and verify the standardized summary output is emitted,
-- capture any cloud-specific drift in endpoint behavior in the runbook,
-- keep workflow logic unchanged unless production drift requires a targeted fix.
-
-Current note:
-- AWS deploy now fails fast in the validate job when `AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN` is unset (run `22500933140`), reducing noisy matrix-wide credential failures.
+**Phase E — Reliability hardening (targeted, low-risk)**:
+- keep AWS deploy OIDC-only with optional role-ARN override and account-derived fallback (validated success run `22501374876`),
+- keep Azure deploy path on OIDC with latest successful validation (`22501374891`),
+- keep GCP Cloud Build failure signal workflow validated end-to-end with OIDC (`22502258584`),
+- continue incremental runbook tightening and alert-noise reduction without changing core deploy logic.
