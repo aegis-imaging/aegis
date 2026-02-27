@@ -39,7 +39,11 @@ jobs:
 
           LOOKBACK="${INPUT_LOOKBACK_MINUTES:-}"
           if [ -z "${LOOKBACK}" ]; then
-            LOOKBACK="60"
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              LOOKBACK="30"
+            else
+              LOOKBACK="60"
+            fi
           fi
 
           if ! [[ "${LOOKBACK}" =~ ^[0-9]+$ ]]; then
