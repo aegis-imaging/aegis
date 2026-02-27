@@ -1,7 +1,9 @@
 name: Terraform Azure
 
-# Mirrors the GCP Cloud Build terraform-apply-on-develop trigger
-# (cloudbuild.terraform.yaml). Fires only when terraform/azure/** files change.
+# Phase A parity update:
+# - plan on PR and push for terraform/azure/** changes
+# - apply only on develop with protected environment approval
+# - apply consumes the exact plan artifact from the same run
 #
 # Prerequisites (set in GitHub repo secrets):
 #   AZURE_CLIENT_ID          — Service principal / federated OIDC client ID
@@ -14,20 +16,34 @@ name: Terraform Azure
 # Storage Blob Data Contributor on the aegis-tfstate storage account.
 
 on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - "terraform/azure/**"
   push:
     branches:
       - develop
     paths:
       - "terraform/azure/**"
   workflow_dispatch:
+    inputs:
+      confirm_apply:
+        description: "Type APPLY to run terraform apply"
+        required: false
+        default: ""
 
 permissions:
   id-token: write  # Required for OIDC token exchange
   contents: read
 
+concurrency:
+  group: terraform-azure
+  cancel-in-progress: false
+
 jobs:
-  terraform:
-    name: Terraform Apply (Azure)
+  terraform-plan:
+    name: Terraform Plan (Azure)
     runs-on: ubuntu-latest
     env:
       # Terraform azurerm provider authenticates via OIDC using these env vars.
@@ -57,7 +73,16 @@ jobs:
         env:
           TFVARS_CONTENT: ${{ secrets.AZURE_TERRAFORM_TFVARS }}
         working-directory: terraform/azure
-        run: printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
+        run: |
+          if [ -z "$TFVARS_CONTENT" ]; then
+            echo "AZURE_TERRAFORM_TFVARS secret is empty or missing"
+            exit 1
+          fi
+          printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
+
+      - name: Terraform fmt check
+        working-directory: terraform/azure
+        run: terraform fmt -check
 
       - name: Terraform Init
         working-directory: terraform/azure
@@ -68,14 +93,70 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        id: plan
         working-directory: terraform/azure
         # Use api_image_tag=placeholder so Container Apps can be created even when
         # ACR images have not been pushed yet. GitHub Actions (deploy-azure.yml)
         # updates the images via `az containerapp update` after pushing to ACR.
         # The lifecycle { ignore_changes = [template[0].container[0].image] } block
         # on each Container App prevents terraform from reverting CI/CD-deployed images.
-        run: terraform plan -input=false -no-color -var 'api_image_tag=placeholder' -out=tfplan
+        run: terraform plan -input=false -no-color -var 'api_image_tag=placeholder' -out=tfplan | tee tfplan.txt
+
+      - name: Upload plan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-azure-plan-${{ github.run_id }}
+          path: |
+            terraform/azure/tfplan
+            terraform/azure/tfplan.txt
+
+  terraform-apply:
+    name: Terraform Apply (Azure)
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    environment: azure-prod
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_CONTENT: ${{ secrets.AZURE_TERRAFORM_TFVARS }}
+        working-directory: terraform/azure
+        run: |
+          if [ -z "$TFVARS_CONTENT" ]; then
+            echo "AZURE_TERRAFORM_TFVARS secret is empty or missing"
+            exit 1
+          fi
+          printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
+
+      - name: Terraform Init
+        working-directory: terraform/azure
+        run: terraform init -input=false
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-azure-plan-${{ github.run_id }}
+          path: terraform/azure
 
       - name: Terraform Apply
         working-directory: terraform/azure
