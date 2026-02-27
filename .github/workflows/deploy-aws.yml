@@ -29,12 +29,28 @@ jobs:
   validate:
     name: Validate deploy guardrails
     runs-on: ubuntu-latest
+    env:
+      AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Validate authentication guardrails
         run: ./scripts/check-auth-guardrails.sh
+
+      - name: Validate required AWS deploy secrets
+        run: |
+          missing=()
+          [[ -n "$AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN" ]] || missing+=("AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN")
+          [[ -n "$AWS_ACCOUNT_ID" ]] || missing+=("AWS_ACCOUNT_ID")
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "Missing required GitHub Actions secrets for AWS deploy workflow:"
+            printf '  - %s\n' "${missing[@]}"
+            echo "Set these in: GitHub repo -> Settings -> Secrets and variables -> Actions"
+            exit 1
+          fi
+          echo "Required AWS deploy secrets are present."
 
   # ── Phase 1: Build and push all images ──────────────────────────────────────
 
