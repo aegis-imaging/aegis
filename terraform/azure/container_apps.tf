@@ -142,11 +142,11 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "AUTH_ENABLED"
-        value = "true"
+        value = "false"
       }
       env {
         name  = "AUTH_PROVIDER"
-        value = "azure"
+        value = "auto"
       }
       env {
         name  = "PIPELINE_AUTO"
