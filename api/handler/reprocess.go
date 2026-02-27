@@ -35,9 +35,8 @@ func (s *Server) ResetPipelineStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentStudyMutation)
+	if !ok {
 		return
 	}
 

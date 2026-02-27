@@ -23,6 +23,7 @@ func TestResetPipelineStep_StepNotRequired(t *testing.T) {
 	// deface is not required on a default study
 	body, _ := json.Marshal(map[string]string{"step": "deface"})
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/reset-pipeline-step", bytes.NewBuffer(body))
+	req = withAdminUser(req, "admin-reset-step-not-required", "admin-reset-step-not-required@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
@@ -39,6 +40,7 @@ func TestResetPipelineStep_UnknownStep(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"step": "invalid_step"})
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/reset-pipeline-step", bytes.NewBuffer(body))
+	req = withAdminUser(req, "admin-reset-unknown-step", "admin-reset-unknown-step@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
@@ -53,6 +55,7 @@ func TestResetPipelineStep_StudyNotFound(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"step": "qc"})
 	req := httptest.NewRequest("POST", "/api/studies/00000000-0000-0000-0000-000000000000/reset-pipeline-step", bytes.NewBuffer(body))
+	req = withAdminUser(req, "admin-reset-not-found", "admin-reset-not-found@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "00000000-0000-0000-0000-000000000000")
 	rr := httptest.NewRecorder()
@@ -74,6 +77,7 @@ func TestResetPipelineStep_QCResetOK(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"step": "qc"})
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/reset-pipeline-step", bytes.NewBuffer(body))
+	req = withAdminUser(req, "admin-reset-qc-ok", "admin-reset-qc-ok@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
@@ -100,10 +104,70 @@ func TestResetPipelineStep_InFlight409(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"step": "qc"})
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/reset-pipeline-step", bytes.NewBuffer(body))
+	req = withAdminUser(req, "admin-reset-inflight", "admin-reset-inflight@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
 	srv.ResetPipelineStep(rr, req)
 
 	assert.Equal(t, http.StatusConflict, rr.Code)
+}
+
+func TestResetPipelineStep_ResearcherSiteCoordinator_OnSiteAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	inst := testutil.CreateTestInstitution(t, db, "reset-site-allowed")
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1, qc_required = true, qc_status = 'pass' WHERE id = $2`, inst.ID, study.ID)
+	require.NoError(t, err)
+	researcher := testutil.CreateTestAdminUser(t, db, "reset-site-allowed@test.com", "researcher")
+
+	err = model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_coordinator",
+		InstitutionID: &inst.ID,
+	})
+	require.NoError(t, err)
+
+	body, _ := json.Marshal(map[string]string{"step": "qc"})
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/reset-pipeline-step", bytes.NewBuffer(body))
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.ResetPipelineStep(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestResetPipelineStep_ResearcherSiteCoordinator_OffSiteDeniedAsNotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	instMember := testutil.CreateTestInstitution(t, db, "reset-site-member")
+	instStudy := testutil.CreateTestInstitution(t, db, "reset-site-study")
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1, qc_required = true, qc_status = 'pass' WHERE id = $2`, instStudy.ID, study.ID)
+	require.NoError(t, err)
+	researcher := testutil.CreateTestAdminUser(t, db, "reset-site-denied@test.com", "researcher")
+
+	err = model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_coordinator",
+		InstitutionID: &instMember.ID,
+	})
+	require.NoError(t, err)
+
+	body, _ := json.Marshal(map[string]string{"step": "qc"})
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/reset-pipeline-step", bytes.NewBuffer(body))
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.ResetPipelineStep(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }

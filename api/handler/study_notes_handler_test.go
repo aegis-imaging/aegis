@@ -22,6 +22,7 @@ func TestAddStudyNote_OK(t *testing.T) {
 
 	body := `{"note":"This study needs manual review"}`
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/notes", bytes.NewBufferString(body))
+	req = withAdminUser(req, "admin-note-ok", "admin-note-ok@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
@@ -36,6 +37,7 @@ func TestAddStudyNote_StudyNotFound(t *testing.T) {
 
 	body := `{"note":"some note"}`
 	req := httptest.NewRequest("POST", "/api/studies/00000000-0000-0000-0000-000000000000/notes", bytes.NewBufferString(body))
+	req = withAdminUser(req, "admin-note-not-found", "admin-note-not-found@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "00000000-0000-0000-0000-000000000000")
 	rr := httptest.NewRecorder()
@@ -51,6 +53,7 @@ func TestAddStudyNote_EmptyNote(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/notes", bytes.NewBufferString(`{"note":""}`))
+	req = withAdminUser(req, "admin-note-empty", "admin-note-empty@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
@@ -71,12 +74,70 @@ func TestAddStudyNote_TooLong(t *testing.T) {
 	}
 	body := `{"note":"` + string(note) + `"}`
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/notes", bytes.NewBufferString(body))
+	req = withAdminUser(req, "admin-note-too-long", "admin-note-too-long@test.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
 	srv.AddStudyNote(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestAddStudyNote_ResearcherSiteCoordinator_OnSiteAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	inst := testutil.CreateTestInstitution(t, db, "notes-site-allowed")
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, inst.ID, study.ID)
+	require.NoError(t, err)
+	researcher := testutil.CreateTestAdminUser(t, db, "notes-site-allowed@test.com", "researcher")
+
+	err = model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_coordinator",
+		InstitutionID: &inst.ID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/notes", bytes.NewBufferString(`{"note":"site note"}`))
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.AddStudyNote(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestAddStudyNote_ResearcherSiteCoordinator_OffSiteDeniedAsNotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	instMember := testutil.CreateTestInstitution(t, db, "notes-site-member")
+	instStudy := testutil.CreateTestInstitution(t, db, "notes-site-study")
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, instStudy.ID, study.ID)
+	require.NoError(t, err)
+	researcher := testutil.CreateTestAdminUser(t, db, "notes-site-denied@test.com", "researcher")
+
+	err = model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_coordinator",
+		InstitutionID: &instMember.ID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/notes", bytes.NewBufferString(`{"note":"offsite note"}`))
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.AddStudyNote(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 func TestListStudyNotes_NotFound(t *testing.T) {

@@ -22,6 +22,13 @@ func withResearcherUser(r *http.Request, id, email string) *http.Request {
 	return r.WithContext(ctx)
 }
 
+func withAdminUser(r *http.Request, id, email string) *http.Request {
+	ctx := context.WithValue(r.Context(), middleware.AuthUserContextKey(), &middleware.AuthUser{
+		ID: id, Email: email, Role: "admin",
+	})
+	return r.WithContext(ctx)
+}
+
 func TestListStudies_Handler(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
@@ -212,6 +219,7 @@ func TestApproveStudy_Handler(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
+	req = withAdminUser(req, "admin-approve", "admin-approve@test.com")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
 	srv.ApproveStudy(rr, req)
@@ -226,8 +234,9 @@ func TestApproveStudy_NotFound(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
 
-	req := httptest.NewRequest("POST", "/api/studies/nonexistent/approve", nil)
-	req.SetPathValue("id", "nonexistent")
+	req := httptest.NewRequest("POST", "/api/studies/00000000-0000-0000-0000-000000000000/approve", nil)
+	req = withAdminUser(req, "admin-approve-not-found", "admin-approve-not-found@test.com")
+	req.SetPathValue("id", "00000000-0000-0000-0000-000000000000")
 	rr := httptest.NewRecorder()
 	srv.ApproveStudy(rr, req)
 
@@ -242,11 +251,62 @@ func TestApproveStudy_AlreadyApproved(t *testing.T) {
 	model.UpdateStudyStatus(context.Background(), db, study.ID, "approved")
 
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
+	req = withAdminUser(req, "admin-approve-already", "admin-approve-already@test.com")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
 	srv.ApproveStudy(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestApproveStudy_ResearcherReviewerAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "approve-reviewer@test.com", "researcher")
+
+	err := model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "reviewer",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.ApproveStudy(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestApproveStudy_ResearcherSiteCoordinatorForbidden(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	inst := testutil.CreateTestInstitution(t, db, "approve-site-coordinator")
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, inst.ID, study.ID)
+	require.NoError(t, err)
+	researcher := testutil.CreateTestAdminUser(t, db, "approve-site-coordinator@test.com", "researcher")
+
+	err = model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_coordinator",
+		InstitutionID: &inst.ID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.ApproveStudy(rr, req)
+
+	assert.Equal(t, http.StatusForbidden, rr.Code)
 }
 
 func TestRejectStudy_Handler(t *testing.T) {
@@ -256,6 +316,7 @@ func TestRejectStudy_Handler(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/reject", nil)
+	req = withAdminUser(req, "admin-reject", "admin-reject@test.com")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
 	srv.RejectStudy(rr, req)
