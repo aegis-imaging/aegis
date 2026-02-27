@@ -108,6 +108,7 @@ jobs:
           - scripts/check-hipaa-day1-controls.sh
           - scripts/check-monitoring-alert-parity.sh
           - scripts/check-runbook-readiness.sh
+          - scripts/check-terraform-security-baseline.sh
           - scripts/gcp_setup_cloudbuild.sh
     steps:
       - uses: actions/checkout@v4
@@ -169,6 +170,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate unified runbook and sign-off artifacts
         run: ./scripts/check-runbook-readiness.sh
+
+  terraform-security-baseline:
+    name: Terraform security baseline check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate terraform security baseline signals
+        run: ./scripts/check-terraform-security-baseline.sh
 
   python-test:
     name: "Python tests (${{ matrix.service }})"
