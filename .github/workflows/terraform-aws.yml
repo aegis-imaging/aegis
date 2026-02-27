@@ -1,7 +1,8 @@
 name: Terraform AWS
 
-# Phase 1 (plan-only): validates and plans terraform/aws changes.
-# No terraform apply is executed in this workflow.
+# Phase 3: validates/plans on PRs and on develop pushes,
+# and auto-runs apply for develop pushes with aws-prod environment approval.
+# Manual dispatch apply remains available via confirm_apply=APPLY.
 #
 # Required GitHub Secrets:
 #   AWS_ACCESS_KEY_ID
@@ -29,8 +30,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-aws-plan
-  cancel-in-progress: true
+  group: terraform-aws
+  cancel-in-progress: false
 
 jobs:
   terraform-plan:
@@ -90,7 +91,7 @@ jobs:
 
   terraform-apply:
     name: Terraform Apply (AWS)
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY' && github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
     needs: terraform-plan
     runs-on: ubuntu-latest
     environment: aws-prod
