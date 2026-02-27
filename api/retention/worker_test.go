@@ -1,5 +1,4 @@
 package retention
-package retention
 
 import (
 	"context"
