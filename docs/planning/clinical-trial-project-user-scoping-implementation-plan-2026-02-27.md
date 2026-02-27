@@ -34,10 +34,10 @@ This document is planning-only. No code changes are included here.
 
 ## Status (Updated 2026-02-27)
 
-- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`, Phase 2 `P0-20`, `P0-21`
+- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`, Phase 2 `P0-20`, `P0-21`, `P0-22`
   - `docs/planning/access-matrix-project-site-scoping.md`
   - `docs/planning/access-test-catalog-project-site-scoping.md`
-- **Next active:** Phase 2 — `P0-22` (write authorization regression suite)
+- **Next active:** Phase 3 — `P1-30` (replace `isAdmin`-only UI gating with capability model)
 - **Queued:** Phase 2+
 
 ---
@@ -167,6 +167,8 @@ This document is planning-only. No code changes are included here.
 
 ### Ticket P0-22: Write Authorization Regression Suite
 **Goal:** Prevent privilege escalation/regressions.
+
+**Status:** ✅ Completed (2026-02-27)
 
 **Acceptance Criteria**
 - Negative tests: non-member, wrong-site member, site_viewer mutation attempts.
