@@ -1,5 +1,4 @@
 package audit_retention
-package audit_retention
 
 import (
 	"context"
