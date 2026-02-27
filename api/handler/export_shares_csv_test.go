@@ -1,10 +1,12 @@
 package handler_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,4 +76,75 @@ func TestExportSharesCSV_StatusFilter(t *testing.T) {
 	body := w.Body.String()
 	// Just the header row
 	assert.Contains(t, body, "id,study_id,recipient_email")
+}
+
+func TestExportSharesCSV_ResearcherRequiresProjectScope(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "shares-csv-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/export-shares.csv", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	w := httptest.NewRecorder()
+
+	srv.ExportSharesCSV(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestExportSharesCSV_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "shares-csv-denied@test.com", "researcher")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/export-shares.csv?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	w := httptest.NewRecorder()
+
+	srv.ExportSharesCSV(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "project not found")
+}
+
+func TestExportSharesCSV_ResearcherWithProjectScopeAllowed(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "shares-csv-allowed@test.com", "researcher")
+
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "coordinator",
+	}))
+
+	_, err := db.Exec(`UPDATE studies SET status='approved' WHERE id=$1`, study.ID)
+	require.NoError(t, err)
+	_, err = db.Exec(`
+		INSERT INTO export_shares (id, study_id, token_hash, recipient_email, expires_at, created_by)
+		VALUES (gen_random_uuid(), $1, 'c1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 'scoped-csv@example.com',
+		        now() + interval '48 hours', 'test')`, study.ID)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/export-shares.csv?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	w := httptest.NewRecorder()
+
+	srv.ExportSharesCSV(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "scoped-csv@example.com")
 }
