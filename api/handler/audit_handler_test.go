@@ -33,7 +33,7 @@ func TestListAudit_Empty(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
 	assert.Equal(t, 0, result.Total)
 	assert.Len(t, result.Entries, 0)
-	assert.Equal(t, 100, result.Limit)  // default
+	assert.Equal(t, 100, result.Limit) // default
 	assert.Equal(t, 0, result.Offset)
 }
 
@@ -161,4 +161,54 @@ func TestListAudit_ResourceTypeFilter(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
 	assert.Equal(t, 1, result.Total)
 	assert.Equal(t, "admin_user", result.Entries[0].ResourceType)
+}
+
+func TestListAudit_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "audit-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/audit", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAudit(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestListAudit_ResearcherScopedToProjectStudyEvents(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	projA := testutil.SeedProject(t, db)
+	projB, err := model.CreateProject(t.Context(), db, "Audit Scope B", "audit-scope-b", "")
+	require.NoError(t, err)
+
+	studyA := testutil.CreateTestStudy(t, db, projA.ID)
+	studyB := testutil.CreateTestStudy(t, db, projB.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "audit-scoped@test.com", "researcher")
+
+	require.NoError(t, model.CreateProjectMember(t.Context(), db, &model.ProjectMember{
+		ProjectID:   projA.ID,
+		AdminUserID: researcher.ID,
+		Role:        "reviewer",
+	}))
+
+	require.NoError(t, model.CreateAuditEntry(t.Context(), db, "study.approved", "admin@test.com", "study", studyA.ID, "", nil))
+	require.NoError(t, model.CreateAuditEntry(t.Context(), db, "study.rejected", "admin@test.com", "study", studyB.ID, "", nil))
+	require.NoError(t, model.CreateAuditEntry(t.Context(), db, "admin_user.created", "ops@test.com", "admin_user", "x", "", nil))
+
+	req := httptest.NewRequest("GET", "/api/audit?project_id="+projA.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAudit(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result auditPageResponse
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, 1, result.Total)
+	require.Len(t, result.Entries, 1)
+	assert.Equal(t, studyA.ID, result.Entries[0].ResourceID)
 }
