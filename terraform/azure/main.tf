@@ -408,6 +408,17 @@ resource "azurerm_container_app_environment" "main" {
   # Application Gateway (for custom domains + WAF) can be layered on later.
   internal_load_balancer_enabled = false
 
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+    minimum_count         = 0
+    maximum_count         = 0
+  }
+
+  lifecycle {
+    ignore_changes = [infrastructure_resource_group_name]
+  }
+
   tags = local.tags
 }
 

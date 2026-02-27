@@ -15,11 +15,12 @@
 # The Go API's *_SERVICE_URL env vars are set to these internal addresses.
 
 locals {
-  acr_server        = azurerm_container_registry.main.login_server
-  aca_env_id        = azurerm_container_app_environment.main.id
-  identity_id       = azurerm_user_assigned_identity.aca_workload.id
-  storage_account   = azurerm_storage_account.dicom.name
-  storage_container = azurerm_storage_container.dicom.name
+  acr_server         = azurerm_container_registry.main.login_server
+  aca_env_id         = azurerm_container_app_environment.main.id
+  identity_id        = azurerm_user_assigned_identity.aca_workload.id
+  identity_client_id = azurerm_user_assigned_identity.aca_workload.client_id
+  storage_account    = azurerm_storage_account.dicom.name
+  storage_container  = azurerm_storage_container.dicom.name
 
   # Internal ACA DNS suffix for service discovery
   aca_internal_domain = azurerm_container_app_environment.main.default_domain
@@ -37,6 +38,10 @@ locals {
     {
       name  = "STORAGE_MODE"
       value = "azure"
+    },
+    {
+      name  = "AZURE_CLIENT_ID"
+      value = azurerm_user_assigned_identity.aca_workload.client_id
     },
     {
       name  = "AZURE_STORAGE_ACCOUNT"
@@ -64,6 +69,7 @@ resource "azurerm_container_app" "api" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -107,7 +113,7 @@ resource "azurerm_container_app" "api" {
       name   = "api"
       image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/api:${var.api_image_tag}"
       cpu    = 1.0
-      memory = "2.0Gi"
+      memory = "2Gi"
 
       env {
         name  = "PORT"
@@ -121,6 +127,10 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "STORAGE_MODE"
         value = "azure"
+      }
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = local.identity_client_id
       }
       env {
         name  = "AZURE_STORAGE_ACCOUNT"
@@ -229,6 +239,7 @@ resource "azurerm_container_app" "admin_dashboard" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -277,6 +288,7 @@ resource "azurerm_container_app" "landing" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -325,6 +337,7 @@ resource "azurerm_container_app" "weasis" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -373,6 +386,7 @@ resource "azurerm_container_app" "mcp_server" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -403,7 +417,7 @@ resource "azurerm_container_app" "mcp_server" {
       name   = "mcp-server"
       image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/mcp-server:${var.api_image_tag}"
       cpu    = 0.5
-      memory = "1.0Gi"
+      memory = "1Gi"
 
       env {
         name  = "AEGIS_API_URL"
@@ -441,6 +455,7 @@ resource "azurerm_container_app" "defacing" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -471,7 +486,7 @@ resource "azurerm_container_app" "defacing" {
       name   = "defacing"
       image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/defacing:${var.api_image_tag}"
       cpu    = 1.0
-      memory = "2.0Gi"
+      memory = "2Gi"
 
       dynamic "env" {
         for_each = local.sidecar_common_env
@@ -499,6 +514,7 @@ resource "azurerm_container_app" "phi_detection" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -565,6 +581,7 @@ resource "azurerm_container_app" "qc_service" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -631,6 +648,7 @@ resource "azurerm_container_app" "bids_service" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -661,7 +679,7 @@ resource "azurerm_container_app" "bids_service" {
       name   = "bids-service"
       image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/bids-service:${var.api_image_tag}"
       cpu    = 0.5
-      memory = "1.0Gi"
+      memory = "1Gi"
 
       dynamic "env" {
         for_each = local.sidecar_common_env
@@ -689,6 +707,7 @@ resource "azurerm_container_app" "classification_service" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -751,6 +770,7 @@ resource "azurerm_container_app" "protocol_service" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -813,6 +833,7 @@ resource "azurerm_container_app" "synth_service" {
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
 
   identity {
     type         = "UserAssigned"
@@ -843,7 +864,7 @@ resource "azurerm_container_app" "synth_service" {
       name   = "synth-service"
       image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/synth-service:${var.api_image_tag}"
       cpu    = 0.5
-      memory = "1.0Gi"
+      memory = "1Gi"
 
       dynamic "env" {
         for_each = local.sidecar_common_env
