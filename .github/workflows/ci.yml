@@ -101,11 +101,20 @@ jobs:
           - scripts/aws_build_push_images.sh
           - scripts/aws_apply_infra.sh
           - scripts/aws_install_poc.sh
+          - scripts/check-aws-deploy-parity.sh
           - scripts/gcp_setup_cloudbuild.sh
     steps:
       - uses: actions/checkout@v4
       - name: Syntax check
         run: bash -n ${{ matrix.script }}
+
+  aws-deploy-parity:
+    name: AWS deploy parity check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deploy workflow coverage
+        run: ./scripts/check-aws-deploy-parity.sh
 
   python-test:
     name: "Python tests (${{ matrix.service }})"
