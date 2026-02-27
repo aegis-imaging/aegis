@@ -75,3 +75,6 @@ Completed:
 - run one deploy smoke check cycle per cloud and verify the standardized summary output is emitted,
 - capture any cloud-specific drift in endpoint behavior in the runbook,
 - keep workflow logic unchanged unless production drift requires a targeted fix.
+
+Current note:
+- AWS deploy now fails fast in the validate job when `AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN` is unset (run `22500933140`), reducing noisy matrix-wide credential failures.
