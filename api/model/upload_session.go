@@ -7,17 +7,18 @@ import (
 )
 
 type UploadSession struct {
-	ID               string  `json:"id"`
-	ProjectID        string  `json:"project_id"`
-	Status           string  `json:"status"`
-	FileCount        int     `json:"file_count"`
-	StoragePrefix    string  `json:"storage_prefix"`
-	UploaderIP       string  `json:"uploader_ip,omitempty"`
-	UploaderEmail    string  `json:"uploader_email,omitempty"`
-	StudyInstanceUID *string `json:"study_instance_uid,omitempty"`
-	Modality         *string `json:"modality,omitempty"`
-	BodyPart         *string `json:"body_part,omitempty"`
-	ErrorMessage     *string `json:"error_message,omitempty"`
+	ID               string    `json:"id"`
+	ProjectID        string    `json:"project_id"`
+	InstitutionID    *string   `json:"institution_id,omitempty"`
+	Status           string    `json:"status"`
+	FileCount        int       `json:"file_count"`
+	StoragePrefix    string    `json:"storage_prefix"`
+	UploaderIP       string    `json:"uploader_ip,omitempty"`
+	UploaderEmail    string    `json:"uploader_email,omitempty"`
+	StudyInstanceUID *string   `json:"study_instance_uid,omitempty"`
+	Modality         *string   `json:"modality,omitempty"`
+	BodyPart         *string   `json:"body_part,omitempty"`
+	ErrorMessage     *string   `json:"error_message,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -28,9 +29,10 @@ func CreateUploadSession(ctx context.Context, db *sql.DB, projectID string, file
 		INSERT INTO upload_sessions (project_id, file_count, storage_prefix, uploader_ip, uploader_email)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, project_id, status, file_count, storage_prefix, uploader_ip, uploader_email,
-		          study_instance_uid, modality, body_part, error_message, created_at, updated_at`,
+		          institution_id, study_instance_uid, modality, body_part, error_message, created_at, updated_at`,
 		projectID, fileCount, storagePrefix, uploaderIP, uploaderEmail).
 		Scan(&s.ID, &s.ProjectID, &s.Status, &s.FileCount, &s.StoragePrefix, &s.UploaderIP, &s.UploaderEmail,
+			&s.InstitutionID,
 			&s.StudyInstanceUID, &s.Modality, &s.BodyPart, &s.ErrorMessage, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -42,14 +44,22 @@ func GetUploadSession(ctx context.Context, db *sql.DB, id string) (*UploadSessio
 	var s UploadSession
 	err := db.QueryRowContext(ctx, `
 		SELECT id, project_id, status, file_count, storage_prefix, uploader_ip, uploader_email,
-		       study_instance_uid, modality, body_part, error_message, created_at, updated_at
+		       institution_id, study_instance_uid, modality, body_part, error_message, created_at, updated_at
 		FROM upload_sessions WHERE id = $1`, id).
 		Scan(&s.ID, &s.ProjectID, &s.Status, &s.FileCount, &s.StoragePrefix, &s.UploaderIP, &s.UploaderEmail,
+			&s.InstitutionID,
 			&s.StudyInstanceUID, &s.Modality, &s.BodyPart, &s.ErrorMessage, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &s, nil
+}
+
+func UpdateUploadSessionInstitution(ctx context.Context, db *sql.DB, id string, institutionID *string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE upload_sessions SET institution_id = $1, updated_at = now() WHERE id = $2`,
+		institutionID, id)
+	return err
 }
 
 func UpdateUploadSessionStatus(ctx context.Context, db *sql.DB, id, status string) error {

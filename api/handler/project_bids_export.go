@@ -25,6 +25,9 @@ func (s *Server) GetProjectBidsInfo(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "missing project ID")
 		return
 	}
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
+		return
+	}
 
 	if _, err := model.GetProjectByID(r.Context(), s.db, projectID); err != nil {
 		s.writeError(w, http.StatusNotFound, "project not found")
@@ -93,6 +96,9 @@ func (s *Server) ServeProjectBidsExport(w http.ResponseWriter, r *http.Request) 
 	projectID := r.PathValue("id")
 	if projectID == "" {
 		s.writeError(w, http.StatusBadRequest, "missing project ID")
+		return
+	}
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
 		return
 	}
 
@@ -214,8 +220,8 @@ func (s *Server) ServeProjectBidsExport(w http.ResponseWriter, r *http.Request) 
 		"project", projectID,
 		clientIP(r),
 		map[string]any{
-			"study_count":  len(studies),
+			"study_count":   len(studies),
 			"status_filter": statusFilter,
-			"truncated":    len(studies) >= maxProjectBidsStudies,
+			"truncated":     len(studies) >= maxProjectBidsStudies,
 		})
 }

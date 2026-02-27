@@ -16,6 +16,9 @@ import (
 // operators choose an appropriate retention period.
 func (s *Server) GetRetentionPreview(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
+		return
+	}
 
 	days := 90
 	if d := r.URL.Query().Get("days"); d != "" {

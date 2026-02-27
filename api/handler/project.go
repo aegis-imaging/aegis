@@ -77,6 +77,9 @@ func (s *Server) CreateProject(w http.ResponseWriter, r *http.Request) {
 // GET /api/projects/{id}
 func (s *Server) GetProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, ok := s.requireProjectReadAccess(w, r, id); !ok {
+		return
+	}
 	project, err := model.GetProjectByID(r.Context(), s.db, id)
 	if err != nil {
 		s.writeError(w, http.StatusNotFound, "project not found")
@@ -290,18 +293,18 @@ func (s *Server) CloneProject(w http.ResponseWriter, r *http.Request) {
 
 	// Clone PHI config (only if a row exists — skip on error or default).
 	if phiCfg, err := model.GetProjectPhiConfig(r.Context(), s.db, src.ID); err == nil {
-		_ , _ = model.UpsertProjectPhiConfig(r.Context(), s.db, dst.ID, phiCfg.ConfidenceThreshold, phiCfg.MinTextLength)
+		_, _ = model.UpsertProjectPhiConfig(r.Context(), s.db, dst.ID, phiCfg.ConfidenceThreshold, phiCfg.MinTextLength)
 	}
 
 	// Re-fetch dst to include all copied settings.
 	dst, _ = model.GetProjectByID(r.Context(), s.db, dst.ID)
 	model.CreateAuditEntry(r.Context(), s.db, "project.cloned", actorEmail(r), "project", dst.ID, clientIP(r), map[string]any{
-		"source_project_id": src.ID,
-		"source_name":       src.Name,
-		"name":              dst.Name,
-		"slug":              dst.Slug,
-		"routing_rules":     len(rules),
-		"anon_profiles":     len(profiles),
+		"source_project_id":  src.ID,
+		"source_name":        src.Name,
+		"name":               dst.Name,
+		"slug":               dst.Slug,
+		"routing_rules":      len(rules),
+		"anon_profiles":      len(profiles),
 		"protocol_templates": len(templates),
 	})
 	s.writeJSON(w, http.StatusCreated, dst)

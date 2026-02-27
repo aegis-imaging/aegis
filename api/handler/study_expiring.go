@@ -18,6 +18,10 @@ import (
 func (s *Server) GetExpiringStudies(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	projectID := q.Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
 
 	days := 7
 	if d := q.Get("days"); d != "" {
@@ -37,6 +41,15 @@ func (s *Server) GetExpiringStudies(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "expiring studies query failed")
 		return
+	}
+	if access != nil && access.IsSiteScoped() {
+		filtered := make([]model.ExpiringStudyRow, 0, len(studies))
+		for _, st := range studies {
+			if st.InstitutionID != nil && *st.InstitutionID == *access.InstitutionID {
+				filtered = append(filtered, st)
+			}
+		}
+		studies = filtered
 	}
 
 	s.writeJSON(w, http.StatusOK, map[string]any{

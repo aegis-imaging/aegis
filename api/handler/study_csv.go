@@ -39,6 +39,13 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 		DateFrom:      dateFrom,
 		DateTo:        dateTo,
 	}
+	access, ok := s.requireResearcherProjectScope(w, r, f.ProjectID)
+	if !ok {
+		return
+	}
+	if access != nil && access.IsSiteScoped() {
+		f.InstitutionID = *access.InstitutionID
+	}
 
 	studies, err := model.ListStudies(r.Context(), s.db, f, 10000, 0)
 	if err != nil {
