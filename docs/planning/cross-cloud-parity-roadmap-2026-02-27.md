@@ -48,14 +48,14 @@ Status: **Strong parity**.
 
 ## Major Gaps to Address Next
 
-1. **Post-deploy smoke consistency**
-   - Ensure all cloud deploy workflows emit similarly structured smoke-check summary blocks for quick operator scan.
+No remaining high-priority parity gaps in this phase.
 
 ---
 
 ## Recommended Execution Sequence
 
 ### Phase D — Remaining Parity Closure
+Completed:
 1. Normalize post-deploy smoke summary formatting across GCP/AWS/Azure workflows.
 
 ---
@@ -71,7 +71,7 @@ Status: **Strong parity**.
 
 ## Immediate Next Candidate (if approved)
 
-**Normalize post-deploy smoke summary output**:
-- align smoke-check section formatting in GCP, AWS, and Azure deploy workflows,
-- ensure each workflow surfaces endpoint health in a scan-friendly summary,
-- validate one run per cloud after formatting alignment.
+**Operational validation pass**:
+- run one deploy smoke check cycle per cloud and verify the standardized summary output is emitted,
+- capture any cloud-specific drift in endpoint behavior in the runbook,
+- keep workflow logic unchanged unless production drift requires a targeted fix.
