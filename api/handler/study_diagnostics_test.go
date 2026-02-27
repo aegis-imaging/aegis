@@ -168,3 +168,35 @@ func TestGetStudyDiagnostics_ReportsDimseSignals(t *testing.T) {
 	assert.Contains(t, actions, "/api/dimse/retry/process/"+study.StudyInstanceUID)
 	assert.Contains(t, actions, "/api/dimse/retry/replay/"+study.StudyInstanceUID)
 }
+
+func TestGetStudyDiagnostics_SiteScopedOutOfSiteDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	instA := createInstitution(t, db, "sender", "PACS_DIAG_A", true)
+	instB := createInstitution(t, db, "sender", "PACS_DIAG_B", true)
+
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, instA.ID, study.ID)
+	require.NoError(t, err)
+
+	researcher := testutil.CreateTestAdminUser(t, db, "diag-site@test.com", "researcher")
+	instBID := instB.ID
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_viewer",
+		InstitutionID: &instBID,
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/studies/"+study.ID+"/diagnostics", nil)
+	req.SetPathValue("id", study.ID)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetStudyDiagnostics(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "study not found")
+}
