@@ -19,10 +19,13 @@ import (
 )
 
 type uploadInitRequest struct {
-	ProjectSlug   string        `json:"project_slug"`
-	FileCount     int           `json:"file_count"`
-	UploaderEmail string        `json:"uploader_email"`
-	Metadata      studyMetadata `json:"study_metadata"`
+	ProjectSlug        string        `json:"project_slug"`
+	InstitutionID      string        `json:"institution_id,omitempty"`
+	InstitutionSlug    string        `json:"institution_slug,omitempty"`
+	InstitutionAETitle string        `json:"institution_ae_title,omitempty"`
+	FileCount          int           `json:"file_count"`
+	UploaderEmail      string        `json:"uploader_email"`
+	Metadata           studyMetadata `json:"study_metadata"`
 }
 
 type seriesMetadata struct {
@@ -73,6 +76,21 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var institutionID *string
+	if strings.TrimSpace(req.InstitutionID) != "" || strings.TrimSpace(req.InstitutionSlug) != "" || strings.TrimSpace(req.InstitutionAETitle) != "" {
+		inst, err := s.resolveIngestInstitution(r.Context(), project.ID, req.InstitutionID, req.InstitutionSlug, req.InstitutionAETitle)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		institutionID = &inst.ID
+	} else {
+		inst, err := s.resolveIngestInstitutionFromSourceIP(r.Context(), project.ID, clientIP(r))
+		if err == nil && inst != nil {
+			institutionID = &inst.ID
+		}
+	}
+
 	// Create upload session
 	session, err := model.CreateUploadSession(r.Context(), s.db, project.ID, req.FileCount, "", clientIP(r), req.UploaderEmail)
 	if err != nil {
@@ -80,6 +98,12 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to create upload session")
 		return
 	}
+	if err := model.UpdateUploadSessionInstitution(r.Context(), s.db, session.ID, institutionID); err != nil {
+		log.Printf("set upload session institution: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to initialize upload session")
+		return
+	}
+	session.InstitutionID = institutionID
 
 	// Set storage prefix using session ID
 	prefix := fmt.Sprintf("uploads/%s", session.ID)
@@ -99,8 +123,9 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 
 	// Audit
 	model.CreateAuditEntry(r.Context(), s.db, "upload.init", "anonymous", "upload_session", session.ID, clientIP(r), map[string]any{
-		"file_count": req.FileCount,
-		"project":    slug,
+		"file_count":     req.FileCount,
+		"project":        slug,
+		"institution_id": institutionID,
 	})
 
 	s.writeJSON(w, http.StatusOK, uploadInitResponse{
@@ -256,6 +281,7 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 	study := &model.Study{
 		ProjectID:        session.ProjectID,
 		UploadSessionID:  &session.ID,
+		InstitutionID:    session.InstitutionID,
 		StudyInstanceUID: studyUID,
 		Modality:         deref(session.Modality),
 		BodyPart:         deref(session.BodyPart),

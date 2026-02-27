@@ -1,14 +1,25 @@
 package handler_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
+	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func withResearcherCSV(r *http.Request, id, email string) *http.Request {
+	ctx := context.WithValue(r.Context(), middleware.AuthUserContextKey(), &middleware.AuthUser{
+		ID: id, Email: email, Role: "researcher",
+	})
+	return r.WithContext(ctx)
+}
 
 func TestExportStudiesCSV_OK(t *testing.T) {
 	db := testutil.TestDB(t)
@@ -75,4 +86,45 @@ func TestExportStudiesCSV_WithLabelFilter(t *testing.T) {
 	body := rr.Body.String()
 	lines := strings.Split(strings.TrimSpace(body), "\n")
 	assert.Len(t, lines, 1, "expected only header row when label filter matches nothing")
+}
+
+func TestExportStudiesCSV_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "csv-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/studies.csv", nil)
+	req = withResearcherCSV(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+	srv.ExportStudiesCSV(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestExportStudiesCSV_ResearcherWithProjectScopeAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "csv-researcher-allowed@test.com", "researcher")
+
+	err := model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "coordinator",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/api/studies.csv?project_id="+proj.ID, nil)
+	req = withResearcherCSV(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+	srv.ExportStudiesCSV(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	lines := strings.Split(strings.TrimSpace(body), "\n")
+	assert.GreaterOrEqual(t, len(lines), 2, "expected header + at least one data row")
 }

@@ -31,6 +31,9 @@ func (s *Server) GetInstitutionBreakdown(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, http.StatusBadRequest, "missing project id")
 		return
 	}
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
+		return
+	}
 
 	if _, err := model.GetProjectByID(r.Context(), s.db, projectID); err != nil {
 		s.writeError(w, http.StatusNotFound, "project not found")

@@ -75,6 +75,9 @@ func (s *Server) SetStorageQuota(w http.ResponseWriter, r *http.Request) {
 // Returns the current storage usage in bytes and the quota (if set).
 func (s *Server) GetStorageUsage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
+		return
+	}
 
 	project, err := model.GetProjectByID(r.Context(), s.db, projectID)
 	if err != nil {
@@ -93,8 +96,8 @@ func (s *Server) GetStorageUsage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{
-		"project_id": projectID,
-		"used_bytes": usedBytes,
+		"project_id":  projectID,
+		"used_bytes":  usedBytes,
 		"quota_bytes": project.StorageQuotaBytes,
 	}
 	if project.StorageQuotaBytes != nil && *project.StorageQuotaBytes > 0 {
