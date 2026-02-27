@@ -4,9 +4,7 @@
 # Triggers on every push to develop, runs in parallel with the GCP Cloud Build.
 #
 # Required GitHub Secrets:
-#   AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN — IAM role ARN for OIDC-based deploy auth (preferred)
-#   AWS_ACCESS_KEY_ID      — fallback legacy IAM user key (used only if role ARN secret is unset)
-#   AWS_SECRET_ACCESS_KEY  — corresponding fallback legacy secret key
+#   AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN — IAM role ARN for OIDC-based deploy auth
 #   AWS_ACCOUNT_ID         — 12-digit AWS account ID
 #
 # Phase 1: Build all 13 service images in parallel (matrix) and push to ECR.
@@ -98,19 +96,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials (OIDC)
-        if: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
-
-      - name: Configure AWS credentials (legacy fallback)
-        if: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN == '' }}
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
 
       - name: Log in to ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -150,19 +139,10 @@ jobs:
 
     steps:
       - name: Configure AWS credentials (OIDC)
-        if: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
-
-      - name: Configure AWS credentials (legacy fallback)
-        if: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN == '' }}
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
 
       - name: Force new deployment for all ECS services
         run: |
@@ -212,19 +192,10 @@ jobs:
 
     steps:
       - name: Configure AWS credentials (OIDC)
-        if: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
-
-      - name: Configure AWS credentials (legacy fallback)
-        if: ${{ env.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN == '' }}
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
 
       - name: Update DIMSE image SSM parameter
         env:
