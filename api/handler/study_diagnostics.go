@@ -2,9 +2,7 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -69,13 +67,8 @@ func (s *Server) GetStudyDiagnostics(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusNotFound, "study not found")
 		return
 	}
-	study, err := model.GetStudyByID(r.Context(), s.db, studyID)
-	if errors.Is(err, sql.ErrNoRows) {
-		s.writeError(w, http.StatusNotFound, "study not found")
-		return
-	}
-	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+	study, _, ok := s.requireStudyReadAccessByID(w, r, studyID)
+	if !ok {
 		return
 	}
 

@@ -11,8 +11,7 @@ import (
 // GET /api/studies/{id}/series
 func (s *Server) ListStudySeries(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := model.GetStudyByID(r.Context(), s.db, id); err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	if _, _, ok := s.requireStudyReadAccessByID(w, r, id); !ok {
 		return
 	}
 
