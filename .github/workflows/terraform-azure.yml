@@ -99,7 +99,9 @@ jobs:
         # updates the images via `az containerapp update` after pushing to ACR.
         # The lifecycle { ignore_changes = [template[0].container[0].image] } block
         # on each Container App prevents terraform from reverting CI/CD-deployed images.
-        run: terraform plan -input=false -no-color -var 'api_image_tag=placeholder' -out=tfplan | tee tfplan.txt
+        run: |
+          set -o pipefail
+          terraform plan -input=false -no-color -var 'api_image_tag=placeholder' -out=tfplan | tee tfplan.txt
 
       - name: Upload plan artifacts
         uses: actions/upload-artifact@v4

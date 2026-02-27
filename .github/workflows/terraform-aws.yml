@@ -79,6 +79,7 @@ jobs:
 
       - name: Terraform plan
         run: |
+          set -o pipefail
           terraform plan -input=false -no-color -out=tfplan | tee tfplan.txt
 
       - name: Upload plan artifacts
