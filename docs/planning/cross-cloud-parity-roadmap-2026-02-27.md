@@ -7,7 +7,11 @@ This planning note captures current CI/CD and Terraform parity status across GCP
 Recent completed milestones:
 - AWS Terraform Phase 3 implemented (`Terraform AWS`) with approval-gated apply via `aws-prod` environment.
 - AWS failure signal workflow added (`Terraform AWS Failure Alert`).
-- Azure Terraform formatting regression fixed (`terraform/azure/auth.tf`).
+- Azure Terraform now runs plan + approval + apply with protected environment gate (`azure-prod`) and plan-artifact reuse.
+- Azure Terraform and AWS Terraform plan steps use `pipefail` to avoid masked plan failures.
+- Azure Terraform permission runbook automation scripts added and validated end-to-end (PR #348).
+- Azure Terraform workflow run succeeded after permission remediation (`22497085026`).
+- GCP failure-signal parity added via GitHub Actions workflow (`GCP Cloud Build Failure Alert`) with direct Cloud Build run URLs.
 
 ---
 
@@ -23,56 +27,36 @@ Status: **Strong parity**.
 ### Infrastructure Automation (Terraform)
 - **GCP**: Terraform infra apply runs via Cloud Build trigger on `terraform/infra/**` changes (auto-apply model).
 - **AWS**: `terraform-aws.yml` now supports plan + apply with approval-gated apply (Phase 3), plus manual dispatch path.
-- **Azure**: `terraform-azure.yml` currently plans and applies on push (no explicit environment approval gate).
+- **Azure**: `terraform-azure.yml` now uses plan + protected approval + apply flow with artifact handoff and OIDC.
 
-Status: **Partial parity** (AWS has stronger apply guardrails than Azure).
+Status: **Strong parity** for AWS/Azure Terraform guardrails.
 
 ### Failure Visibility / Ops Signal
 - **AWS**: Dedicated failure workflow exists (`terraform-aws-failure-alert.yml`) triggered from `workflow_run`.
-- **Azure**: No equivalent Terraform failure-alert workflow yet.
-- **GCP**: No equivalent pipeline-level failure-alert workflow in GitHub Actions (Cloud Build notifications/logs used separately).
+- **Azure**: Dedicated failure workflow exists (`terraform-azure-failure-alert.yml`) triggered from `workflow_run`.
+- **GCP**: Dedicated failure workflow exists (`gcp-cloud-build-failure-alert.yml`) that checks recent failed Cloud Build runs and surfaces direct run URLs.
 
-Status: **Gap**.
+Status: **Strong parity**.
 
 ### Auth Posture in CI/CD
 - **Azure deploy**: OIDC-based auth in workflow.
-- **AWS deploy**: currently uses long-lived access key secrets.
+- **AWS deploy**: OIDC-only auth in workflow (`deploy-aws.yml`); legacy static key fallback removed.
 
-Status: **Gap** (prefer OIDC parity).
+Status: **Strong parity**.
 
 ---
 
 ## Major Gaps to Address Next
 
-1. **Azure Terraform apply gate parity**
-   - Add plan/apply split with apply protected by GitHub Environment approval (mirror AWS model).
-
-2. **Cross-cloud Terraform failure alert parity**
-   - Add Azure Terraform failure-alert workflow similar to AWS.
-   - Define equivalent GCP signal path (GitHub- or Cloud Build-based) with direct run/build URL and triage pointers.
-
-3. **AWS deploy auth hardening**
-   - Migrate `deploy-aws.yml` from static IAM user secrets to OIDC role assumption.
-
-4. **Unified post-deploy smoke gates**
-   - Standardize cloud-specific smoke checks after deploy (health endpoint + critical route checks).
+1. **Post-deploy smoke consistency**
+   - Ensure all cloud deploy workflows emit similarly structured smoke-check summary blocks for quick operator scan.
 
 ---
 
 ## Recommended Execution Sequence
 
-### Phase A — Terraform Safety Parity
-1. Implement approval-gated apply flow for Azure Terraform (`terraform-azure.yml`).
-2. Add Azure Terraform failure-alert workflow (`workflow_run` pattern).
-3. Confirm runbook updates for Azure equivalent of `aws-prod` approval operation.
-
-### Phase B — Credentials & Identity Hardening
-4. Introduce AWS OIDC role for deploy workflow and remove static key dependency in `deploy-aws.yml`.
-5. Validate least-privilege policy boundaries and rollout plan.
-
-### Phase C — Operational Consistency
-6. Add per-cloud post-deploy smoke checks and standardized pass/fail summaries.
-7. Add a concise cross-cloud operator runbook section linking all deployment/failure entry points.
+### Phase D — Remaining Parity Closure
+1. Normalize post-deploy smoke summary formatting across GCP/AWS/Azure workflows.
 
 ---
 
@@ -87,8 +71,7 @@ Status: **Gap** (prefer OIDC parity).
 
 ## Immediate Next Candidate (if approved)
 
-**Implement Azure Terraform approval-gated apply parity**:
-- split Azure Terraform into plan + apply jobs,
-- require environment approval before apply,
-- keep manual dispatch support,
-- preserve OIDC authentication.
+**Normalize post-deploy smoke summary output**:
+- align smoke-check section formatting in GCP, AWS, and Azure deploy workflows,
+- ensure each workflow surfaces endpoint health in a scan-friendly summary,
+- validate one run per cloud after formatting alignment.
