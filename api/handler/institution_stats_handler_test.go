@@ -48,3 +48,23 @@ func TestGetInstitutionStats_NotFound(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
+
+func TestGetInstitutionStats_ResearcherRequiresProjectScope(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	inst := testutil.CreateTestInstitution(t, db, "Researcher Scope Inst")
+	researcher := testutil.CreateTestAdminUser(t, db, "inst-stats-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/institutions/"+inst.ID+"/stats", nil)
+	req.SetPathValue("id", inst.ID)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetInstitutionStats(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}

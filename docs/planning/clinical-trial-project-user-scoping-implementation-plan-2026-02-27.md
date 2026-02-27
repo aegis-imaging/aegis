@@ -34,11 +34,11 @@ This document is planning-only. No code changes are included here.
 
 ## Status (Updated 2026-02-27)
 
-- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`
+- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`
   - `docs/planning/access-matrix-project-site-scoping.md`
   - `docs/planning/access-test-catalog-project-site-scoping.md`
-- **Next active:** Phase 1 — `P0-11` (scope global share/audit/stats surfaces for researchers)
-- **Queued:** `P0-12`, Phase 2+
+- **Next active:** Phase 1 — `P0-12` (regression tests for read scoping)
+- **Queued:** Phase 2+
 
 ---
 
@@ -101,6 +101,8 @@ This document is planning-only. No code changes are included here.
 
 ### Ticket P0-11: Scope Global Share/Audit/Stats Surfaces for Researchers
 **Goal:** Prevent cross-project leakage through global metadata endpoints.
+
+**Status:** ✅ Completed (2026-02-27)
 
 **Primary targets**
 - Shares: global listing/analytics routes in `api/handler/export.go`

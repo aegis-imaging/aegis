@@ -8,36 +8,36 @@ import (
 )
 
 type Study struct {
-	ID               string    `json:"id"`
-	ProjectID        string    `json:"project_id"`
-	UploadSessionID  *string   `json:"upload_session_id,omitempty"`
-	InstitutionID    *string   `json:"institution_id,omitempty"`
-	StudyInstanceUID string    `json:"study_instance_uid"`
-	Modality         string    `json:"modality"`
-	BodyPart         string    `json:"body_part"`
-	StudyDescription string    `json:"study_description"`
-	SeriesCount      int       `json:"series_count"`
-	InstanceCount    int       `json:"instance_count"`
-	Status           string    `json:"status"`
-	DefacingRequired bool      `json:"defacing_required"`
-	DicomStore       string    `json:"dicom_store"`
-	Source           string    `json:"source"`
-	PhiScanRequired  bool      `json:"phi_scan_required"`
-	PhiScanStatus    string    `json:"phi_scan_status"`
-	QcRequired       bool      `json:"qc_required"`
-	QcStatus         string    `json:"qc_status"`
-	BidsRequired           bool      `json:"bids_required"`
-	BidsStatus             string    `json:"bids_status"`
-	ClassificationRequired bool      `json:"classification_required"`
-	ClassificationStatus   string    `json:"classification_status"`
-	ProtocolRequired       bool      `json:"protocol_required"`
-	ProtocolStatus         string    `json:"protocol_status"`
-	ExportRequired         bool      `json:"export_required"`
-	ExportStatus           string    `json:"export_status"`
-	DefaceQaScore          *float64  `json:"deface_qa_score,omitempty"`
-	SubjectID              *string   `json:"subject_id,omitempty"`
-	RejectionReason        *string   `json:"rejection_reason,omitempty"`
-	StudySizeBytes         int64     `json:"study_size_bytes"`
+	ID                     string     `json:"id"`
+	ProjectID              string     `json:"project_id"`
+	UploadSessionID        *string    `json:"upload_session_id,omitempty"`
+	InstitutionID          *string    `json:"institution_id,omitempty"`
+	StudyInstanceUID       string     `json:"study_instance_uid"`
+	Modality               string     `json:"modality"`
+	BodyPart               string     `json:"body_part"`
+	StudyDescription       string     `json:"study_description"`
+	SeriesCount            int        `json:"series_count"`
+	InstanceCount          int        `json:"instance_count"`
+	Status                 string     `json:"status"`
+	DefacingRequired       bool       `json:"defacing_required"`
+	DicomStore             string     `json:"dicom_store"`
+	Source                 string     `json:"source"`
+	PhiScanRequired        bool       `json:"phi_scan_required"`
+	PhiScanStatus          string     `json:"phi_scan_status"`
+	QcRequired             bool       `json:"qc_required"`
+	QcStatus               string     `json:"qc_status"`
+	BidsRequired           bool       `json:"bids_required"`
+	BidsStatus             string     `json:"bids_status"`
+	ClassificationRequired bool       `json:"classification_required"`
+	ClassificationStatus   string     `json:"classification_status"`
+	ProtocolRequired       bool       `json:"protocol_required"`
+	ProtocolStatus         string     `json:"protocol_status"`
+	ExportRequired         bool       `json:"export_required"`
+	ExportStatus           string     `json:"export_status"`
+	DefaceQaScore          *float64   `json:"deface_qa_score,omitempty"`
+	SubjectID              *string    `json:"subject_id,omitempty"`
+	RejectionReason        *string    `json:"rejection_reason,omitempty"`
+	StudySizeBytes         int64      `json:"study_size_bytes"`
 	PriorityFlag           bool       `json:"priority_flag"`
 	AssignedTo             *string    `json:"assigned_to,omitempty"`
 	AssignedAt             *time.Time `json:"assigned_at,omitempty"`
@@ -645,13 +645,13 @@ func ClaimExport(ctx context.Context, db *sql.DB, id string) (bool, error) {
 
 // StudyStatusCounts holds per-status study counts for the dashboard overview.
 type StudyStatusCounts struct {
-	Received  int `json:"received"`
-	Defacing  int `json:"defacing"`
-	Clean     int `json:"clean"`
-	Defaced   int `json:"defaced"`
-	Approved  int `json:"approved"`
-	Rejected  int `json:"rejected"`
-	Total     int `json:"total"`
+	Received int `json:"received"`
+	Defacing int `json:"defacing"`
+	Clean    int `json:"clean"`
+	Defaced  int `json:"defaced"`
+	Approved int `json:"approved"`
+	Rejected int `json:"rejected"`
+	Total    int `json:"total"`
 }
 
 // GetStudyStatusCounts returns a snapshot count of studies by status.
@@ -696,11 +696,46 @@ func GetStudyStatusCounts(ctx context.Context, db *sql.DB, projectID ...string) 
 	return c, rows.Err()
 }
 
+func GetStudyStatusCountsForScope(ctx context.Context, db *sql.DB, projectID, institutionID string) (StudyStatusCounts, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT status, count(*) FROM studies WHERE project_id = $1::uuid AND ($2 = '' OR institution_id = NULLIF($2, '')::uuid) GROUP BY status`,
+		projectID, institutionID)
+	if err != nil {
+		return StudyStatusCounts{}, err
+	}
+	defer rows.Close()
+
+	var c StudyStatusCounts
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return StudyStatusCounts{}, err
+		}
+		switch status {
+		case "received":
+			c.Received = n
+		case "defacing":
+			c.Defacing = n
+		case "clean":
+			c.Clean = n
+		case "defaced":
+			c.Defaced = n
+		case "approved":
+			c.Approved = n
+		case "rejected":
+			c.Rejected = n
+		}
+		c.Total += n
+	}
+	return c, rows.Err()
+}
+
 // BreakdownRow is one cell in the modality × body_part cross-tab.
 type BreakdownRow struct {
-	Modality  string `json:"modality"`
-	BodyPart  string `json:"body_part"`
-	Count     int    `json:"count"`
+	Modality string `json:"modality"`
+	BodyPart string `json:"body_part"`
+	Count    int    `json:"count"`
 }
 
 // GetStudyBreakdown returns study counts grouped by (modality, body_part).
@@ -718,6 +753,30 @@ func GetStudyBreakdown(ctx context.Context, db *sql.DB, projectID ...string) ([]
 		FROM studies`+where+`
 		GROUP BY modality, body_part
 		ORDER BY count(*) DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []BreakdownRow
+	for rows.Next() {
+		var r BreakdownRow
+		if err := rows.Scan(&r.Modality, &r.BodyPart, &r.Count); err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
+func GetStudyBreakdownForScope(ctx context.Context, db *sql.DB, projectID, institutionID string) ([]BreakdownRow, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT coalesce(modality, ''), coalesce(body_part, ''), count(*)
+		FROM studies
+		WHERE project_id = $1::uuid
+		  AND ($2 = '' OR institution_id = NULLIF($2, '')::uuid)
+		GROUP BY modality, body_part
+		ORDER BY count(*) DESC`, projectID, institutionID)
 	if err != nil {
 		return nil, err
 	}
@@ -768,11 +827,29 @@ func GetStorageStats(ctx context.Context, db *sql.DB, projectID ...string) (*Sto
 	return &s, nil
 }
 
+func GetStorageStatsForScope(ctx context.Context, db *sql.DB, projectID, institutionID string) (*StorageStats, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT
+		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'raw'),   0)::int,
+		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'clean'), 0)::int,
+		  coalesce(sum(instance_count), 0)::int,
+		  count(*)::int,
+		  coalesce(sum(study_size_bytes), 0)::bigint
+		FROM studies
+		WHERE project_id = $1::uuid
+		  AND ($2 = '' OR institution_id = NULLIF($2, '')::uuid)`, projectID, institutionID)
+	var s StorageStats
+	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies, &s.TotalSizeBytes); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 // TimelineDay holds ingestion counts for a single UTC date.
 type TimelineDay struct {
-	Date     string `json:"date"`      // YYYY-MM-DD
-	Received int    `json:"received"`  // studies created that day
-	Approved int    `json:"approved"`  // studies approved that day
+	Date     string `json:"date"`     // YYYY-MM-DD
+	Received int    `json:"received"` // studies created that day
+	Approved int    `json:"approved"` // studies approved that day
 }
 
 // GetStudyTimeline returns daily ingestion counts for the last `days` calendar days.
@@ -798,6 +875,41 @@ func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...st
 		WHERE created_at >= now() - ($1 * INTERVAL '1 day')`+where+`
 		GROUP BY day
 		ORDER BY day`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []TimelineDay
+	for rows.Next() {
+		var d TimelineDay
+		if err := rows.Scan(&d.Date, &d.Received, &d.Approved); err != nil {
+			return nil, err
+		}
+		result = append(result, d)
+	}
+	if result == nil {
+		result = []TimelineDay{}
+	}
+	return result, rows.Err()
+}
+
+func GetStudyTimelineForScope(ctx context.Context, db *sql.DB, days int, projectID, institutionID string) ([]TimelineDay, error) {
+	if days <= 0 || days > 365 {
+		days = 30
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+		  to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+		  count(*) FILTER (WHERE status <> 'approved')  +
+		    count(*) FILTER (WHERE status = 'approved')  AS received,
+		  count(*) FILTER (WHERE status = 'approved')   AS approved
+		FROM studies
+		WHERE created_at >= now() - ($1 * INTERVAL '1 day')
+		  AND project_id = $2::uuid
+		  AND ($3 = '' OR institution_id = NULLIF($3, '')::uuid)
+		GROUP BY day
+		ORDER BY day`, days, projectID, institutionID)
 	if err != nil {
 		return nil, err
 	}

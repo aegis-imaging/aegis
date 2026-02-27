@@ -133,8 +133,8 @@ func (s *Server) ReactivateStudy(w http.ResponseWriter, r *http.Request) {
 type createShareRequest struct {
 	RecipientEmail string `json:"recipient_email"`
 	Note           string `json:"note"`
-	ExpiryHours    int    `json:"expiry_hours"`         // default 168 (7 days)
-	ExpiresAt      string `json:"expires_at,omitempty"` // optional RFC3339 timestamp
+	ExpiryHours    int    `json:"expiry_hours"`            // default 168 (7 days)
+	ExpiresAt      string `json:"expires_at,omitempty"`    // optional RFC3339 timestamp
 	MaxDownloads   *int   `json:"max_downloads,omitempty"` // nil = unlimited
 }
 
@@ -271,14 +271,36 @@ func (s *Server) ListAllShares(w http.ResponseWriter, r *http.Request) {
 
 	status := model.ShareStatusFilter(q.Get("status"))
 	projectID := q.Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+	institutionID := ""
+	if access != nil {
+		projectID = access.ProjectID
+		if access.IsSiteScoped() {
+			institutionID = *access.InstitutionID
+		}
+	}
 
-	total, err := model.CountAllExportShares(r.Context(), s.db, status, projectID)
+	var total int
+	var err error
+	if access != nil {
+		total, err = model.CountAllExportSharesForScope(r.Context(), s.db, status, projectID, institutionID)
+	} else {
+		total, err = model.CountAllExportShares(r.Context(), s.db, status, projectID)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to count shares")
 		return
 	}
 
-	shares, err := model.ListAllExportShares(r.Context(), s.db, status, limit, offset, projectID)
+	var shares []model.ExportShare
+	if access != nil {
+		shares, err = model.ListAllExportSharesForScope(r.Context(), s.db, status, limit, offset, projectID, institutionID)
+	} else {
+		shares, err = model.ListAllExportShares(r.Context(), s.db, status, limit, offset, projectID)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list shares")
 		return
@@ -305,6 +327,9 @@ func (s *Server) ListAllShares(w http.ResponseWriter, r *http.Request) {
 // ListShares returns all export shares for a study.
 func (s *Server) ListShares(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, _, ok := s.requireStudyReadAccessByID(w, r, id); !ok {
+		return
+	}
 	shares, err := model.ListExportSharesByStudy(r.Context(), s.db, id)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list shares")
@@ -332,7 +357,23 @@ func buildListShareResponses(shares []model.ExportShare, now time.Time) []listSh
 
 // GetExportAnalytics returns aggregate download analytics across all export shares.
 func (s *Server) GetExportAnalytics(w http.ResponseWriter, r *http.Request) {
-	analytics, err := model.GetExportDownloadAnalytics(r.Context(), s.db)
+	projectID := r.URL.Query().Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+
+	var analytics *model.DownloadAnalytics
+	var err error
+	if access != nil {
+		institutionID := ""
+		if access.IsSiteScoped() {
+			institutionID = *access.InstitutionID
+		}
+		analytics, err = model.GetExportDownloadAnalyticsForScope(r.Context(), s.db, access.ProjectID, institutionID)
+	} else {
+		analytics, err = model.GetExportDownloadAnalytics(r.Context(), s.db)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to load export analytics")
 		return
@@ -343,6 +384,14 @@ func (s *Server) GetExportAnalytics(w http.ResponseWriter, r *http.Request) {
 // GetShareDownloads returns the immutable download history for one export share.
 func (s *Server) GetShareDownloads(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareID")
+	share, err := model.GetExportShareByID(r.Context(), s.db, shareID)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "share not found")
+		return
+	}
+	if _, _, ok := s.requireStudyReadAccessByID(w, r, share.StudyID); !ok {
+		return
+	}
 	downloads, err := model.ListExportDownloadsByShare(r.Context(), s.db, shareID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list downloads")

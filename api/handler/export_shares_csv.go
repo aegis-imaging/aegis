@@ -20,10 +20,27 @@ func (s *Server) ExportSharesCSV(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	status := model.ShareStatusFilter(q.Get("status"))
 	projectID := q.Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+	institutionID := ""
+	if access != nil {
+		projectID = access.ProjectID
+		if access.IsSiteScoped() {
+			institutionID = *access.InstitutionID
+		}
+	}
 
 	// Cap at 10 000 rows to protect against runaway exports.
 	const maxRows = 10000
-	shares, err := model.ListAllExportShares(r.Context(), s.db, status, maxRows, 0, projectID)
+	var shares []model.ExportShare
+	var err error
+	if access != nil {
+		shares, err = model.ListAllExportSharesForScope(r.Context(), s.db, status, maxRows, 0, projectID, institutionID)
+	} else {
+		shares, err = model.ListAllExportShares(r.Context(), s.db, status, maxRows, 0, projectID)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list shares")
 		return
