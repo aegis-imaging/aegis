@@ -314,11 +314,19 @@ jobs:
 
       - name: Write smoke summary
         run: |
+          API_URL_VALUE="${API_URL}"
+          ADMIN_URL_VALUE="${AZURE_ADMIN_URL:-https://azure.admin.aegisimaging.ai}"
+          API_STATUS=$(curl -s -o /tmp/healthz-summary.json -w '%{http_code}' "$API_URL_VALUE/healthz" 2>/dev/null || echo "000")
+          ADMIN_STATUS=$(curl -s -o /tmp/admin-summary-headers.txt -w '%{http_code}' -I "$ADMIN_URL_VALUE" 2>/dev/null || echo "000")
           {
-            echo "## Azure deploy smoke check"
+            echo "## Smoke Check Summary"
             echo ""
-            echo "- API health: passed"
-            echo "- Admin endpoint reachability: passed"
+            echo "- Platform: Azure"
+            echo "- API URL: ${API_URL_VALUE}"
+            echo "- API /healthz HTTP: ${API_STATUS}"
+            echo "- Admin URL: ${ADMIN_URL_VALUE}"
+            echo "- Admin HEAD HTTP: ${ADMIN_STATUS}"
+            echo "- Result: passed"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── Phase 3: Deploy DIMSE Receiver VM (if configured) ─────────────────────
