@@ -63,7 +63,7 @@ jobs:
           printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
 
       - name: Terraform fmt check
-        run: terraform fmt -check
+        run: terraform fmt -check *.tf
 
       - name: Terraform init
         run: terraform init -input=false
