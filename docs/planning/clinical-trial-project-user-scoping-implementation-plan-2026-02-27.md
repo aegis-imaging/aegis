@@ -34,10 +34,10 @@ This document is planning-only. No code changes are included here.
 
 ## Status (Updated 2026-02-27)
 
-- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`, Phase 2 `P0-20`, `P0-21`, `P0-22`
+- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`, Phase 2 `P0-20`, `P0-21`, `P0-22`, Phase 3 `P1-30`
   - `docs/planning/access-matrix-project-site-scoping.md`
   - `docs/planning/access-test-catalog-project-site-scoping.md`
-- **Next active:** Phase 3 — `P1-30` (replace `isAdmin`-only UI gating with capability model)
+- **Next active:** Phase 3 — `P1-31` (project/site context UX hardening)
 - **Queued:** Phase 2+
 
 ---
@@ -181,6 +181,8 @@ This document is planning-only. No code changes are included here.
 
 ### Ticket P1-30: Replace `isAdmin`-Only UI Gating with Capability Model
 **Goal:** UI reflects backend authorization reality for project roles.
+
+**Status:** ✅ Completed (2026-02-27)
 
 **Primary target**
 - `frontend/admin-dashboard/src/App.tsx`
