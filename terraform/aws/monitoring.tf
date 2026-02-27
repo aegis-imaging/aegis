@@ -517,6 +517,32 @@ resource "aws_cloudwatch_log_metric_filter" "pipeline_dispatches" {
   }
 }
 
+resource "aws_cloudwatch_log_metric_filter" "destination_probe_failures" {
+  name           = "${var.project_name}-destination-probe-failures"
+  log_group_name = aws_cloudwatch_log_group.main.name
+  pattern        = "\"destination.tested\" \"success\":false"
+
+  metric_transformation {
+    name          = "DestinationProbeFailures"
+    namespace     = "AEGIS/${var.environment}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "dimse_dead_letter" {
+  name           = "${var.project_name}-dimse-dead-letter"
+  log_group_name = aws_cloudwatch_log_group.main.name
+  pattern        = "\"dead-letter\""
+
+  metric_transformation {
+    name          = "DimseDeadLetter"
+    namespace     = "AEGIS/${var.environment}"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 # ── Alarms on log-based metrics ───────────────────────────────────────────────
 
 resource "aws_cloudwatch_metric_alarm" "pipeline_failure_alert" {
@@ -564,6 +590,54 @@ resource "aws_cloudwatch_metric_alarm" "study_stuck_alert" {
   tags = {
     Service  = "pipeline"
     Severity = "warning"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "destination_probe_failure_alert" {
+  count = var.enable_monitoring_alerts ? 1 : 0
+
+  alarm_name        = "${var.project_name}-destination-probe-failures-${var.environment}"
+  alarm_description = "Destination connectivity probes are failing. Check destination endpoint reachability and routing configuration."
+
+  namespace           = "AEGIS/${var.environment}"
+  metric_name         = "DestinationProbeFailures"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = local.alarm_actions
+  ok_actions    = local.alarm_actions
+
+  tags = {
+    Service  = "routing"
+    Severity = "warning"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dimse_dead_letter_alert" {
+  count = var.enable_monitoring_alerts ? 1 : 0
+
+  alarm_name        = "${var.project_name}-dimse-dead-letter-${var.environment}"
+  alarm_description = "DIMSE dead-letter indicators detected in logs. Review DIMSE retry/dead-letter queues and ingest connectivity."
+
+  namespace           = "AEGIS/${var.environment}"
+  metric_name         = "DimseDeadLetter"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = local.alarm_actions
+  ok_actions    = local.alarm_actions
+
+  tags = {
+    Service  = "dimse"
+    Severity = "critical"
   }
 }
 
