@@ -102,8 +102,102 @@ func CountAuditEntries(ctx context.Context, db *sql.DB, f AuditFilters) (int, er
 	return n, err
 }
 
+func auditWhereStudyScope(f AuditFilters, projectID, institutionID string, argStart int) (string, []any) {
+	clauses := []string{"resource_type = 'study'", fmt.Sprintf(`resource_id IN (SELECT id::text FROM studies WHERE project_id = $%d::uuid`, argStart)}
+	args := []any{projectID}
+	n := argStart + 1
+
+	if institutionID != "" {
+		clauses[1] += fmt.Sprintf(" AND institution_id = $%d::uuid", n)
+		args = append(args, institutionID)
+		n++
+	}
+	clauses[1] += ")"
+
+	if f.Action != "" {
+		clauses = append(clauses, fmt.Sprintf("action LIKE $%d || '%%'", n))
+		args = append(args, f.Action)
+		n++
+	}
+	if f.ResourceType != "" {
+		clauses = append(clauses, fmt.Sprintf("resource_type = $%d", n))
+		args = append(args, f.ResourceType)
+		n++
+	}
+	if f.Actor != "" {
+		clauses = append(clauses, fmt.Sprintf("actor = $%d", n))
+		args = append(args, f.Actor)
+		n++
+	}
+	if f.Search != "" {
+		pat := "%" + f.Search + "%"
+		clauses = append(clauses, fmt.Sprintf(
+			"(actor ILIKE $%d OR action ILIKE $%d OR resource_id ILIKE $%d OR COALESCE(detail::text,'') ILIKE $%d)",
+			n, n, n, n))
+		args = append(args, pat)
+		n++
+	}
+	if !f.DateFrom.IsZero() {
+		clauses = append(clauses, fmt.Sprintf("created_at >= $%d", n))
+		args = append(args, f.DateFrom.UTC())
+		n++
+	}
+	if !f.DateTo.IsZero() {
+		clauses = append(clauses, fmt.Sprintf("created_at <= $%d", n))
+		args = append(args, f.DateTo.UTC())
+		n++
+	}
+
+	where := " WHERE " + clauses[0]
+	for _, c := range clauses[1:] {
+		where += " AND " + c
+	}
+	return where, args
+}
+
+func CountAuditEntriesForStudyScope(ctx context.Context, db *sql.DB, f AuditFilters, projectID, institutionID string) (int, error) {
+	where, args := auditWhereStudyScope(f, projectID, institutionID, 1)
+	var n int
+	err := db.QueryRowContext(ctx, `SELECT count(*) FROM audit_trail`+where, args...).Scan(&n)
+	return n, err
+}
+
 func ListAuditEntries(ctx context.Context, db *sql.DB, f AuditFilters, limit, offset int) ([]AuditEntry, error) {
 	where, args := auditWhere(f)
+	argN := len(args) + 1
+
+	query := `SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at FROM audit_trail` + where + ` ORDER BY created_at DESC`
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", argN)
+		args = append(args, limit)
+		argN++
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", argN)
+		args = append(args, offset)
+	}
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		if err := rows.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
+			&e.Detail, &e.IPAddress, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+func ListAuditEntriesForStudyScope(ctx context.Context, db *sql.DB, f AuditFilters, projectID, institutionID string, limit, offset int) ([]AuditEntry, error) {
+	where, args := auditWhereStudyScope(f, projectID, institutionID, 1)
 	argN := len(args) + 1
 
 	query := `SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at FROM audit_trail` + where + ` ORDER BY created_at DESC`
@@ -241,6 +335,51 @@ func GetActorSummary(ctx context.Context, db *sql.DB, limit int) ([]ActorSummary
 		return nil, err
 	}
 	defer qrows.Close()
+	var result []ActorSummary
+	for qrows.Next() {
+		var s ActorSummary
+		if err := qrows.Scan(&s.Actor, &s.ActionCount, &s.LastSeenAt, &s.LastAction); err != nil {
+			return nil, err
+		}
+		result = append(result, s)
+	}
+	return result, qrows.Err()
+}
+
+func GetActorSummaryForStudyScope(ctx context.Context, db *sql.DB, projectID, institutionID string, limit int) ([]ActorSummary, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	where, args := auditWhereStudyScope(AuditFilters{}, projectID, institutionID, 1)
+	args = append(args, limit)
+
+	query := `
+		WITH scoped AS (
+			SELECT actor, action, created_at
+			FROM audit_trail` + where + `
+		)
+		SELECT s.actor,
+		       count(*) AS action_count,
+		       max(s.created_at) AS last_seen_at,
+		       (
+		         SELECT s2.action FROM scoped s2
+		         WHERE s2.actor = s.actor
+		         ORDER BY s2.created_at DESC
+		         LIMIT 1
+		       ) AS last_action
+		FROM scoped s
+		WHERE s.actor <> ''
+		GROUP BY s.actor
+		ORDER BY max(s.created_at) DESC
+		LIMIT $` + fmt.Sprintf("%d", len(args))
+
+	qrows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer qrows.Close()
+
 	var result []ActorSummary
 	for qrows.Next() {
 		var s ActorSummary

@@ -8,17 +8,17 @@ import (
 )
 
 type ExportShare struct {
-	ID             string     `json:"id"`
-	StudyID        string     `json:"study_id"`
-	RecipientEmail string     `json:"recipient_email"`
-	Note           string     `json:"note,omitempty"`
-	ExpiresAt      time.Time  `json:"expires_at"`
-	CreatedBy      string     `json:"created_by"`
+	ID               string     `json:"id"`
+	StudyID          string     `json:"study_id"`
+	RecipientEmail   string     `json:"recipient_email"`
+	Note             string     `json:"note,omitempty"`
+	ExpiresAt        time.Time  `json:"expires_at"`
+	CreatedBy        string     `json:"created_by"`
 	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
 	RevocationReason *string    `json:"revocation_reason,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
-	MaxDownloads   *int       `json:"max_downloads,omitempty"`
-	DownloadCount  int        `json:"download_count"`
+	MaxDownloads     *int       `json:"max_downloads,omitempty"`
+	DownloadCount    int        `json:"download_count"`
 	// Token is populated only when a new share is created; never read from DB.
 	Token string `json:"token,omitempty"`
 }
@@ -173,7 +173,7 @@ type DownloadAnalytics struct {
 
 // DailyDownloads holds download count for a single UTC date.
 type DailyDownloads struct {
-	Date  string `json:"date"`  // YYYY-MM-DD
+	Date  string `json:"date"` // YYYY-MM-DD
 	Count int    `json:"count"`
 }
 
@@ -346,4 +346,147 @@ func ListAllExportShares(ctx context.Context, db *sql.DB, status ShareStatusFilt
 		shares = append(shares, s)
 	}
 	return shares, rows.Err()
+}
+
+func CountAllExportSharesForScope(ctx context.Context, db *sql.DB, status ShareStatusFilter, projectID, institutionID string) (int, error) {
+	n := 3
+	where, wargs := shareStatusWhere(status, n)
+	args := []any{projectID, institutionID}
+	args = append(args, wargs...)
+
+	query := `
+		SELECT count(*)
+		FROM export_shares es
+		JOIN studies s ON s.id = es.study_id
+		WHERE s.project_id = $1::uuid
+		  AND ($2 = '' OR s.institution_id = NULLIF($2, '')::uuid)
+	` + where
+
+	var cnt int
+	err := db.QueryRowContext(ctx, query, args...).Scan(&cnt)
+	return cnt, err
+}
+
+func ListAllExportSharesForScope(ctx context.Context, db *sql.DB, status ShareStatusFilter, limit, offset int, projectID, institutionID string) ([]ExportShare, error) {
+	n := 3
+	where, wargs := shareStatusWhere(status, n)
+	args := []any{projectID, institutionID}
+	args = append(args, wargs...)
+	if len(wargs) > 0 {
+		n++
+	}
+
+	query := `
+		SELECT` + shareColumnsWithCount + `
+		FROM export_shares es
+		JOIN studies s ON s.id = es.study_id
+		WHERE s.project_id = $1::uuid
+		  AND ($2 = '' OR s.institution_id = NULLIF($2, '')::uuid)
+	` + where + ` ORDER BY es.created_at DESC`
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", n)
+		args = append(args, limit)
+		n++
+	}
+	if offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", n)
+		args = append(args, offset)
+	}
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var shares []ExportShare
+	for rows.Next() {
+		var s ExportShare
+		if err := scanShareWithCount(rows, &s); err != nil {
+			return nil, err
+		}
+		shares = append(shares, s)
+	}
+	return shares, rows.Err()
+}
+
+func GetExportDownloadAnalyticsForScope(ctx context.Context, db *sql.DB, projectID, institutionID string) (*DownloadAnalytics, error) {
+	var total int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM export_downloads ed
+		JOIN export_shares es ON es.id = ed.share_id
+		JOIN studies s ON s.id = es.study_id
+		WHERE s.project_id = $1::uuid
+		  AND ($2 = '' OR s.institution_id = NULLIF($2, '')::uuid)`,
+		projectID, institutionID).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT to_char(ed.accessed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, count(*)
+		FROM export_downloads ed
+		JOIN export_shares es ON es.id = ed.share_id
+		JOIN studies s ON s.id = es.study_id
+		WHERE ed.accessed_at >= now() - INTERVAL '30 days'
+		  AND s.project_id = $1::uuid
+		  AND ($2 = '' OR s.institution_id = NULLIF($2, '')::uuid)
+		GROUP BY day
+		ORDER BY day`, projectID, institutionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var daily []DailyDownloads
+	for rows.Next() {
+		var d DailyDownloads
+		if err := rows.Scan(&d.Date, &d.Count); err != nil {
+			return nil, err
+		}
+		daily = append(daily, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if daily == nil {
+		daily = []DailyDownloads{}
+	}
+
+	topRows, err := db.QueryContext(ctx, `
+		SELECT es.id, es.recipient_email, es.study_id, count(ed.id) AS cnt
+		FROM export_shares es
+		JOIN export_downloads ed ON ed.share_id = es.id
+		JOIN studies s ON s.id = es.study_id
+		WHERE s.project_id = $1::uuid
+		  AND ($2 = '' OR s.institution_id = NULLIF($2, '')::uuid)
+		GROUP BY es.id, es.recipient_email, es.study_id
+		ORDER BY cnt DESC
+		LIMIT 10`, projectID, institutionID)
+	if err != nil {
+		return nil, err
+	}
+	defer topRows.Close()
+
+	var top []ShareDownloads
+	for topRows.Next() {
+		var s ShareDownloads
+		if err := topRows.Scan(&s.ShareID, &s.RecipientEmail, &s.StudyID, &s.DownloadCount); err != nil {
+			return nil, err
+		}
+		top = append(top, s)
+	}
+	if err := topRows.Err(); err != nil {
+		return nil, err
+	}
+	if top == nil {
+		top = []ShareDownloads{}
+	}
+
+	return &DownloadAnalytics{
+		TotalDownloads: total,
+		Last30Days:     daily,
+		TopShares:      top,
+	}, nil
 }
