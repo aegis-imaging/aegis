@@ -1,8 +1,8 @@
 -- +goose Up
 ALTER TABLE upload_sessions
-    ADD COLUMN institution_id UUID REFERENCES institutions(id) ON DELETE SET NULL;
+    ADD COLUMN IF NOT EXISTS institution_id UUID REFERENCES institutions(id) ON DELETE SET NULL;
 
-CREATE INDEX idx_upload_sessions_institution ON upload_sessions (institution_id);
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_institution ON upload_sessions (institution_id);
 
 -- +goose Down
 DROP INDEX IF EXISTS idx_upload_sessions_institution;
