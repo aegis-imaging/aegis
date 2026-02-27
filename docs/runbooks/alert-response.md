@@ -12,6 +12,7 @@ Use this quick index to jump to the right deployment or failure surface.
 - **App deploy workflow**: GitHub Actions → `Deploy to AWS`
 - **Terraform workflow**: GitHub Actions → `Terraform AWS`
 - **Terraform failure signal**: GitHub Actions → `Terraform AWS Failure Alert`
+- **Failure signal scope**: reports failed `Terraform AWS` runs on `develop` only
 - **Apply approval gate**: GitHub Environment `aws-prod`
 
 ### Azure
@@ -19,6 +20,7 @@ Use this quick index to jump to the right deployment or failure surface.
 - **App deploy workflow**: GitHub Actions → `Deploy to Azure`
 - **Terraform workflow**: GitHub Actions → `Terraform Azure`
 - **Terraform failure signal**: GitHub Actions → `Terraform Azure Failure Alert`
+- **Failure signal scope**: reports failed `Terraform Azure` runs on `develop` only
 - **Apply approval gate**: GitHub Environment `azure-prod`
 
 ### GCP
@@ -48,6 +50,14 @@ Use this section when `GCP Cloud Build Failure Alert` reports one or more failed
 - For Terraform failures, check state backend access and provider authentication first.
 
 ### Manual investigation commands
+
+Manual run (without failing the checker workflow) for quick inspection:
+
+```bash
+gh workflow run "GCP Cloud Build Failure Alert" \
+   -f lookback_minutes=60 \
+   -f fail_on_detection=false
+```
 
 ```bash
 gcloud builds list --project=aegis-prod-488120 --sort-by=~createTime --limit=10
