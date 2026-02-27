@@ -10,6 +10,9 @@ import (
 // GetProjectPhiConfig GET /api/projects/{id}/phi-config
 func (s *Server) GetProjectPhiConfig(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
+		return
+	}
 	cfg, err := model.GetProjectPhiConfig(r.Context(), s.db, projectID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "query failed")

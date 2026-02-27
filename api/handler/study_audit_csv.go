@@ -18,10 +18,7 @@ func (s *Server) ExportStudyAuditCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify the study exists.
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if err != nil || study == nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	if _, _, ok := s.requireStudyReadAccessByID(w, r, id); !ok {
 		return
 	}
 

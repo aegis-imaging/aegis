@@ -12,14 +12,14 @@ import (
 
 // complianceReport is the full compliance summary for a project.
 type complianceReport struct {
-	ProjectID   string                   `json:"project_id"`
-	GeneratedAt string                   `json:"generated_at"`
-	PeriodDays  int                      `json:"period_days"`
-	Studies     complianceStudies        `json:"studies"`
-	PhiDetect   compliancePhiDetect      `json:"phi_detection"`
-	Defacing    complianceDefacing       `json:"defacing"`
-	Protocol    complianceProtocol       `json:"protocol_compliance"`
-	Exports     complianceExports        `json:"exports"`
+	ProjectID   string              `json:"project_id"`
+	GeneratedAt string              `json:"generated_at"`
+	PeriodDays  int                 `json:"period_days"`
+	Studies     complianceStudies   `json:"studies"`
+	PhiDetect   compliancePhiDetect `json:"phi_detection"`
+	Defacing    complianceDefacing  `json:"defacing"`
+	Protocol    complianceProtocol  `json:"protocol_compliance"`
+	Exports     complianceExports   `json:"exports"`
 }
 
 type complianceStudies struct {
@@ -36,17 +36,17 @@ type compliancePhiDetect struct {
 }
 
 type complianceDefacing struct {
-	Required    int     `json:"required"`
-	Completed   int     `json:"completed"`
-	Failed      int     `json:"failed"`
-	AvgQAScore  float64 `json:"avg_qa_score"`
+	Required   int     `json:"required"`
+	Completed  int     `json:"completed"`
+	Failed     int     `json:"failed"`
+	AvgQAScore float64 `json:"avg_qa_score"`
 }
 
 type complianceProtocol struct {
-	Checked          int `json:"checked"`
-	Compliant        int `json:"compliant"`
-	MinorDeviations  int `json:"minor_deviations"`
-	NonCompliant     int `json:"non_compliant"`
+	Checked         int `json:"checked"`
+	Compliant       int `json:"compliant"`
+	MinorDeviations int `json:"minor_deviations"`
+	NonCompliant    int `json:"non_compliant"`
 }
 
 type complianceExports struct {
@@ -62,6 +62,9 @@ func (s *Server) GetProjectComplianceReport(w http.ResponseWriter, r *http.Reque
 	projectID := r.PathValue("id")
 	if projectID == "" {
 		s.writeError(w, http.StatusBadRequest, "missing project id")
+		return
+	}
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
 		return
 	}
 
@@ -177,6 +180,9 @@ func (s *Server) ExportComplianceReportCSV(w http.ResponseWriter, r *http.Reques
 	projectID := r.PathValue("id")
 	if projectID == "" {
 		s.writeError(w, http.StatusBadRequest, "missing project id")
+		return
+	}
+	if _, ok := s.requireProjectReadAccess(w, r, projectID); !ok {
 		return
 	}
 
