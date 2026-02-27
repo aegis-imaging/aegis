@@ -34,10 +34,10 @@ This document is planning-only. No code changes are included here.
 
 ## Status (Updated 2026-02-27)
 
-- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`
+- **Completed:** Phase 0 (`P0-01`, `P0-02`), Phase 1 `P0-10`, `P0-11`, `P0-12`
   - `docs/planning/access-matrix-project-site-scoping.md`
   - `docs/planning/access-test-catalog-project-site-scoping.md`
-- **Next active:** Phase 1 — `P0-12` (regression tests for read scoping)
+- **Next active:** Phase 2 — `P0-20` (capability-based write guard helpers)
 - **Queued:** Phase 2+
 
 ---
@@ -122,6 +122,8 @@ This document is planning-only. No code changes are included here.
 
 ### Ticket P0-12: Regression Tests for Read Scoping
 **Goal:** Add handler/model tests proving no read leakage.
+
+**Status:** ✅ Completed (2026-02-27)
 
 **Acceptance Criteria**
 - New tests cover each endpoint family updated in P0-10/P0-11.
