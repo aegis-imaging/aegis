@@ -142,6 +142,68 @@ func TestAddProjectMember_SiteRoleWithInstitution(t *testing.T) {
 	assert.Equal(t, instID, *m.InstitutionID)
 }
 
+func TestAddProjectMember_ProjectOwnerResearcherAllowed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.CreateTestProject(t, db, "add-member-owner-allowed")
+	owner := testutil.CreateTestAdminUser(t, db, "owner-add-member@test.com", "researcher")
+	target := testutil.CreateTestAdminUser(t, db, "target-add-member@test.com", "researcher")
+
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: owner.ID,
+		Role:        "owner",
+	}))
+
+	body, _ := json.Marshal(map[string]any{
+		"admin_user_id": target.ID,
+		"role":          "reviewer",
+	})
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/projects/%s/members", proj.ID), bytes.NewReader(body))
+	req = withResearcherUser(req, owner.ID, owner.Email)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", proj.ID)
+	rr := httptest.NewRecorder()
+
+	srv.AddProjectMember(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+}
+
+func TestAddProjectMember_ResearcherNonOwnerDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.CreateTestProject(t, db, "add-member-owner-denied")
+	coordinator := testutil.CreateTestAdminUser(t, db, "coord-add-member@test.com", "researcher")
+	target := testutil.CreateTestAdminUser(t, db, "target2-add-member@test.com", "researcher")
+
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: coordinator.ID,
+		Role:        "coordinator",
+	}))
+
+	body, _ := json.Marshal(map[string]any{
+		"admin_user_id": target.ID,
+		"role":          "reviewer",
+	})
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/projects/%s/members", proj.ID), bytes.NewReader(body))
+	req = withResearcherUser(req, coordinator.ID, coordinator.Email)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", proj.ID)
+	rr := httptest.NewRecorder()
+
+	srv.AddProjectMember(rr, req)
+
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+}
+
 // ─── Project member model CRUD ────────────────────────────────────────────────
 
 func TestProjectMemberCRUD(t *testing.T) {
