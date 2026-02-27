@@ -120,6 +120,62 @@ func TestUploadInit_WithUploaderEmail(t *testing.T) {
 	assert.NotEmpty(t, result["session_id"])
 }
 
+func TestUploadInit_AssignsInstitutionByID(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, _ := dicomTestServer(t, db)
+	project := testutil.SeedProject(t, db)
+
+	inst := createInstitution(t, db, "sender", "PACS_UPLOAD_ALPHA", true)
+	linkInstitutionToProject(t, db, inst.ID, project.ID, "sender")
+
+	body, _ := json.Marshal(map[string]any{
+		"file_count":     1,
+		"project_slug":   project.Slug,
+		"institution_id": inst.ID,
+		"uploader_email": "sender@hospital.org",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	srv.UploadInit(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result map[string]any
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	sessionID, ok := result["session_id"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, sessionID)
+
+	session, err := model.GetUploadSession(context.Background(), db, sessionID)
+	require.NoError(t, err)
+	require.NotNil(t, session.InstitutionID)
+	assert.Equal(t, inst.ID, *session.InstitutionID)
+}
+
+func TestUploadInit_RejectsInstitutionNotLinkedToProject(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, _ := dicomTestServer(t, db)
+	project := testutil.SeedProject(t, db)
+
+	inst := createInstitution(t, db, "sender", "PACS_UPLOAD_BRAVO", true)
+	otherProject, err := model.CreateProject(context.Background(), db, "Other Upload Project", "other-upload-project", "")
+	require.NoError(t, err)
+	linkInstitutionToProject(t, db, inst.ID, otherProject.ID, "sender")
+
+	body, _ := json.Marshal(map[string]any{
+		"file_count":     1,
+		"project_slug":   project.Slug,
+		"institution_id": inst.ID,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	srv.UploadInit(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "institution is not linked to project as sender/admin")
+}
+
 // ─── UploadFile ───────────────────────────────────────────────────────────────
 
 func TestUploadFile_Success(t *testing.T) {

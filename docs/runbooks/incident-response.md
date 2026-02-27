@@ -70,6 +70,40 @@ curl -s https://api.aegisimaging.ai/api/studies/<id>/diagnostics \
   -H 'Authorization: Bearer <token>' | jq .summary
 ```
 
+For upload attribution drift (restricted projects receiving studies with missing institution linkage), use:
+
+```bash
+# Platform-level snapshot (last 7 days)
+curl -s 'https://api.aegisimaging.ai/api/stats/institution-attribution?days=7' \
+  -H 'Authorization: Bearer <token>' | jq .
+
+# Project-scoped snapshot (required for researcher role)
+curl -s 'https://api.aegisimaging.ai/api/stats/institution-attribution?project_id=<project_uuid>&days=7' \
+  -H 'Authorization: Bearer <token>' | jq .
+```
+
+SQL fallback (Cloud SQL / psql):
+
+```sql
+SELECT
+  p.id,
+  p.slug,
+  p.name,
+  COUNT(*) AS total_studies,
+  COUNT(*) FILTER (WHERE s.institution_id IS NULL) AS unattributed_studies
+FROM studies s
+JOIN projects p ON p.id = s.project_id
+WHERE p.restricted = true
+  AND s.created_at >= now() - interval '7 days'
+GROUP BY p.id, p.slug, p.name
+ORDER BY unattributed_studies DESC, total_studies DESC;
+```
+
+Remediation:
+- Confirm upload path is using explicit institution attribution for site-scoped users.
+- Verify institution is enabled, type `sender|both`, and linked to the project as `sender|admin`.
+- Re-run failed uploads after membership/institution link corrections.
+
 ### 6. Resolve
 
 Apply the fix. Verify with:

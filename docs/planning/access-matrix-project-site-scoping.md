@@ -34,6 +34,7 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/stats/modality-trend` | `GetModalityTrend` | `project_member_any` |
 | `auth` | `GET /api/stats/label-usage` | `GetLabelUsage` | `project_member_any` |
 | `auth` | `GET /api/stats/source-trend` | `GetSourceTrend` | `project_member_any` |
+| `auth` | `GET /api/stats/institution-attribution` | `GetInstitutionAttributionStats` | `project_member_any` |
 | `auth` | `GET /api/storage/stats` | `GetStorageStats` | `project_member_any` |
 | `auth` | `GET /api/system/health-summary` | `GetSystemHealthSummary` | `project_member_any` |
 | `adminOnly` | `POST /api/projects` | `CreateProject` | `platform_admin` |
@@ -109,12 +110,12 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `adminOnly` | `POST /api/studies/bulk` | `BulkStudyAction` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/bulk-pipeline-trigger` | `BulkPipelineTrigger` | `platform_admin` |
 | `auth` | `GET /api/studies/{id}/notes` | `ListStudyNotes` | `project_member_site_scoped` |
-| `adminOnly` | `POST /api/studies/{id}/notes` | `AddStudyNote` | `platform_admin` |
-| `adminOnly` | `PATCH /api/studies/{id}/flag` | `PatchStudyFlag` | `platform_admin` |
-| `adminOnly` | `POST /api/studies/{id}/reset-pipeline-step` | `ResetPipelineStep` | `platform_admin` |
-| `adminOnly` | `POST /api/studies/{id}/approve` | `ApproveStudy` | `platform_admin` |
-| `adminOnly` | `POST /api/studies/{id}/reject` | `RejectStudy` | `platform_admin` |
-| `adminOnly` | `POST /api/studies/{id}/reactivate` | `ReactivateStudy` | `platform_admin` |
+| `auth` | `POST /api/studies/{id}/notes` | `AddStudyNote` | `project_member_site_scoped` |
+| `auth` | `PATCH /api/studies/{id}/flag` | `PatchStudyFlag` | `project_member_site_scoped` |
+| `auth` | `POST /api/studies/{id}/reset-pipeline-step` | `ResetPipelineStep` | `project_member_site_scoped` |
+| `auth` | `POST /api/studies/{id}/approve` | `ApproveStudy` | `project_member_site_scoped` |
+| `auth` | `POST /api/studies/{id}/reject` | `RejectStudy` | `project_member_site_scoped` |
+| `auth` | `POST /api/studies/{id}/reactivate` | `ReactivateStudy` | `project_member_site_scoped` |
 | `adminOnly` | `POST /api/studies/{id}/soft-delete` | `SoftDeleteStudy` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/{id}/restore` | `RestoreStudy` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/{id}/share` | `CreateShare` | `platform_admin` |

@@ -292,3 +292,66 @@ func TestStatsExtended_ResearcherWithProjectScopeWithoutMembershipDenied(t *test
 		})
 	}
 }
+
+func TestGetInstitutionAttributionStats_Basic(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+
+	// Mark default project as restricted so it participates in attribution monitoring.
+	_, err := db.ExecContext(context.Background(), `UPDATE projects SET restricted = true WHERE id = $1`, proj.ID)
+	require.NoError(t, err)
+
+	inst := createInstitution(t, db, "sender", "PACS_ATTR_ALPHA", true)
+	linkInstitutionToProject(t, db, inst.ID, proj.ID, "sender")
+
+	s1 := testutil.CreateTestStudy(t, db, proj.ID)
+	s2 := testutil.CreateTestStudy(t, db, proj.ID)
+
+	// One attributed, one unattributed.
+	_, err = db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, inst.ID, s1.ID)
+	require.NoError(t, err)
+	_, err = db.ExecContext(context.Background(), `UPDATE studies SET institution_id = NULL WHERE id = $1`, s2.ID)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stats/institution-attribution?days=30", nil)
+	rr := httptest.NewRecorder()
+	srv.GetInstitutionAttributionStats(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var resp struct {
+		Days              int `json:"days"`
+		TotalRestricted   int `json:"total_restricted_studies"`
+		UnattributedTotal int `json:"unattributed_studies"`
+		Projects          []struct {
+			ProjectID         string  `json:"project_id"`
+			TotalStudies      int     `json:"total_studies"`
+			UnattributedCount int     `json:"unattributed_count"`
+			UnattributedPct   float64 `json:"unattributed_pct"`
+		} `json:"projects"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.Equal(t, 30, resp.Days)
+	assert.Equal(t, 2, resp.TotalRestricted)
+	assert.Equal(t, 1, resp.UnattributedTotal)
+	require.Len(t, resp.Projects, 1)
+	assert.Equal(t, proj.ID, resp.Projects[0].ProjectID)
+	assert.Equal(t, 2, resp.Projects[0].TotalStudies)
+	assert.Equal(t, 1, resp.Projects[0].UnattributedCount)
+	assert.InDelta(t, 50.0, resp.Projects[0].UnattributedPct, 0.001)
+}
+
+func TestGetInstitutionAttributionStats_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "attr-stats-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stats/institution-attribution", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetInstitutionAttributionStats(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}

@@ -30,6 +30,16 @@ interface StudyGroup {
   summary: StudySummaryType
 }
 
+type ProjectMemberRole = 'owner' | 'coordinator' | 'reviewer' | 'site_coordinator' | 'site_viewer'
+
+interface ProjectMember {
+  admin_user_id: string
+  user_email: string
+  role: ProjectMemberRole
+  institution_id: string | null
+  institution_name?: string
+}
+
 type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -129,6 +139,10 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState('default')
   const [projectsLoading, setProjectsLoading] = useState(true)
+  const [attributionRole, setAttributionRole] = useState<ProjectMemberRole | null>(null)
+  const [attributionInstitutionId, setAttributionInstitutionId] = useState<string | null>(null)
+  const [attributionInstitutionName, setAttributionInstitutionName] = useState('')
+  const [attributionLoading, setAttributionLoading] = useState(false)
   const validCustomTimeZone = normalizeIanaTimeZone(displayTimezoneCustom) ?? ''
   const localTimeZone = browserTimeZone()
 
@@ -163,6 +177,42 @@ export function App() {
       .catch(() => setProjects([]))
       .finally(() => setProjectsLoading(false))
   }, [])
+
+  useEffect(() => {
+    const selected = projects.find(p => p.slug === selectedProject)
+    if (!currentUser || currentUser.role !== 'researcher' || !selected) {
+      setAttributionRole(null)
+      setAttributionInstitutionId(null)
+      setAttributionInstitutionName('')
+      setAttributionLoading(false)
+      return
+    }
+
+    setAttributionLoading(true)
+    fetch(`/api/projects/${selected.id}/members`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        const members = (data?.members ?? []) as ProjectMember[]
+        const me = members.find(m => m.admin_user_id === currentUser.id || m.user_email === currentUser.email)
+        if (!me) {
+          setAttributionRole(null)
+          setAttributionInstitutionId(null)
+          setAttributionInstitutionName('')
+          return
+        }
+        setAttributionRole(me.role)
+        setAttributionInstitutionId(me.institution_id ?? null)
+        setAttributionInstitutionName(me.institution_name ?? '')
+      })
+      .catch(() => {
+        setAttributionRole(null)
+        setAttributionInstitutionId(null)
+        setAttributionInstitutionName('')
+      })
+      .finally(() => setAttributionLoading(false))
+  }, [projects, selectedProject, currentUser])
+
+  const attributionRequired = attributionRole === 'site_coordinator' || attributionRole === 'site_viewer'
 
   const emailValid = uploaderEmail === '' || EMAIL_RE.test(uploaderEmail)
 
@@ -274,6 +324,11 @@ export function App() {
       return
     }
 
+    if (attributionRequired && !attributionInstitutionId) {
+      setError('Institution attribution is required for your site-scoped role. Ask an admin to set your project membership institution before uploading.')
+      return
+    }
+
     setError(null)
     setStage('uploading')
     const totalFiles = files.length
@@ -312,6 +367,7 @@ export function App() {
           },
           onFileStart: (filename) => setCurrentFile(filename),
           uploaderEmail: uploaderEmail.trim() || undefined,
+          institutionId: attributionInstitutionId ?? undefined,
           deid: retainedTags ? { retainedTags } : undefined,
         })
         results.push(result)
@@ -330,7 +386,7 @@ export function App() {
     } finally {
       uploadAbortRef.current = null
     }
-  }, [studyGroups, files, selectedProject, uploaderEmail])
+  }, [studyGroups, files, selectedProject, uploaderEmail, attributionRequired, attributionInstitutionId])
 
   const totalFileCount = files.length
 
@@ -456,6 +512,25 @@ export function App() {
             </div>
           )}
 
+          {currentUser?.role === 'researcher' && (
+            <div style={{
+              padding: '10px 14px',
+              backgroundColor: attributionRequired ? '#fefce8' : '#f8fafc',
+              border: `1px solid ${attributionRequired ? '#fde68a' : '#e2e8f0'}`,
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: attributionRequired ? '#92400e' : '#475569',
+            }}>
+              {attributionLoading
+                ? 'Institution attribution: loading…'
+                : attributionInstitutionId
+                  ? `Institution attribution: ${attributionInstitutionName || attributionInstitutionId}`
+                  : attributionRequired
+                    ? 'Institution attribution required for your site-scoped role (not configured).'
+                    : 'Institution attribution: automatic (project context/IP fallback).'}
+            </div>
+          )}
+
           <FileDropZone onFilesSelected={handleFilesSelected} />
         </div>
       )}
@@ -530,6 +605,23 @@ export function App() {
               Project: {projects.find(p => p.slug === selectedProject)?.name ?? selectedProject}
             </span>
           </div>
+
+          {currentUser?.role === 'researcher' && (
+            <div style={{
+              padding: '10px 14px',
+              backgroundColor: attributionRequired ? '#fefce8' : '#f8fafc',
+              border: `1px solid ${attributionRequired ? '#fde68a' : '#e2e8f0'}`,
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: attributionRequired ? '#92400e' : '#475569',
+            }}>
+              {attributionInstitutionId
+                ? `Institution attribution for upload: ${attributionInstitutionName || attributionInstitutionId}`
+                : attributionRequired
+                  ? 'Institution attribution required for this upload is missing. Upload is blocked until membership is configured.'
+                  : 'Institution attribution for upload: automatic (project context/IP fallback).'}
+            </div>
+          )}
 
           {/* Multi-study notice */}
           {studyGroups.length > 1 && (
@@ -621,14 +713,14 @@ export function App() {
             </button>
             <button
               onClick={handleUpload}
-              disabled={!emailValid}
+              disabled={!emailValid || (attributionRequired && !attributionInstitutionId)}
               style={{
                 padding: '10px 24px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: emailValid ? '#2563eb' : '#93c5fd',
+                backgroundColor: (emailValid && (!attributionRequired || !!attributionInstitutionId)) ? '#2563eb' : '#93c5fd',
                 color: '#fff',
-                cursor: emailValid ? 'pointer' : 'not-allowed',
+                cursor: (emailValid && (!attributionRequired || !!attributionInstitutionId)) ? 'pointer' : 'not-allowed',
                 fontSize: '14px',
                 fontWeight: 600,
               }}
