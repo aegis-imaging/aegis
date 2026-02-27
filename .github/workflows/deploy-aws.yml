@@ -4,8 +4,9 @@
 # Triggers on every push to develop, runs in parallel with the GCP Cloud Build.
 #
 # Required GitHub Secrets:
-#   AWS_ACCESS_KEY_ID      — IAM user with ECR push + ECS update + SSM write
-#   AWS_SECRET_ACCESS_KEY  — corresponding secret key
+#   AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN — IAM role ARN for OIDC-based deploy auth (preferred)
+#   AWS_ACCESS_KEY_ID      — fallback legacy IAM user key (used only if role ARN secret is unset)
+#   AWS_SECRET_ACCESS_KEY  — corresponding fallback legacy secret key
 #   AWS_ACCOUNT_ID         — 12-digit AWS account ID
 #
 # Phase 1: Build all 13 service images in parallel (matrix) and push to ECR.
@@ -90,7 +91,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Configure AWS credentials (legacy fallback)
+        if: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN == '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -132,7 +141,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Configure AWS credentials (legacy fallback)
+        if: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN == '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -184,7 +201,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Configure AWS credentials (legacy fallback)
+        if: ${{ secrets.AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN == '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -224,3 +249,60 @@ jobs:
           aws ec2 reboot-instances \
             --instance-ids "$INSTANCE_ID" \
             --no-cli-pager
+
+  health-check:
+    name: Post-deploy health check
+    runs-on: ubuntu-latest
+    needs: deploy-ecs
+    env:
+      AWS_API_URL: ${{ vars.AWS_API_URL }}
+      AWS_ADMIN_URL: ${{ vars.AWS_ADMIN_URL }}
+    steps:
+      - name: Wait for rollout
+        run: sleep 30
+
+      - name: Verify API health
+        run: |
+          API_URL="${AWS_API_URL:-https://aws.api.aegisimaging.ai}"
+          max_attempts=5
+          delay=15
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "Health check attempt $attempt/$max_attempts..."
+            status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "$API_URL/healthz" 2>/dev/null || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "API is healthy:"
+              cat /tmp/healthz.json | python3 -m json.tool 2>/dev/null || cat /tmp/healthz.json
+              break
+            fi
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "::error::API health check failed after $max_attempts attempts (last HTTP $status)"
+              cat /tmp/healthz.json 2>/dev/null || true
+              exit 1
+            fi
+            echo "Got HTTP $status, retrying in ${delay}s..."
+            sleep "$delay"
+          done
+
+      - name: Verify admin endpoint reachability
+        run: |
+          ADMIN_URL="${AWS_ADMIN_URL:-https://aws.admin.aegisimaging.ai}"
+          status=$(curl -s -o /tmp/admin_headers.txt -w '%{http_code}' -I "$ADMIN_URL" 2>/dev/null || echo "000")
+          case "$status" in
+            200|301|302|401|403)
+              echo "Admin endpoint reachable with HTTP $status"
+              ;;
+            *)
+              echo "::error::Admin endpoint not reachable (HTTP $status)"
+              cat /tmp/admin_headers.txt 2>/dev/null || true
+              exit 1
+              ;;
+          esac
+
+      - name: Write smoke summary
+        run: |
+          {
+            echo "## AWS deploy smoke check"
+            echo ""
+            echo "- API health: passed"
+            echo "- Admin endpoint reachability: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
