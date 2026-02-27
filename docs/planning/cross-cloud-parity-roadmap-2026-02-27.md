@@ -87,3 +87,10 @@ Completed:
 - **Terraform Azure Failure Alert**: recent sequence includes historical `failure` runs (`22497034941`, `22496444844`, `22495765287`, `22495674643`) followed by `skipped` (`22497146718`) after failure conditions cleared.
 - **GCP Cloud Build Failure Alert**: manual validation remains green (`22502258584` success), with scheduled run `22502537637` continuing to detect real failed Cloud Build events when present.
 - **Assessment**: current Phase E hardening is operating as intended; maintain periodic signal reviews and keep future changes low-risk and incremental.
+
+### Phase E Operational Cadence (ongoing)
+
+- **Weekly (quick check, 10–15 min)**: capture the latest 5–10 runs for `Terraform AWS Failure Alert`, `Terraform Azure Failure Alert`, and `GCP Cloud Build Failure Alert`; confirm branch scope, expected skip/fail behavior, and triage-link clarity.
+- **Monthly (deeper review, 30 min)**: summarize recurring alert patterns (including duplicate-window behavior and noisy failures), then decide whether a low-risk wording/tuning PR is warranted.
+- **Change threshold**: only open a tuning PR when the same signal-quality issue appears in at least two review windows or clearly degrades operator triage speed.
+- **PR scope rule**: keep cadence/tuning updates doc-only or single-workflow-only; avoid multi-workflow behavior changes in one PR.
