@@ -14,6 +14,15 @@ type statsResponse struct {
 	GeneratedAt  time.Time               `json:"generated_at"`
 }
 
+type institutionAttributionStatsResponse struct {
+	Days              int                                      `json:"days"`
+	TotalRestricted   int                                      `json:"total_restricted_studies"`
+	UnattributedTotal int                                      `json:"unattributed_studies"`
+	UnattributedPct   float64                                  `json:"unattributed_pct"`
+	Projects          []model.InstitutionAttributionProjectRow `json:"projects"`
+	GeneratedAt       time.Time                                `json:"generated_at"`
+}
+
 // GetStats returns a lightweight snapshot of study pipeline state and active
 // share count. Used by the admin dashboard overview banner.
 // Accepts optional ?project_id= to scope counts to a single project.
@@ -160,5 +169,40 @@ func (s *Server) GetTimeline(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"timeline":     rows,
 		"generated_at": time.Now().UTC(),
+	})
+}
+
+// GetInstitutionAttributionStats reports missing institution attribution
+// (institution_id IS NULL) in restricted projects for the last N days.
+// GET /api/stats/institution-attribution — accepts ?days=7 and optional ?project_id=
+func (s *Server) GetInstitutionAttributionStats(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	days, _ := strconv.Atoi(q.Get("days"))
+	projectID := q.Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+	institutionID := ""
+	if access != nil {
+		projectID = access.ProjectID
+		if access.IsSiteScoped() {
+			institutionID = *access.InstitutionID
+		}
+	}
+
+	stats, err := model.GetInstitutionAttributionStats(r.Context(), s.db, days, projectID, institutionID)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to query institution attribution stats")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, institutionAttributionStatsResponse{
+		Days:              stats.Days,
+		TotalRestricted:   stats.TotalRestricted,
+		UnattributedTotal: stats.UnattributedTotal,
+		UnattributedPct:   stats.UnattributedPct,
+		Projects:          stats.Projects,
+		GeneratedAt:       time.Now().UTC(),
 	})
 }

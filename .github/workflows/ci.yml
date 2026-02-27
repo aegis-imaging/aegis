@@ -13,6 +13,14 @@ jobs:
       - name: Check Terraform credential placeholders
         run: ./scripts/check-infra-placeholders.sh
 
+  access-matrix-guard:
+    name: Access matrix guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authenticated route coverage in access matrix
+        run: ./scripts/check-access-matrix-coverage.sh
+
   terraform:
     name: "Terraform checks (${{ matrix.module }})"
     runs-on: ubuntu-latest
