@@ -312,6 +312,10 @@ function capabilitiesForProjectRole(role: ProjectRole | null | undefined): Proje
   }
 }
 
+function isSiteScopedRole(role: ProjectRole | null | undefined): boolean {
+  return role === 'site_coordinator' || role === 'site_viewer'
+}
+
 type DimseRetrySnapshot = {
   pending: number
   dead_letter: number
@@ -8883,6 +8887,51 @@ export function App() {
     fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'researcher') return
+    const missing = projects.map(p => p.id).filter(id => !(id in projectRoleById))
+    if (missing.length === 0) return
+    let cancelled = false
+    Promise.all(
+      missing.map(async projectID => {
+        try {
+          const res = await fetch(`/api/projects/${projectID}/members`)
+          if (!res.ok) return [projectID, null] as const
+          const data = await res.json()
+          const members = (data.members ?? []) as ProjectMember[]
+          const me = members.find(m => m.admin_user_id === currentUser.id || m.user_email === currentUser.email)
+          return [projectID, (me?.role as ProjectRole | undefined) ?? null] as const
+        } catch {
+          return [projectID, null] as const
+        }
+      }),
+    ).then(entries => {
+      if (cancelled) return
+      setProjectRoleById(prev => {
+        const next = { ...prev }
+        for (const [projectID, role] of entries) next[projectID] = role
+        return next
+      })
+    })
+    return () => { cancelled = true }
+  }, [currentUser, projects, projectRoleById])
+
+  const isResearcher = currentUser?.role === 'researcher'
+  const knownProjectRoles = Object.values(projectRoleById).filter((role): role is ProjectRole => !!role)
+  const researcherSiteScopedOnly = isResearcher && knownProjectRoles.length > 0 && knownProjectRoles.every(isSiteScopedRole)
+  const canUseAllProjectsMode = !researcherSiteScopedOnly
+
+  useEffect(() => {
+    if (!researcherSiteScopedOnly || globalProjectId) return
+    const firstScopedProject = projects.find(p => isSiteScopedRole(projectRoleById[p.id]))
+    if (firstScopedProject) setGlobalProjectId(firstScopedProject.id)
+  }, [researcherSiteScopedOnly, globalProjectId, projects, projectRoleById])
+
+  const selectedProjectName = globalProjectId
+    ? (projects.find(p => p.id === globalProjectId)?.name ?? 'Selected project')
+    : (projects.length === 0 ? 'Loading projects…' : 'All projects')
+  const scopeLabel = researcherSiteScopedOnly && !globalProjectId ? 'Project required' : selectedProjectName
+
   // Institutions for filter dropdown
   const [allInstitutions, setAllInstitutions] = useState<Institution[]>([])
   useEffect(() => {
@@ -9132,7 +9181,12 @@ export function App() {
   function setModalityF(v: string) { setFilterModality(v); setPage(0); setBulkSelected(new Set()) }
   function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0); setBulkSelected(new Set()) }
   function setSourceF(v: string)   { setFilterSource(v);   setPage(0); setBulkSelected(new Set()) }
-  function setProjectF(v: string)  { setFilterProject(v);  setPage(0); setBulkSelected(new Set()) }
+  function setProjectF(v: string)  {
+    if (!canUseAllProjectsMode && !v) return
+    setFilterProject(v)
+    setPage(0)
+    setBulkSelected(new Set())
+  }
   function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
   function setSubjectF(v: string)   { setFilterSubject(v);   setPage(0); setBulkSelected(new Set()) }
   function setLabelF(v: string)     { setFilterLabel(v);     setPage(0); setBulkSelected(new Set()) }
@@ -9159,7 +9213,9 @@ export function App() {
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
-    setFilterSource(''); setFilterProject(''); setFilterSearch('')
+    setFilterSource('')
+    setFilterProject(canUseAllProjectsMode ? '' : (globalProjectId || filterProject))
+    setFilterSearch('')
     setFilterSubject(''); setFilterLabel(''); setFilterInstitution('')
     setFilterDateFrom(''); setFilterDateTo('')
     setFilterFlagged(false); setPage(0)
@@ -9381,17 +9437,28 @@ export function App() {
                 id="global-project-select"
                 className="tz-select"
                 value={globalProjectId}
-                onChange={e => setGlobalProjectId(e.target.value)}
+                onChange={e => {
+                  const next = e.target.value
+                  if (!canUseAllProjectsMode && !next) return
+                  setGlobalProjectId(next)
+                }}
               >
-                <option value="">All projects</option>
+                {canUseAllProjectsMode ? (
+                  <option value="">All projects</option>
+                ) : !globalProjectId ? (
+                  <option value="">Select project…</option>
+                ) : null}
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              {globalProjectId && (
+              {canUseAllProjectsMode && globalProjectId && (
                 <button type="button" className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
                   onClick={() => setGlobalProjectId('')}>Clear</button>
               )}
             </div>
           )}
+          <span className="auth-user-badge" title="Active project/scope">
+            Scope: {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
+          </span>
           <div className="tz-control">
             <label className="tz-label" htmlFor="display-timezone-mode">Time Zone</label>
             <select
@@ -9963,7 +10030,11 @@ export function App() {
               <option value="internal">Internal</option>
             </select>
             <select className="filter-select" title="Filter by project" value={filterProject} onChange={e => setProjectF(e.target.value)}>
-              <option value="">All projects</option>
+              {canUseAllProjectsMode ? (
+                <option value="">All projects</option>
+              ) : !filterProject ? (
+                <option value="">Select project…</option>
+              ) : null}
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             {allInstitutions.length > 0 && (

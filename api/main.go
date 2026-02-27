@@ -183,6 +183,7 @@ func main() {
 	mux.HandleFunc("GET /api/stats/modality-trend", auth(srv.GetModalityTrend))
 	mux.HandleFunc("GET /api/stats/label-usage", auth(srv.GetLabelUsage))
 	mux.HandleFunc("GET /api/stats/source-trend", auth(srv.GetSourceTrend))
+	mux.HandleFunc("GET /api/stats/institution-attribution", auth(srv.GetInstitutionAttributionStats))
 	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
 	// System health summary — aggregated operational status panel.

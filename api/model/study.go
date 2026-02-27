@@ -852,6 +852,25 @@ type TimelineDay struct {
 	Approved int    `json:"approved"` // studies approved that day
 }
 
+// InstitutionAttributionProjectRow is one project row in the attribution gap report.
+type InstitutionAttributionProjectRow struct {
+	ProjectID         string  `json:"project_id"`
+	ProjectSlug       string  `json:"project_slug"`
+	ProjectName       string  `json:"project_name"`
+	TotalStudies      int     `json:"total_studies"`
+	UnattributedCount int     `json:"unattributed_count"`
+	UnattributedPct   float64 `json:"unattributed_pct"`
+}
+
+// InstitutionAttributionStats reports missing institution attribution in restricted projects.
+type InstitutionAttributionStats struct {
+	Days              int                                `json:"days"`
+	TotalRestricted   int                                `json:"total_restricted_studies"`
+	UnattributedTotal int                                `json:"unattributed_studies"`
+	UnattributedPct   float64                            `json:"unattributed_pct"`
+	Projects          []InstitutionAttributionProjectRow `json:"projects"`
+}
+
 // GetStudyTimeline returns daily ingestion counts for the last `days` calendar days.
 // An optional projectID filters to a single project.
 func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...string) ([]TimelineDay, error) {
@@ -927,6 +946,56 @@ func GetStudyTimelineForScope(ctx context.Context, db *sql.DB, days int, project
 		result = []TimelineDay{}
 	}
 	return result, rows.Err()
+}
+
+// GetInstitutionAttributionStats returns unattributed study counts (institution_id IS NULL)
+// across restricted projects for the last `days` days.
+// Optional projectID narrows to one project; optional institutionID applies site-scope filter.
+func GetInstitutionAttributionStats(ctx context.Context, db *sql.DB, days int, projectID, institutionID string) (*InstitutionAttributionStats, error) {
+	if days <= 0 || days > 365 {
+		days = 7
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			s.project_id,
+			p.slug,
+			p.name,
+			count(*)::int AS total_studies,
+			count(*) FILTER (WHERE s.institution_id IS NULL)::int AS unattributed_count
+		FROM studies s
+		JOIN projects p ON p.id = s.project_id
+		WHERE p.restricted = true
+		  AND s.created_at >= now() - ($1 * INTERVAL '1 day')
+		  AND ($2 = '' OR s.project_id = $2::uuid)
+		  AND ($3 = '' OR s.institution_id = NULLIF($3, '')::uuid)
+		GROUP BY s.project_id, p.slug, p.name
+		ORDER BY unattributed_count DESC, total_studies DESC, p.name ASC`, days, projectID, institutionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := &InstitutionAttributionStats{Days: days, Projects: []InstitutionAttributionProjectRow{}}
+	for rows.Next() {
+		var row InstitutionAttributionProjectRow
+		if err := rows.Scan(&row.ProjectID, &row.ProjectSlug, &row.ProjectName, &row.TotalStudies, &row.UnattributedCount); err != nil {
+			return nil, err
+		}
+		if row.TotalStudies > 0 {
+			row.UnattributedPct = (float64(row.UnattributedCount) / float64(row.TotalStudies)) * 100
+		}
+		out.TotalRestricted += row.TotalStudies
+		out.UnattributedTotal += row.UnattributedCount
+		out.Projects = append(out.Projects, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if out.TotalRestricted > 0 {
+		out.UnattributedPct = (float64(out.UnattributedTotal) / float64(out.TotalRestricted)) * 100
+	}
+	return out, nil
 }
 
 // ExpiringStudyRow extends Study with retention metadata for the expiry endpoint.
