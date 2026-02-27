@@ -21,6 +21,7 @@ substitutions:
   _REPO: us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services
   _WEASIS_URL: https://weasis-uk5cvzf5nq-uc.a.run.app
   _API_URL: https://api.aegisimaging.ai
+  _ADMIN_URL: https://admin.aegisimaging.ai
   # DIMSE receiver — Compute Engine instance. Override in trigger if zone/name differ.
   _DIMSE_ZONE: us-central1-a
   _DIMSE_INSTANCE: aegis-prod-dimse-receiver
@@ -468,3 +469,42 @@ steps:
           --quiet
 
         echo "==> dimse-receiver deploy complete."
+
+  # --- post-deploy smoke check (API + admin endpoint reachability) ---
+  - name: curlimages/curl:8.12.1
+    id: smoke-check
+    waitFor:
+      - deploy-api
+      - deploy-admin-dashboard
+    entrypoint: /bin/sh
+    args:
+      - -c
+      - |
+        set -euo pipefail
+
+        API_URL="${_API_URL}"
+        ADMIN_URL="${_ADMIN_URL}"
+
+        echo "==> Checking API health: ${_API_URL}/healthz"
+        api_status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "${API_URL}/healthz" || echo "000")
+        if [ "${api_status}" != "200" ]; then
+          echo "API health check failed with HTTP ${api_status}"
+          cat /tmp/healthz.json || true
+          exit 1
+        fi
+        echo "API health check passed"
+
+        echo "==> Checking admin endpoint reachability: ${_ADMIN_URL}"
+        admin_status=$(curl -s -o /tmp/admin_headers.txt -w '%{http_code}' -I "${ADMIN_URL}" || echo "000")
+        case "${admin_status}" in
+          200|301|302|401|403)
+            echo "Admin endpoint reachable with HTTP ${admin_status}"
+            ;;
+          *)
+            echo "Admin endpoint check failed with HTTP ${admin_status}"
+            cat /tmp/admin_headers.txt || true
+            exit 1
+            ;;
+        esac
+
+        echo "Smoke check passed (API + admin endpoint)"
