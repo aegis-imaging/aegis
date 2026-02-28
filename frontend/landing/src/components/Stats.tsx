@@ -1,10 +1,10 @@
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
 const STATS = [
-  { value: '7', label: 'Automated Processing Services' },
+  { value: '9', label: 'Automated Processing Services' },
   { value: '18', label: 'HIPAA Identifiers Addressed' },
-  { value: '400+', label: 'Automated Tests' },
-  { value: '3', label: 'Cloud Platforms Supported' },
+  { value: '750+', label: 'Automated Tests' },
+  { value: '3', label: 'Cloud Platforms Live' },
 ]
 
 export function Stats() {
