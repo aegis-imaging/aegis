@@ -24,7 +24,7 @@ import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
-const htmlPath = path.join(__dirname, 'architecture-diagram.html');
+const htmlPath = path.join(repoRoot, 'AEGIS_Architecture_Diagram.html');
 
 const launchOptions = {
   headless: true,
