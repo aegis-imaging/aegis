@@ -1,3 +1,5 @@
+# ── Provider Auth ────────────────────────────────────────────────────────────
+
 variable "use_oidc" {
   description = "Enable OIDC authentication for the azurerm provider (set to true in CI/CD, false for local az login)"
   type        = bool
