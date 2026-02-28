@@ -14,7 +14,7 @@ Environment variables:
                            "atlas_roi" | "synthseg" | "nnunet" |
                            "totalsegmentator" | "itksnap" | "brainsuite" |
                            "volbrain" | "monai_label" | "petsurfer" | "qsm" |
-                           "basil"
+                           "basil" | "totalspineseg" | "spineps" | "medsam2"
   ANALYTICS_TIMEOUT     -- max seconds per study (default 86400 = 24h)
   FS_LICENSE            -- FreeSurfer license file path
   FSL_DIR               -- FSL installation directory
@@ -52,6 +52,9 @@ from .backends.monai_label import MONAILabelBackend
 from .backends.petsurfer import PETSurferBackend
 from .backends.qsm import QSMBackend
 from .backends.basil import BASILBackend
+from .backends.totalspineseg import TotalSpineSegBackend
+from .backends.spineps import SPINEPSBackend
+from .backends.medsam2 import MedSAM2Backend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +78,9 @@ ALL_BACKENDS: list[AnalyticsBackend] = [
     PETSurferBackend(),
     QSMBackend(),
     BASILBackend(),
+    TotalSpineSegBackend(),
+    SPINEPSBackend(),
+    MedSAM2Backend(),
 ]
 
 LONGITUDINAL_BACKENDS: list[LongitudinalBackend] = [

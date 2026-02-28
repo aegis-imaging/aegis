@@ -32,6 +32,7 @@ Current research files:
 - `docs/research/nnunet-integration.md` — nnU-Net v2 self-configuring DL segmentation framework, Python API, model management, BraTS integration
 - `docs/research/synthseg-integration.md` — SynthSeg contrast-agnostic brain segmentation, FreeSurfer integration, standalone package, QC scoring
 - `docs/research/3d-slicer-server-side-integration.md` — 3D Slicer server-side analysis (impractical), TotalSegmentator as replacement
+- `docs/research/spine-imaging-analytics.md` — spine segmentation tool comparison (TotalSpineSeg, SPINEPS, MedSAM2, SCT, SpineNet), SAM 2/3 medical variants, standard spine metrics, public datasets
 
 Operational docs:
 - `docs/dicom-conformance.md` — formal DICOM conformance statement: supported SOP classes, transfer syntaxes, DICOMweb (QIDO-RS/STOW-RS/WADO-RS), DIMSE (C-STORE SCP, C-ECHO SCP, C-STORE SCU), de-identification profile, limitations
@@ -1031,7 +1032,7 @@ uvicorn app.main:app --port 8089
 | Var | Default | Notes |
 |-----|---------|-------|
 | `ANALYTICS_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
-| `ANALYTICS_TOOL` | `auto` | Backend selection: `auto`, `freesurfer`, `fsl`, `ants`, `spm`, `atlas_roi`, `synthseg`, `nnunet`, `totalsegmentator`, `itksnap`, `brainsuite`, `volbrain`, `monai_label`, `petsurfer`, `qsm`, `basil` |
+| `ANALYTICS_TOOL` | `auto` | Backend selection: `auto`, `freesurfer`, `fsl`, `ants`, `spm`, `atlas_roi`, `synthseg`, `nnunet`, `totalsegmentator`, `itksnap`, `brainsuite`, `volbrain`, `monai_label`, `petsurfer`, `qsm`, `basil`, `totalspineseg`, `spineps`, `medsam2` |
 
 **Study fields:**
 - `analytics_required` — boolean flag, set by routing rule action
@@ -1058,8 +1059,11 @@ uvicorn app.main:app --port 8089
 | PETSurfer | `mri_gtmpvc` | PET partial volume correction and SUVR quantification |
 | QSM | `tgv_qsm` or `scipy` (Python) | Quantitative Susceptibility Mapping from phase/magnitude data |
 | BASIL | `oxford_asl` | ASL perfusion CBF quantification (part of FSL) |
+| TotalSpineSeg | `totalspineseg` (CLI) | Spine MRI segmentation: vertebrae C1-sacrum, IVDs, spinal cord/canal (LGPL-3.0) |
+| SPINEPS | `spineps` (Python API) | Whole-spine MRI segmentation with 14 vertebral substructure classes + instance vertebrae (Apache 2.0) |
+| MedSAM2 | SAM 2 (Python API) | General-purpose prompted medical image segmentation — binary masks, any modality (Apache 2.0) |
 
-**Auto-selection priority:** freesurfer > fsl > ants > spm > atlas_roi > synthseg > nnunet > totalsegmentator > itksnap > brainsuite > volbrain > monai_label > petsurfer > qsm > basil (first available wins)
+**Auto-selection priority:** freesurfer > fsl > ants > spm > atlas_roi > synthseg > nnunet > totalsegmentator > itksnap > brainsuite > volbrain > monai_label > petsurfer > qsm > basil > totalspineseg > spineps > medsam2 (first available wins)
 
 **Single-study backends:**
 
@@ -2166,7 +2170,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | phi-detection | 134 | Windowing, uint8 normalization, mock Tesseract OCR, Cloud Vision/Azure Vision/Textract OCR, pixel_utils, multi-file detection, pixel redaction, LLM text scrubbing, private tag PHI scanning |
 | bids-service | 17 | Series classification (T1w/FLAIR/bold/DWI/ASL/PET/CT), subject label hashing, mock dcm2niix |
 | synth-service | 12 | Synthetic brain MRI generation, DICOM metadata, nibabel phantom pipeline |
-| analytics-service | 280+ | All 15 backends (FreeSurfer/FSL/ANTs/SPM/SynthSeg/nnU-Net/TotalSegmentator/ITK-SNAP/BrainSuite/volBrain/MONAI Label/PETSurfer/QSM/BASIL), tool availability detection, seg_utils, endpoint tests |
+| analytics-service | 280+ | All 18 backends (FreeSurfer/FSL/ANTs/SPM/SynthSeg/nnU-Net/TotalSegmentator/ITK-SNAP/BrainSuite/volBrain/MONAI Label/PETSurfer/QSM/BASIL/TotalSpineSeg/SPINEPS/MedSAM2), tool availability detection, seg_utils (spine finders + label maps), endpoint tests |
 
 All tests use **synthetic DICOM files** generated via pydicom — no test data on disk. External tools (tesseract, dcm2niix, mri_deface) are mocked.
 
