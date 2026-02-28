@@ -14,7 +14,7 @@ from pydicom.dataset import Dataset
 from .dateshift import DATE_TAGS, TIME_TAGS, shift_dicom_date
 from .sequences import process_sequences
 from .tags import BASIC_PROFILE, is_private_tag
-from .text_scrub import ScrubContext, scrub_free_text
+from .text_scrub import RemoteTextScrubBackend, ScrubContext, scrub_free_text
 from .uid_hash import hash_identifier, hash_uid
 
 
@@ -52,8 +52,19 @@ class DeidResult:
     date_shift_offset: int | None = None
 
 
-def deidentify(ds: Dataset, options: DeidOptions | None = None) -> DeidResult:
+def deidentify(
+    ds: Dataset,
+    options: DeidOptions | None = None,
+    text_scrub_backend: RemoteTextScrubBackend | None = None,
+) -> DeidResult:
     """Apply de-identification to a pydicom Dataset **in place**.
+
+    Args:
+        ds: The pydicom Dataset to modify.
+        options: De-identification options.
+        text_scrub_backend: Optional remote text scrub backend. When provided,
+            C-action (clean) fields are scrubbed via the remote service instead
+            of the local regex backend.
 
     Returns the modified dataset and a diff of all changes for UI preview.
     """
@@ -163,7 +174,10 @@ def deidentify(ds: Dataset, options: DeidOptions | None = None) -> DeidResult:
                 ))
 
         elif action == "C":
-            scrub_result = scrub_free_text(original_str or "", scrub_context)
+            if text_scrub_backend:
+                scrub_result = text_scrub_backend.scrub(original_str or "", scrub_context)
+            else:
+                scrub_result = scrub_free_text(original_str or "", scrub_context)
             if scrub_result.phi_found:
                 setattr(ds, keyword, scrub_result.text)
                 tag_changes.append(TagChange(
