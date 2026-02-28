@@ -216,6 +216,22 @@ steps:
         docker push ${_REPO}/synth-service:${SHORT_SHA}
         docker push ${_REPO}/synth-service:latest
 
+  # --- sct-service ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-sct-service
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/sct-service:${SHORT_SHA} \
+          -t ${_REPO}/sct-service:latest \
+          sct-service
+        docker push ${_REPO}/sct-service:${SHORT_SHA}
+        docker push ${_REPO}/sct-service:latest
+
   # --- mcp-server ---
   - name: gcr.io/cloud-builders/docker
     id: build-push-mcp-server
@@ -412,6 +428,20 @@ steps:
       - deploy
       - synth-service
       - --image=${_REPO}/synth-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy sct-service ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-sct-service
+    waitFor: [build-push-sct-service]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - sct-service
+      - --image=${_REPO}/sct-service:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --quiet

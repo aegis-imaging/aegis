@@ -199,6 +199,63 @@ export async function handleTriggerAnalytics(
   });
 }
 
+export async function handleTriggerSct(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "trigger_sct");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_sct",
+      false,
+      "trigger_sct"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_sct");
+  }
+
+  if (matched.sct_required === false) {
+    return formatError(requestId, "CONFLICT", "Study does not require SCT analysis", false, "trigger_sct");
+  }
+
+  if (matched.sct_status === "analyzing") {
+    return formatError(requestId, "CONFLICT", "SCT analysis already in progress", false, "trigger_sct");
+  }
+
+  if (matched.sct_status && !["pending", "failed"].includes(matched.sct_status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `SCT trigger blocked for current status: ${matched.sct_status}`,
+      false,
+      "trigger_sct"
+    );
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/run-sct`);
+  return formatSuccess(requestId, "trigger_sct", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
 export async function handleTriggerLongitudinalAnalytics(
   requestId: string,
   parsed: {

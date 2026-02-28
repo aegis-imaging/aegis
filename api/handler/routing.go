@@ -145,7 +145,7 @@ func (s *Server) CreateRoutingRule(w http.ResponseWriter, r *http.Request) {
 		"require_phi_scan": true, "require_qc_check": true,
 		"require_bids_conversion": true, "require_classification": true,
 		"require_protocol_check": true, "require_pixel_redaction": true,
-		"require_analytics": true,
+		"require_analytics": true, "require_sct": true,
 	}
 	if !validActions[rule.Action] {
 		s.writeError(w, http.StatusBadRequest, "invalid action")

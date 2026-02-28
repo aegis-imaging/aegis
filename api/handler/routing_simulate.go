@@ -36,6 +36,7 @@ type simulateActionSummary struct {
 	RequireExport          bool `json:"require_export"`
 	RequirePixelRedaction  bool `json:"require_pixel_redaction"`
 	RequireAnalytics       bool `json:"require_analytics"`
+	RequireSct             bool `json:"require_sct"`
 	AutoApprove            bool `json:"auto_approve"`
 	Reject                 bool `json:"reject"`
 }
@@ -135,6 +136,8 @@ func (s *Server) SimulateRoutingRules(w http.ResponseWriter, r *http.Request) {
 			summary.RequirePixelRedaction = true
 		case "require_analytics":
 			summary.RequireAnalytics = true
+		case "require_sct":
+			summary.RequireSct = true
 		case "auto_approve":
 			summary.AutoApprove = true
 		case "reject":

@@ -548,6 +548,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-download", auth(srv.ServeDicomDownload))
 	mux.HandleFunc("POST /api/studies/{studyUID}/analytics", adminOnly(srv.TriggerAnalytics))
 	mux.HandleFunc("POST /api/studies/{studyUID}/longitudinal-analytics", adminOnly(srv.TriggerLongitudinalAnalytics))
+	mux.HandleFunc("POST /api/studies/{studyUID}/run-sct", adminOnly(srv.TriggerSct))
 	mux.HandleFunc("POST /api/studies/{studyUID}/trigger-export", adminOnly(srv.TriggerExport))
 
 	// Biomarker database — ROI results, composite scores, longitudinal data.
