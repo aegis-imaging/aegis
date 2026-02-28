@@ -21,6 +21,12 @@ func (s *Server) storeROIResults(ctx context.Context, study *model.Study, result
 			s.storeFreeSurferROIs(ctx, study, r.Metrics)
 		case "atlas_roi":
 			s.storeAtlasROIResults(ctx, study, r.Metrics)
+		case "synthseg":
+			s.storeSynthSegROIs(ctx, study, r.Metrics)
+		case "nnunet":
+			s.storeGenericSegROIs(ctx, study, r.Metrics, "nnunet")
+		case "totalsegmentator":
+			s.storeGenericSegROIs(ctx, study, r.Metrics, "totalsegmentator")
 		}
 	}
 }
@@ -188,6 +194,164 @@ func (s *Server) storeAtlasROIResults(ctx context.Context, study *model.Study, m
 		return
 	}
 	log.Printf("roi-storage: stored %d Atlas ROI results for %s", len(rows), study.StudyInstanceUID)
+}
+
+// storeSynthSegROIs extracts per-ROI volumes from SynthSeg metrics and stores
+// them as ROI results. Additionally stores a QC composite score when available.
+func (s *Server) storeSynthSegROIs(ctx context.Context, study *model.Study, metrics map[string]any) {
+	if err := model.DeleteROIResultsByStudy(ctx, s.db, study.ID); err != nil {
+		log.Printf("roi-storage: delete existing ROIs for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	atlasName, _ := metrics["atlas"].(string)
+	if atlasName == "" {
+		atlasName = "synthseg"
+	}
+
+	var rows []model.ROIResult
+
+	// roi_volumes: map[roi_name] → volume_mm3
+	if vols, ok := metrics["roi_volumes"].(map[string]any); ok {
+		for name, val := range vols {
+			rows = append(rows, model.ROIResult{
+				StudyID:     study.ID,
+				Tool:        "synthseg",
+				AtlasName:   atlasName,
+				ROIName:     name,
+				MetricType:  "volume_mm3",
+				MetricValue: toFloat64(val),
+				Hemisphere:  synthsegHemisphere(name),
+				ScanType:    "T1w",
+			})
+		}
+	}
+
+	if len(rows) == 0 {
+		return
+	}
+
+	if err := model.CreateROIResults(ctx, s.db, rows); err != nil {
+		log.Printf("roi-storage: insert SynthSeg ROIs for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	log.Printf("roi-storage: stored %d SynthSeg ROI results for %s", len(rows), study.StudyInstanceUID)
+
+	// Store QC composite score if available.
+	if qcScore, ok := metrics["qc_score"]; ok && qcScore != nil {
+		meta, _ := json.Marshal(map[string]any{
+			"parcellation": metrics["parcellation"],
+			"roi_count":    metrics["roi_count"],
+		})
+		score := &model.CompositeScore{
+			StudyID:    study.ID,
+			Tool:       "synthseg",
+			ScoreName:  "synthseg_qc",
+			ScoreValue: toFloat64(qcScore),
+			Metadata:   meta,
+		}
+		if err := model.DeleteCompositeScoresByStudy(ctx, s.db, study.ID); err != nil {
+			log.Printf("roi-storage: delete existing composite scores for %s: %v", study.StudyInstanceUID, err)
+		}
+		if err := model.CreateCompositeScore(ctx, s.db, score); err != nil {
+			log.Printf("roi-storage: insert SynthSeg QC score for %s: %v", study.StudyInstanceUID, err)
+		}
+	}
+}
+
+// storeGenericSegROIs extracts per-ROI volumes and intensity stats from
+// segmentation-based backends (nnU-Net, TotalSegmentator). These share the
+// same metrics structure: atlas, roi_volumes, roi_stats.
+func (s *Server) storeGenericSegROIs(ctx context.Context, study *model.Study, metrics map[string]any, toolName string) {
+	if err := model.DeleteROIResultsByStudy(ctx, s.db, study.ID); err != nil {
+		log.Printf("roi-storage: delete existing ROIs for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	atlasName, _ := metrics["atlas"].(string)
+	if atlasName == "" {
+		atlasName = toolName
+	}
+
+	var rows []model.ROIResult
+
+	// roi_volumes: map[roi_name] → volume_mm3
+	if vols, ok := metrics["roi_volumes"].(map[string]any); ok {
+		for name, val := range vols {
+			rows = append(rows, model.ROIResult{
+				StudyID:     study.ID,
+				Tool:        toolName,
+				AtlasName:   atlasName,
+				ROIName:     name,
+				MetricType:  "volume_mm3",
+				MetricValue: toFloat64(val),
+				Hemisphere:  hemisphereFromName(name),
+				ScanType:    "T1w",
+			})
+		}
+	}
+
+	// roi_stats: []map with roi_name, mean, median, std, voxel_count
+	if stats, ok := metrics["roi_stats"].([]any); ok {
+		for _, item := range stats {
+			stat, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := stat["roi_name"].(string)
+			if name == "" {
+				continue
+			}
+			hem := hemisphereFromName(name)
+
+			for _, metricKey := range []string{"mean", "median", "std"} {
+				if v, exists := stat[metricKey]; exists {
+					rows = append(rows, model.ROIResult{
+						StudyID:     study.ID,
+						Tool:        toolName,
+						AtlasName:   atlasName,
+						ROIName:     name,
+						MetricType:  metricKey,
+						MetricValue: toFloat64(v),
+						Hemisphere:  hem,
+						ScanType:    "T1w",
+					})
+				}
+			}
+		}
+	}
+
+	if len(rows) == 0 {
+		return
+	}
+
+	if err := model.CreateROIResults(ctx, s.db, rows); err != nil {
+		log.Printf("roi-storage: insert %s ROIs for %s: %v", toolName, study.StudyInstanceUID, err)
+		return
+	}
+	log.Printf("roi-storage: stored %d %s ROI results for %s", len(rows), toolName, study.StudyInstanceUID)
+}
+
+// synthsegHemisphere detects hemisphere from SynthSeg ROI names which use
+// "Left-" / "Right-" or "ctx-lh-" / "ctx-rh-" prefixes.
+func synthsegHemisphere(name string) string {
+	if len(name) >= 5 {
+		if name[:5] == "Left-" {
+			return "L"
+		}
+		if name[:6] == "Right-" {
+			return "R"
+		}
+	}
+	if len(name) >= 6 {
+		if name[:6] == "ctx-lh" {
+			return "L"
+		}
+		if name[:6] == "ctx-rh" {
+			return "R"
+		}
+	}
+	return hemisphereFromName(name)
 }
 
 // storeTBMSyNResults extracts per-ROI atrophy measurements from TBM-SyN metrics.
