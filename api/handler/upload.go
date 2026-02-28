@@ -41,6 +41,7 @@ type studyMetadata struct {
 	Modality         string           `json:"modality"`
 	BodyPart         string           `json:"body_part"`
 	StudyDescription string           `json:"study_description"`
+	StudyDate        string           `json:"study_date"`
 	SeriesCount      int              `json:"series_count"`
 	InstanceCount    int              `json:"instance_count"`
 	StudySizeBytes   int64            `json:"study_size_bytes,omitempty"`
@@ -104,6 +105,26 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session.InstitutionID = institutionID
+
+	// Store client-provided metadata on the session for later use at upload-complete.
+	if req.Metadata.Modality != "" || req.Metadata.BodyPart != "" || req.Metadata.StudyDate != "" {
+		var mod, bp, sd *string
+		if req.Metadata.Modality != "" {
+			mod = &req.Metadata.Modality
+		}
+		if req.Metadata.BodyPart != "" {
+			bp = &req.Metadata.BodyPart
+		}
+		if req.Metadata.StudyDate != "" {
+			sd = &req.Metadata.StudyDate
+		}
+		if err := model.UpdateUploadSessionMetadata(r.Context(), s.db, session.ID, mod, bp, sd); err != nil {
+			log.Printf("set upload session metadata: %v", err)
+		}
+		session.Modality = mod
+		session.BodyPart = bp
+		session.StudyDate = sd
+	}
 
 	// Set storage prefix using session ID
 	prefix := fmt.Sprintf("uploads/%s", session.ID)
@@ -286,6 +307,7 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 		Modality:         deref(session.Modality),
 		BodyPart:         deref(session.BodyPart),
 		StudyDescription: "",
+		StudyDate:        session.StudyDate,
 		SeriesCount:      0,
 		InstanceCount:    len(files),
 		Status:           "received",

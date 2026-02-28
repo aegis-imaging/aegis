@@ -16,6 +16,7 @@ type Study struct {
 	Modality               string     `json:"modality"`
 	BodyPart               string     `json:"body_part"`
 	StudyDescription       string     `json:"study_description"`
+	StudyDate              *string    `json:"study_date,omitempty"`
 	SeriesCount            int        `json:"series_count"`
 	InstanceCount          int        `json:"instance_count"`
 	Status                 string     `json:"status"`
@@ -52,7 +53,7 @@ type Study struct {
 
 const studyColumns = `
 	id, project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
-	study_description, series_count, instance_count, status, defacing_required,
+	study_description, study_date, series_count, instance_count, status, defacing_required,
 	dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 	bids_required, bids_status, classification_required, classification_status,
 	protocol_required, protocol_status,
@@ -76,7 +77,7 @@ type scannable interface {
 func scanStudy(row scannable, s *Study) error {
 	return row.Scan(
 		&s.ID, &s.ProjectID, &s.UploadSessionID, &s.InstitutionID, &s.StudyInstanceUID,
-		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.SeriesCount, &s.InstanceCount,
+		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.StudyDate, &s.SeriesCount, &s.InstanceCount,
 		&s.Status, &s.DefacingRequired, &s.DicomStore, &s.Source,
 		&s.PhiScanRequired, &s.PhiScanStatus, &s.QcRequired, &s.QcStatus,
 		&s.BidsRequired, &s.BidsStatus,
@@ -100,7 +101,7 @@ func scanStudy(row scannable, s *Study) error {
 func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 	return db.QueryRowContext(ctx, `
 		INSERT INTO studies (project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
-		                     study_description, series_count, instance_count, status, defacing_required,
+		                     study_description, study_date, series_count, instance_count, status, defacing_required,
 		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 		                     bids_required, bids_status,
 		                     classification_required, classification_status,
@@ -108,10 +109,10 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		                     export_required, export_status,
 		                     pixel_redaction_required, pixel_redaction_status,
 		                     analytics_required, analytics_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
-		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
+		s.StudyDescription, s.StudyDate, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
 		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus,
 		s.BidsRequired, s.BidsStatus,
 		s.ClassificationRequired, s.ClassificationStatus,
@@ -155,9 +156,11 @@ type StudyFilters struct {
 	InstitutionID string    // exact match on institution_id (UUID)
 	DateFrom      time.Time // created_at >= DateFrom (zero = no lower bound)
 	DateTo        time.Time // created_at <= DateTo   (zero = no upper bound)
+	StudyDateFrom string    // study_date >= StudyDateFrom (YYYYMMDD, empty = no lower bound)
+	StudyDateTo   string    // study_date <= StudyDateTo   (YYYYMMDD, empty = no upper bound)
 	Flagged       *bool     // if non-nil, filter by priority_flag value
 	AssignedTo    string    // exact match on assigned_to UUID
-	SortBy        string    // created_at|updated_at|status|modality|body_part|source|instance_count (default: created_at)
+	SortBy        string    // created_at|updated_at|status|modality|body_part|source|instance_count|study_date (default: created_at)
 	SortDir       string    // asc|desc (default: desc)
 }
 
@@ -224,6 +227,16 @@ func studyWhere(f StudyFilters) (string, []any) {
 		args = append(args, f.DateTo.UTC())
 		n++
 	}
+	if f.StudyDateFrom != "" {
+		clauses = append(clauses, fmt.Sprintf(`study_date >= $%d`, n))
+		args = append(args, f.StudyDateFrom)
+		n++
+	}
+	if f.StudyDateTo != "" {
+		clauses = append(clauses, fmt.Sprintf(`study_date <= $%d`, n))
+		args = append(args, f.StudyDateTo)
+		n++
+	}
 	if f.Flagged != nil {
 		clauses = append(clauses, fmt.Sprintf(`priority_flag = $%d`, n))
 		args = append(args, *f.Flagged)
@@ -256,6 +269,7 @@ var allowedStudySortCols = map[string]string{
 	"source":         "source",
 	"instance_count": "instance_count",
 	"assigned_at":    "assigned_at",
+	"study_date":     "study_date",
 }
 
 func ListStudies(ctx context.Context, db *sql.DB, f StudyFilters, limit, offset int) ([]Study, error) {
