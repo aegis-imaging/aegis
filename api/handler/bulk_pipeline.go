@@ -19,13 +19,14 @@ type bulkPipelineTriggerResponse struct {
 }
 
 var validPipelineSteps = map[string]bool{
-	"classify": true,
-	"phi_scan": true,
-	"protocol": true,
-	"deface":   true,
-	"qc":       true,
-	"bids":     true,
-	"export":   true,
+	"classify":        true,
+	"phi_scan":        true,
+	"protocol":        true,
+	"deface":          true,
+	"qc":              true,
+	"bids":            true,
+	"export":          true,
+	"pixel_redaction": true,
 }
 
 // BulkPipelineTrigger resets and re-dispatches a pipeline step for multiple
@@ -45,7 +46,7 @@ func (s *Server) BulkPipelineTrigger(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validPipelineSteps[req.Step] {
-		s.writeError(w, http.StatusBadRequest, "step must be one of: classify, phi_scan, protocol, deface, qc, bids, export")
+		s.writeError(w, http.StatusBadRequest, "step must be one of: classify, phi_scan, protocol, deface, qc, bids, export, pixel_redaction")
 		return
 	}
 	if len(req.StudyIDs) == 0 {

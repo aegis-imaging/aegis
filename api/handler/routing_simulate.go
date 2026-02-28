@@ -27,15 +27,16 @@ type simulatedMatchedRule struct {
 }
 
 type simulateActionSummary struct {
-	RequireDefacing       bool `json:"require_defacing"`
-	RequirePhiScan        bool `json:"require_phi_scan"`
-	RequireQcCheck        bool `json:"require_qc_check"`
-	RequireBidsConversion bool `json:"require_bids_conversion"`
-	RequireClassification bool `json:"require_classification"`
-	RequireProtocolCheck  bool `json:"require_protocol_check"`
-	RequireExport         bool `json:"require_export"`
-	AutoApprove           bool `json:"auto_approve"`
-	Reject                bool `json:"reject"`
+	RequireDefacing        bool `json:"require_defacing"`
+	RequirePhiScan         bool `json:"require_phi_scan"`
+	RequireQcCheck         bool `json:"require_qc_check"`
+	RequireBidsConversion  bool `json:"require_bids_conversion"`
+	RequireClassification  bool `json:"require_classification"`
+	RequireProtocolCheck   bool `json:"require_protocol_check"`
+	RequireExport          bool `json:"require_export"`
+	RequirePixelRedaction  bool `json:"require_pixel_redaction"`
+	AutoApprove            bool `json:"auto_approve"`
+	Reject                 bool `json:"reject"`
 }
 
 type simulateResponse struct {
@@ -129,6 +130,8 @@ func (s *Server) SimulateRoutingRules(w http.ResponseWriter, r *http.Request) {
 			summary.RequireProtocolCheck = true
 		case "require_export":
 			summary.RequireExport = true
+		case "require_pixel_redaction":
+			summary.RequirePixelRedaction = true
 		case "auto_approve":
 			summary.AutoApprove = true
 		case "reject":
