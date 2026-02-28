@@ -1,8 +1,8 @@
 # DICOM Conformance Statement
 
 **Application**: Anonymization & Exchange Gateway for Imaging Studies (AEGIS)
-**Version**: 1.2
-**Date**: 2026-02-27
+**Version**: 1.3
+**Date**: 2026-02-28
 **Standard**: DICOM PS3 (2024c)
 
 ---
@@ -296,7 +296,7 @@ AEGIS is certified for deployment on three cloud platforms. The DICOM protocol b
 | Component | Platform Resource |
 |-----------|-----------------|
 | Go API | Cloud Run (`aegis-api`) |
-| DIMSE Receiver SCP | Compute Engine VM (Debian 12, port 11112) — Cloud Run cannot expose raw TCP |
+| DIMSE Receiver SCP | Compute Engine VM (Debian 12, static IP `35.232.172.221`, port 11112) — operational |
 | DICOM Storage | Google Cloud Storage (GCS), `STORAGE_MODE=gcs` |
 | Auth | IAP (`AUTH_PROVIDER=iap`), header `X-Goog-Authenticated-User-Email` |
 | Cross-cloud routing | STOW-RS to AWS/Azure via routing rules + API key auth |
@@ -306,7 +306,7 @@ AEGIS is certified for deployment on three cloud platforms. The DICOM protocol b
 | Component | Platform Resource |
 |-----------|-----------------|
 | Go API | ECS Fargate |
-| DIMSE Receiver SCP | ECS Fargate task (port 11112 exposed via NLB) |
+| DIMSE Receiver SCP | EC2 instance (Amazon Linux 2023, Elastic IP, port 11112) — operational |
 | DICOM Storage | S3 (SSE-KMS), `STORAGE_MODE=s3` |
 | Auth | ALB + Cognito (`AUTH_PROVIDER=aws`), OIDC JWT via `X-Amzn-Oidc-Data` header |
 | Cross-cloud routing | STOW-RS to GCP via routing rules + API key auth |
@@ -318,7 +318,7 @@ AEGIS is certified for deployment on three cloud platforms. The DICOM protocol b
 | Component | Platform Resource |
 |-----------|-----------------|
 | Go API | Azure Container Apps |
-| DIMSE Receiver SCP | Azure Linux VM (Standard_B2s, Debian 12, port 11112) — Container Apps cannot expose raw TCP |
+| DIMSE Receiver SCP | Azure Linux VM (Standard_B2s, Debian 12, static IP `20.97.180.87`, port 11112) — operational |
 | DICOM Storage | Azure Blob Storage, `STORAGE_MODE=azure` |
 | Auth | Easy Auth (`AUTH_PROVIDER=azure`), header `X-MS-CLIENT-PRINCIPAL-NAME` |
 | Email (SMTP) | Azure Communication Services Email relay (`smtp.azurecomm.net:587`) |
@@ -332,6 +332,8 @@ Bidirectional cross-cloud study forwarding is implemented using DICOMweb STOW-RS
 2. On study approval, the Go API streams DICOM files as `multipart/related` to the destination STOW-RS endpoint.
 3. The destination tenancy receives the study via `/api/stow/studies`, creates a study record, and runs its own routing rules.
 4. Duplicate StudyInstanceUIDs are rejected by a unique database constraint — the loop terminates after one hop.
+
+**DIMSE alternative:** Cross-cloud forwarding can also use DIMSE C-STORE via `route_to` rules with `type=dimse` destinations. The source cloud's API proxies the C-STORE through its local DIMSE receiver's `/forward` endpoint to the destination cloud's DIMSE receiver IP on port 11112. Each cloud restricts inbound DIMSE traffic via the `dimse_source_ranges` Terraform variable. See `docs/runbooks/cross-cloud-routing.md` for setup instructions.
 
 ---
 

@@ -9,11 +9,12 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 >
 > **AWS Production Status (2026-02-25):** `301691475234` / `us-east-1` is live.
 > API: `https://aws.api.aegisimaging.ai` — 10 ECS Fargate services, RDS PostgreSQL 15, S3, ALB + Cognito auth.
+> DIMSE receiver: EC2 instance with Elastic IP (port 11112). Healthz: `dimse_receiver: healthy`.
 > Cross-cloud DICOM routing: GCP→AWS STOW-RS verified live. GitHub Actions CI/CD active (fires on push to `develop`).
 >
-> **Azure Production Status (2026-02-27):** Live.
+> **Azure Production Status (2026-02-28):** Live.
 > API: `https://azure.api.aegisimaging.ai` — Container Apps + PostgreSQL Flexible Server + Azure Blob Storage + Azure Container Registry.
-> DIMSE receiver: Azure Linux VM (Standard_B2s, Debian 12, port 11112).
+> DIMSE receiver: Azure Linux VM (Standard_B2s, Debian 12, static IP `20.97.180.87`, port 11112).
 > GitHub Actions OIDC CI/CD (`.github/workflows/deploy-azure.yml`) fires on push to `develop`.
 
 ---
