@@ -31,13 +31,11 @@ export function Architecture() {
         </p>
 
         <div className={`arch__diagram-wrapper animate animate--scale-in animate--delay-2 ${isVisible ? 'animate--visible' : ''}`}>
-          <img
-            src="/architecture.png"
-            alt="AEGIS system architecture diagram"
-            className="arch__diagram"
+          <iframe
+            src="/architecture.html"
+            title="AEGIS system architecture diagram"
+            className="arch__diagram-iframe"
             loading="lazy"
-            width="1200"
-            height="800"
           />
         </div>
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /**
- * Renders AEGIS_Architecture_Diagram.png and .pdf from the HTML source.
+ * Renders AEGIS_Architecture_Diagram.pdf from the HTML source.
+ *
+ * Also copies the HTML source to the landing page public folder
+ * so it can be embedded via iframe.
  *
  * Prerequisites:
  *   npm install --no-save puppeteer    (one-time, from repo root)
@@ -9,11 +12,10 @@
  *   node scripts/render-architecture-diagram.mjs
  *
  * Output:
- *   AEGIS_Architecture_Diagram.png   (2× retina, ~1100 KB)
- *   AEGIS_Architecture_Diagram.pdf   (vector, single page)
+ *   AEGIS_Architecture_Diagram.pdf                   (vector, single page)
+ *   frontend/landing/public/architecture.html         (copy for iframe embed)
  *
- * The HTML source is scripts/architecture-diagram.html.
- * The logo is loaded from logo-small.png in the repo root.
+ * The HTML source is AEGIS_Architecture_Diagram.html in the repo root.
  * Edit the HTML to update the diagram content, then re-run this script.
  */
 
@@ -25,6 +27,11 @@ import fs from 'fs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const htmlPath = path.join(repoRoot, 'AEGIS_Architecture_Diagram.html');
+
+// Copy HTML to landing page public folder for iframe embed
+const landingPublicPath = path.join(repoRoot, 'frontend', 'landing', 'public', 'architecture.html');
+fs.copyFileSync(htmlPath, landingPublicPath);
+console.log('✓ architecture.html →', landingPublicPath);
 
 const launchOptions = {
   headless: true,
@@ -43,15 +50,6 @@ await page.goto(`file://${htmlPath}`, { waitUntil: 'networkidle0' });
 
 const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
 await page.setViewport({ width: 1660, height: bodyHeight + 60, deviceScaleFactor: 2 });
-
-// PNG — canonical location: served directly by the landing page
-const pngPath = path.join(repoRoot, 'frontend', 'landing', 'public', 'architecture.png');
-await page.screenshot({
-  path: pngPath,
-  fullPage: true,
-  omitBackground: false,
-});
-console.log('✓ architecture.png →', pngPath);
 
 // PDF (single page, exact fit)
 await page.pdf({
