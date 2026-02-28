@@ -34,6 +34,8 @@ type Study struct {
 	ProtocolStatus         string     `json:"protocol_status"`
 	ExportRequired         bool       `json:"export_required"`
 	ExportStatus           string     `json:"export_status"`
+	PixelRedactionRequired bool       `json:"pixel_redaction_required"`
+	PixelRedactionStatus   string     `json:"pixel_redaction_status"`
 	DefaceQaScore          *float64   `json:"deface_qa_score,omitempty"`
 	SubjectID              *string    `json:"subject_id,omitempty"`
 	RejectionReason        *string    `json:"rejection_reason,omitempty"`
@@ -53,6 +55,7 @@ const studyColumns = `
 	bids_required, bids_status, classification_required, classification_status,
 	protocol_required, protocol_status,
 	export_required, export_status,
+	pixel_redaction_required, pixel_redaction_status,
 	deface_qa_score,
 	subject_id,
 	rejection_reason,
@@ -77,6 +80,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.ClassificationRequired, &s.ClassificationStatus,
 		&s.ProtocolRequired, &s.ProtocolStatus,
 		&s.ExportRequired, &s.ExportStatus,
+		&s.PixelRedactionRequired, &s.PixelRedactionStatus,
 		&s.DefaceQaScore,
 		&s.SubjectID,
 		&s.RejectionReason,
@@ -97,8 +101,9 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		                     bids_required, bids_status,
 		                     classification_required, classification_status,
 		                     protocol_required, protocol_status,
-		                     export_required, export_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+		                     export_required, export_status,
+		                     pixel_redaction_required, pixel_redaction_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
 		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
@@ -106,7 +111,8 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		s.BidsRequired, s.BidsStatus,
 		s.ClassificationRequired, s.ClassificationStatus,
 		s.ProtocolRequired, s.ProtocolStatus,
-		s.ExportRequired, s.ExportStatus).
+		s.ExportRequired, s.ExportStatus,
+		s.PixelRedactionRequired, s.PixelRedactionStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
@@ -643,6 +649,38 @@ func ClaimExport(ctx context.Context, db *sql.DB, id string) (bool, error) {
 	return n > 0, nil
 }
 
+// SetPixelRedactionRequired sets the pixel_redaction_required flag and initialises pixel_redaction_status to "pending".
+func SetPixelRedactionRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET pixel_redaction_required = $1, pixel_redaction_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdatePixelRedactionStatus sets the pixel_redaction_status field on a study.
+func UpdatePixelRedactionStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET pixel_redaction_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// ClaimPixelRedaction atomically claims pixel redaction dispatch.
+func ClaimPixelRedaction(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET pixel_redaction_status = 'redacting', updated_at = now()
+		WHERE id = $1 AND pixel_redaction_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 // StudyStatusCounts holds per-status study counts for the dashboard overview.
 type StudyStatusCounts struct {
 	Received int `json:"received"`
@@ -1019,6 +1057,7 @@ func GetExpiringStudies(ctx context.Context, db *sql.DB, projectID string, days,
 		  s.phi_scan_required, s.phi_scan_status, s.qc_required, s.qc_status,
 		  s.bids_required, s.bids_status, s.classification_required, s.classification_status,
 		  s.protocol_required, s.protocol_status, s.export_required, s.export_status,
+		  s.pixel_redaction_required, s.pixel_redaction_status,
 		  s.deface_qa_score, s.subject_id, s.rejection_reason, s.study_size_bytes,
 		  s.priority_flag, s.assigned_to, s.assigned_at, s.created_at, s.updated_at,
 		  p.retention_days,
@@ -1054,6 +1093,7 @@ func GetExpiringStudies(ctx context.Context, db *sql.DB, projectID string, days,
 				&row.ClassificationRequired, &row.ClassificationStatus,
 				&row.ProtocolRequired, &row.ProtocolStatus,
 				&row.ExportRequired, &row.ExportStatus,
+				&row.PixelRedactionRequired, &row.PixelRedactionStatus,
 				&row.DefaceQaScore,
 				&row.SubjectID,
 				&row.RejectionReason,

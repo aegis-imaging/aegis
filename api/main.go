@@ -539,6 +539,7 @@ func main() {
 	// Async processing triggers — admin-initiated pipeline actions.
 	mux.HandleFunc("POST /api/deface/{studyUID}", adminOnly(srv.TriggerDeface))
 	mux.HandleFunc("POST /api/studies/{studyUID}/phi-scan", adminOnly(srv.TriggerPhiScan))
+	mux.HandleFunc("POST /api/studies/{studyUID}/pixel-redaction", adminOnly(srv.TriggerPixelRedaction))
 	mux.HandleFunc("POST /api/studies/{studyUID}/qc-check", adminOnly(srv.TriggerQcCheck))
 	mux.HandleFunc("POST /api/studies/{studyUID}/bids-convert", adminOnly(srv.TriggerBidsConversion))
 	mux.HandleFunc("GET /api/studies/{studyUID}/bids-download", auth(srv.ServeBidsDownload))
