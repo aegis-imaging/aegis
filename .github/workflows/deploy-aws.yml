@@ -8,7 +8,7 @@
 #   AWS_GITHUB_OIDC_DEPLOY_ROLE_ARN — optional explicit IAM role ARN for OIDC deploy auth
 #                                      (if unset, workflow derives arn:aws:iam::<AWS_ACCOUNT_ID>:role/aegis-github-actions-deploy)
 #
-# Phase 1: Build all 13 service images in parallel (matrix) and push to ECR.
+# Phase 1: Build all 15 service images in parallel (matrix) and push to ECR.
 # Phase 2: Update all ECS services (force new deployment) + reboot DIMSE EC2.
 #
 # NOTE: landing uses the monorepo root as build context (its Dockerfile copies
@@ -103,6 +103,12 @@ jobs:
           - service: synth-service
             context: synth-service
             dockerfile: synth-service/Dockerfile
+          - service: analytics-service
+            context: analytics-service
+            dockerfile: analytics-service/Dockerfile
+          - service: sct-service
+            context: sct-service
+            dockerfile: sct-service/Dockerfile
           - service: mcp-server
             context: mcp-server
             dockerfile: mcp-server/Dockerfile
@@ -200,6 +206,8 @@ jobs:
             aegis-classification-service \
             aegis-protocol-service \
             aegis-synth-service \
+            aegis-analytics-service \
+            aegis-sct-service \
             aegis-mcp-server; do
             deploy_if_exists "$SVC"
           done
