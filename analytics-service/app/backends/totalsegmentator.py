@@ -40,6 +40,20 @@ _BRAIN_STRUCTURES = {
 # Full label list is loaded dynamically from TotalSegmentator's map_to_binary.json
 # or inferred from the output segmentation mask.
 
+# Fallback label map for the vertebrae_mr task when dynamic map loading fails.
+_VERTEBRAE_MR_LABELS: dict[int, str] = {
+    1: "vertebrae_C1", 2: "vertebrae_C2", 3: "vertebrae_C3",
+    4: "vertebrae_C4", 5: "vertebrae_C5", 6: "vertebrae_C6",
+    7: "vertebrae_C7",
+    8: "vertebrae_T1", 9: "vertebrae_T2", 10: "vertebrae_T3",
+    11: "vertebrae_T4", 12: "vertebrae_T5", 13: "vertebrae_T6",
+    14: "vertebrae_T7", 15: "vertebrae_T8", 16: "vertebrae_T9",
+    17: "vertebrae_T10", 18: "vertebrae_T11", 19: "vertebrae_T12",
+    20: "vertebrae_L1", 21: "vertebrae_L2", 22: "vertebrae_L3",
+    23: "vertebrae_L4", 24: "vertebrae_L5",
+    25: "vertebrae_S1",
+}
+
 
 class TotalSegmentatorBackend(AnalyticsBackend):
     """Whole-body CT/MRI segmentation via TotalSegmentator."""
@@ -276,6 +290,11 @@ def _load_totalseg_label_map(task: str) -> dict[int, str]:
             return {i + 1: name for i, name in enumerate(cm[task])}
     except (ImportError, AttributeError):
         pass
+
+    # Fallback to known label maps for specific tasks
+    if task == "vertebrae_mr":
+        log.info("Using fallback vertebrae_mr label map")
+        return dict(_VERTEBRAE_MR_LABELS)
 
     log.warning("Could not load TotalSegmentator label map, using numeric labels")
     return {}

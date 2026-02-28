@@ -8,13 +8,17 @@ import numpy as np
 import pytest
 
 from app.backends.seg_utils import (
+    SPINEPS_SEMANTIC_LABELS,
+    TOTALSPINESEG_LABELS,
     compute_label_stats,
     compute_label_volumes,
     find_any_nifti,
     find_asl_nifti,
     find_pet_nifti,
     find_qsm_niftis,
+    find_spine_nifti,
     find_t1w_nifti,
+    find_t2w_nifti,
 )
 
 
@@ -205,6 +209,114 @@ class TestComputeLabelStats:
 
             names = [s["roi_name"] for s in stats]
             assert names == ["A_region", "B_region", "C_region"]
+
+
+class TestFindT2wNifti:
+    def test_returns_none_empty_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            assert find_t2w_nifti(d) is None
+
+    def test_finds_t2w(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            t2w = os.path.join(anat, "sub-01_T2w.nii.gz")
+            with open(t2w, "wb") as f:
+                f.write(b"\x00" * 10)
+
+            result = find_t2w_nifti(d)
+            assert result == t2w
+
+    def test_ignores_non_t2w(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            t1w = os.path.join(anat, "sub-01_T1w.nii.gz")
+            with open(t1w, "wb") as f:
+                f.write(b"\x00" * 10)
+
+            assert find_t2w_nifti(d) is None
+
+
+class TestFindSpineNifti:
+    def test_returns_none_empty_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            assert find_spine_nifti(d) is None
+
+    def test_prefers_spine_in_filename(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            spine = os.path.join(anat, "sub-01_spine_T2w.nii.gz")
+            t2w = os.path.join(anat, "sub-01_T2w.nii.gz")
+            for f in [spine, t2w]:
+                with open(f, "wb") as fp:
+                    fp.write(b"\x00" * 10)
+
+            result = find_spine_nifti(d)
+            assert "spine" in result.lower()
+
+    def test_prefers_t2w_for_spine(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            t2w = os.path.join(anat, "sub-01_T2w.nii.gz")
+            t1w = os.path.join(anat, "sub-01_T1w.nii.gz")
+            for f in [t2w, t1w]:
+                with open(f, "wb") as fp:
+                    fp.write(b"\x00" * 10)
+
+            result = find_spine_nifti(d)
+            assert "T2w" in result
+
+    def test_falls_back_to_t1w(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            t1w = os.path.join(anat, "sub-01_T1w.nii.gz")
+            with open(t1w, "wb") as f:
+                f.write(b"\x00" * 10)
+
+            result = find_spine_nifti(d)
+            assert "T1w" in result
+
+    def test_falls_back_to_any_nifti(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            other = os.path.join(anat, "sub-01_FLAIR.nii.gz")
+            with open(other, "wb") as f:
+                f.write(b"\x00" * 10)
+
+            result = find_spine_nifti(d)
+            assert result == other
+
+    def test_spinal_keyword(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            spinal = os.path.join(anat, "sub-01_spinal_cord.nii.gz")
+            t2w = os.path.join(anat, "sub-01_T2w.nii.gz")
+            for f in [spinal, t2w]:
+                with open(f, "wb") as fp:
+                    fp.write(b"\x00" * 10)
+
+            result = find_spine_nifti(d)
+            assert "spinal" in result.lower()
+
+
+class TestSpineLabelMaps:
+    def test_totalspineseg_has_25_vertebrae(self):
+        vertebrae = [v for v in TOTALSPINESEG_LABELS.values()
+                     if not v.startswith("IVD_") and v not in ("spinal_cord", "spinal_canal")]
+        assert len(vertebrae) == 25  # C1-C7 + T1-T12 + L1-L5 + sacrum
+
+    def test_totalspineseg_has_23_ivds(self):
+        ivds = [v for v in TOTALSPINESEG_LABELS.values() if v.startswith("IVD_")]
+        assert len(ivds) == 23  # C2-C3 through L5-S1
+
+    def test_spineps_has_14_labels(self):
+        assert len(SPINEPS_SEMANTIC_LABELS) == 14
 
 
 class TestFindPetNifti:
