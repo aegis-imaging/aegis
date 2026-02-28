@@ -122,13 +122,13 @@ Click a Study UID to open the **Study Detail Panel**. This panel shows:
 
 1. **Header** — full Study UID, status and source badges, description
 2. **Meta row** — modality, body part, file count, series count, DICOM store, timestamps
-3. **Pipeline visualization** — 7-stage horizontal pipeline showing the status of each automated service (Classification → PHI Scan → Protocol → Defacing → QC → BIDS → Export)
+3. **Pipeline visualization** — 8-stage horizontal pipeline showing the status of each automated service (Classification → PHI Scan → Pixel Redaction → Protocol → Defacing → QC → BIDS → Export)
 4. **Action buttons** — all processing triggers, approve/reject, share creation, DICOM viewer, BIDS download
 5. **Tabs** — Audit Trail, Routing Log, Export Shares
 
 ### Approving or Rejecting a Study
 
-After reviewing the study (and optionally viewing it in the OHIF viewer), click:
+After reviewing the study (and optionally viewing it in the Weasis DWV viewer), click:
 
 - **Approve** — marks the study `approved`; uploader receives a notification email (if they provided one); auto-export triggers if a routing rule requires it
 - **Reject** — marks the study `rejected`; uploader is notified
@@ -141,10 +141,12 @@ If `PIPELINE_AUTO=true` (default), services run automatically after upload. You 
 
 - **Classify** — detect modality and body part from DICOM headers
 - **Scan for PHI** — run OCR to detect burned-in text in pixel data
+- **Redact Pixels** — detect and mask burned-in PHI text in DICOM pixel data
 - **Check Protocol** — compare acquisition parameters against project templates
 - **Deface** — remove facial features from head/brain imaging
 - **Run QC** — automated image quality checks
 - **Convert to BIDS** — convert DICOM to NIfTI/BIDS format
+- **Run Analytics** — run neuroimaging analysis tools (FreeSurfer, FSL, ANTs, SPM) on BIDS-converted data
 
 ### Creating an Export Share
 
@@ -201,9 +203,11 @@ After a study is uploaded and routing rules evaluate, AEGIS automatically dispat
 ```
 Phase 0: Classification
     ↓  (fills modality/body_part, re-evaluates routing rules)
-Phase 1: PHI scan + Protocol check + Defacing  (parallel)
+Phase 1: PHI scan + Pixel Redaction + Protocol check + Defacing  (parallel)
     ↓  (defacing must complete for head studies before Phase 2)
 Phase 2: QC check + BIDS conversion
+    ↓
+Phase 3: Analytics  (FreeSurfer, FSL, ANTs, SPM — post-BIDS, on NIfTI outputs)
     ↓
 Admin review → Approve/Reject
     ↓  (on approve)
@@ -215,11 +219,13 @@ Export forwarding  (if routing rule requires route_to destination)
 | Service | What it checks |
 |---------|---------------|
 | **Classification** | Reads DICOM headers to determine modality (MR/CT/PET/…) and body part (HEAD/CHEST/…). Triggers routing re-evaluation — e.g. a HEAD study may automatically require defacing. |
-| **PHI scan** | Runs OCR on every DICOM slice's pixel data to detect burned-in text (patient names, dates, accession numbers) that tag-level de-identification cannot remove. Flags studies for human review. |
-| **Protocol check** | Compares acquisition parameters (TR, TE, flip angle, slice thickness, resolution) against per-project templates. Flags deviations as compliant / minor deviations / non-compliant. |
+| **PHI scan** | Runs OCR on every DICOM slice's pixel data to detect burned-in text (patient names, dates, accession numbers) that tag-level de-identification cannot remove. Flags studies for human review. Supports JPEG2000, Enhanced multi-frame, and Mosaic DICOM formats. |
+| **Pixel redaction** | Detects and masks burned-in PHI text directly in the DICOM pixel data. Produces redacted DICOM files with text regions blacked out while preserving the surrounding image. |
+| **Protocol check** | Compares acquisition parameters (TR, TE, flip angle, slice thickness, resolution) against per-project templates. Flags deviations as compliant / minor deviations / non-compliant. Supports both Classic and Enhanced DICOM. |
 | **Defacing** | Removes facial features from head/brain DICOM studies using automated segmentation tools (mri_reface, DeepDefacer, mri_deface, or a fast fallback). Prevents face reconstruction from 3D volumetric data. |
 | **QC check** | Runs 5 automated quality checks: file integrity, slice consistency, SNR estimation, coverage completeness, and missing slice detection. Flags studies as pass / warn / fail. |
 | **BIDS conversion** | Converts DICOM to NIfTI format with a BIDS-compliant directory structure and JSON sidecar metadata. Output is downloadable as a zip archive. |
+| **Analytics** | Runs neuroimaging analysis tools on BIDS-converted NIfTI data. Supported tools: FreeSurfer (recon-all), FSL (BET, FAST, FLIRT, DTIFIT), ANTs (antsCorticalThickness), and SPM (segmentation, DARTEL). Triggered after BIDS conversion completes. |
 | **Export forwarding** | Forwards de-identified DICOM files to external DICOMweb or DIMSE destinations (e.g. a partner PACS or a cloud archive). Triggered automatically on approval for studies matched by a `route_to` routing rule. |
 
 All service results are recorded in the **Audit Trail** — accessible from the Study Detail Panel. No PHI appears in any audit entry.
@@ -234,7 +240,7 @@ No. The upload portal applies de-identification in your browser before transmitt
 
 **Q: What if I don't have a DICOM viewer — can I still verify the study?**
 
-Yes. The admin dashboard includes an embedded OHIF Viewer. Click **View** on any study to open it inline, or **Open in new tab** to view it full-screen.
+Yes. The admin dashboard includes an embedded Weasis DWV viewer. Click **View** on any study to open it inline, or **Open in new tab** to view it full-screen.
 
 **Q: What happens if defacing or PHI scan fails?**
 
@@ -263,6 +269,22 @@ All administrators (admin and viewer roles) can see the audit trail. It records 
 **Q: How do I get access to the admin dashboard?**
 
 Your institution's AEGIS administrator must register your email in the admin user list. Contact them and provide your Google account email (for GCP/IAP deployments) or your Azure AD email (for Azure deployments).
+
+**Q: What neuroimaging analytics tools are available?**
+
+AEGIS supports four neuroimaging analysis tools that run on BIDS-converted NIfTI data: **FreeSurfer** (recon-all for cortical reconstruction and volumetric segmentation), **FSL** (BET brain extraction, FAST tissue segmentation, FLIRT linear registration, DTIFIT diffusion tensor fitting), **ANTs** (antsCorticalThickness for cortical thickness analysis), and **SPM** (segmentation and DARTEL spatial normalization). Analytics run as Phase 3 of the pipeline, after BIDS conversion completes.
+
+**Q: What DICOM formats and transfer syntaxes are supported?**
+
+AEGIS supports all standard DICOM transfer syntaxes including JPEG Baseline, JPEG Lossless, JPEG 2000 (lossless and lossy), JPEG-LS (lossless and near-lossless), and RLE Lossless. Enhanced (multi-frame) DICOM, Siemens Mosaic DICOM, and compressed formats are all handled transparently — pixel processing services (PHI detection, QC, pixel redaction) decompress via python-gdcm/pylibjpeg backends, and dcm2niix unwraps Mosaic volumes during BIDS conversion.
+
+**Q: What are vendor private tags and how does AEGIS handle them?**
+
+Vendor private tags are non-standard DICOM tags added by scanner manufacturers (e.g. Siemens, GE, Philips) containing acquisition-specific metadata. By default, the PS3.15 Basic Profile removes all private tags during de-identification. Administrators can enable private tag preservation on a per-project basis via anonymization profiles (`keep_private_tags`). When enabled, a dedicated PHI scanning service checks private tag values for embedded PHI before preserving them.
+
+**Q: Can I use AEGIS with studies from a PACS?**
+
+Yes. AEGIS includes a DIMSE receiver that accepts C-STORE associations on port 11112. Configure your PACS to send studies to the AEGIS AE title (default `AEGIS`). Studies received via DIMSE enter the same processing pipeline as browser uploads. You can also query remote PACS using C-FIND via the admin API.
 
 ---
 
