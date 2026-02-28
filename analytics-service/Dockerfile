@@ -26,6 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # PETSurfer        | No   | (FreeSurfer)     | (included w/ FreeSurfer)
 # BASIL            | No   | (FSL)            | (included w/ FSL)
 # volBrain         | No   | Online API       | 0 (no local binary)
+# TotalSpineSeg    | No   | LGPL-3.0         | ~1 GB (+ PyTorch/nnU-Net)
+# SPINEPS          | No   | Apache 2.0       | ~500 MB (+ PyTorch)
+# MedSAM2          | No   | Apache 2.0       | ~500 MB (+ PyTorch)
 
 ARG INCLUDE_FREESURFER=false
 ARG INCLUDE_FSL=false
@@ -38,6 +41,9 @@ ARG INCLUDE_ITKSNAP=false
 ARG INCLUDE_BRAINSUITE=false
 ARG INCLUDE_MONAI=false
 ARG INCLUDE_QSM=false
+ARG INCLUDE_TOTALSPINESEG=false
+ARG INCLUDE_SPINEPS=false
+ARG INCLUDE_MEDSAM2=false
 
 # FreeSurfer (minimal distribution — recon-all + stats tools)
 # Requires FS_LICENSE env var pointing to a license file at runtime.
@@ -140,6 +146,31 @@ RUN if [ "$INCLUDE_QSM" = "true" ]; then \
 # PETSurfer: included with INCLUDE_FREESURFER (mri_gtmpvc is part of FreeSurfer)
 # BASIL/oxford_asl: included with INCLUDE_FSL (oxford_asl is part of FSL)
 # volBrain: online API only, no local binary needed
+
+# TotalSpineSeg (LGPL-3.0, ~1 GB + PyTorch/nnU-Net)
+# Automatic spine MRI segmentation: vertebrae, IVDs, spinal cord, spinal canal.
+# Cascaded nnU-Net models. GPU recommended (8 GB VRAM). ~2-5 min on GPU.
+# https://github.com/neuropoly/totalspineseg
+RUN if [ "$INCLUDE_TOTALSPINESEG" = "true" ]; then \
+    pip install --no-cache-dir "totalspineseg[nnunetv2]"; \
+    fi
+
+# SPINEPS (Apache 2.0, ~500 MB + PyTorch)
+# Automatic whole-spine MRI segmentation with 14 semantic classes + instance
+# vertebrae. Unique substructure segmentation (body, arch, processes, facets).
+# https://github.com/Hendrik-code/spineps
+RUN if [ "$INCLUDE_SPINEPS" = "true" ]; then \
+    pip install --no-cache-dir spineps; \
+    fi
+
+# MedSAM2 (Apache 2.0, ~500 MB + PyTorch)
+# General-purpose prompted medical image segmentation (any modality).
+# Fine-tuned SAM 2 on 455K+ 3D medical image-mask pairs.
+# Very low GPU needs (~1 GB VRAM). Produces binary masks only.
+# https://github.com/bowang-lab/MedSAM2
+RUN if [ "$INCLUDE_MEDSAM2" = "true" ]; then \
+    pip install --no-cache-dir "git+https://github.com/bowang-lab/MedSAM.git"; \
+    fi
 
 # ── Atlas data ────────────────────────────────────────────────────────────
 # Atlases are stored in /opt/atlases/{name}/ with a NIfTI volume and
