@@ -481,7 +481,7 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver", "weasis", "mcp-server", "landing"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "analytics-service", "sct-service", "dimse-receiver", "weasis", "mcp-server", "landing"]
 
   api_image    = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
   admin_image  = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
@@ -500,10 +500,11 @@ locals {
     "https://${local.admin_fqdn}/logout"
   ]
 
-  resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : [
+  resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : compact([
     "https://${local.admin_fqdn}",
     "https://${local.weasis_fqdn}",
-  ]
+    var.landing_domain != "" ? "https://${var.landing_domain}" : "",
+  ])
 
   # SES SMTP endpoint — region-specific. Use ses_smtp_region override when set,
   # otherwise fall back to the primary deployment region.
@@ -1052,6 +1053,8 @@ resource "aws_ecs_task_definition" "api" {
         { name = "CLASSIFICATION_SERVICE_URL", value = "http://classification-service.aegis.local:8080" },
         { name = "PROTOCOL_SERVICE_URL", value = "http://protocol-service.aegis.local:8080" },
         { name = "SYNTH_SERVICE_URL", value = "http://synth-service.aegis.local:8080" },
+        { name = "ANALYTICS_SERVICE_URL", value = "http://analytics-service.aegis.local:8080" },
+        { name = "SCT_SERVICE_URL", value = "http://sct-service.aegis.local:8080" },
         { name = "DIMSE_RECEIVER_URL", value = try("http://${aws_instance.dimse_receiver[0].private_ip}:8080", "") },
         { name = "FIRST_ADMIN_EMAIL", value = var.first_admin_email },
         { name = "SMTP_HOST", value = local.ses_smtp_hostname },

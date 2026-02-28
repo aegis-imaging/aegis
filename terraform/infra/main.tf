@@ -182,6 +182,12 @@ variable "sct_service_image" {
   default     = ""
 }
 
+variable "analytics_service_image" {
+  description = "Container image URI for the analytics sidecar (empty = service not deployed)"
+  type        = string
+  default     = ""
+}
+
 variable "mcp_server_image" {
   description = "Container image URI for the MCP agent server (empty = not deployed)"
   type        = string
@@ -465,7 +471,8 @@ locals {
     # Omit from the map when the image is not provided so the for_each loop
     # does not attempt to create a Cloud Run service with an empty image URI.
     var.synth_service_image != "" ? { synth-service = var.synth_service_image } : {},
-    var.sct_service_image != "" ? { sct-service = var.sct_service_image } : {}
+    var.sct_service_image != "" ? { sct-service = var.sct_service_image } : {},
+    var.analytics_service_image != "" ? { analytics-service = var.analytics_service_image } : {}
   )
 
   lb_domains = distinct(compact([
@@ -1095,6 +1102,13 @@ resource "google_cloud_run_v2_service" "api" {
         for_each = var.sct_service_image != "" ? [google_cloud_run_v2_service.sidecars["sct-service"].uri] : []
         content {
           name  = "SCT_SERVICE_URL"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.analytics_service_image != "" ? [google_cloud_run_v2_service.sidecars["analytics-service"].uri] : []
+        content {
+          name  = "ANALYTICS_SERVICE_URL"
           value = env.value
         }
       }
