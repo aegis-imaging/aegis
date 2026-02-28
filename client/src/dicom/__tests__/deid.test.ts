@@ -153,4 +153,98 @@ describe('deidentify', () => {
       expect(order[actions[i]]).toBeGreaterThanOrEqual(order[actions[i - 1]])
     }
   })
+
+  describe('SR sequence handling', () => {
+    function makeSRDataset(): NaturalizedDataset {
+      return {
+        PatientName: 'DOE^JOHN',
+        PatientID: 'MRN-12345',
+        ReferringPhysicianName: 'SMITH^ALICE',
+        InstitutionName: 'General Hospital',
+        SOPClassUID: '1.2.840.10008.5.1.4.1.1.88.33', // Comprehensive SR
+        StudyInstanceUID: '1.2.840.113619.2.55.3.12345',
+        SeriesInstanceUID: '1.2.840.113619.2.55.3.12345.1',
+        SOPInstanceUID: '1.2.840.113619.2.55.3.12345.1.1',
+        Modality: 'SR',
+        StudyDate: '20240301',
+        AccessionNumber: 'ACC-99999',
+        ContentSequence: [
+          {
+            TextValue: 'Patient John Doe presented with headache',
+            ReferencedSOPInstanceUID: '1.2.840.113619.2.55.3.99999',
+            ContentSequence: [
+              {
+                TextValue: 'Referring physician: Dr. Smith, MRN: 12345',
+                PersonName: 'SMITH^ALICE',
+              },
+            ],
+          },
+          {
+            TextValue: 'Normal brain MRI findings',
+            UID: '1.2.840.113619.2.55.3.88888',
+          },
+        ],
+      } as unknown as NaturalizedDataset
+    }
+
+    it('scrubs PHI from TextValue in ContentSequence', async () => {
+      const ds = makeSRDataset()
+      await deidentify(ds, { salt: 'test-salt' })
+      const items = ds.ContentSequence as Record<string, unknown>[]
+      // First TextValue had patient name — should be scrubbed
+      expect(items[0].TextValue as string).toContain('[REMOVED]')
+      expect(items[0].TextValue as string).not.toContain('John Doe')
+    })
+
+    it('preserves non-PHI TextValue', async () => {
+      const ds = makeSRDataset()
+      await deidentify(ds, { salt: 'test-salt' })
+      const items = ds.ContentSequence as Record<string, unknown>[]
+      expect(items[1].TextValue).toBe('Normal brain MRI findings')
+    })
+
+    it('hashes UIDs within sequences consistently', async () => {
+      const ds = makeSRDataset()
+      const result = await deidentify(ds, { salt: 'test-salt' })
+      const items = ds.ContentSequence as Record<string, unknown>[]
+      // ReferencedSOPInstanceUID should be hashed
+      const refUid = items[0].ReferencedSOPInstanceUID as string
+      expect(refUid).toMatch(/^2\.25\./)
+      expect(refUid).not.toBe('1.2.840.113619.2.55.3.99999')
+      // UID in second item should also be hashed
+      const uid = items[1].UID as string
+      expect(uid).toMatch(/^2\.25\./)
+      // Both should be in the mappings
+      expect(result.uidMappings.has('1.2.840.113619.2.55.3.99999')).toBe(true)
+      expect(result.uidMappings.has('1.2.840.113619.2.55.3.88888')).toBe(true)
+    })
+
+    it('zeros PersonName in nested sequences', async () => {
+      const ds = makeSRDataset()
+      await deidentify(ds, { salt: 'test-salt' })
+      const items = ds.ContentSequence as Record<string, unknown>[]
+      const nested = items[0].ContentSequence as Record<string, unknown>[]
+      expect(nested[0].PersonName).toBe('')
+    })
+
+    it('recurses into deeply nested sequences and scrubs PHI', async () => {
+      const ds = makeSRDataset()
+      await deidentify(ds, { salt: 'test-salt' })
+      const items = ds.ContentSequence as Record<string, unknown>[]
+      const nested = items[0].ContentSequence as Record<string, unknown>[]
+      // Nested TextValue with physician name and MRN should be scrubbed
+      const text = nested[0].TextValue as string
+      expect(text).toContain('[REMOVED]')
+      expect(text).not.toContain('Smith')
+    })
+
+    it('does not affect non-SR datasets without sequences', async () => {
+      const ds = makeDataset()
+      const result = await deidentify(ds, { salt: 'test-salt' })
+      // Standard dataset should work exactly as before
+      expect(ds.Modality).toBe('CT')
+      expect((ds.StudyInstanceUID as string).startsWith('2.25.')).toBe(true)
+      expect(result.uidMappings.size).toBeGreaterThan(0)
+    })
+  })
 })
