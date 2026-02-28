@@ -377,11 +377,16 @@ echo "Client ID:      $(echo $SP | jq -r .appId)"
 echo "Tenant ID:      $(az account show --query tenantId -o tsv)"
 echo "Subscription:   <SUBSCRIPTION_ID>"
 
-# Add federated credentials for the develop branch
+# Add federated credentials for the develop branch (push/dispatch)
 APP_ID=$(echo $SP | jq -r .appId)
 az ad app federated-credential create \
   --id $APP_ID \
   --parameters '{"name":"aegis-develop","issuer":"https://token.actions.githubusercontent.com","subject":"repo:aegis-imaging/aegis:ref:refs/heads/develop","audiences":["api://AzureADTokenExchange"]}'
+
+# Add federated credential for pull requests (terraform plan on PRs)
+az ad app federated-credential create \
+  --id $APP_ID \
+  --parameters '{"name":"aegis-pull-request","issuer":"https://token.actions.githubusercontent.com","subject":"repo:aegis-imaging/aegis:pull_request","audiences":["api://AzureADTokenExchange"]}'
 ```
 
 Add the following as **GitHub Secrets** on the repository:
