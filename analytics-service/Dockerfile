@@ -19,6 +19,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # SynthSeg         | No   | Apache 2.0       | ~200 MB (+ TensorFlow)
 # nnU-Net          | No   | Apache 2.0       | ~1 GB (+ PyTorch)
 # TotalSegmentator | No   | Apache 2.0       | ~1 GB (+ PyTorch)
+# ITK-SNAP/c3d     | No   | GPL v3           | ~200 MB
+# BrainSuite       | No   | GPL v2           | ~1 GB
+# MONAI Label      | No   | Apache 2.0       | ~500 MB (+ PyTorch)
+# QSM (scipy)      | No   | BSD              | ~50 MB
+# PETSurfer        | No   | (FreeSurfer)     | (included w/ FreeSurfer)
+# BASIL            | No   | (FSL)            | (included w/ FSL)
+# volBrain         | No   | Online API       | 0 (no local binary)
 
 ARG INCLUDE_FREESURFER=false
 ARG INCLUDE_FSL=false
@@ -27,6 +34,10 @@ ARG INCLUDE_SPM=false
 ARG INCLUDE_SYNTHSEG=false
 ARG INCLUDE_NNUNET=false
 ARG INCLUDE_TOTALSEGMENTATOR=false
+ARG INCLUDE_ITKSNAP=false
+ARG INCLUDE_BRAINSUITE=false
+ARG INCLUDE_MONAI=false
+ARG INCLUDE_QSM=false
 
 # FreeSurfer (minimal distribution — recon-all + stats tools)
 # Requires FS_LICENSE env var pointing to a license file at runtime.
@@ -90,6 +101,45 @@ RUN if [ "$INCLUDE_NNUNET" = "true" ]; then \
 RUN if [ "$INCLUDE_TOTALSEGMENTATOR" = "true" ]; then \
     pip install --no-cache-dir TotalSegmentator; \
     fi
+
+# ITK-SNAP / Convert3D (GPL v3, ~200 MB)
+# c3d is a lightweight command-line tool for NIfTI manipulation and segmentation.
+# http://www.itksnap.org/pmwiki/pmwiki.php?n=Convert3D.Convert3D
+RUN if [ "$INCLUDE_ITKSNAP" = "true" ]; then \
+    apt-get update && apt-get install -y --no-install-recommends \
+        wget ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    echo "c3d: Download from http://www.itksnap.org/pmwiki/pmwiki.php?n=Downloads.C3D" && \
+    echo "Set C3D_BIN env var after installing"; \
+    fi
+
+# BrainSuite (GPL v2, ~1 GB)
+# Cortical surface extraction and volumetric analysis.
+# http://brainsuite.org/
+RUN if [ "$INCLUDE_BRAINSUITE" = "true" ]; then \
+    apt-get update && apt-get install -y --no-install-recommends \
+        wget ca-certificates libgomp1 && \
+    rm -rf /var/lib/apt/lists/* && \
+    echo "BrainSuite: Download from http://brainsuite.org/download/" && \
+    echo "Set BRAINSUITE_DIR env var after installing"; \
+    fi
+
+# MONAI Label (Apache 2.0, ~500 MB + PyTorch)
+# AI-based interactive and automatic segmentation framework.
+# https://monai.io/label.html
+RUN if [ "$INCLUDE_MONAI" = "true" ]; then \
+    pip install --no-cache-dir monailabel; \
+    fi
+
+# QSM tools — scipy for Python-based TKD/Laplacian QSM pipeline (~50 MB)
+# For external tgv_qsm binary, install separately.
+RUN if [ "$INCLUDE_QSM" = "true" ]; then \
+    pip install --no-cache-dir scipy; \
+    fi
+
+# PETSurfer: included with INCLUDE_FREESURFER (mri_gtmpvc is part of FreeSurfer)
+# BASIL/oxford_asl: included with INCLUDE_FSL (oxford_asl is part of FSL)
+# volBrain: online API only, no local binary needed
 
 # ── Atlas data ────────────────────────────────────────────────────────────
 # Atlases are stored in /opt/atlases/{name}/ with a NIfTI volume and
