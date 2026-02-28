@@ -12,18 +12,19 @@ css: |
     overflow: visible !important;
   }
   h1 { font-size: 2em; margin: 0.67em 0; }
-  h2 { font-size: 1.5em; margin: 1.2em 0 0.6em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.4em; }
-  h3 { font-size: 1.2em; margin: 1em 0 0.4em; }
+  h2 { font-size: 1.5em; margin: 1.2em 0 0.6em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.4em; page-break-after: avoid; break-after: avoid; }
+  h3 { font-size: 1.2em; margin: 1em 0 0.4em; page-break-after: avoid; break-after: avoid; }
+  h4 { page-break-after: avoid; break-after: avoid; }
   p  { margin: 0.8em 0; }
   ul, ol { padding-left: 2em; margin: 0.8em 0; }
   li { margin: 0.3em 0; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 13px; page-break-inside: avoid; break-inside: avoid; }
+  blockquote { border-left: 4px solid #d0d7de; margin: 0; padding: 0 1em; color: #57606a; page-break-inside: avoid; break-inside: avoid; }
   th { background: #f6f8fa; font-weight: 600; text-align: left; padding: 8px 12px; border: 1px solid #d0d7de; }
   td { padding: 7px 12px; border: 1px solid #d0d7de; vertical-align: top; }
   code { background: #f6f8fa; padding: 2px 5px; border-radius: 4px; font-size: 85%; }
   pre  { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; }
   hr   { border: none; border-top: 1px solid #e5e7eb; margin: 2em 0; }
-  blockquote { border-left: 4px solid #d0d7de; margin: 0; padding: 0 1em; color: #57606a; }
   sup  { font-size: 75%; vertical-align: super; }
   em   { font-style: italic; }
   strong { font-weight: 600; }
