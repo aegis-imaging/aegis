@@ -156,10 +156,22 @@ class AtlasROIBackend(AnalyticsBackend):
 
         # Build metrics dict with top-level counts and per-ROI volumes
         roi_volumes = {r["roi_name"]: r["volume_mm3"] for r in roi_stats}
+        # Per-ROI statistics (mean, median, std, voxel_count) for structured DB storage
+        roi_stats_list = [
+            {
+                "roi_name": r["roi_name"],
+                "mean": r.get("mean", 0),
+                "median": r.get("median", 0),
+                "std": r.get("std", 0),
+                "voxel_count": r.get("voxel_count", 0),
+            }
+            for r in roi_stats
+        ]
         metrics = {
             "atlas": atlas_name,
             "roi_count": len(roi_stats),
             "roi_volumes": roi_volumes,
+            "roi_stats": roi_stats_list,
         }
 
         log.info(
