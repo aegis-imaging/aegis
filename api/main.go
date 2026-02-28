@@ -550,6 +550,31 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{studyUID}/longitudinal-analytics", adminOnly(srv.TriggerLongitudinalAnalytics))
 	mux.HandleFunc("POST /api/studies/{studyUID}/trigger-export", adminOnly(srv.TriggerExport))
 
+	// Biomarker database — ROI results, composite scores, longitudinal data.
+	mux.HandleFunc("GET /api/studies/{id}/roi-results", auth(srv.ListROIResults))
+	mux.HandleFunc("GET /api/studies/{id}/roi-results/summary", auth(srv.GetROIResultsSummary))
+	mux.HandleFunc("GET /api/studies/{id}/composite-scores", auth(srv.ListCompositeScores))
+	mux.HandleFunc("GET /api/studies/{id}/longitudinal-roi-results", auth(srv.ListLongitudinalROIResults))
+	mux.HandleFunc("DELETE /api/studies/{id}/roi-results", adminOnly(srv.DeleteROIResults))
+	mux.HandleFunc("GET /api/subjects/{subjectID}/roi-results", auth(srv.ListSubjectROIResults))
+	mux.HandleFunc("GET /api/projects/{id}/roi-export", auth(srv.ExportProjectROIData))
+
+	// Analyst QC ratings — human quality assessments for studies.
+	mux.HandleFunc("GET /api/studies/{id}/qc-ratings", auth(srv.ListQCRatings))
+	mux.HandleFunc("POST /api/studies/{id}/qc-ratings", adminOnly(srv.SubmitQCRating))
+	mux.HandleFunc("PUT /api/qc-ratings/{id}", adminOnly(srv.UpdateQCRating))
+	mux.HandleFunc("DELETE /api/qc-ratings/{id}", adminOnly(srv.DeleteQCRating))
+
+	// Subject demographics — de-identified research metadata.
+	mux.HandleFunc("GET /api/subjects/{subjectID}/demographics", auth(srv.GetSubjectDemographics))
+	mux.HandleFunc("PUT /api/subjects/{subjectID}/demographics", adminOnly(srv.UpsertSubjectDemographics))
+	mux.HandleFunc("GET /api/projects/{id}/demographics", auth(srv.ListProjectDemographics))
+	mux.HandleFunc("GET /api/projects/{id}/demographics.csv", auth(srv.ExportProjectDemographicsCSV))
+
+	// Analytics output files — browse and stream NIfTI/surface/stats files.
+	mux.HandleFunc("GET /api/studies/{id}/analytics-files", auth(srv.ListAnalyticsFiles))
+	mux.HandleFunc("GET /api/studies/{id}/analytics-files/{path...}", auth(srv.ServeAnalyticsFile))
+
 	// Synthetic MRI generation — creates a new synthetic brain MRI study.
 	mux.HandleFunc("POST /api/studies/generate-synthetic", adminOnly(srv.GenerateSyntheticStudy))
 
