@@ -45,7 +45,7 @@ func (s *Server) ResetPipelineStep(w http.ResponseWriter, r *http.Request) {
 		case errInFlight:
 			s.writeError(w, http.StatusConflict, "step is currently in-flight; wait for it to complete before resetting")
 		case errUnknownStep:
-			s.writeError(w, http.StatusBadRequest, "unknown step; valid: deface, phi_scan, qc, bids, classify, protocol, export")
+			s.writeError(w, http.StatusBadRequest, "unknown step; valid: deface, phi_scan, qc, bids, classify, protocol, export, pixel_redaction")
 		case errNotRequired:
 			s.writeError(w, http.StatusBadRequest, "step is not required for this study; enable it via a routing rule or pipeline trigger first")
 		default:
@@ -136,6 +136,15 @@ func resetStep(ctx context.Context, db *sql.DB, study *model.Study, step string)
 			return errInFlight
 		}
 		return model.UpdateExportStatus(ctx, db, study.ID, "pending")
+
+	case "pixel_redaction":
+		if !study.PixelRedactionRequired {
+			return errNotRequired
+		}
+		if study.PixelRedactionStatus == "redacting" {
+			return errInFlight
+		}
+		return model.UpdatePixelRedactionStatus(ctx, db, study.ID, "pending")
 
 	default:
 		return errUnknownStep
