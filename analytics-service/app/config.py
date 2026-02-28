@@ -76,3 +76,16 @@ QSM_DIPOLE_METHOD = os.getenv("QSM_DIPOLE_METHOD", "ilsqr")
 BASIL_BOLUS_DURATION = os.getenv("BASIL_BOLUS_DURATION", "1.8")
 BASIL_TIS = os.getenv("BASIL_TIS", "3.6")
 BASIL_CALIB_METHOD = os.getenv("BASIL_CALIB_METHOD", "voxel")
+
+# TotalSpineSeg (LGPL-3.0)
+TOTALSPINESEG_USE_GPU = os.getenv("TOTALSPINESEG_USE_GPU", "true").lower() == "true"
+TOTALSPINESEG_ISO = os.getenv("TOTALSPINESEG_ISO", "false").lower() == "true"
+TOTALSPINESEG_STEP1_ONLY = os.getenv("TOTALSPINESEG_STEP1_ONLY", "false").lower() == "true"
+
+# SPINEPS (Apache 2.0)
+SPINEPS_MODEL = os.getenv("SPINEPS_MODEL", "t2w")  # "t2w" or "t1w"
+SPINEPS_USE_GPU = os.getenv("SPINEPS_USE_GPU", "true").lower() == "true"
+
+# MedSAM2 (Apache 2.0)
+MEDSAM2_CHECKPOINT = os.getenv("MEDSAM2_CHECKPOINT", "/opt/medsam2/medsam2_checkpoint.pth")
+MEDSAM2_USE_GPU = os.getenv("MEDSAM2_USE_GPU", "true").lower() == "true"
