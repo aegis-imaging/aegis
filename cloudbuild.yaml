@@ -232,6 +232,22 @@ steps:
         docker push ${_REPO}/sct-service:${SHORT_SHA}
         docker push ${_REPO}/sct-service:latest
 
+  # --- analytics-service ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-analytics-service
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/analytics-service:${SHORT_SHA} \
+          -t ${_REPO}/analytics-service:latest \
+          analytics-service
+        docker push ${_REPO}/analytics-service:${SHORT_SHA}
+        docker push ${_REPO}/analytics-service:latest
+
   # --- mcp-server ---
   - name: gcr.io/cloud-builders/docker
     id: build-push-mcp-server
@@ -442,6 +458,20 @@ steps:
       - deploy
       - sct-service
       - --image=${_REPO}/sct-service:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy analytics-service ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-analytics-service
+    waitFor: [build-push-analytics-service]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - analytics-service
+      - --image=${_REPO}/analytics-service:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --quiet
