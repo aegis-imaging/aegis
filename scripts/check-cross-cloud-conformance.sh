@@ -29,8 +29,8 @@ check_pattern ".github/workflows/deploy-aws.yml" 'service: dimse-receiver' "AWS 
 check_pattern ".github/workflows/deploy-aws.yml" 'deploy_if_exists "aegis-landing"' "AWS conditional landing deployment"
 
 # Azure deploy coverage signals
-check_pattern ".github/workflows/deploy-azure.yml" 'Build & push — mcp-server' "Azure build mcp-server"
-check_pattern ".github/workflows/deploy-azure.yml" 'Build & push — dimse-receiver' "Azure build dimse-receiver"
+check_pattern ".github/workflows/deploy-azure.yml" 'service: mcp-server' "Azure build mcp-server"
+check_pattern ".github/workflows/deploy-azure.yml" 'service: dimse-receiver' "Azure build dimse-receiver"
 check_pattern ".github/workflows/deploy-azure.yml" 'Deploy — mcp-server' "Azure deploy mcp-server"
 
 # CI guardrail/check coverage
