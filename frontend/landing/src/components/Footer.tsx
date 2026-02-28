@@ -1,16 +1,14 @@
-export function Footer() {
-  const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-  }
+import { Link } from 'react-router-dom'
 
+export function Footer() {
   return (
     <footer className="footer">
       <div className="footer__inner">
         <div className="footer__brand-col">
-          <div className="footer__brand">
+          <Link to="/" className="footer__brand">
             <img src="/logo.png" alt="AEGIS" className="footer__logo" />
             <span className="footer__wordmark">AEGIS</span>
-          </div>
+          </Link>
           <p className="footer__tagline">
             Anonymization &amp; Exchange Gateway for Imaging Studies
           </p>
@@ -22,22 +20,22 @@ export function Footer() {
 
         <div className="footer__col">
           <h4 className="footer__heading">Product</h4>
-          <button className="footer__link" onClick={() => scrollTo('solution')}>Features</button>
-          <button className="footer__link" onClick={() => scrollTo('how-it-works')}>How It Works</button>
-          <button className="footer__link" onClick={() => scrollTo('trust')}>Compliance</button>
-          <button className="footer__link" onClick={() => scrollTo('architecture')}>Architecture</button>
+          <Link to="/product" className="footer__link">Features</Link>
+          <Link to="/product" className="footer__link">How It Works</Link>
+          <Link to="/product" className="footer__link">Compliance</Link>
+          <Link to="/technology" className="footer__link">Architecture</Link>
         </div>
 
         <div className="footer__col">
           <h4 className="footer__heading">Resources</h4>
-          <button className="footer__link" onClick={() => scrollTo('audiences')}>Use Cases</button>
-          <button className="footer__link" onClick={() => scrollTo('contact')}>Early Access</button>
+          <Link to="/demos" className="footer__link">Live Demos</Link>
+          <Link to="/contact" className="footer__link">Early Access</Link>
           <a href="mailto:contact@aegisimaging.ai" className="footer__link">Support</a>
         </div>
 
         <div className="footer__col">
           <h4 className="footer__heading">Company</h4>
-          <a href="mailto:contact@aegisimaging.ai" className="footer__link">Contact</a>
+          <Link to="/contact" className="footer__link">Contact</Link>
           <a href="https://aegisimaging.ai" className="footer__link">aegisimaging.ai</a>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import dicomParser from 'dicom-parser'
 import { deidentify, parseDicomFile } from '@aegis/client'
 import type { DicomTag } from '@aegis/client'
@@ -280,6 +281,7 @@ const CANVAS_SLICE_INDICES = [3, 7, 11, 15]
 const POLL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
 export default function PipelineDemo() {
+  const navigate = useNavigate()
   const { ref, isVisible } = useScrollAnimation()
   const [stage, setStage] = useState<Stage>('idle')
   const [studyID, setStudyID] = useState('')
@@ -704,21 +706,20 @@ export default function PipelineDemo() {
                   routing rules, PHI detection, protocol compliance, and BIDS export.
                 </div>
               </div>
-              <a
-                href="#contact"
-                onClick={e => { e.preventDefault(); document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }) }}
+              <button
+                onClick={() => navigate('/contact')}
                 style={{
                   display: 'inline-block', padding: '10px 22px',
                   background: 'var(--gradient-cta)', color: '#fff',
                   borderRadius: '8px', fontWeight: 700, fontSize: '0.87rem',
-                  textDecoration: 'none', whiteSpace: 'nowrap',
+                  border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
                   transition: 'transform 0.15s',
                 }}
                 onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-1px)' }}
                 onMouseOut={e => { e.currentTarget.style.transform = '' }}
               >
                 Schedule Demo →
-              </a>
+              </button>
             </div>
 
             {/* Reset */}

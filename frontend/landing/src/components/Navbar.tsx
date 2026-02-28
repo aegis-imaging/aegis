@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useTheme } from '../hooks/useTheme'
 
 function MoonIcon() {
@@ -22,37 +23,23 @@ function SunIcon() {
 }
 
 const NAV_LINKS = [
-  { id: 'problem', label: 'Problem' },
-  { id: 'solution', label: 'Solution' },
-  { id: 'how-it-works', label: 'How It Works' },
-  { id: 'demo', label: 'Live Demo' },
-  { id: 'trust', label: 'Compliance' },
-  { id: 'architecture', label: 'Architecture' },
-  { id: 'contact', label: 'Contact' },
+  { path: '/', label: 'Home' },
+  { path: '/product', label: 'Product' },
+  { path: '/demos', label: 'Demos' },
+  { path: '/technology', label: 'Technology' },
+  { path: '/contact', label: 'Contact' },
 ]
 
 export function Navbar() {
-  const [activeSection, setActiveSection] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const { theme, toggle } = useTheme()
+  const { pathname } = useLocation()
 
+  // Close mobile menu on route change
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id)
-          }
-        }
-      },
-      { rootMargin: '-50% 0px -50% 0px' }
-    )
-
-    const sections = document.querySelectorAll('section[id]')
-    sections.forEach((section) => observer.observe(section))
-    return () => observer.disconnect()
-  }, [])
+    setMenuOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10)
@@ -60,28 +47,28 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-    setMenuOpen(false)
+  const isActive = (path: string) => {
+    if (path === '/') return pathname === '/'
+    return pathname.startsWith(path)
   }
 
   return (
-    <nav className={`navbar ${scrolled ? 'navbar--scrolled' : ''}`}>
+    <nav className={`navbar ${scrolled || pathname !== '/' ? 'navbar--scrolled' : ''}`}>
       <div className="navbar__inner">
-        <button className="navbar__brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+        <Link to="/" className="navbar__brand">
           <img src="/logo.png" alt="AEGIS" className="navbar__logo" />
           <span className="navbar__wordmark">AEGIS</span>
-        </button>
+        </Link>
 
         <div className={`navbar__links ${menuOpen ? 'navbar__links--open' : ''}`}>
           {NAV_LINKS.map((link) => (
-            <button
-              key={link.id}
-              className={`navbar__link ${activeSection === link.id ? 'navbar__link--active' : ''}`}
-              onClick={() => scrollTo(link.id)}
+            <Link
+              key={link.path}
+              to={link.path}
+              className={`navbar__link ${isActive(link.path) ? 'navbar__link--active' : ''}`}
             >
               {link.label}
-            </button>
+            </Link>
           ))}
           <button
             className="navbar__theme-toggle navbar__theme-toggle--mobile"
@@ -91,9 +78,9 @@ export function Navbar() {
             {theme === 'light' ? <MoonIcon /> : <SunIcon />}
             <span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
           </button>
-          <button className="btn btn--primary btn--sm navbar__cta-mobile" onClick={() => scrollTo('contact')}>
+          <Link to="/contact" className="btn btn--primary btn--sm navbar__cta-mobile">
             Schedule Demo
-          </button>
+          </Link>
         </div>
 
         <button
@@ -105,9 +92,9 @@ export function Navbar() {
           {theme === 'light' ? <MoonIcon /> : <SunIcon />}
         </button>
 
-        <button className="btn btn--primary btn--sm navbar__cta" onClick={() => scrollTo('contact')}>
+        <Link to="/contact" className="btn btn--primary btn--sm navbar__cta">
           Schedule Demo
-        </button>
+        </Link>
 
         <button
           className="navbar__hamburger"

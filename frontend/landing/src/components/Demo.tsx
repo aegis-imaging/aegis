@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { parseDicomFile, deidentify } from '@aegis/client'
 import type { DicomTag } from '@aegis/client'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
@@ -65,6 +66,7 @@ function TagRow({ tag, index }: { tag: DicomTag; index: number }) {
 }
 
 export default function Demo() {
+  const navigate = useNavigate()
   const { ref, isVisible } = useScrollAnimation()
   const [state, setState] = useState<DemoState>('idle')
   const [tags, setTags] = useState<DicomTag[]>([])
@@ -349,20 +351,19 @@ export default function Demo() {
           <p style={{ color: '#475569', fontSize: '0.87rem', marginBottom: '20px' }}>
             The same open-source engine powers the upload portal — auditable, DICOM PS3.15 compliant, zero dependency on cloud AI.
           </p>
-          <a
-            href="#contact"
-            onClick={e => { e.preventDefault(); document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' }) }}
+          <button
+            onClick={() => navigate('/contact')}
             style={{
               display: 'inline-block', padding: '14px 32px',
               background: 'var(--gradient-cta)', color: '#fff',
               borderRadius: '8px', fontWeight: 700, fontSize: '1rem',
-              textDecoration: 'none', transition: 'transform 0.15s',
+              border: 'none', cursor: 'pointer', transition: 'transform 0.15s',
             }}
             onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-1px)' }}
             onMouseOut={e => { e.currentTarget.style.transform = '' }}
           >
             Request a full platform demo →
-          </a>
+          </button>
         </div>
       </div>
     </section>
