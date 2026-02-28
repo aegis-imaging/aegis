@@ -22,6 +22,11 @@ terraform {
 }
 
 provider "azurerm" {
+  # OIDC auth is auto-detected from ARM_USE_OIDC + ARM_CLIENT_ID env vars
+  # set by the GitHub Actions azure/login step. Falls back to Azure CLI
+  # auth for local development (az login).
+  use_oidc = var.use_oidc
+
   features {
     key_vault {
       purge_soft_delete_on_destroy    = true

@@ -10,6 +10,7 @@ name: Deploy to Azure
 #     AZURE_SUBSCRIPTION_ID    — Azure subscription ID
 #     AZURE_ACR_REGISTRY       — ACR login server (e.g. aegisprodacr.azurecr.io)
 #     AZURE_RESOURCE_GROUP     — Resource group name (e.g. aegis-prod)
+#     AZURE_TERRAFORM_TFVARS   — Full contents of terraform/azure/terraform.tfvars (for auto-apply)
 #   Variables:
 #     AZURE_WEASIS_URL          — Weasis container app URL (baked into admin-dashboard)
 #     AZURE_API_URL             — API container app URL (baked into landing + admin-dashboard)
@@ -341,3 +342,87 @@ jobs:
                 \$PREV_VOLS \
                 \"$ACR/dimse-receiver:$IMAGE_TAG\"
             "
+
+  # ── Phase 4: Terraform apply (only when terraform/azure/** changed) ────────
+  # Mirrors GCP's cloudbuild.terraform.yaml auto-apply pattern.
+  # Requires AZURE_TERRAFORM_TFVARS secret containing the full terraform.tfvars.
+  terraform-detect:
+    name: Detect Terraform changes
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.filter.outputs.azure_tf }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for terraform/azure changes
+        id: filter
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q '^terraform/azure/'; then
+            echo "azure_tf=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "azure_tf=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  terraform-apply:
+    name: Terraform apply (Azure)
+    runs-on: ubuntu-latest
+    needs: [deploy, terraform-detect]
+    if: ${{ needs.terraform-detect.outputs.changed == 'true' }}
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+
+    steps:
+      - name: Check tfvars secret is configured
+        env:
+          TFVARS: ${{ secrets.AZURE_TERRAFORM_TFVARS }}
+        run: |
+          if [[ -z "$TFVARS" ]]; then
+            echo "::warning::AZURE_TERRAFORM_TFVARS secret not set — skipping terraform apply"
+            echo "SKIP_TF=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout
+        if: ${{ env.SKIP_TF != 'true' }}
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        if: ${{ env.SKIP_TF != 'true' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Write terraform.tfvars from secret
+        if: ${{ env.SKIP_TF != 'true' }}
+        run: |
+          cat > terraform/azure/terraform.tfvars <<'TFVARS_EOF'
+          ${{ secrets.AZURE_TERRAFORM_TFVARS }}
+          TFVARS_EOF
+
+      - name: Setup Terraform
+        if: ${{ env.SKIP_TF != 'true' }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform init
+        if: ${{ env.SKIP_TF != 'true' }}
+        working-directory: terraform/azure
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        if: ${{ env.SKIP_TF != 'true' }}
+        working-directory: terraform/azure
+        run: terraform validate
+
+      - name: Terraform apply
+        if: ${{ env.SKIP_TF != 'true' }}
+        working-directory: terraform/azure
+        run: terraform apply -auto-approve -input=false -var="use_oidc=true"

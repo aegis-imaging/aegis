@@ -2173,7 +2173,7 @@ Only the container image is updated on each deploy; all env vars, secrets, CPU/m
 
 **`terraform/aws/` is intentionally manual** — AWS is live production (`us-east-1`). Deploy manually: `cd terraform/aws && terraform plan && terraform apply`.
 
-**`terraform/azure/` is intentionally manual** — Azure is the third cloud target. Deploy manually: `cd terraform/azure && terraform init && terraform plan && terraform apply`. Auto-deploy is handled by `.github/workflows/deploy-azure.yml` (GitHub Actions, fires on `develop` push). Terraform infra changes remain manual to avoid accidental resource destruction.
+**`terraform/azure/` auto-applies via GitHub Actions** — `.github/workflows/deploy-azure.yml` detects changes to `terraform/azure/**` on push to `develop` and runs `terraform apply -auto-approve`. Requires GitHub secret `AZURE_TERRAFORM_TFVARS` (contents of `terraform.tfvars`). When the secret is not configured, the job logs a warning and skips gracefully. OIDC auth is used (`use_oidc=true` passed at apply time). Same pattern as GCP's `cloudbuild.terraform.yaml`.
 
 Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
 
