@@ -1215,6 +1215,7 @@ export const readToolNames = [
 export const writeToolNames = [
   "trigger_classification",
   "trigger_phi_scan",
+  "trigger_pixel_redaction",
   "trigger_protocol_check",
   "trigger_qc_check",
   "trigger_bids_convert",

@@ -56,7 +56,7 @@ durations AS (
     LIMIT  1
   ) c ON true
   WHERE tr.stage IN (
-    'deface', 'phi_scan', 'qc_check', 'bids_conversion',
+    'deface', 'phi_scan', 'pixel_redaction', 'qc_check', 'bids_conversion',
     'classification', 'protocol_check', 'export'
   )
 )

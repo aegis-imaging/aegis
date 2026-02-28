@@ -61,7 +61,7 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 	_ = cw.Write([]string{
 		"id", "study_instance_uid", "modality", "body_part", "study_description",
 		"status", "source", "series_count", "instance_count", "dicom_store",
-		"defacing_required", "phi_scan_status", "qc_status", "bids_status",
+		"defacing_required", "phi_scan_status", "pixel_redaction_status", "qc_status", "bids_status",
 		"classification_status", "protocol_status", "export_status",
 		"project_id", "institution_id", "created_at", "updated_at",
 	})
@@ -84,6 +84,7 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 			st.DicomStore,
 			strconv.FormatBool(st.DefacingRequired),
 			st.PhiScanStatus,
+			st.PixelRedactionStatus,
 			st.QcStatus,
 			st.BidsStatus,
 			st.ClassificationStatus,
