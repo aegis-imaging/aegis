@@ -24,7 +24,7 @@ const MILESTONES: Milestone[] = [
     date: 'Feb 17–24, 2026',
     title: 'Foundation — GCP Production',
     items: [
-      'Microservices architecture: Go API + 9 Python microservices, DIMSE receiver, MCP server — 14 services total',
+      'Microservices architecture: Go API + 9 Python sidecars + DIMSE receiver + MCP server + 3 frontends — 15 services per cloud',
       'Full HIPAA pipeline: tag de-identification, defacing, PHI scan, pixel redaction, QC, BIDS, protocol compliance, analytics',
       'Terraform IaC + Cloud Build CI/CD — every merge to develop auto-deploys all services across 3 clouds',
       'Admin dashboard with Weasis DWV viewer, RBAC, audit trail, routing rules engine, clinical trial access control',
@@ -42,7 +42,7 @@ const MILESTONES: Milestone[] = [
     date: 'Q1 2026',
     title: 'AWS Deployment',
     items: [
-      'ECS Fargate (10 microservices), RDS PostgreSQL, S3, ALB + Cognito — fully live',
+      '14 ECS Fargate services + EC2 DIMSE receiver — 15 services total, matching GCP parity',
       'GitHub Actions CI/CD mirrors GCP Cloud Build — auto-deploy on every push to develop',
       'DIMSE receiver on EC2 with Elastic IP — same static-IP PACS pattern as GCP',
       'Cross-cloud DICOM routing verified live — GCP→AWS STOW-RS tested, bidirectional API key auth',
