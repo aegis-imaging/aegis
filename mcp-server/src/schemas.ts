@@ -1315,6 +1315,7 @@ export const writeToolNames = [
   "trigger_export",
   "trigger_deface",
   "trigger_analytics",
+  "trigger_sct",
   "trigger_longitudinal_analytics",
   "retry_dimse_study",
   "approve_study",

@@ -2,9 +2,9 @@ import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
 const MOMENTUM = [
   { value: '7',     label: 'days to production' },
-  { value: '1,200+', label: 'git commits' },
-  { value: '303+',  label: 'API routes' },
-  { value: '750+',  label: 'automated tests' },
+  { value: '1,300+', label: 'git commits' },
+  { value: '115+',  label: 'MCP tools' },
+  { value: '900+',  label: 'automated tests' },
 ]
 
 type MilestoneStatus = 'done' | 'active' | 'planned'
@@ -24,11 +24,11 @@ const MILESTONES: Milestone[] = [
     date: 'Feb 17–24, 2026',
     title: 'Foundation — GCP Production',
     items: [
-      'Microservices architecture: Go API + 9 Python microservices, DIMSE C-STORE SCP, MCP server — 12+ services total',
+      'Microservices architecture: Go API + 9 Python microservices, DIMSE receiver, MCP server — 14 services total',
       'Full HIPAA pipeline: tag de-identification, defacing, PHI scan, pixel redaction, QC, BIDS, protocol compliance, analytics',
       'Terraform IaC + Cloud Build CI/CD — every merge to develop auto-deploys all services across 3 clouds',
       'Admin dashboard with Weasis DWV viewer, RBAC, audit trail, routing rules engine, clinical trial access control',
-      'AI-native operations: MCP server with 50+ read tools, 64+ write tools, agent orchestrator with DICOM diagnostics',
+      'AI-native operations: MCP server with 115+ typed tools (50 read, 65 write), agent orchestrator with DICOM diagnostics',
     ],
     tags: [
       { label: '✓ Live', style: 'done' },
@@ -36,22 +36,6 @@ const MILESTONES: Milestone[] = [
       { label: 'Open Beta', style: 'neutral' },
     ],
     liveUrl: 'https://api.aegisimaging.ai/healthz',
-  },
-  {
-    status: 'active',
-    date: 'Q1 2026',
-    title: 'Private Beta',
-    items: [
-      'Invite-gated access for early adopters — research institutions and imaging centers welcome',
-      'Gathering feedback on de-identification workflows, PACS integration, and protocol compliance',
-      'DIMSE C-MOVE / C-FIND for active PACS pull integration',
-      'Hardening SLA monitoring, retention policies, and routing rules for production workloads',
-    ],
-    tags: [
-      { label: '● Active', style: 'active' },
-      { label: 'GCP', style: 'cloud' },
-      { label: 'Invite Only', style: 'neutral' },
-    ],
   },
   {
     status: 'done',
@@ -92,16 +76,49 @@ const MILESTONES: Milestone[] = [
     date: 'Feb 27, 2026',
     title: 'Advanced Processing & Security',
     items: [
-      'Neuroimaging analytics: FreeSurfer, FSL, ANTs, SPM pipelines on BIDS-converted data (Phase 3)',
       'Comprehensive DICOM format support: JPEG2000, JPEG-LS, Enhanced multi-frame, Siemens Mosaic',
       'Pixel redaction pipeline: automated detection and masking of burned-in PHI in pixel data',
       'Clinical trial access control: project membership roles, capability-based write guards',
-      '8 phases of cross-cloud security hardening with CI enforcement',
+      '8 phases of cross-cloud security hardening with CI enforcement across all three clouds',
+    ],
+    tags: [
+      { label: '✓ Complete', style: 'done' },
+      { label: 'Security', style: 'neutral' },
+      { label: 'RBAC', style: 'neutral' },
+    ],
+  },
+  {
+    status: 'done',
+    date: 'Feb 28, 2026',
+    title: 'Analytics Expansion & MIDI-B Compliance',
+    items: [
+      '18 neuroimaging analysis tools — brain (FreeSurfer, SynthSeg, BrainSuite, volBrain, Atlas ROI), spine (SpinEPS, TotalSpineSeg), whole-body (TotalSegmentator, nnU-Net, MedSAM2, MONAI Label), and specialized (PETSurfer, QSM, BASIL, FSL, ANTs, SPM, ITK-SNAP)',
+      'Longitudinal analytics: TBM-SyN tensor-based morphometry and FreeSurfer longitudinal stream — track brain volume changes over time',
+      'Biomarker database: ROI volumetric results, QC ratings, demographics, and analytics file management',
+      'MIDI-B de-identification benchmark compliance: date shifting, pseudonymization, LLM-based text scrubbing, mapping export',
+      'Niivue NIfTI viewer embedded in admin dashboard for analytics output review',
     ],
     tags: [
       { label: '✓ Complete', style: 'done' },
       { label: 'Analytics', style: 'neutral' },
-      { label: 'Security', style: 'neutral' },
+      { label: 'MIDI-B', style: 'neutral' },
+    ],
+  },
+  {
+    status: 'active',
+    date: 'Q1 2026',
+    title: 'Private Beta',
+    items: [
+      'Invite-gated access for early adopters — research institutions and imaging centers welcome',
+      'Gathering feedback on de-identification workflows, PACS integration, and protocol compliance',
+      'Spinal Cord Toolbox (SCT) integration for spinal cord cross-sectional area and white matter analysis',
+      'DIMSE C-MOVE / C-FIND — query and pull studies directly from hospital imaging systems',
+      'Hardening SLA monitoring, retention policies, and routing rules for production workloads',
+    ],
+    tags: [
+      { label: '● Active', style: 'active' },
+      { label: 'All Clouds', style: 'cloud' },
+      { label: 'Invite Only', style: 'neutral' },
     ],
   },
   {
@@ -112,7 +129,7 @@ const MILESTONES: Milestone[] = [
       'Production email — SMTP for share notifications, pipeline alerts, and digest subscriptions',
       'Business Associate Agreement (BAA) template + countersigning workflow — required before real PHI',
       'SOC 2 Type I audit initiation — point-in-time controls assessment; engages auditor and starts 6-month Type II observation window',
-      'DIMSE C-MOVE / C-FIND — AEGIS actively queries and retrieves studies from PACS rather than waiting for push',
+      'DIMSE C-MOVE / C-FIND at scale — AEGIS actively queries and retrieves studies from PACS and VNA systems',
       'AWS Marketplace listing submission — enterprise procurement channel',
     ],
     tags: [
@@ -127,7 +144,7 @@ const MILESTONES: Milestone[] = [
     title: 'SOC 2 Type II + Enterprise Integrations',
     items: [
       'SOC 2 Type II observation period underway — 6-month audit window; final report expected Q4 2026',
-      'HL7 FHIR notifications — fire DiagnosticReport / ImagingStudy resources to Epic, Cerner, and other EMR/RIS on study events',
+      'HL7 FHIR notifications — send DiagnosticReport / ImagingStudy resources to Epic, Cerner, and other EMR/RIS on study events',
       'DICOM conformance statement v2 — formal PS3.2 statement across all three clouds; required for PACS vendor certification',
       'Cross-tenant federated sharing — peer AEGIS instances exchange approved studies across institutions',
     ],
@@ -170,7 +187,7 @@ export function Roadmap() {
         >
           <h2 className="roadmap__heading">Built to move fast</h2>
           <p className="roadmap__subheading">
-            From first commit to three-cloud production in 9 days — and a clear path to enterprise with the right team.
+            From first commit to three-cloud production in 9 days, 18 analysis tools in 12 — and a clear path to enterprise.
           </p>
         </div>
 
@@ -195,7 +212,7 @@ export function Roadmap() {
           {MILESTONES.map((m, i) => (
             <div
               key={m.title}
-              className={`roadmap__milestone roadmap__milestone--${m.status} animate animate--fade-up animate--delay-${i + 1 as 1|2|3|4|5|6|7}${timelineVisible ? ' animate--visible' : ''}`}
+              className={`roadmap__milestone roadmap__milestone--${m.status} animate animate--fade-up animate--delay-${Math.min(i + 1, 7)}${timelineVisible ? ' animate--visible' : ''}`}
             >
               <div className="roadmap__milestone-node" aria-hidden="true">
                 {m.status === 'done' ? '✓' : m.status === 'active' ? '●' : '○'}

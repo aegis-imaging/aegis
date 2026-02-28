@@ -64,6 +64,7 @@ aegis/
 ├── protocol-service/        # Python MRI protocol compliance service (pydicom)
 ├── synth-service/           # Python synthetic DICOM brain MRI generator (nibabel + NumPy)
 ├── analytics-service/       # Python neuroimaging analytics (15 backends incl. FreeSurfer, FSL, ANTs, SPM, SynthSeg, MONAI Label, PETSurfer, QSM, BASIL)
+├── sct-service/             # Python Spinal Cord Toolbox sidecar (cord segmentation, CSA, compression)
 ├── dimse-receiver/          # Python DIMSE adapter (pynetdicom C-STORE SCP + ingest trigger)
 ├── mcp-server/              # TypeScript MCP server for AI agent operations
 └── docs/                    # Shared research, references, and analysis (see docs/README.md)
@@ -333,6 +334,7 @@ docker compose down -v        # stop all + destroy volumes
 | protocol-service | (internal) | MRI protocol compliance |
 | synth-service | (internal) | Synthetic DICOM brain MRI generator |
 | analytics-service | (internal) | Neuroimaging analytics (FreeSurfer, FSL, ANTs, SPM) |
+| sct-service | (internal) | Spinal Cord Toolbox analysis (cord segmentation, CSA, compression) |
 | dimse-receiver | 11112 (DICOM), 8080 (internal health) | Receives DICOM via C-STORE and calls API ingest |
 
 Most sidecar services have no host port mapping — the Go API reaches them via Docker internal DNS (e.g., `http://defacing:8080`). `dimse-receiver` exposes port `11112` so external PACS systems can send C-STORE directly. The API's `LOCAL_STORAGE_DIR=/app/data` and all sidecars mount the same volume at `/app/data`.
@@ -468,6 +470,8 @@ Routing rules are evaluated on every study ingest (upload complete + internal in
 | `require_classification` | Forces `classification_required=true`, sets `classification_status=pending` |
 | `require_protocol_check` | Forces `protocol_required=true`, sets `protocol_status=pending` |
 | `require_export` | Forces `export_required=true`, sets `export_status=pending` |
+| `require_analytics` | Forces `analytics_required=true`, sets `analytics_status=pending` |
+| `require_sct` | Forces `sct_required=true`, sets `sct_status=pending` |
 | `auto_approve` | Skips manual QC, sets `status=approved` |
 | `require_qa` | No-op — holds for manual review (default) |
 | `reject` | Auto-rejects the study |
@@ -1098,6 +1102,45 @@ Request body: `{"baseline_study_id": "<uuid>", "scan_interval_days": 365}` — `
 
 **MCP write tool:** `trigger_longitudinal_analytics` — `{study_uid (follow-up DICOM UID), baseline_study_id (UUID), scan_interval_days?, confirm, reason}`
 
+### SCT Service (`sct-service/`, `api/handler/sct.go`)
+
+Runs Spinal Cord Toolbox (SCT) analysis on BIDS-converted NIfTI spine data. Phase 3 of the pipeline — triggered after BIDS conversion completes, in parallel with analytics. Runs as a separate Docker sidecar based on SCT's official image (SCT bundles its own Miniforge Python environment and is NOT pip-installable).
+
+**Running locally:**
+```bash
+cd sct-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8090
+# Then set SCT_SERVICE_URL=http://localhost:8090 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `SCT_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `SCT_TOOL` | `auto` | Backend selection: `auto` or `sct` |
+| `SCT_CONTRAST` | `t2` | Default contrast type: `t1`, `t2`, `t2s`, `dwi` |
+| `SCT_DATA_DIR` | `/app/data` | Shared storage mount |
+
+**Study fields:**
+- `sct_required` — boolean flag, set by `require_sct` routing rule action
+- `sct_status` — `''` (not required), `pending`, `analyzing`, `complete`, `partial`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/run-sct` — trigger SCT analysis (returns 202 Accepted, runs async)
+
+**SCT CLI pipeline** (multi-step, each step non-fatal):
+1. `sct_deepseg_sc` — spinal cord segmentation
+2. `sct_label_vertebrae` — automatic vertebral labeling
+3. `sct_process_segmentation` — CSA per vertebral level
+4. `sct_compute_compression` — aMCC, aSCOR compression metrics (if canal segmentation available)
+5. `sct_dmri_compute_dti` — FA, MD, AD, RD maps (optional, if DWI data present)
+
+**Metrics output:** CSA per vertebral level, mean CSA, compression metrics (aMCC, aSCOR), cord length, detected vertebral levels.
+
+**MCP write tool:** `trigger_sct` — `{study_uid, confirm, reason}`
+
 ### DIMSE Receiver Service (`dimse-receiver/`)
 
 Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
@@ -1248,13 +1291,13 @@ Phase 1: PHI scan + Pixel Redaction + Protocol check + Defacing (parallel, raw f
     ↓
 Phase 2: QC check + BIDS conversion (after defacing, final files)
     ↓
-Phase 3: Analytics (15 backends — post-BIDS, on NIfTI outputs)
+Phase 3: Analytics + SCT (parallel, post-BIDS, on NIfTI outputs)
 ```
 
 - **Phase 0**: Classification must complete first — it fills `modality`/`body_part` from DICOM headers, then re-evaluates routing rules which may add new requirements (e.g. `require_defacing` for HEAD studies)
 - **Phase 1**: PHI scan, pixel redaction, protocol check, and defacing run in parallel on raw files. Each service is dispatched only if its URL is configured.
 - **Phase 2**: QC and BIDS run after defacing completes (if defacing is required). They operate on the final `dicom_store` (clean after defacing, raw otherwise).
-- **Phase 3**: Analytics runs after BIDS conversion completes. Neuroimaging analysis tools (15 backends including FreeSurfer, FSL, ANTs, SPM, SynthSeg, ITK-SNAP, BrainSuite, volBrain, MONAI Label, PETSurfer, QSM, BASIL) operate on the BIDS-converted NIfTI outputs.
+- **Phase 3**: Analytics and SCT run in parallel after BIDS conversion completes. Analytics (15 backends including FreeSurfer, FSL, ANTs, SPM, SynthSeg, ITK-SNAP, BrainSuite, volBrain, MONAI Label, PETSurfer, QSM, BASIL) and SCT (Spinal Cord Toolbox — cord segmentation, CSA, compression metrics) operate on BIDS-converted NIfTI outputs.
 
 **How it works:**
 - `AdvancePipeline(ctx, studyID)` is called after routing rules evaluate and after each service completes
@@ -1346,7 +1389,7 @@ Full export workflow for approved studies: admin DICOM download, token-authentic
 - MCP `list_projects`: now returns `stuck_threshold_minutes` field
 
 **Pipeline step reset / re-processing** (`POST /api/studies/{id}/reset-pipeline-step`, admin-only):
-- Body: `{"step": "deface"|"phi_scan"|"qc"|"bids"|"classify"|"protocol"|"export"}`
+- Body: `{"step": "deface"|"phi_scan"|"qc"|"bids"|"classify"|"protocol"|"export"|"sct"}`
 - Resets the chosen step's status back to `pending`; auto-pipeline re-dispatches if `PIPELINE_AUTO=true`
 - Returns `409 Conflict` if the step is currently in-flight
 - Returns `400` if the step is not required for the study (enable it via a routing rule first)
@@ -1811,7 +1854,7 @@ Dry-run evaluation of all enabled routing rules against a hypothetical study. No
 - Returns `{input, matched_rules[], skipped_rules[], action_summary}`
   - `matched_rules` — rules that would fire, with `priority`, `action`, `destination_name` (for route_to)
   - `skipped_rules` — enabled rules that didn't match (visible for debugging)
-  - `action_summary` — boolean flags for all pipeline actions (`require_defacing`, `require_phi_scan`, `require_qc_check`, `require_bids_conversion`, `require_classification`, `require_protocol_check`, `require_export`, `auto_approve`, `reject`)
+  - `action_summary` — boolean flags for all pipeline actions (`require_defacing`, `require_phi_scan`, `require_qc_check`, `require_bids_conversion`, `require_classification`, `require_protocol_check`, `require_export`, `require_analytics`, `require_sct`, `auto_approve`, `reject`)
 - Accessible to viewers (read-only) and admins
 
 **Admin dashboard:** "Rule Simulator" collapsible panel in the Routing tab. Operator enters modality, body part, and source, clicks "Simulate", and sees matched rules + action summary chips.
@@ -1959,6 +2002,7 @@ cd mcp-server && npm install && npm run build
 | `trigger_bids_convert` | Trigger NIfTI/BIDS conversion |
 | `trigger_export` | Trigger DICOM export forwarding |
 | `trigger_deface` | Trigger defacing |
+| `trigger_sct` | Trigger SCT (Spinal Cord Toolbox) analysis |
 | `retry_dimse_study` | Retry a DIMSE ingest failure |
 | `revoke_share` | Revoke an export share |
 | `create_share` | Create a new export share |
@@ -2007,7 +2051,7 @@ cd mcp-server && npm install && npm run build
 | `set_storage_quota` | Set or clear the per-project DICOM storage quota in bytes (null = unlimited) |
 | `update_phi_config` | Override global PHI detection thresholds (confidence_threshold, min_text_length) for a project |
 | `delete_study` | Permanently delete a study record and all DICOM files from storage |
-| `bulk_pipeline_trigger` | Trigger a pipeline step (classify/phi_scan/protocol/deface/qc/bids/export) for multiple studies at once |
+| `bulk_pipeline_trigger` | Trigger a pipeline step (classify/phi_scan/protocol/deface/qc/bids/export/sct) for multiple studies at once |
 | `import_tcia_series` | Download a TCIA series by SeriesInstanceUID and import it into AEGIS (triggers full pipeline) |
 | `import_protocol_templates` | Bulk-import protocol compliance templates into a project from a JSON array (skips duplicates by name) |
 | `import_routing_rules` | Bulk-import routing rules into a project (skips duplicates by name; destination_id stripped — must be re-assigned via update_routing_rule) |
@@ -2107,6 +2151,7 @@ Two triggers are active in Cloud Build (configured by `scripts/gcp_setup_cloudbu
 | `protocol-service` | `protocol-service/` |
 | `synth-service` | `synth-service/` |
 | `analytics-service` | `analytics-service/` |
+| `sct-service` | `sct-service/` |
 | `aegis-mcp-server` | `mcp-server/` |
 | `aegis-prod-dimse-receiver` (GCE VM) | `dimse-receiver/` — see note below |
 
@@ -2141,11 +2186,11 @@ Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
 | `go` | `go build ./...` + `go vet ./...` |
 | `go-test` | `go test -race -v -count=1 ./...` (~137 tests) |
 | `infra-guard` | `scripts/check-infra-placeholders.sh` blocks known credential placeholders in Terraform |
-| `python` (7× matrix) | `py_compile` on all `.py` files per service |
+| `python` (11× matrix) | `py_compile` on all `.py` files per service |
 | `python-scripts` | `py_compile` on smoke/DIMSE harness scripts in `scripts/` |
-| `python-test` (9× matrix) | `pytest -v --tb=short` per service (~617 tests total) |
+| `python-test` (11× matrix) | `pytest -v --tb=short` per service (~664 tests total) |
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
-| `docker` (8× matrix) | `docker build` for all service images |
+| `docker` (12× matrix) | `docker build` for all service images |
 
 Manual workflow:
 - `.github/workflows/cloud-smoke.yml` (`workflow_dispatch`) runs `scripts/cloud_smoke_test.py` against a deployed environment.
@@ -2171,6 +2216,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | bids-service | 17 | Series classification (T1w/FLAIR/bold/DWI/ASL/PET/CT), subject label hashing, mock dcm2niix |
 | synth-service | 12 | Synthetic brain MRI generation, DICOM metadata, nibabel phantom pipeline |
 | analytics-service | 280+ | All 18 backends (FreeSurfer/FSL/ANTs/SPM/SynthSeg/nnU-Net/TotalSegmentator/ITK-SNAP/BrainSuite/volBrain/MONAI Label/PETSurfer/QSM/BASIL/TotalSpineSeg/SPINEPS/MedSAM2), tool availability detection, seg_utils (spine finders + label maps), endpoint tests |
+| sct-service | 47 | SCT backend availability, spine NIfTI/DWI finding, 5-step CLI pipeline mock, CSA CSV parsing, compression CSV parsing, vertebral label parsing, endpoint tests |
 
 All tests use **synthetic DICOM files** generated via pydicom — no test data on disk. External tools (tesseract, dcm2niix, mri_deface) are mocked.
 
