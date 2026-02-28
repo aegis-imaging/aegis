@@ -248,7 +248,7 @@ A single merge to `develop` deploys to GCP and AWS in parallel — GCP Cloud Bui
 
 ## Phased Roadmap
 
-> **Production status:** The full platform is **live on three clouds.** GCP: Go API, admin dashboard, Weasis DWV viewer, 9 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM, static IP `35.232.172.221`, port 11112), and MCP server at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. AWS: 10 ECS Fargate services, RDS PostgreSQL, S3, ALB + Cognito auth at `aws.api.aegisimaging.ai` and `aws.admin.aegisimaging.ai`. Azure: 15 Container Apps + PostgreSQL Flexible Server + Azure Blob Storage at `azure.api.aegisimaging.ai` and `azure.admin.aegisimaging.ai`. All clouds share one codebase; GCP Cloud Build and GitHub Actions deploy in parallel on every merge to `develop`. Cross-cloud DICOM routing (GCP→AWS→Azure) is verified live.
+> **Production status:** The full platform is **live on three clouds.** GCP: Go API, admin dashboard, Weasis DWV viewer, 9 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM, static IP `35.232.172.221`, port 11112), and MCP server at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. AWS: 10 ECS Fargate services, RDS PostgreSQL, S3, ALB + Cognito auth, DIMSE receiver (EC2 with Elastic IP, port 11112) at `aws.api.aegisimaging.ai` and `aws.admin.aegisimaging.ai`. Azure: 15 Container Apps + PostgreSQL Flexible Server + Azure Blob Storage, DIMSE receiver (Azure Linux VM, static IP `20.97.180.87`, port 11112) at `azure.api.aegisimaging.ai` and `azure.admin.aegisimaging.ai`. All clouds share one codebase; GCP Cloud Build and GitHub Actions deploy in parallel on every merge to `develop`. Cross-cloud DICOM routing (GCP→AWS→Azure) is verified live. **All three DIMSE C-STORE receivers are operational** — accepting inbound studies from PACS systems on TCP port 11112.
 
 ### ✓ Milestone 1 — Foundation + GCP Production (February 17–24, 2026)
 
@@ -306,6 +306,7 @@ Everything listed below was built and deployed to GCP production within 7 days o
 - First enterprise pilot customers (research institutions + radiology departments)
 - Invite-gated access with self-service request workflow
 - Gathering feedback on de-identification workflows, PACS integration, and protocol compliance
+- DIMSE C-STORE receivers operational on all three clouds (GCP, AWS, Azure) — accepting inbound studies from PACS systems on TCP port 11112
 - DIMSE C-MOVE / C-FIND workflows for active PACS pull integration
 - SLA monitoring, retention policies, and routing rules hardening for production workloads
 

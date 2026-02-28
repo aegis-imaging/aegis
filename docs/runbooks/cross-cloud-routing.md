@@ -1,6 +1,6 @@
-# Cross-Cloud DICOM Routing: GCP → AWS
+# Cross-Cloud DICOM Routing
 
-Sends approved DICOM studies from the GCP AEGIS environment to the AWS AEGIS environment using DICOMweb STOW-RS over HTTPS. No code changes required — configuration only.
+Sends approved DICOM studies between AEGIS cloud environments (GCP, AWS, Azure) using DICOMweb STOW-RS over HTTPS or DIMSE C-STORE over TCP. No code changes required — configuration only.
 
 ## Architecture
 
@@ -129,27 +129,82 @@ Response:
 | Connection timeout | AWS ALB security group allows inbound 443; GCP egress is not blocked |
 | Study received but no pipeline | AWS routing rules not configured; check `GET /api/routing-rules` on AWS |
 
-## DIMSE Alternative (C-STORE)
+## DIMSE Forwarding (C-STORE)
 
-For DIMSE-based forwarding (port 11112) instead of STOW-RS:
+All three DIMSE C-STORE receivers are operational. Cross-cloud forwarding can use DIMSE as an alternative to STOW-RS.
 
-1. Deploy the AWS DIMSE receiver: set `dimse_receiver_image` in `terraform/aws/terraform.tfvars` and run `terraform apply`
-2. Note the output `dimse_receiver_ip` (static Elastic IP)
-3. Create a DIMSE destination on GCP:
+### DIMSE Receiver Endpoints
+
+| Cloud | IP Address | Port | VM Type | Terraform File |
+|-------|-----------|------|---------|----------------|
+| GCP   | `35.232.172.221` | 11112 | Compute Engine (Debian 12) | `terraform/infra/dimse.tf` |
+| AWS   | *(Elastic IP — run `terraform output dimse_receiver_ip` in `terraform/aws/`)* | 11112 | EC2 (Amazon Linux 2023) | `terraform/aws/dimse.tf` |
+| Azure | `20.97.180.87` | 11112 | Azure Linux VM (Debian 12) | `terraform/azure/dimse.tf` |
+
+### GCP → AWS (DIMSE C-STORE)
+
+1. Note the AWS DIMSE IP: `cd terraform/aws && terraform output dimse_receiver_ip`
+2. Create a DIMSE destination on GCP:
    ```json
    {
      "name": "AWS DIMSE",
      "type": "dimse",
      "ae_title": "AEGIS",
-     "host": "<dimse_receiver_ip>",
+     "host": "<aws_dimse_ip>",
      "port": 11112,
      "enabled": true
    }
    ```
-4. Create a `route_to` routing rule pointing to this destination
-5. Test with `POST /api/destinations/{id}/test` (sends C-ECHO)
+3. Create a `route_to` routing rule pointing to this destination
+4. Test with `POST /api/destinations/{id}/test` (sends C-ECHO)
 
-**Note:** DIMSE forwarding proxies through the GCP DIMSE receiver's `/forward` endpoint, so `DIMSE_RECEIVER_URL` must be set on the GCP API.
+### GCP → Azure (DIMSE C-STORE)
+
+1. Create a DIMSE destination on GCP:
+   ```json
+   {
+     "name": "Azure DIMSE",
+     "type": "dimse",
+     "ae_title": "AEGIS",
+     "host": "20.97.180.87",
+     "port": 11112,
+     "enabled": true
+   }
+   ```
+2. Create a `route_to` routing rule on GCP pointing to this destination
+3. Test with `POST /api/destinations/{id}/test`
+
+### Azure → GCP (DIMSE C-STORE)
+
+1. Create a DIMSE destination on Azure:
+   ```json
+   {
+     "name": "GCP DIMSE",
+     "type": "dimse",
+     "ae_title": "AEGIS",
+     "host": "35.232.172.221",
+     "port": 11112,
+     "enabled": true
+   }
+   ```
+2. Create a `route_to` routing rule on Azure pointing to this destination
+3. Test with `POST /api/destinations/{id}/test`
+
+### Other Pairs (AWS → Azure, AWS → GCP, Azure → AWS)
+
+Follow the same pattern — create a DIMSE destination on the **sending** cloud with the **receiving** cloud's DIMSE IP and port 11112, then create a `route_to` routing rule.
+
+### Firewall Requirements
+
+Each cloud restricts inbound DIMSE traffic on TCP 11112 via the `dimse_source_ranges` Terraform variable. To enable cross-cloud DIMSE forwarding, add the source cloud's DIMSE VM egress IP (or NAT IP) to the destination cloud's `dimse_source_ranges`:
+
+| Cloud | Variable location | Default |
+|-------|------------------|---------|
+| GCP | `terraform/infra/terraform.tfvars` | `["0.0.0.0/0"]` |
+| AWS | `terraform/aws/terraform.tfvars` | `["203.0.113.0/24"]` (placeholder) |
+| Azure | `terraform/azure/terraform.tfvars` | `["0.0.0.0/0"]` |
+
+**Note:** DIMSE forwarding proxies through the sending cloud's DIMSE receiver's `/forward` endpoint, so `DIMSE_RECEIVER_URL` must be set on the sending cloud's API.
 
 ## Key Files
 
