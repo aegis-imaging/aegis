@@ -56,6 +56,7 @@ func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 
 	// Phase 1: Parallel services on raw files.
 	s.dispatchPhiScan(ctx, study)
+	s.dispatchPixelRedaction(ctx, study)
 	s.dispatchProtocolCheck(ctx, study)
 	s.dispatchDefacing(ctx, study)
 
@@ -88,6 +89,8 @@ func (s *Server) maybeFireProcessingComplete(ctx context.Context, studyID string
 		fresh.ClassificationStatus == "classified" || fresh.ClassificationStatus == "failed"
 	phiOK := !fresh.PhiScanRequired ||
 		fresh.PhiScanStatus == "clean" || fresh.PhiScanStatus == "flagged" || fresh.PhiScanStatus == "failed"
+	pixelRedactOK := !fresh.PixelRedactionRequired ||
+		fresh.PixelRedactionStatus == "complete" || fresh.PixelRedactionStatus == "failed"
 	protocolOK := !fresh.ProtocolRequired ||
 		fresh.ProtocolStatus == "compliant" || fresh.ProtocolStatus == "minor_deviations" ||
 		fresh.ProtocolStatus == "non_compliant" || fresh.ProtocolStatus == "failed"
@@ -101,7 +104,7 @@ func (s *Server) maybeFireProcessingComplete(ctx context.Context, studyID string
 	exportOK := !fresh.ExportRequired ||
 		fresh.ExportStatus == "exported" || fresh.ExportStatus == "failed"
 
-	if classOK && phiOK && protocolOK && defacingOK && qcOK && bidsOK && exportOK {
+	if classOK && phiOK && pixelRedactOK && protocolOK && defacingOK && qcOK && bidsOK && exportOK {
 		go webhook.Deliver(ctx, s.db, "study.processing_complete", fresh)
 	}
 }
@@ -144,6 +147,29 @@ func (s *Server) dispatchPhiScan(ctx context.Context, study *model.Study) {
 		"study_uid": study.StudyInstanceUID,
 	})
 	go s.runPhiScan(study)
+}
+
+func (s *Server) dispatchPixelRedaction(ctx context.Context, study *model.Study) {
+	if !study.PixelRedactionRequired || study.PixelRedactionStatus != "pending" {
+		return
+	}
+	if s.cfg.PhiDetectionServiceURL == "" {
+		return
+	}
+	claimed, err := model.ClaimPixelRedaction(ctx, s.db, study.ID)
+	if err != nil {
+		log.Printf("pipeline: claim pixel_redaction for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	if !claimed {
+		return
+	}
+	log.Printf("pipeline: dispatching pixel_redaction for %s", study.StudyInstanceUID)
+	model.CreateAuditEntry(ctx, s.db, "pipeline.dispatch", "pipeline", "study", study.ID, "", map[string]any{
+		"service":   "pixel_redaction",
+		"study_uid": study.StudyInstanceUID,
+	})
+	go s.runPixelRedaction(study)
 }
 
 func (s *Server) dispatchProtocolCheck(ctx context.Context, study *model.Study) {
