@@ -194,6 +194,24 @@ jobs:
           docker push "$ACR/synth-service:$IMAGE_TAG"
           docker push "$ACR/synth-service:latest"
 
+      - name: Build & push — analytics-service
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/analytics-service:$IMAGE_TAG" \
+            -t "$ACR/analytics-service:latest" \
+            analytics-service/
+          docker push "$ACR/analytics-service:$IMAGE_TAG"
+          docker push "$ACR/analytics-service:latest"
+
+      - name: Build & push — sct-service
+        run: |
+          docker build --platform linux/amd64 \
+            -t "$ACR/sct-service:$IMAGE_TAG" \
+            -t "$ACR/sct-service:latest" \
+            sct-service/
+          docker push "$ACR/sct-service:$IMAGE_TAG"
+          docker push "$ACR/sct-service:latest"
+
       - name: Build & push — mcp-server
         run: |
           docker build --platform linux/amd64 \
@@ -262,6 +280,12 @@ jobs:
 
       - name: Deploy — synth-service
         run: az containerapp update --name aegis-prod-synth-service --resource-group "$RG" --image "$ACR/synth-service:$IMAGE_TAG"
+
+      - name: Deploy — analytics-service
+        run: az containerapp update --name aegis-prod-analytics-service --resource-group "$RG" --image "$ACR/analytics-service:$IMAGE_TAG"
+
+      - name: Deploy — sct-service
+        run: az containerapp update --name aegis-prod-sct-service --resource-group "$RG" --image "$ACR/sct-service:$IMAGE_TAG"
 
       - name: Deploy — mcp-server
         run: az containerapp update --name aegis-prod-mcp-server --resource-group "$RG" --image "$ACR/mcp-server:$IMAGE_TAG"

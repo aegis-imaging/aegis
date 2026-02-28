@@ -2195,7 +2195,7 @@ Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
 Manual workflow:
 - `.github/workflows/cloud-smoke.yml` (`workflow_dispatch`) runs `scripts/cloud_smoke_test.py` against a deployed environment.
 - Optional repo secret `CLOUD_SMOKE_ADMIN_HEADER` provides the admin auth header for protected endpoints.
-- `.github/workflows/deploy-azure.yml` — **Azure auto-deploy** (fires on push to `develop`): builds all 13 images, pushes to ACR, deploys all Container Apps. Requires GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_ACR_REGISTRY`, `AZURE_RESOURCE_GROUP`. Variables: `AZURE_WEASIS_URL`, `AZURE_API_URL`, `AZURE_DIMSE_VM_NAME` (optional).
+- `.github/workflows/deploy-azure.yml` — **Azure auto-deploy** (fires on push to `develop`): builds all 15 images, pushes to ACR, deploys all Container Apps. Requires GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_ACR_REGISTRY`, `AZURE_RESOURCE_GROUP`. Variables: `AZURE_WEASIS_URL`, `AZURE_API_URL`, `AZURE_DIMSE_VM_NAME` (optional).
 
 ### Python Sidecar Testing
 

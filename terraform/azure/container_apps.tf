@@ -1,10 +1,11 @@
 # AEGIS — Azure Container Apps
 #
-# Defines all 12 Container App services:
+# Defines all 14 Container App services:
 #   - api (Go API)
 #   - admin-dashboard, landing, weasis, mcp-server (frontends / tooling)
 #   - defacing, phi-detection, qc-service, bids-service,
-#     classification-service, protocol-service, synth-service (Python sidecars)
+#     classification-service, protocol-service, synth-service,
+#     analytics-service, sct-service (Python sidecars)
 #
 # All apps share the same Container Apps Environment and user-assigned
 # managed identity (ACR pull + Key Vault + Blob Storage access).
@@ -185,6 +186,14 @@ resource "azurerm_container_app" "api" {
         name  = "SYNTH_SERVICE_URL"
         value = "https://${local.prefix}-synth-service.internal.${local.aca_internal_domain}"
       }
+      env {
+        name  = "ANALYTICS_SERVICE_URL"
+        value = "https://${local.prefix}-analytics-service.internal.${local.aca_internal_domain}"
+      }
+      env {
+        name  = "SCT_SERVICE_URL"
+        value = "https://${local.prefix}-sct-service.internal.${local.aca_internal_domain}"
+      }
       # ── Email / SMTP (Azure Communication Services) ──────────────────────────
       # smtp.azurecomm.net:587 — blank SMTP_HOST disables email (Go API no-op).
       env {
@@ -342,6 +351,26 @@ resource "azurerm_container_app" "landing" {
   lifecycle {
     ignore_changes = [template[0].container[0].image]
   }
+}
+
+# ── Landing Page — Custom Domain (optional) ──────────────────────────────────
+#
+# Step 1 (Terraform): Bind the custom domain to the Container App.
+# Step 2 (Manual, after DNS CNAME is live):
+#   az containerapp hostname bind \
+#     --hostname <landing_domain> \
+#     -g <resource_group> \
+#     -n aegis-prod-landing \
+#     --environment <aca_env_name> \
+#     --validation-method CNAME
+# This provisions a free Azure-managed TLS certificate for the domain.
+
+resource "azurerm_container_app_custom_domain" "landing" {
+  count = var.landing_domain != "" ? 1 : 0
+
+  name                     = var.landing_domain
+  container_app_id         = azurerm_container_app.landing.id
+  certificate_binding_type = "Disabled"
 }
 
 # ── Weasis DWV Viewer ─────────────────────────────────────────────────────────
@@ -886,6 +915,128 @@ resource "azurerm_container_app" "synth_service" {
           name  = env.value.name
           value = env.value.value
         }
+      }
+    }
+  }
+
+  tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
+}
+
+resource "azurerm_container_app" "analytics_service" {
+  name                         = "${local.prefix}-analytics-service"
+  container_app_environment_id = local.aca_env_id
+  resource_group_name          = azurerm_resource_group.main.name
+  revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [local.identity_id]
+  }
+
+  registry {
+    server   = local.acr_server
+    identity = local.identity_id
+  }
+
+  ingress {
+    allow_insecure_connections = false
+    external_enabled           = false
+    target_port                = 8080
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  template {
+    min_replicas = 0
+    max_replicas = 3
+
+    container {
+      name   = "analytics-service"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/analytics-service:${var.api_image_tag}"
+      cpu    = 1.0
+      memory = "2Gi"
+
+      dynamic "env" {
+        for_each = local.sidecar_common_env
+        content {
+          name  = env.value.name
+          value = env.value.value
+        }
+      }
+      env {
+        name  = "ANALYTICS_TOOL"
+        value = "auto"
+      }
+    }
+  }
+
+  tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
+}
+
+resource "azurerm_container_app" "sct_service" {
+  name                         = "${local.prefix}-sct-service"
+  container_app_environment_id = local.aca_env_id
+  resource_group_name          = azurerm_resource_group.main.name
+  revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [local.identity_id]
+  }
+
+  registry {
+    server   = local.acr_server
+    identity = local.identity_id
+  }
+
+  ingress {
+    allow_insecure_connections = false
+    external_enabled           = false
+    target_port                = 8080
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  template {
+    min_replicas = 0
+    max_replicas = 3
+
+    container {
+      name   = "sct-service"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/sct-service:${var.api_image_tag}"
+      cpu    = 0.5
+      memory = "1Gi"
+
+      dynamic "env" {
+        for_each = local.sidecar_common_env
+        content {
+          name  = env.value.name
+          value = env.value.value
+        }
+      }
+      env {
+        name  = "SCT_TOOL"
+        value = "auto"
+      }
+      env {
+        name  = "SCT_CONTRAST"
+        value = "t2"
       }
     }
   }

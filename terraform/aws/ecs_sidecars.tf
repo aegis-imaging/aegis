@@ -1,6 +1,6 @@
 # ── ECS Fargate — Python processing sidecars ──────────────────────────────────
 #
-# 7 sidecar services that run alongside the Go API. Each registers with
+# 9 sidecar services that run alongside the Go API. Each registers with
 # AWS Cloud Map so the API can reach it at http://<name>.aegis.local:8080.
 #
 # All sidecars share the same IAM roles and ECS security group as the API.
@@ -60,6 +60,21 @@ locals {
       cpu    = 512
       memory = 1024
       env    = []
+    }
+    "analytics-service" = {
+      cpu    = 1024
+      memory = 2048
+      env = [
+        { name = "ANALYTICS_TOOL", value = "auto" },
+      ]
+    }
+    "sct-service" = {
+      cpu    = 512
+      memory = 1024
+      env = [
+        { name = "SCT_TOOL", value = "auto" },
+        { name = "SCT_CONTRAST", value = "t2" },
+      ]
     }
   }
 
