@@ -225,7 +225,7 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. AWS production followed on day 8. Azure Container Apps deployment completed on day 9. The resulting platform is production-grade across all three major clouds: version-controlled infrastructure, automated CI/CD, 2,100+ tests, and all services deployed and monitored simultaneously.
 
-A single merge to `develop` deploys to GCP and AWS in parallel — GCP Cloud Build and GitHub Actions trigger concurrently, updating all services on both platforms within minutes from a single shared codebase. Cross-cloud DICOM routing (GCP→AWS via STOW-RS) is verified live and tested. Azure auto-deploys via GitHub Actions OIDC federated auth on every push to `develop`.
+A single merge to `develop` deploys to all three clouds simultaneously — GCP Cloud Build, AWS GitHub Actions, and Azure GitHub Actions (OIDC federated auth) trigger concurrently, updating all services across GCP, AWS, and Azure within minutes from a single shared codebase. Cross-cloud DICOM routing (STOW-RS and DIMSE C-STORE) is verified live across all cloud pairs.
 
 | Metric | Value |
 |--------|-------|
@@ -273,7 +273,7 @@ Everything listed below was built and deployed to GCP production within 7 days o
 - Terraform infrastructure provisioned; 13 ECR repositories; GitHub Actions CI/CD auto-deploys on every push to `develop`
 - DIMSE receiver on EC2 with Elastic IP, SSM-driven rolling deploys
 - **Cross-cloud DICOM routing verified live** — GCP→AWS STOW-RS tested end-to-end; bidirectional API key authentication; routing loop benign (deduplicated by unique constraint)
-- Single shared codebase; one merge deploys to both clouds simultaneously
+- Single shared codebase; one merge deploys to all three clouds simultaneously
 
 ### ✓ Milestone 3 — Azure Deployment (February 26, 2026)
 
