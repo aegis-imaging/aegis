@@ -1,10 +1,7 @@
+import { Link } from 'react-router-dom'
 import { ShieldCheckIcon, LockIcon, CloudIcon, ServerIcon } from './icons'
 
 export function Hero() {
-  const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-  }
-
   return (
     <section id="hero" className="hero">
       <div className="hero__inner">
@@ -25,12 +22,12 @@ export function Hero() {
         </p>
 
         <div className="hero__ctas">
-          <button className="btn btn--white btn--lg" onClick={() => scrollTo('demo')}>
+          <Link to="/demos" className="btn btn--white btn--lg">
             Try Live Demo
-          </button>
-          <button className="btn btn--ghost btn--lg" onClick={() => scrollTo('contact')}>
+          </Link>
+          <Link to="/contact" className="btn btn--ghost btn--lg">
             Schedule a Demo →
-          </button>
+          </Link>
         </div>
 
         <div className="hero__trust-badges">

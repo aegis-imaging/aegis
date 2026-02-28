@@ -1,64 +1,37 @@
-import { useState } from 'react'
+import { useEffect } from 'react'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import './App.css'
 import { Navbar } from './components/Navbar'
-import { Hero } from './components/Hero'
-import { Stats } from './components/Stats'
-import { Problem } from './components/Problem'
-import { Solution } from './components/Solution'
-import { HowItWorks } from './components/HowItWorks'
-import Demo from './components/Demo'
-import PipelineDemo from './components/PipelineDemo'
-import { Trust } from './components/Trust'
-import { Audiences } from './components/Audiences'
-import { MarketOpportunity } from './components/MarketOpportunity'
-import { Architecture } from './components/Architecture'
-import { Roadmap } from './components/Roadmap'
-import { Contact } from './components/Contact'
-import { FinalCTA } from './components/FinalCTA'
 import { Footer } from './components/Footer'
 import { InviteGate } from './components/InviteGate'
-import { CollapsibleSection } from './components/CollapsibleSection'
+import { HomePage } from './pages/HomePage'
+import { ProductPage } from './pages/ProductPage'
+import { DemosPage } from './pages/DemosPage'
+import { TechnologyPage } from './pages/TechnologyPage'
+import { ContactPage } from './pages/ContactPage'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
 
 export function App() {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const toggle = (id: string) =>
-    setCollapsed(prev => ({ ...prev, [id]: !prev[id] }))
-
   return (
     <InviteGate>
       <Navbar />
-      <Hero />
-      <Stats />
-      <Problem />
-      <CollapsibleSection id="solution" label="Features" collapsed={!!collapsed.solution} onToggle={() => toggle('solution')}>
-        <Solution />
-      </CollapsibleSection>
-      <CollapsibleSection id="hiw" label="How It Works" collapsed={!!collapsed.hiw} onToggle={() => toggle('hiw')}>
-        <HowItWorks />
-      </CollapsibleSection>
-      <CollapsibleSection id="demo" label="Live Demo" collapsed={!!collapsed.demo} onToggle={() => toggle('demo')}>
-        <Demo />
-      </CollapsibleSection>
-      <CollapsibleSection id="pipeline" label="Processing Pipeline" collapsed={!!collapsed.pipeline} onToggle={() => toggle('pipeline')}>
-        <PipelineDemo />
-      </CollapsibleSection>
-      <CollapsibleSection id="trust" label="Security & Compliance" collapsed={!!collapsed.trust} onToggle={() => toggle('trust')}>
-        <Trust />
-      </CollapsibleSection>
-      <CollapsibleSection id="audiences" label="Who It's For" collapsed={!!collapsed.audiences} onToggle={() => toggle('audiences')}>
-        <Audiences />
-      </CollapsibleSection>
-      <CollapsibleSection id="market" label="Market Opportunity" collapsed={!!collapsed.market} onToggle={() => toggle('market')}>
-        <MarketOpportunity />
-      </CollapsibleSection>
-      <CollapsibleSection id="architecture" label="Architecture" collapsed={!!collapsed.architecture} onToggle={() => toggle('architecture')}>
-        <Architecture />
-      </CollapsibleSection>
-      <CollapsibleSection id="roadmap" label="Roadmap" collapsed={!!collapsed.roadmap} onToggle={() => toggle('roadmap')}>
-        <Roadmap />
-      </CollapsibleSection>
-      <Contact />
-      <FinalCTA />
+      <ScrollToTop />
+      <main>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/product" element={<ProductPage />} />
+          <Route path="/demos" element={<DemosPage />} />
+          <Route path="/technology" element={<TechnologyPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+        </Routes>
+      </main>
       <Footer />
     </InviteGate>
   )
