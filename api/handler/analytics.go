@@ -197,6 +197,9 @@ func (s *Server) runAnalytics(study *model.Study) {
 		"duration_seconds": fmt.Sprintf("%.1f", svcResp.DurationSeconds),
 	})
 
+	// Store structured ROI results in the biomarker database.
+	s.storeROIResults(ctx, study, svcResp.Results)
+
 	// Advance pipeline — may dispatch next eligible services.
 	s.AdvancePipeline(ctx, study.ID)
 }

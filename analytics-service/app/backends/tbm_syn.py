@@ -274,12 +274,25 @@ class TBMSyNBackend(LongitudinalBackend):
             composite_path,
         ]
 
+        # Per-ROI atrophy stats for structured DB storage
+        roi_atrophy_list = [
+            {
+                "roi_name": r["roi_name"],
+                "roi_id": r.get("roi_id", 0),
+                "mean": r.get("mean", 0),
+                "median": r.get("median", 0),
+                "std": r.get("std", 0),
+                "voxel_count": r.get("voxel_count", 0),
+            }
+            for r in roi_stats
+        ]
         metrics = {
             "scan_interval_days": scan_interval_days,
             "atlas": atlas_name,
             "roi_count": len(roi_stats),
             "ad_composite_mean": ad_composite.get("composite_mean"),
             "ad_composite_roi_count": ad_composite.get("contributing_roi_count"),
+            "roi_atrophy": roi_atrophy_list,
         }
 
         log.info(
