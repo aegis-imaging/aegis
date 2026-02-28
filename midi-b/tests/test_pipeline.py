@@ -1,6 +1,8 @@
 """Tests for the pipeline orchestrator."""
 
 from pathlib import Path
+from unittest.mock import patch
+
 from tests.conftest import make_dataset, make_dicom_file
 from midi_b.pipeline import PipelineOptions, process_study
 
@@ -80,3 +82,47 @@ def test_date_shift_applied(tmp_path: Path):
     # Patient ID mapping should include date shift offset
     pid_csv = collector.to_patient_id_csv()
     assert "SUBJ-" in pid_csv
+
+
+def test_pixel_redact_local_skipped_when_tesseract_unavailable(tmp_path: Path):
+    """Pixel redaction gracefully skips when Tesseract is not installed."""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    ds = make_dataset()
+    make_dicom_file(input_dir, ds, "study.dcm")
+
+    output_dir = tmp_path / "output"
+    opts = PipelineOptions(
+        salt="test-salt", date_shift=False, pixel_redact=True,
+    )
+
+    with patch("midi_b.deid.pixel_detect.tesseract_available", return_value=False):
+        stats, _ = process_study(input_dir, output_dir, opts)
+
+    assert stats.files_processed == 1
+    assert stats.files_pixel_redacted == 0
+    assert (output_dir / "study.dcm").exists()
+
+
+def test_phi_service_url_passed_to_pipeline(tmp_path: Path):
+    """When phi_service_url is set, the pipeline creates a remote text scrub backend."""
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    ds = make_dataset()
+    make_dicom_file(input_dir, ds, "study.dcm")
+
+    output_dir = tmp_path / "output"
+    opts = PipelineOptions(
+        salt="test-salt",
+        date_shift=False,
+        phi_service_url="http://localhost:8082",
+    )
+
+    # Mock the RemoteTextScrubBackend to avoid actual HTTP calls
+    with patch("midi_b.pipeline.RemoteTextScrubBackend") as mock_cls:
+        mock_backend = mock_cls.return_value
+        mock_backend.scrub.return_value = type("R", (), {"text": "clean", "phi_found": False})()
+        stats, _ = process_study(input_dir, output_dir, opts)
+
+    assert stats.files_processed == 1
+    mock_cls.assert_called_once_with("http://localhost:8082")

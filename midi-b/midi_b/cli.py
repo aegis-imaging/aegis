@@ -18,6 +18,8 @@ from .pipeline import PipelineOptions, process_study
 @click.option("--date-shift/--no-date-shift", default=True, help="Enable date shifting")
 @click.option("--date-shift-max-days", default=365, type=int, help="Max offset range in days")
 @click.option("--keep-private-tags", is_flag=True, default=False, help="Keep private tags")
+@click.option("--pixel-redact/--no-pixel-redact", default=False, help="Enable pixel PHI redaction (requires Tesseract or --phi-service-url)")
+@click.option("--phi-service-url", default=None, type=str, help="PHI detection service URL for remote text scrubbing and pixel redaction")
 @click.option("--dry-run", is_flag=True, default=False, help="Scan only, don't write")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Verbose logging")
 def main(
@@ -27,6 +29,8 @@ def main(
     date_shift: bool,
     date_shift_max_days: int,
     keep_private_tags: bool,
+    pixel_redact: bool,
+    phi_service_url: str | None,
     dry_run: bool,
     verbose: bool,
 ) -> None:
@@ -46,6 +50,8 @@ def main(
         date_shift_max_days=date_shift_max_days,
         keep_private_tags=keep_private_tags,
         dry_run=dry_run,
+        pixel_redact=pixel_redact,
+        phi_service_url=phi_service_url,
     )
 
     if not dry_run:
@@ -57,6 +63,9 @@ def main(
     click.echo(f"Files processed:      {stats.files_processed}")
     click.echo(f"Files skipped:        {stats.files_skipped}")
     click.echo(f"Private tags removed: {stats.private_tags_removed}")
+
+    if stats.files_pixel_redacted > 0:
+        click.echo(f"Files pixel-redacted: {stats.files_pixel_redacted}")
 
     if stats.errors:
         click.echo(f"Errors:               {len(stats.errors)}")

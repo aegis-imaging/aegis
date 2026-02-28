@@ -1,6 +1,9 @@
 """Tests for text scrubbing."""
 
-from midi_b.deid.text_scrub import ScrubContext, scrub_free_text
+import json
+from unittest.mock import MagicMock, patch
+
+from midi_b.deid.text_scrub import RemoteTextScrubBackend, ScrubContext, scrub_free_text
 
 
 def test_no_phi():
@@ -98,3 +101,84 @@ def test_preserves_non_phi_text():
     result = scrub_free_text("CT for John Doe with contrast enhancement", ctx)
     assert "CT for" in result.text
     assert "contrast enhancement" in result.text
+
+
+# ---------------------------------------------------------------------------
+# RemoteTextScrubBackend tests
+# ---------------------------------------------------------------------------
+
+
+def test_remote_backend_success():
+    """Remote backend returns scrubbed text from the service."""
+    backend = RemoteTextScrubBackend("http://localhost:8082")
+
+    response_body = json.dumps({
+        "status": "complete",
+        "results": [{"original": "John Doe", "scrubbed": "[REMOVED]", "phi_found": True}],
+        "tool_used": "gemini",
+    }).encode()
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = response_body
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        result = backend.scrub("John Doe")
+
+    assert result.phi_found is True
+    assert result.text == "[REMOVED]"
+
+
+def test_remote_backend_batch():
+    """Remote backend sends batch request."""
+    backend = RemoteTextScrubBackend("http://localhost:8082")
+
+    response_body = json.dumps({
+        "status": "complete",
+        "results": [
+            {"original": "John Doe", "scrubbed": "[REMOVED]", "phi_found": True},
+            {"original": "Normal finding", "scrubbed": "Normal finding", "phi_found": False},
+        ],
+        "tool_used": "regex",
+    }).encode()
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = response_body
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        results = backend.scrub_batch(["John Doe", "Normal finding"])
+
+    assert len(results) == 2
+    assert results[0].phi_found is True
+    assert results[1].phi_found is False
+
+
+def test_remote_backend_fallback_on_error():
+    """Remote backend falls back to local regex on HTTP failure."""
+    backend = RemoteTextScrubBackend("http://localhost:9999")
+
+    with patch("urllib.request.urlopen", side_effect=Exception("connection refused")):
+        ctx = ScrubContext(patient_name="DOE^JOHN")
+        result = backend.scrub("CT for John Doe", ctx)
+
+    # Should fall back to local regex and still find PHI
+    assert result.phi_found is True
+    assert "John" not in result.text
+
+
+def test_remote_backend_empty_input():
+    """Empty string returns immediately without HTTP call."""
+    backend = RemoteTextScrubBackend("http://localhost:8082")
+    result = backend.scrub("")
+    assert result.phi_found is False
+    assert result.text == ""
+
+
+def test_remote_backend_batch_empty():
+    """Empty batch returns immediately."""
+    backend = RemoteTextScrubBackend("http://localhost:8082")
+    results = backend.scrub_batch([])
+    assert results == []
