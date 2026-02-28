@@ -229,6 +229,9 @@ export async function deidentify(
     }
   }
 
+  // Recursively process sequences (SR ContentSequence, nested UIDs, etc.)
+  await processSequences(dataset, scrubContext, options, salt, uidMappings)
+
   // Remove all private tags (odd group numbers) unless opted out
   if (!options.keepPrivateTags) {
     const keysToRemove: string[] = []
@@ -256,6 +259,89 @@ export async function deidentify(
     uidMappings,
     patientIdMapping,
     dateShiftOffset: options.dateShift?.offsetDays,
+  }
+}
+
+/**
+ * Recursively process DICOM sequences for de-identification.
+ * Handles SR ContentSequence trees and any other nested sequence data.
+ *
+ * In dcmjs naturalized datasets, sequences are arrays of plain objects.
+ * Each object is a sequence item (nested dataset).
+ */
+async function processSequences(
+  dataset: NaturalizedDataset,
+  scrubContext: ScrubContext,
+  options: DeidOptions,
+  salt: string,
+  uidMappings: Map<string, string>
+): Promise<void> {
+  for (const key of Object.keys(dataset)) {
+    if (key === '_meta' || key === 'PixelData') continue
+    const value = dataset[key]
+    if (!Array.isArray(value) || value.length === 0) continue
+    if (typeof value[0] !== 'object' || value[0] === null) continue
+
+    // Array of objects → sequence items
+    for (const item of value) {
+      await processSequenceItem(item as Record<string, unknown>, scrubContext, options, salt, uidMappings)
+    }
+  }
+}
+
+async function processSequenceItem(
+  item: Record<string, unknown>,
+  scrubContext: ScrubContext,
+  options: DeidOptions,
+  salt: string,
+  uidMappings: Map<string, string>
+): Promise<void> {
+  for (const [key, value] of Object.entries(item)) {
+    if (value === undefined || value === null) continue
+
+    // Recurse into nested sequences (array of objects)
+    if (Array.isArray(value) && value.length > 0 &&
+        typeof value[0] === 'object' && value[0] !== null) {
+      for (const nestedItem of value) {
+        await processSequenceItem(nestedItem as Record<string, unknown>, scrubContext, options, salt, uidMappings)
+      }
+      continue
+    }
+
+    if (typeof value !== 'string') continue
+
+    // TextValue (0040,A160) — scrub free text for PHI
+    if (key === 'TextValue') {
+      const result = scrubFreeText(value, scrubContext)
+      if (result.phiFound) {
+        item[key] = result.text
+      }
+      continue
+    }
+
+    // PersonName — zero out
+    if (key === 'PersonName' || (key.endsWith('Name') && value.includes('^'))) {
+      item[key] = ''
+      continue
+    }
+
+    // UID tags — apply consistent hash mapping
+    if ((key.endsWith('UID') || key === 'UID') && /^[012]\.\d/.test(value)) {
+      if (uidMappings.has(value)) {
+        item[key] = uidMappings.get(value)!
+      } else {
+        const newUid = await hashUid(value, salt)
+        uidMappings.set(value, newUid)
+        item[key] = newUid
+      }
+      continue
+    }
+
+    // Date tags within sequences — shift if date shifting enabled
+    if (options.dateShift && /^\d{8}$/.test(value) && key.toLowerCase().includes('date')) {
+      item[key] = shiftDicomDate(value, options.dateShift.offsetDays)
+      continue
+    }
   }
 }
 

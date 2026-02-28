@@ -143,6 +143,14 @@ export const BASIC_PROFILE: Record<string, TagRule> = {
 
   // --- Body part (keep for routing) ---
   '00180015': { keyword: 'BodyPartExamined', action: 'K' },
+
+  // --- Structured Report (SR) tags ---
+  // ContentSequence structure is preserved; items within are recursively de-identified.
+  '0040A730': { keyword: 'ContentSequence', action: 'K' },
+  '0040A160': { keyword: 'TextValue', action: 'C' },
+  '0040A123': { keyword: 'PersonName', action: 'Z' },
+  '0040A124': { keyword: 'UID', action: 'U' },
+  '00081199': { keyword: 'ReferencedSOPSequence', action: 'K' },
 }
 
 /** Look up tag rule by DICOM tag number (GGGGEEEE format) */
