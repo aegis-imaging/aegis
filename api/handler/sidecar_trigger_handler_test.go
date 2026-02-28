@@ -45,6 +45,8 @@ func sidecarServer(t *testing.T, db *sql.DB, field string, svcURL string) *handl
 		cfg.DefacingServiceURL = svcURL
 	case "protocol":
 		cfg.ProtocolServiceURL = svcURL
+	case "pixel_redaction":
+		cfg.PhiDetectionServiceURL = svcURL
 	}
 	store := storage.NewLocal(tmpDir, cfg.APIBaseURL)
 	return handler.NewServer(db, store, cfg)
@@ -649,4 +651,130 @@ func TestTriggerDeface_WithMockService(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, rr.Code)
 	// No DICOM files in test store → goroutine transitions study back to "received" on failure
 	pollStudyStatus(t, db, study.ID, "received")
+}
+
+// ─── Pixel Redaction ──────────────────────────────────────────────────────────
+
+func pollPixelRedactionStatus(t *testing.T, db *sql.DB, studyID, expected string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		s, err := model.GetStudyByID(context.Background(), db, studyID)
+		if err == nil && s.PixelRedactionStatus == expected {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Errorf("timed out waiting for pixel_redaction_status=%q", expected)
+}
+
+func TestTriggerPixelRedaction_NotFound(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/studies/no.such.uid/pixel-redaction", nil)
+	req.SetPathValue("studyUID", "no.such.uid")
+	rr := httptest.NewRecorder()
+
+	srv.TriggerPixelRedaction(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "study not found")
+}
+
+func TestTriggerPixelRedaction_NotRequired(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/studies/"+study.StudyInstanceUID+"/pixel-redaction", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	rr := httptest.NewRecorder()
+
+	srv.TriggerPixelRedaction(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "does not require pixel redaction")
+}
+
+func TestTriggerPixelRedaction_AlreadyInProgress(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	require.NoError(t, model.SetPixelRedactionRequired(t.Context(), db, study.ID, true))
+	require.NoError(t, model.UpdatePixelRedactionStatus(t.Context(), db, study.ID, "redacting"))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/studies/"+study.StudyInstanceUID+"/pixel-redaction", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	rr := httptest.NewRecorder()
+
+	srv.TriggerPixelRedaction(rr, req)
+
+	assert.Equal(t, http.StatusConflict, rr.Code)
+	assert.Contains(t, rr.Body.String(), "already in progress")
+}
+
+func TestTriggerPixelRedaction_ServiceNotConfigured(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db) // no service URL
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	require.NoError(t, model.SetPixelRedactionRequired(t.Context(), db, study.ID, true))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/studies/"+study.StudyInstanceUID+"/pixel-redaction", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	rr := httptest.NewRecorder()
+
+	srv.TriggerPixelRedaction(rr, req)
+
+	assert.Equal(t, http.StatusAccepted, rr.Code)
+	var body map[string]string
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
+	assert.Equal(t, "redacting", body["status"])
+
+	// Status should be "redacting" even without a live service
+	updated, err := model.GetStudyByID(t.Context(), db, study.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "redacting", updated.PixelRedactionStatus)
+}
+
+func TestTriggerPixelRedaction_WithMockService(t *testing.T) {
+	db := testutil.TestDB(t)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	require.NoError(t, model.SetPixelRedactionRequired(t.Context(), db, study.ID, true))
+
+	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		assert.Equal(t, "/redact", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"study_uid":       study.StudyInstanceUID,
+			"status":          "complete",
+			"files_processed": 0,
+			"files_redacted":  0,
+			"findings":        []any{},
+			"tool_used":       "tesseract",
+		})
+	}))
+	defer svc.Close()
+
+	srv := sidecarServer(t, db, "pixel_redaction", svc.URL)
+	req := httptest.NewRequest(http.MethodPost, "/api/studies/"+study.StudyInstanceUID+"/pixel-redaction", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	rr := httptest.NewRecorder()
+
+	srv.TriggerPixelRedaction(rr, req)
+
+	assert.Equal(t, http.StatusAccepted, rr.Code)
+	// No DICOM files in test store → goroutine sets status to "failed"
+	pollPixelRedactionStatus(t, db, study.ID, "failed")
 }
