@@ -111,6 +111,10 @@
 .az-z-pipe .az-zone-title { color: #1D4ED8; }
 .az-z-pipe .az-zone-chevron { color: #1D4ED8; }
 
+.az-z-novel      { background: #FFFBEB; border-color: #B45309; }
+.az-z-novel .az-zone-title { color: #B45309; }
+.az-z-novel .az-zone-chevron { color: #B45309; }
+
 .az-z-phases     { background: #FAF5FF; border-color: #7C3AED; }
 .az-z-phases .az-zone-title { color: #7C3AED; }
 .az-z-phases .az-zone-chevron { color: #7C3AED; }
@@ -622,6 +626,8 @@
 .az-cross-cloud-badge--gcp { background: #0F766E; }
 .az-cross-cloud-badge--aws { background: #EA580C; }
 .az-cross-cloud-badge--azure { background: #0078D4; }
+.az-cross-cloud-badge--onprem { background: #374151; }
+.az-cross-cloud-badge--any { background: linear-gradient(135deg, #0F766E, #EA580C, #0078D4); }
 
 .az-cross-cloud-arrow {
   font-size: var(--text-sm);
@@ -742,6 +748,7 @@
 [data-theme="dark"] .az-z-aws   { background: rgba(234, 88, 12, 0.08); border-color: rgba(234, 88, 12, 0.35); }
 [data-theme="dark"] .az-z-azure { background: rgba(0, 120, 212, 0.1); border-color: rgba(0, 120, 212, 0.4); }
 [data-theme="dark"] .az-z-pipe  { background: rgba(30, 58, 138, 0.15); border-color: rgba(29, 78, 216, 0.5); }
+[data-theme="dark"] .az-z-novel { background: rgba(180, 83, 9, 0.08); border-color: rgba(180, 83, 9, 0.35); }
 [data-theme="dark"] .az-z-phases { background: rgba(124, 58, 237, 0.08); border-color: rgba(124, 58, 237, 0.35); }
 
 [data-theme="dark"] .az-card { background: var(--bg-surface); }
