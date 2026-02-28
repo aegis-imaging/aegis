@@ -30,7 +30,7 @@ lint-go:
 	cd api && go vet ./...
 
 lint-python:
-	@for svc in defacing phi-detection qc-service bids-service classification-service protocol-service dimse-receiver; do \
+	@for svc in defacing phi-detection qc-service bids-service classification-service protocol-service dimse-receiver midi-b; do \
 		echo "Checking $$svc..."; \
 		find $$svc -name '*.py' -exec python3 -m py_compile {} +; \
 	done
