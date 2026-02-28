@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import './App.css'
 import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
+import { NiivueViewer } from './components/NiivueViewer'
 import { TCIAPanel } from './components/TCIAPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
@@ -1660,7 +1661,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
   const [seriesList, setSeriesList] = useState<SeriesRow[]>([])
   const [relationships, setRelationships] = useState<RelationshipWithStudy[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships' | 'notes'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships' | 'notes' | 'analytics'>('audit')
   type StudyNoteEntry = { id: string; actor: string; note: string; created_at: string }
   const [studyNotes, setStudyNotes] = useState<StudyNoteEntry[]>([])
   const [newLabel, setNewLabel] = useState('')
@@ -2334,6 +2335,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           <button type="button" className={`tab-btn${detailTab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('notes')}>
             Notes {studyNotes.length > 0 ? `(${studyNotes.length})` : ''}
           </button>
+          {study.bids_status === 'complete' && (
+            <button type="button" className={`tab-btn${detailTab === 'analytics' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('analytics')}>
+              NIfTI Viewer
+            </button>
+          )}
         </div>
 
         {detailTab === 'audit' && (
@@ -2723,6 +2729,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               </div>
             )}
           </div>
+        )}
+
+        {detailTab === 'analytics' && (
+          <NiivueViewer studyId={study.id} />
         )}
       </div>
     </div>
