@@ -296,7 +296,24 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/invite/requests` | `ListInviteRequestsAdmin` | `project_member_any` |
 | `adminOnly` | `POST /api/invite/requests/{id}/approve` | `ApproveInviteRequestAdmin` | `platform_admin` |
 | `adminOnly` | `POST /api/invite/requests/{id}/deny` | `DenyInviteRequestAdmin` | `platform_admin` |
+| `auth` | `GET /api/studies/{id}/roi-results` | `ListROIResults` | `project_member_site_scoped` |
+| `auth` | `GET /api/studies/{id}/roi-results/summary` | `GetROIResultsSummary` | `project_member_site_scoped` |
+| `auth` | `GET /api/studies/{id}/composite-scores` | `ListCompositeScores` | `project_member_site_scoped` |
+| `auth` | `GET /api/studies/{id}/longitudinal-roi-results` | `ListLongitudinalROIResults` | `project_member_site_scoped` |
+| `adminOnly` | `DELETE /api/studies/{id}/roi-results` | `DeleteROIResults` | `platform_admin` |
+| `auth` | `GET /api/subjects/{subjectID}/roi-results` | `ListSubjectROIResults` | `project_member_any` |
+| `auth` | `GET /api/projects/{id}/roi-export` | `ExportProjectROIData` | `project_member_any` |
+| `auth` | `GET /api/studies/{id}/qc-ratings` | `ListQCRatings` | `project_member_site_scoped` |
+| `adminOnly` | `POST /api/studies/{id}/qc-ratings` | `SubmitQCRating` | `platform_admin` |
+| `adminOnly` | `PUT /api/qc-ratings/{id}` | `UpdateQCRating` | `platform_admin` |
+| `adminOnly` | `DELETE /api/qc-ratings/{id}` | `DeleteQCRating` | `platform_admin` |
+| `auth` | `GET /api/subjects/{subjectID}/demographics` | `GetSubjectDemographics` | `project_member_any` |
+| `adminOnly` | `PUT /api/subjects/{subjectID}/demographics` | `UpsertSubjectDemographics` | `platform_admin` |
+| `auth` | `GET /api/projects/{id}/demographics` | `ListProjectDemographics` | `project_member_any` |
+| `auth` | `GET /api/projects/{id}/demographics.csv` | `ExportProjectDemographicsCSV` | `project_member_any` |
+| `auth` | `GET /api/studies/{id}/analytics-files` | `ListAnalyticsFiles` | `project_member_site_scoped` |
+| `auth` | `GET /api/studies/{id}/analytics-files/{path...}` | `ServeAnalyticsFile` | `project_member_site_scoped` |
 
 ## Coverage
-- Total mapped authenticated/admin routes: **273**
+- Total mapped authenticated/admin routes: **294**
 - Every `auth(...)` and `adminOnly(...)` route registration in `api/main.go` is included above.

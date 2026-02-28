@@ -12,7 +12,9 @@ Endpoints:
 Environment variables:
   ANALYTICS_TOOL        -- "auto" | "freesurfer" | "fsl" | "ants" | "spm" |
                            "atlas_roi" | "synthseg" | "nnunet" |
-                           "totalsegmentator"
+                           "totalsegmentator" | "itksnap" | "brainsuite" |
+                           "volbrain" | "monai_label" | "petsurfer" | "qsm" |
+                           "basil"
   ANALYTICS_TIMEOUT     -- max seconds per study (default 86400 = 24h)
   FS_LICENSE            -- FreeSurfer license file path
   FSL_DIR               -- FSL installation directory
@@ -43,6 +45,13 @@ from .backends.freesurfer_long import FreeSurferLongBackend
 from .backends.synthseg import SynthSegBackend
 from .backends.nnunet import NNUNetBackend
 from .backends.totalsegmentator import TotalSegmentatorBackend
+from .backends.itksnap import ITKSnapBackend
+from .backends.brainsuite import BrainSuiteBackend
+from .backends.volbrain import VolBrainBackend
+from .backends.monai_label import MONAILabelBackend
+from .backends.petsurfer import PETSurferBackend
+from .backends.qsm import QSMBackend
+from .backends.basil import BASILBackend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,6 +68,13 @@ ALL_BACKENDS: list[AnalyticsBackend] = [
     SynthSegBackend(),
     NNUNetBackend(),
     TotalSegmentatorBackend(),
+    ITKSnapBackend(),
+    BrainSuiteBackend(),
+    VolBrainBackend(),
+    MONAILabelBackend(),
+    PETSurferBackend(),
+    QSMBackend(),
+    BASILBackend(),
 ]
 
 LONGITUDINAL_BACKENDS: list[LongitudinalBackend] = [
