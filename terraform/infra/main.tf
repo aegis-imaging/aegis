@@ -1134,6 +1134,13 @@ resource "google_cloud_run_v2_service" "api" {
           value = env.value
         }
       }
+      dynamic "env" {
+        for_each = local.dimse_enabled ? [google_compute_instance.dimse_receiver[0].network_interface[0].network_ip] : []
+        content {
+          name  = "DIMSE_RECEIVER_URL"
+          value = "http://${env.value}:8080"
+        }
+      }
 
       liveness_probe {
         failure_threshold     = 5
