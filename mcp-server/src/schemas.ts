@@ -1144,6 +1144,78 @@ export const toggleProjectRestrictedArgsSchema = z.object({
   confirm: z.literal(true)
 });
 
+// --- Biomarker database schemas ---
+
+export const roiResultsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  tool: z.string().optional(),
+  atlas_name: z.string().optional(),
+  metric_type: z.string().optional(),
+  roi_name: z.string().optional(),
+  hemisphere: z.enum(["L", "R", "B"]).optional(),
+  limit: z.number().int().min(1).max(2000).optional()
+});
+
+export const subjectRoiArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subject_id: z.string().min(1).max(256),
+  project_id: z.string().uuid().optional()
+});
+
+export const projectRoiExportArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  project_id: z.string().uuid()
+});
+
+export const qcRatingsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid()
+});
+
+export const submitQcRatingArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid(),
+  rating_quality: z.number().int().min(0).max(4),
+  rating_motion: z.number().int().min(0).max(4),
+  rating_snr: z.number().int().min(0).max(4).optional(),
+  rating_coverage: z.number().int().min(0).max(4).optional(),
+  rating_artifacts: z.number().int().min(0).max(4).optional(),
+  rating_overall: z.number().int().min(0).max(4),
+  comments: z.string().max(2000).optional(),
+  review_type: z.enum(["initial", "consensus", "adjudication"]).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const demographicsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subject_id: z.string().min(1).max(256),
+  project_id: z.string().uuid()
+});
+
+export const upsertDemographicsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  subject_id: z.string().min(1).max(256),
+  project_id: z.string().uuid(),
+  sex: z.enum(["M", "F", "O", ""]).optional(),
+  age_at_scan: z.number().int().min(0).max(150).optional(),
+  diagnosis: z.string().max(256).optional(),
+  education_years: z.number().int().min(0).max(30).optional(),
+  mmse_score: z.number().int().min(0).max(30).optional(),
+  moca_score: z.number().int().min(0).max(30).optional(),
+  cdr_global: z.number().min(0).max(3).optional(),
+  apoe_genotype: z.string().max(10).optional(),
+  notes: z.string().max(2000).optional(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const analyticsFilesArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_id: z.string().uuid()
+});
+
 export const readToolNames = [
   "list_studies",
   "get_study_detail",
@@ -1220,7 +1292,17 @@ export const readToolNames = [
   "get_source_trend",
   "get_export_shares_csv",
   "get_institution_breakdown",
-  "get_compliance_report_csv"
+  "get_compliance_report_csv",
+  "get_roi_results",
+  "get_roi_results_summary",
+  "get_composite_scores",
+  "get_longitudinal_roi_results",
+  "get_subject_roi_comparison",
+  "get_qc_ratings",
+  "get_subject_demographics",
+  "list_project_demographics",
+  "list_analytics_files",
+  "export_project_roi_data"
 ] as const;
 
 export const writeToolNames = [
@@ -1325,7 +1407,9 @@ export const writeToolNames = [
   "add_project_member",
   "update_project_member",
   "remove_project_member",
-  "toggle_project_restricted"
+  "toggle_project_restricted",
+  "submit_qc_rating",
+  "upsert_demographics"
 ] as const;
 
 export type ReadToolName = (typeof readToolNames)[number];
