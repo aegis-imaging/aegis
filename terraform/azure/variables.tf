@@ -38,9 +38,9 @@ variable "admin_domain" {
 }
 
 variable "enable_application_gateway_waf" {
-  description = "Enable Azure Application Gateway WAF v2 edge ingress for API/admin"
+  description = "Enable Azure Application Gateway WAF v2 edge ingress for API/admin. Defaults to true for parity with GCP Cloud Armor and AWS WAF v2."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "app_gateway_certificate_secret_id" {
@@ -181,6 +181,12 @@ variable "dimse_source_ranges" {
   description = "CIDR ranges allowed to reach DIMSE C-STORE on TCP 11112. Restrict to known PACS IPs in production."
   type        = list(string)
   default     = ["203.0.113.0/24"] # RFC 5737 TEST-NET-3 placeholder — replace with real PACS IP ranges
+}
+
+variable "dimse_admin_ssh_ranges" {
+  description = "CIDR ranges allowed SSH access to the DIMSE VM. Empty list = SSH disabled (default, secure)."
+  type        = list(string)
+  default     = []
 }
 
 # ── MCP Server ────────────────────────────────────────────────────────────────

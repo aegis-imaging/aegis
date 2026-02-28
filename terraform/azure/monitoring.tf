@@ -63,7 +63,7 @@ resource "azurerm_monitor_metric_alert" "api_latency" {
   name                = "${local.prefix}-api-latency"
   resource_group_name = azurerm_resource_group.main.name
   scopes              = [azurerm_container_app.api.id]
-  description         = "API P99 request latency > 2 seconds over 15 minutes"
+  description         = "API average request latency > 5 seconds over 15 minutes"
   severity            = 3
   frequency           = "PT5M"
   window_size         = "PT15M"
@@ -73,7 +73,7 @@ resource "azurerm_monitor_metric_alert" "api_latency" {
     metric_name      = "ResponseTime"
     aggregation      = "Average"
     operator         = "GreaterThan"
-    threshold        = 2000
+    threshold        = 5000
   }
 
   dynamic "action" {
@@ -399,6 +399,63 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "dimse_dead_letter" {
     for_each = local.action_group_ids
     content {
       action_groups = [action.value]
+    }
+  }
+
+  tags = local.tags
+}
+
+# ── External Availability Test ─────────────────────────────────────────────
+# Mirrors GCP google_monitoring_uptime_check_config and AWS Route53 health check.
+# Probes the API /healthz endpoint from Azure's global test locations.
+
+resource "azurerm_application_insights_standard_web_test" "api_healthz" {
+  name                    = "${local.prefix}-api-healthz"
+  resource_group_name     = azurerm_resource_group.main.name
+  location                = azurerm_resource_group.main.location
+  application_insights_id = azurerm_application_insights.main.id
+  description             = "External availability probe — API /healthz"
+  frequency               = 300 # 5 minutes (matches GCP/AWS)
+  timeout                 = 30
+  enabled                 = true
+
+  geo_locations = [
+    "us-tx-sn1-azr", # South Central US
+    "us-il-ch1-azr", # North Central US
+    "us-va-ash-azr", # East US
+  ]
+
+  request {
+    url = "https://${azurerm_container_app.api.ingress[0].fqdn}/healthz"
+  }
+
+  validation_rules {
+    expected_status_code = 200
+  }
+
+  tags = local.tags
+}
+
+resource "azurerm_monitor_metric_alert" "api_uptime" {
+  count               = var.alert_email != "" ? 1 : 0
+  name                = "${local.prefix}-api-uptime"
+  resource_group_name = azurerm_resource_group.main.name
+  scopes              = [azurerm_application_insights_standard_web_test.api_healthz.id, azurerm_application_insights.main.id]
+  description         = "API /healthz external availability test failing"
+  severity            = 1
+  frequency           = "PT5M"
+  window_size         = "PT5M"
+
+  application_insights_web_test_location_availability_criteria {
+    web_test_id           = azurerm_application_insights_standard_web_test.api_healthz.id
+    component_id          = azurerm_application_insights.main.id
+    failed_location_count = 2
+  }
+
+  dynamic "action" {
+    for_each = local.action_group_ids
+    content {
+      action_group_id = action.value
     }
   }
 

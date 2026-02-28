@@ -66,11 +66,64 @@ jobs:
           fi
           echo "All required variables and secrets are present."
 
-  # ── Phase 1: Build all images in parallel ──────────────────────────────────
+  # ── Phase 1: Build all images in parallel (matrix strategy) ───────────────
   build:
-    name: Build & Push Images
+    name: Build ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: validate
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: api
+            dockerfile: api/Dockerfile
+          - service: admin-dashboard
+            context: frontend/admin-dashboard
+            dockerfile: frontend/admin-dashboard/Dockerfile
+            build_args: "--build-arg VITE_WEASIS_BASE_URL=$WEASIS_URL --build-arg VITE_API_BASE_URL=$API_URL"
+          - service: landing
+            context: .
+            dockerfile: frontend/landing/Dockerfile
+            build_args: "--build-arg VITE_API_BASE_URL=$API_URL"
+          - service: weasis
+            context: weasis
+            dockerfile: weasis/Dockerfile
+          - service: defacing
+            context: defacing
+            dockerfile: defacing/Dockerfile
+          - service: phi-detection
+            context: phi-detection
+            dockerfile: phi-detection/Dockerfile
+          - service: qc-service
+            context: qc-service
+            dockerfile: qc-service/Dockerfile
+          - service: bids-service
+            context: bids-service
+            dockerfile: bids-service/Dockerfile
+          - service: classification-service
+            context: classification-service
+            dockerfile: classification-service/Dockerfile
+          - service: protocol-service
+            context: protocol-service
+            dockerfile: protocol-service/Dockerfile
+          - service: synth-service
+            context: synth-service
+            dockerfile: synth-service/Dockerfile
+          - service: analytics-service
+            context: analytics-service
+            dockerfile: analytics-service/Dockerfile
+          - service: sct-service
+            context: sct-service
+            dockerfile: sct-service/Dockerfile
+          - service: mcp-server
+            context: mcp-server
+            dockerfile: mcp-server/Dockerfile
+          - service: dimse-receiver
+            context: dimse-receiver
+            dockerfile: dimse-receiver/Dockerfile
+
     env:
       IMAGE_TAG: ${{ github.sha }}
       ACR: ${{ secrets.AZURE_ACR_REGISTRY }}
@@ -91,144 +144,32 @@ jobs:
       - name: Login to ACR
         run: az acr login --name "$ACR"
 
-      - name: Build & push — api
+      - name: Build and push
+        env:
+          SERVICE:    ${{ matrix.service }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          CTX:        ${{ matrix.context }}
+          BUILD_ARGS: ${{ matrix.build_args }}
         run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/api:$IMAGE_TAG" \
-            -t "$ACR/api:latest" \
-            api/
-          docker push "$ACR/api:$IMAGE_TAG"
-          docker push "$ACR/api:latest"
+          SHA_TAG="$ACR/$SERVICE:$IMAGE_TAG"
+          LATEST_TAG="$ACR/$SERVICE:latest"
 
-      - name: Build & push — admin-dashboard
-        run: |
-          docker build --platform linux/amd64 \
-            --build-arg "VITE_WEASIS_BASE_URL=$WEASIS_URL" \
-            --build-arg "VITE_API_BASE_URL=$API_URL" \
-            -t "$ACR/admin-dashboard:$IMAGE_TAG" \
-            -t "$ACR/admin-dashboard:latest" \
-            frontend/admin-dashboard/
-          docker push "$ACR/admin-dashboard:$IMAGE_TAG"
-          docker push "$ACR/admin-dashboard:latest"
+          # Expand build args (they reference env vars like $WEASIS_URL)
+          EXPANDED_ARGS=""
+          if [[ -n "${BUILD_ARGS:-}" ]]; then
+            EXPANDED_ARGS=$(eval echo "$BUILD_ARGS")
+          fi
 
-      - name: Build & push — landing
-        run: |
-          docker build --platform linux/amd64 \
-            --build-arg "VITE_API_BASE_URL=$API_URL" \
-            -f frontend/landing/Dockerfile \
-            -t "$ACR/landing:$IMAGE_TAG" \
-            -t "$ACR/landing:latest" \
-            .
-          docker push "$ACR/landing:$IMAGE_TAG"
-          docker push "$ACR/landing:latest"
+          docker build \
+            --platform linux/amd64 \
+            --file "$DOCKERFILE" \
+            --tag  "$SHA_TAG" \
+            --tag  "$LATEST_TAG" \
+            ${EXPANDED_ARGS:+$EXPANDED_ARGS} \
+            "$CTX"
 
-      - name: Build & push — weasis
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/weasis:$IMAGE_TAG" \
-            -t "$ACR/weasis:latest" \
-            weasis/
-          docker push "$ACR/weasis:$IMAGE_TAG"
-          docker push "$ACR/weasis:latest"
-
-      - name: Build & push — defacing
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/defacing:$IMAGE_TAG" \
-            -t "$ACR/defacing:latest" \
-            defacing/
-          docker push "$ACR/defacing:$IMAGE_TAG"
-          docker push "$ACR/defacing:latest"
-
-      - name: Build & push — phi-detection
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/phi-detection:$IMAGE_TAG" \
-            -t "$ACR/phi-detection:latest" \
-            phi-detection/
-          docker push "$ACR/phi-detection:$IMAGE_TAG"
-          docker push "$ACR/phi-detection:latest"
-
-      - name: Build & push — qc-service
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/qc-service:$IMAGE_TAG" \
-            -t "$ACR/qc-service:latest" \
-            qc-service/
-          docker push "$ACR/qc-service:$IMAGE_TAG"
-          docker push "$ACR/qc-service:latest"
-
-      - name: Build & push — bids-service
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/bids-service:$IMAGE_TAG" \
-            -t "$ACR/bids-service:latest" \
-            bids-service/
-          docker push "$ACR/bids-service:$IMAGE_TAG"
-          docker push "$ACR/bids-service:latest"
-
-      - name: Build & push — classification-service
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/classification-service:$IMAGE_TAG" \
-            -t "$ACR/classification-service:latest" \
-            classification-service/
-          docker push "$ACR/classification-service:$IMAGE_TAG"
-          docker push "$ACR/classification-service:latest"
-
-      - name: Build & push — protocol-service
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/protocol-service:$IMAGE_TAG" \
-            -t "$ACR/protocol-service:latest" \
-            protocol-service/
-          docker push "$ACR/protocol-service:$IMAGE_TAG"
-          docker push "$ACR/protocol-service:latest"
-
-      - name: Build & push — synth-service
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/synth-service:$IMAGE_TAG" \
-            -t "$ACR/synth-service:latest" \
-            synth-service/
-          docker push "$ACR/synth-service:$IMAGE_TAG"
-          docker push "$ACR/synth-service:latest"
-
-      - name: Build & push — analytics-service
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/analytics-service:$IMAGE_TAG" \
-            -t "$ACR/analytics-service:latest" \
-            analytics-service/
-          docker push "$ACR/analytics-service:$IMAGE_TAG"
-          docker push "$ACR/analytics-service:latest"
-
-      - name: Build & push — sct-service
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/sct-service:$IMAGE_TAG" \
-            -t "$ACR/sct-service:latest" \
-            sct-service/
-          docker push "$ACR/sct-service:$IMAGE_TAG"
-          docker push "$ACR/sct-service:latest"
-
-      - name: Build & push — mcp-server
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/mcp-server:$IMAGE_TAG" \
-            -t "$ACR/mcp-server:latest" \
-            mcp-server/
-          docker push "$ACR/mcp-server:$IMAGE_TAG"
-          docker push "$ACR/mcp-server:latest"
-
-      - name: Build & push — dimse-receiver
-        run: |
-          docker build --platform linux/amd64 \
-            -t "$ACR/dimse-receiver:$IMAGE_TAG" \
-            -t "$ACR/dimse-receiver:latest" \
-            dimse-receiver/
-          docker push "$ACR/dimse-receiver:$IMAGE_TAG"
-          docker push "$ACR/dimse-receiver:latest"
+          docker push "$SHA_TAG"
+          docker push "$LATEST_TAG"
 
   # ── Phase 2: Deploy all Container Apps ────────────────────────────────────
   deploy:

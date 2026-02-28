@@ -203,7 +203,7 @@ resource "azurerm_postgresql_flexible_server_database" "aegis" {
 resource "azurerm_postgresql_flexible_server_configuration" "ssl" {
   name      = "require_secure_transport"
   server_id = azurerm_postgresql_flexible_server.main.id
-  value     = "off" # TLS handled at app layer; VNet isolation provides transport security
+  value     = "on" # Defense-in-depth: TLS enforced server-side alongside VNet isolation
 }
 
 # ── Azure Blob Storage ────────────────────────────────────────────────────────
@@ -233,6 +233,28 @@ resource "azurerm_storage_container" "dicom" {
   name                  = "dicom"
   storage_account_id    = azurerm_storage_account.dicom.id
   container_access_type = "private"
+}
+
+# Lifecycle management — tier DICOM blobs to Cool after 30 days
+# Matches GCP (COLDLINE after 30 days) and AWS (GLACIER_IR after 30 days)
+resource "azurerm_storage_management_policy" "dicom_lifecycle" {
+  storage_account_id = azurerm_storage_account.dicom.id
+
+  rule {
+    name    = "archive-to-cool"
+    enabled = true
+
+    filters {
+      prefix_match = ["dicom/"]
+      blob_types   = ["blockBlob"]
+    }
+
+    actions {
+      base_blob {
+        tier_to_cool_after_days_since_modification_greater_than = 30
+      }
+    }
+  }
 }
 
 resource "azurerm_role_assignment" "blob_contributor" {
