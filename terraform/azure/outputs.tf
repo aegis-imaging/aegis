@@ -20,7 +20,7 @@ output "admin_dashboard_url" {
 
 output "landing_url" {
   description = "Landing Page URL"
-  value       = "https://${azurerm_container_app.landing.ingress[0].fqdn}"
+  value       = var.landing_domain != "" ? "https://${var.landing_domain}" : "https://${azurerm_container_app.landing.ingress[0].fqdn}"
 }
 
 output "weasis_url" {

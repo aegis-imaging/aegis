@@ -30,6 +30,8 @@ locals {
     "classification-service",
     "protocol-service",
     "synth-service",
+    "analytics-service",
+    "sct-service",
     "dimse-receiver",
     "mcp-server",
     "api",

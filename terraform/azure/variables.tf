@@ -131,6 +131,12 @@ variable "landing_base_url" {
   default     = "https://aegisimaging.ai"
 }
 
+variable "landing_domain" {
+  description = "Custom domain for the landing page (e.g. azure.aegisimaging.ai). Empty = ACA FQDN only."
+  type        = string
+  default     = ""
+}
+
 # ── Container Images ──────────────────────────────────────────────────────────
 
 variable "api_image_tag" {
