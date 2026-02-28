@@ -14,7 +14,7 @@ const TECH_TAGS = [
 const CLOUDS = [
   { name: 'Google Cloud', status: 'supported' as const, url: 'https://api.aegisimaging.ai/healthz' },
   { name: 'AWS', status: 'supported' as const, url: 'https://aws.api.aegisimaging.ai/healthz' },
-  { name: 'Azure', status: 'planned' as const, url: null },
+  { name: 'Azure', status: 'supported' as const, url: 'https://azure.api.aegisimaging.ai/healthz' },
 ]
 
 export function Architecture() {

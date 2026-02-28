@@ -83,15 +83,17 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
 │  │  └── Batch import CLI                                 │       │
 │  └──────┬───────────────────────────────────────────────┘       │
 │         │                                                        │
-│  ┌──────▼────────────────────────────────────────────┐          │
-│  │  6 Python Processing Services (FastAPI, Cloud Run) │          │
-│  │  ├── Defacing (DeepDefacer / mri_deface)          │          │
-│  │  ├── PHI Detection (Tesseract / Vision / Textract)│          │
-│  │  ├── QC Automation (pydicom + numpy)              │          │
-│  │  ├── NIfTI/BIDS Conversion (dcm2niix)             │          │
-│  │  ├── Metadata Classification (heuristic + cloud)  │          │
-│  │  └── Protocol Compliance (parameter validation)    │          │
-│  └───────────────────────────────────────────────────┘          │
+│  ┌──────▼──────────────────────────────────────────────┐        │
+│  │  9 Python Processing Services (FastAPI, Cloud Run)  │        │
+│  │  ├── Defacing (DeepDefacer / mri_deface)            │        │
+│  │  ├── PHI Detection + Pixel Redaction (OCR + mask)   │        │
+│  │  ├── QC Automation (pydicom + numpy)                │        │
+│  │  ├── NIfTI/BIDS Conversion (dcm2niix)               │        │
+│  │  ├── Metadata Classification (heuristic + cloud)    │        │
+│  │  ├── Protocol Compliance (parameter validation)     │        │
+│  │  ├── Synthetic MRI Generation (nibabel + NumPy)     │        │
+│  │  └── Analytics (FreeSurfer / FSL / ANTs / SPM)      │        │
+│  └─────────────────────────────────────────────────────┘        │
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │  DIMSE Receiver (Compute Engine VM — aegis-prod-dimse)  │    │
@@ -111,14 +113,14 @@ Brain imaging is the MVP focus because it exercises the most complex pipeline (t
 │                                                                  │
 │  ┌──────────────────────────────────────────────────┐           │
 │  │  React Frontends (4 apps)                         │           │
-│  │  ├── Admin Dashboard (OHIF Viewer, study mgmt)    │           │
+│  │  ├── Admin Dashboard (Weasis DWV, study mgmt)    │           │
 │  │  ├── Upload Portal (public-facing, anonymization) │           │
 │  │  ├── Export Portal (token-authenticated download)  │           │
 │  │  └── Landing Page (aegisimaging.ai)               │           │
 │  └──────────────────────────────────────────────────┘           │
 │                                                                  │
 │  ┌──────────────┐  ┌──────────────┐                             │
-│  │  OHIF Viewer  │  │  Email (SMTP) │                             │
+│  │  Weasis DWV  │  │  Email (SMTP) │                             │
 │  │  (DICOMweb)   │  │  Dev: Mailpit │                             │
 │  └──────────────┘  └──────────────┘                             │
 │                                                                  │
@@ -152,7 +154,7 @@ aegis/
 │   └── testutil/               # Test helpers (testcontainers, fixtures)
 ├── frontend/
 │   ├── upload-portal/          # React — public upload + anonymization UI (:3000)
-│   ├── admin-dashboard/        # React — study mgmt, OHIF viewer, 10-tab admin (:3001)
+│   ├── admin-dashboard/        # React — study mgmt, Weasis DWV viewer, 10-tab admin (:3001)
 │   ├── export-portal/          # React — token-authenticated export download (:3004)
 │   └── landing/                # React — marketing site for aegisimaging.ai (:3003)
 ├── client/                     # @aegis/client TypeScript npm package
@@ -162,7 +164,10 @@ aegis/
 ├── bids-service/               # Python FastAPI — dcm2niix DICOM→NIfTI/BIDS conversion
 ├── classification-service/     # Python FastAPI — DICOM header heuristic classification
 ├── protocol-service/           # Python FastAPI — MRI parameter compliance checking
+├── synth-service/              # Python FastAPI — synthetic DICOM brain MRI generator
+├── analytics-service/          # Python FastAPI — neuroimaging analytics (FreeSurfer, FSL, ANTs, SPM)
 ├── dimse-receiver/             # Python FastAPI — DIMSE C-STORE SCP ingest adapter (deployed on GCE VM)
+├── mcp-server/                 # TypeScript MCP server — AI agent operations (115+ tools)
 └── docs/                       # Shared research and documentation
 ```
 
@@ -185,7 +190,7 @@ aegis/
 ### React Frontends (4 apps)
 
 - **Upload Portal** — DICOM file picker, client-side PS3.15 de-identification, per-project anonymization profiles, before/after preview, per-file progress with auto-retry
-- **Admin Dashboard** — 10 tabs: Studies, Audit Log, Routing, Institutions, Profiles, Notifications, Projects, Users, Protocol Templates; OHIF Viewer integration; RBAC (admin/viewer roles)
+- **Admin Dashboard** — 10 tabs: Studies, Audit Log, Routing, Institutions, Profiles, Notifications, Projects, Users, Protocol Templates; Weasis DWV integration; RBAC (admin/viewer roles)
 - **Export Portal** — Token-authenticated study download page for share recipients
 - **Landing Page** — Marketing site for aegisimaging.ai (deployed to Cloud Run `aegis-prod-landing`)
 
@@ -207,25 +212,25 @@ Reusable library for browser-based DICOM anonymization and upload. Core modules:
 - **DICOM library**: [suyashkumar/dicom](https://github.com/suyashkumar/dicom) for validation/metadata and batch-import header parsing
 - **GCP SDK**: First-class Go SDK (`cloud.google.com/go/healthcare`, `cloud.google.com/go/storage`)
 
-**Python services (6 processing + 1 DIMSE ingress adapter):**
-- All ML/imaging tools (DeepDefacer, Tesseract, dcm2niix, pydicom) are Python or C with Python bindings
+**Python services (8 processing + 1 DIMSE ingress adapter):**
+- All ML/imaging tools (DeepDefacer, Tesseract, dcm2niix, pydicom, FreeSurfer, FSL, ANTs, SPM) are Python or C with Python bindings
 - Isolated containers with their own dependency trees and update cycles
 - Keeps Python dependency surface completely separate from the Go API
-- Processing services (Cloud Run): defacing, PHI detection, QC automation, BIDS conversion, classification, protocol compliance
+- Processing services (Cloud Run): defacing, PHI detection + pixel redaction, QC automation, BIDS conversion, classification, protocol compliance, synthetic MRI generation, neuroimaging analytics
 - Ingress adapter: DIMSE receiver (pynetdicom C-STORE SCP) — runs on **Compute Engine VM** (`aegis-prod-dimse-receiver`, static IP `35.232.172.221`) because Cloud Run cannot expose raw TCP port 11112
 
 ### Frontend: React + TypeScript
 - **Key libraries**:
   - `dcmjs` (MIT) — DICOM read/write in browser
   - `dicomParser` (MIT) — robust DICOM Part 10 parsing
-  - OHIF Viewer components (MIT) for admin dashboard
+  - Weasis DWV components (MIT) for admin dashboard
 - Web Workers for background DICOM processing (keeps UI responsive)
 
 ### Infrastructure: Terraform (Multi-Cloud)
 - **GCP**: `terraform/project/` (bootstrap) + `terraform/infra/` (Cloud Run, Healthcare API, Cloud SQL, GCS)
 - **AWS**: `terraform/aws/` (VPC, ECS Fargate, RDS, S3, ALB, ECR, KMS, SNS/SQS)
-- **Azure**: Planned
-- **Local dev**: `docker-compose.yml` (PostgreSQL, Mailpit, OHIF, Go API, 7 Python services)
+- **Azure**: `terraform/azure/` (Container Apps, PostgreSQL Flexible Server, Blob Storage, ACR)
+- **Local dev**: `docker-compose.yml` (PostgreSQL, Mailpit, Weasis DWV, Go API, 9 Python services)
 - CI: GitHub Actions (Go build+vet+test, Python syntax, TypeScript type check, Docker build); CD: Cloud Build triggers auto-deploy all services on push to `develop`
 
 ### DICOM Storage: Cloud-Neutral File Storage
@@ -265,12 +270,15 @@ Each processing service supports local backends for development and optional clo
 
 | Service | Local Backend | Cloud Backend |
 |---------|--------------|---------------|
-| PHI Detection | Tesseract OCR | Google Cloud Vision `text_detection`, AWS Textract `detect_document_text` |
-| Classification | DICOM header heuristics | Google Cloud Vision `label_detection`, AWS Rekognition `detect_labels` |
-| QC Automation | pydicom + numpy | — (local backend currently sufficient) |
-| Protocol Compliance | pydicom parameter extraction | — (local backend currently sufficient) |
-| Defacing | DeepDefacer / mri_deface | — (local backend currently sufficient) |
-| BIDS Conversion | dcm2niix | — (local backend currently sufficient) |
+| PHI Detection | Tesseract OCR | Gemini multimodal, Google Cloud Vision, Azure Vision, AWS Textract |
+| Pixel Redaction | Tesseract OCR + pixel masking | Gemini, Cloud Vision, Azure Vision, Textract (same as PHI) |
+| Classification | DICOM header heuristics | Gemini multimodal, Google Cloud Vision, Azure Vision, AWS Rekognition |
+| QC Automation | pydicom + numpy | — (local backend sufficient) |
+| Protocol Compliance | pydicom parameter extraction | — (local backend sufficient) |
+| Defacing | DeepDefacer / mri_deface | — (local backend sufficient) |
+| BIDS Conversion | dcm2niix | — (local backend sufficient) |
+| Analytics | FreeSurfer / FSL / ANTs / SPM | — (runs locally installed neuroimaging tools) |
+| Synthetic MRI | nibabel + NumPy | — (generates DICOM phantoms for testing) |
 
 ### Email Notifications
 
@@ -281,18 +289,19 @@ Each processing service supports local backends for development and optional clo
 - Dev: Mailpit (included in Docker Compose)
 - Production: any SMTP provider (institutional relay, SendGrid, SES, etc.)
 
-### Viewing: OHIF Viewer
+### Viewing: Weasis DWV
 
-**Local dev**: OHIF v3 runs as a Docker container on `:3002` via `docker compose up ohif`. Configured via `ohif-config.js` (repo root) to use the Go API's DICOMweb proxy at `http://localhost:8080/dicomweb`.
+**Local dev**: Weasis DWV runs as a Docker container on `:3005` via `docker compose up weasis`. Configured to use the Go API's DICOMweb proxy at `http://localhost:8080/dicomweb`.
 
 **DICOMweb proxy** (`api/handler/dicomweb.go`): minimal QIDO-RS + WADO-RS implemented in Go without a DICOM library. Serves study/series/instance metadata from PostgreSQL and streams raw DICOM bytes from local storage. Uses fake deterministic UIDs (`{studyUID}.1.{fileIndex}`) that map directly to file paths (`dicom/{store}/{studyUID}/{index}.dcm`).
 
-Admin dashboard **View button**: each study row shows an inline iframe panel (OHIF embedded in the dashboard) and an "Open in new tab ↗" link. Both modes open `http://localhost:3002/viewer?StudyInstanceUIDs={uid}`.
+Admin dashboard **View button**: each study row shows an inline iframe panel (Weasis DWV embedded in the dashboard) and an "Open in new tab ↗" link. URL params: `?studyUID=<UID>` and `?store=raw|clean`.
 
-**Production**: OHIF served from a container behind the cloud's auth layer (IAP, ALB+Cognito, or Azure AD). The Go DICOMweb proxy continues to serve DICOM data from cloud storage (S3/GCS) — no external DICOM server required.
+**Production**: Weasis DWV served from a container behind the cloud's auth layer (IAP, ALB+Cognito, or Azure AD). The Go DICOMweb proxy continues to serve DICOM data from cloud storage (S3/GCS/Azure Blob) — no external DICOM server required.
 
-- Web-based, React, MIT license
+- Web-based, lightweight, open-source
 - Supports all standard DICOM modalities (MRI, CT, PET, US, X-Ray, NM, etc.)
+- Built-in side-by-side defacing review (before/after panels with yoked scroll synchronization)
 
 ---
 
@@ -315,12 +324,15 @@ Admin dashboard **View button**: each study row shows an inline iframe panel (OH
 - Mapping table (original → anonymized IDs) stays local, never uploaded
 
 **Phase 2 — Server-side processing (after upload):**
-- **PHI detection service** (Tesseract OCR) scans pixel data for burned-in text (patient names, dates, accession numbers)
+- **PHI detection service** (Tesseract OCR / Gemini / Cloud Vision / Textract) scans pixel data for burned-in text (patient names, dates, accession numbers)
+- **Pixel redaction** detects and masks burned-in PHI directly in DICOM pixel data
+- **Private tag PHI scanning** checks vendor private tag values for PHI patterns (names, SSNs, MRNs) when tag preservation is enabled
 - **Defacing pipeline** (see below) removes facial features from head scans
 - **QC automation** validates file integrity, slice consistency, SNR, coverage, missing slices
 - **Protocol compliance** checks acquisition parameters against per-project templates
 - **Classification service** fills in missing modality/body_part from DICOM headers
 - **BIDS conversion** produces NIfTI files with BIDS-compliant directory structure
+- **Analytics** runs neuroimaging tools (FreeSurfer, FSL, ANTs, SPM) on BIDS-converted NIfTI data
 - Results written to `clean` DICOM store; `raw` store used as staging
 
 ### Defacing Pipeline (Server-Side — Head Imaging Only)
@@ -383,9 +395,10 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 4. Routing rules evaluate → set processing flags on the study.
 5. Automated pipeline orchestrates services in dependency order:
    Phase 0: Classification (fills modality/body_part, re-evaluates routing)
-   Phase 1: PHI scan + Protocol check + Defacing (parallel, raw files)
+   Phase 1: PHI scan + Pixel redaction + Protocol check + Defacing (parallel, raw files)
    Phase 2: QC check + BIDS conversion (after defacing, final files)
-6. Admin reviews in dashboard (OHIF Viewer)
+   Phase 3: Analytics — FreeSurfer, FSL, ANTs, SPM (post-BIDS, on NIfTI outputs)
+6. Admin reviews in dashboard (Weasis DWV Viewer)
    - Processing status badges for each service
    - Defacing quality review (head imaging only — before/after OHIF panels)
 7. Admin approves → study becomes shareable/exportable.
@@ -446,7 +459,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 3. **Cloud SQL schema**: Users, projects, institutions, upload sessions, audit trail
 4. **Go API**: Signed URL generation, upload orchestration, STOW-RS ingest, basic auth, PostgreSQL integration
 5. **Upload Portal**: DICOM file picker, tag-level de-id engine, preview, chunked upload
-6. **Admin Dashboard**: Study list, OHIF viewer, basic QC accept/reject
+6. **Admin Dashboard**: Study list, Weasis DWV viewer, basic QC accept/reject
 7. **BigQuery**: Healthcare API metadata export, basic audit queries
 
 ### Phase 2: Defacing Pipeline
@@ -483,6 +496,15 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 31. ✅ **Batch importer contract hardening**: strict input normalization/validation (`source`, `project_slug`, absolute `dir`), canonical institution selectors for external provenance, strict JSON decoding on `/api/import/batch`, and removal of deprecated importer AE-title selector inputs.
 32. ✅ **Cloud Build CI/CD pipeline**: Two second-gen Cloud Build triggers (`deploy-on-develop`, `terraform-apply-on-develop`) in `us-central1`, connected to GitHub via Cloud Build GitHub App. Deploy trigger builds+pushes all 9 service images, deploys 8 Cloud Run services, and hot-swaps the DIMSE Receiver GCE VM via metadata update + instance reset. Terraform trigger applies `terraform/infra/` changes when `terraform/infra/**` files change on `develop`.
 33. ✅ **Cloud Build IAM hardening**: Cloud Build service account `aegis-cloud-build@aegis-prod-488120.iam.gserviceaccount.com` granted all roles required for `terraform apply` (`roles/run.admin`, `roles/compute.admin`, `roles/iap.admin`, `roles/resourcemanager.projectIamAdmin`, `roles/artifactregistry.admin`, `roles/editor`, `roles/secretmanager.secretAccessor`, `roles/storage.admin`, `roles/iam.serviceAccountUser`). IAM roles tracked in `terraform/project/main.tf` and `scripts/gcp_setup_cloudbuild.sh`.
+34. ✅ **Synthetic MRI service**: `synth-service/` Python FastAPI service generating synthetic DICOM brain MRI phantoms (nibabel + NumPy) for pipeline testing, defacing demos, and protocol development; configurable slices, size, seed, and face geometry; admin dashboard generator panel with auto-pipeline dispatch.
+35. ✅ **Neuroimaging analytics service**: `analytics-service/` Python FastAPI service running neuroimaging analysis tools on BIDS-converted NIfTI data (Phase 3 pipeline); pluggable backends for FreeSurfer (`recon-all` cortical/subcortical volumetrics), FSL (BET/FAST/FLIRT/DTIFIT), ANTs (`antsCorticalThickness`, N4 bias correction, registration), and SPM (segmentation, DARTEL normalization); `analytics_required`/`analytics_status` study fields; `require_analytics` routing rule action; Dockerfile with optional tool installation via build args.
+36. ✅ **Comprehensive DICOM format support**: JPEG2000 lossless, JPEG-LS, Enhanced (multi-frame) DICOM, and Siemens Mosaic DICOM support across all 9 Python sidecar services; decompression backends (`python-gdcm`, `pylibjpeg`, `pylibjpeg-openjpeg`, `pylibjpeg-libjpeg`) installed in all Dockerfiles; multi-frame pixel handling (`frames, rows, cols`) in PHI detection, QC, and pixel redaction; Mosaic detection via `ImageType` for correct slice counting.
+37. ✅ **Pixel redaction pipeline**: First-class pipeline step detecting and masking burned-in PHI directly in DICOM pixel data; `require_pixel_redaction` routing rule action; `pixel_redaction_required`/`pixel_redaction_status` study fields; integrated into Phase 1 parallel processing; Go handler + MCP tools + comprehensive test suite.
+38. ✅ **Vendor private tag preservation**: `keep_private_tags` boolean on anonymization profiles allows retaining vendor-specific DICOM private tags (e.g., diffusion gradient tables, CSA headers) during de-identification; PHI scanning of private tag values via `/detect-tags` endpoint detects name patterns, SSNs, MRNs, accession numbers, phone numbers, and dates of birth in preserved tags.
+39. ✅ **MIDI-B de-identification benchmark**: Tracks 1 and 2 of the NCI MIDI-B challenge; `@aegis/client` enhancements for date shifting, pseudonymization, mapping table export, and text scrubbing; phi-detection pixel redaction and LLM-based text scrubbing endpoints; LLM backend priority: Gemini > OpenAI > Anthropic > regex.
+40. ✅ **Clinical trial access control**: Project membership model with roles (owner, coordinator, site_coordinator, site_viewer, researcher); capability-based write guards replacing admin/viewer binary; scoped study visibility; user self-service project membership; quarterly access review cadence.
+41. ✅ **Security hardening (8 phases)**: Cross-cloud security hardening including CORS origin locking, auth bypass audit, Terraform drift detection, secret rotation procedures, container image provenance, CI enforcement scripts, rate limiting, input validation, and Go API regression test suites for all write authorization paths.
+42. ✅ **Azure deployment**: `terraform/azure/` with Container Apps, PostgreSQL Flexible Server, Azure Blob Storage (`STORAGE_MODE=azure`), Azure Container Registry, Azure Linux VM for DIMSE receiver; GitHub Actions OIDC CI/CD (`.github/workflows/deploy-azure.yml`); Azure Communication Services Email relay for SMTP.
 
 ### Future Ideas (not planned)
 - Non-DICOM formats: pathology whole-slide imaging, electron microscopy
@@ -499,7 +521,7 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 | Go DICOM | [suyashkumar/dicom](https://github.com/suyashkumar/dicom) | MIT | Server-side DICOM header parsing (batch import) |
 | Browser DICOM read/write | [dcmjs](https://github.com/dcmjs-org/dcmjs) | MIT | Client-side tag modification |
 | Browser DICOM parsing | [dicomParser](https://github.com/cornerstonejs/dicomParser) | MIT | Robust Part 10 parsing |
-| Viewer | [OHIF Viewer](https://github.com/OHIF/Viewers) | MIT | DICOMweb viewer in admin |
+| Viewer | [Weasis DWV](https://weasis.org/) | EPL-2.0 / Apache-2.0 | DICOMweb viewer in admin |
 | DICOM→NIfTI | [dcm2niix](https://github.com/rordenlab/dcm2niix) | BSD | Format conversion for defacing + BIDS |
 | Defacing (default) | [DeepDefacer](https://pypi.org/project/deepdefacer/) | Research-friendly | 3D U-Net facial feature removal |
 | Defacing (fallback) | [mri_deface](https://surfer.nmr.mgh.harvard.edu/fswiki/mri_deface) | Free | Atlas-based facial feature removal |
@@ -513,6 +535,12 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 | Go S3 | [aws-sdk-go-v2](https://github.com/aws/aws-sdk-go-v2) | Apache-2.0 | S3 storage backend |
 | Go GCS | [cloud.google.com/go/storage](https://pkg.go.dev/cloud.google.com/go/storage) | Apache-2.0 | GCS storage backend |
 | Go Testing | [testify](https://github.com/stretchr/testify) + [testcontainers-go](https://github.com/testcontainers/testcontainers-go) | MIT | Assertions + PostgreSQL test containers |
+| Analytics | [FreeSurfer](https://surfer.nmr.mgh.harvard.edu/) | Free (registration) | Cortical/subcortical volumetrics (recon-all) |
+| Analytics | [FSL](https://fsl.fmrib.ox.ac.uk/fsl/) | Free (academic) | Brain extraction, tissue segmentation, DTI |
+| Analytics | [ANTs](https://github.com/ANTsX/ANTs) | Apache-2.0 | Cortical thickness, registration, N4 bias correction |
+| Analytics | [SPM](https://www.fil.ion.ucl.ac.uk/spm/) | GPL-2.0 | Segmentation, DARTEL normalization (standalone MCR) |
+| IaC (Azure) | [Terraform Azure Provider](https://registry.terraform.io/providers/hashicorp/azurerm/) | MPL-2.0 | Azure infrastructure |
+| DICOM decompression | [pylibjpeg](https://github.com/pydicom/pylibjpeg) + [python-gdcm](https://github.com/tfmoraes/python-gdcm) | MIT / BSD | JPEG2000, JPEG-LS, RLE decompression |
 
 ---
 
@@ -520,10 +548,11 @@ Defacing applies **only to head/brain imaging** (MR, PT, CT with BodyPartExamine
 
 After each phase, verify:
 
-1. **Automated tests**: `make test-unit` (55 unit tests, no Docker) + `make test` (120 tests including PostgreSQL integration via testcontainers)
+1. **Automated tests**: `make test` (137+ Go tests including PostgreSQL integration via testcontainers) + 617 Python pytest tests across 9 sidecar services = **750+ total tests**
 2. **Go API**: `make api` → `curl http://localhost:8080/healthz` shows healthy status for database, storage, and all configured sidecars
 3. **Upload Portal**: Load a sample brain MRI DICOM directory, verify all PHI tags are stripped in the preview, upload succeeds
-4. **Admin Dashboard**: View uploaded study in OHIF, verify de-identified tags, verify pipeline auto-dispatches processing
-5. **Defacing**: Upload a head MRI with `require_defacing` routing rule → pipeline triggers defacing → compare original vs defaced in OHIF side-by-side
-6. **End-to-end**: External browser → upload → de-id → ingest → classify → deface → QC → review → approve → export
-7. **Docker Compose**: `docker compose up -d` → all 11 services healthy → full pipeline works
+4. **Admin Dashboard**: View uploaded study in Weasis DWV, verify de-identified tags, verify pipeline auto-dispatches processing
+5. **Defacing**: Upload a head MRI with `require_defacing` routing rule → pipeline triggers defacing → compare original vs defaced in Weasis DWV side-by-side
+6. **End-to-end**: External browser → upload → de-id → ingest → classify → PHI scan → pixel redact → deface → QC → BIDS → analytics → review → approve → export
+7. **Docker Compose**: `docker compose up -d` → all 13 services healthy → full 4-phase pipeline works
+8. **DICOM format support**: Upload JPEG2000-compressed, Enhanced multi-frame, and Mosaic DICOM → all pipeline services process without error

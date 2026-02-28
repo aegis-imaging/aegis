@@ -92,6 +92,10 @@ The medical image exchange market is growing, driven by federal data sharing man
 | **MRI protocol compliance** | Automated verification that acquisition parameters (TR, TE, flip angle, resolution) match site-specific templates per scanner manufacturer, model, and software version — catching the 0.19–64% non-compliance rates found across multi-site studies.<sup><a href="#ref-10">[10]</a></sup> |
 | **Centralized audit trail** | Every upload, approval, rejection, and data export is logged with a timestamp and actor. Institutions can demonstrate HIPAA compliance from a single dashboard. |
 | **Clinician review before release** | Administrators review anonymized images in a web-based DICOM viewer (Weasis DWV) before approving studies for sharing. Side-by-side before/after defacing review is built in. Nothing is shared automatically without human sign-off. |
+| **Pixel redaction** | Automated detection and masking of burned-in PHI directly in DICOM pixel data — patient names, dates, and accession numbers overlaid on images are located by OCR and redacted at the pixel level. |
+| **Neuroimaging analytics** | Post-BIDS analysis pipelines using FreeSurfer (cortical/subcortical volumetrics), FSL (brain extraction, tissue segmentation, DTI), ANTs (cortical thickness, registration), and SPM (VBM segmentation). Results stored per-study for downstream analysis. |
+| **Comprehensive DICOM format support** | JPEG2000 lossless, JPEG-LS, Enhanced (multi-frame) DICOM, and Siemens Mosaic DICOM handled transparently across all processing services via decompression backends. |
+| **Vendor private tag preservation** | Per-project option to retain vendor-specific private tags (diffusion gradients, CSA headers) during de-identification, with automated PHI scanning of preserved tag values. |
 
 ---
 
@@ -164,10 +168,10 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 | **Defacing** | DeepDefacer (default), mri_deface, mri_reface | Multiple backends with automatic fallback; see `docs/research/mri-defacing-tools-comparison.md` |
 | **DICOM Viewer** | Weasis DWV (browser-based) | Lightweight, open-source; supports QIDO-RS/WADO-RS; built-in side-by-side defacing review |
 | **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
-| **Processing Pipeline** | Microservices architecture — 7 Python microservices (Cloud Run / ECS Fargate / Container Apps) + DIMSE receiver (Compute Engine VM / EC2 / Azure VM) + MCP server (Cloud Run) | Classification, PHI detection, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation — auto-dispatched in dependency order; DIMSE C-STORE SCP on dedicated VM (static IP, port 11112); MCP server exposes 52+ read tools + 29+ write tools; agent orchestrator with DICOM tag provenance and diagnostic toolchain |
+| **Processing Pipeline** | Microservices architecture — 9 Python microservices (Cloud Run / ECS Fargate / Container Apps) + DIMSE receiver (Compute Engine VM / EC2 / Azure VM) + MCP server (Cloud Run) | Classification, PHI detection + pixel redaction, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation, neuroimaging analytics (FreeSurfer/FSL/ANTs/SPM) — auto-dispatched in 4-phase dependency order; DIMSE C-STORE SCP on dedicated VM (static IP, port 11112); MCP server exposes 50+ read tools + 64+ write tools; agent orchestrator with DICOM tag provenance and diagnostic toolchain |
 | **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
 
-**Live deployments:** GCP — [admin.aegisimaging.ai](https://admin.aegisimaging.ai) (dashboard) · [api.aegisimaging.ai](https://api.aegisimaging.ai) (API) · AWS — [aws.admin.aegisimaging.ai](https://aws.admin.aegisimaging.ai) (dashboard) · [aws.api.aegisimaging.ai](https://aws.api.aegisimaging.ai) (API) · Azure — `azure.admin.aegisimaging.ai` (dashboard, deploying) · `azure.api.aegisimaging.ai` (API, deploying).
+**Live deployments:** GCP — [admin.aegisimaging.ai](https://admin.aegisimaging.ai) (dashboard) · [api.aegisimaging.ai](https://api.aegisimaging.ai) (API) · AWS — [aws.admin.aegisimaging.ai](https://aws.admin.aegisimaging.ai) (dashboard) · [aws.api.aegisimaging.ai](https://aws.api.aegisimaging.ai) (API) · Azure — [azure.admin.aegisimaging.ai](https://azure.admin.aegisimaging.ai) (dashboard) · [azure.api.aegisimaging.ai](https://azure.api.aegisimaging.ai) (API).
 
 **On the use of automated tools:** AEGIS uses automated tools to assist with — not replace — human review. Automated de-identification flags potential issues; a trained administrator reviews and approves every study before it is shared. Automated defacing quality is reviewed side-by-side against the original in the admin interface.
 
@@ -218,7 +222,7 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Development Velocity
 
-AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. AWS production followed on day 8. Azure Container Apps deployment is underway on day 9. The resulting platform is production-grade across all three major clouds: version-controlled infrastructure, automated CI/CD, 400+ tests, and all services deployed and monitored simultaneously.
+AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. AWS production followed on day 8. Azure Container Apps deployment completed on day 9. The resulting platform is production-grade across all three major clouds: version-controlled infrastructure, automated CI/CD, 750+ tests, and all services deployed and monitored simultaneously.
 
 A single merge to `develop` deploys to GCP and AWS in parallel — GCP Cloud Build and GitHub Actions trigger concurrently, updating all services on both platforms within minutes from a single shared codebase. Cross-cloud DICOM routing (GCP→AWS via STOW-RS) is verified live and tested. Azure auto-deploys via GitHub Actions OIDC federated auth on every push to `develop`.
 
@@ -226,34 +230,40 @@ A single merge to `develop` deploys to GCP and AWS in parallel — GCP Cloud Bui
 |--------|-------|
 | Days from first commit to GCP production | **7** |
 | Days from first commit to AWS production | **8** |
-| Days from first commit to Azure deployment | **9** |
-| Git commits in the first week | **846+** |
-| API routes (Go) | **126+** |
-| Automated tests (Go + Python) | **400+** |
-| Cloud Run services deployed (GCP) | **11** |
+| Days from first commit to Azure production | **9** |
+| Git commits | **1,200+** |
+| API routes (Go) | **303+** |
+| Automated tests (Go + Python) | **750+** |
+| Database migrations | **72** |
+| Cloud Run services deployed (GCP) | **14** |
 | ECR repositories provisioned (AWS) | **13** |
 | ECS Fargate services (AWS) | **10** |
-| MCP AI agent tools (read + write) | **81+** |
+| Python processing services | **9** |
+| Pipeline phases | **4** (Classification → PHI/Protocol/Deface → QC/BIDS → Analytics) |
+| MCP AI agent tools (read + write) | **115+** |
 
 ---
 
 ## Phased Roadmap
 
-> **Production status:** The full platform is **live on three clouds.** GCP: Go API, admin dashboard, Weasis DWV viewer, 7 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM, static IP `35.232.172.221`, port 11112), and MCP server at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. AWS: 10 ECS Fargate services, RDS PostgreSQL, S3, ALB + Cognito auth at `aws.api.aegisimaging.ai` and `aws.admin.aegisimaging.ai`. Azure: Container Apps + PostgreSQL Flexible Server + Azure Blob Storage deploying on day 9 (February 26, 2026). All clouds share one codebase; GCP Cloud Build and GitHub Actions deploy in parallel on every merge to `develop`. Cross-cloud DICOM routing (GCP→AWS) is verified live.
+> **Production status:** The full platform is **live on three clouds.** GCP: Go API, admin dashboard, Weasis DWV viewer, 9 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM, static IP `35.232.172.221`, port 11112), and MCP server at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. AWS: 10 ECS Fargate services, RDS PostgreSQL, S3, ALB + Cognito auth at `aws.api.aegisimaging.ai` and `aws.admin.aegisimaging.ai`. Azure: Container Apps + PostgreSQL Flexible Server + Azure Blob Storage at `azure.api.aegisimaging.ai` and `azure.admin.aegisimaging.ai`. All clouds share one codebase; GCP Cloud Build and GitHub Actions deploy in parallel on every merge to `develop`. Cross-cloud DICOM routing (GCP→AWS→Azure) is verified live.
 
 ### ✓ Milestone 1 — Foundation + GCP Production (February 17–24, 2026)
 
 Everything listed below was built and deployed to GCP production within 7 days of the first commit:
 
-- Browser-based upload portal with DICOM tag anonymization (PS3.15 Basic Profile, 18 HIPAA identifiers) and before/after tag diff preview
-- Go API with 122 routes: DICOM ingest, routing engine, DICOMweb proxy, export shares, audit trail, webhook subscriptions, API keys
-- Admin dashboard: study browser, RBAC (admin/viewer), protocol templates, routing rules, institutions, 17 management tabs
+- Browser-based upload portal with DICOM tag anonymization (PS3.15 Basic Profile, 18 HIPAA identifiers), date shifting, pseudonymization, and before/after tag diff preview
+- Go API with 303+ routes: DICOM ingest, routing engine, DICOMweb proxy, export shares, audit trail, webhook subscriptions, API keys, clinical trial access control
+- Admin dashboard: study browser, RBAC (admin/viewer + capability-based guards), protocol templates, routing rules, institutions, 17+ management tabs
 - Weasis DWV viewer with side-by-side before/after defacing review (yoked scroll synchronization)
-- 7 Python processing services on Cloud Run: classification, PHI scan (OCR), protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation
+- 9 Python processing services on Cloud Run: classification, PHI scan + pixel redaction, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation, neuroimaging analytics (FreeSurfer/FSL/ANTs/SPM)
 - DIMSE C-STORE SCP on dedicated Compute Engine VM (port 11112) — durable retry queue, dead-letter, exponential backoff
-- MCP server (52+ read tools + 29+ write tools) + agent orchestrator with DICOM tag provenance and diagnostic toolchain — AI-native platform operations
-- Terraform IaC (GCP + AWS modules), GitHub Actions CI, Cloud Build CD (auto-deploy on push to `develop`)
-- 370+ automated tests (120 Go integration tests, 244+ Python pytest tests across 8 sidecars)
+- MCP server (50+ read tools + 64+ write tools) + agent orchestrator with DICOM tag provenance and diagnostic toolchain — AI-native platform operations
+- Terraform IaC (GCP + AWS + Azure modules), GitHub Actions CI, Cloud Build CD (auto-deploy on push to `develop`)
+- 750+ automated tests (137+ Go integration tests, 617 Python pytest tests across 9 sidecars)
+- Comprehensive DICOM format support: JPEG2000, JPEG-LS, Enhanced multi-frame, Siemens Mosaic
+- Vendor private tag preservation with automated PHI scanning of retained tag values
+- 8 phases of cross-cloud security hardening with CI enforcement
 
 ### → Milestone 2 — Private Beta (Q1 2026)
 
@@ -271,21 +281,33 @@ Everything listed below was built and deployed to GCP production within 7 days o
 - Single shared codebase; one merge deploys to both clouds simultaneously
 - AWS Marketplace listing for enterprise procurement (next)
 
-### → Milestone 4 — Azure Deployment (February 26, 2026 — Day 9)
+### ✓ Milestone 4 — Azure Deployment (February 26, 2026)
 
 - Azure Container Apps deployment — same Go API, Python sidecars, and React frontends as GCP and AWS
 - Azure Database for PostgreSQL (Flexible Server), Azure Blob Storage (STORAGE_MODE=azure), Azure Container Registry
 - GitHub Actions CI/CD with OIDC federated auth — auto-deploy on every push to `develop`
 - DIMSE receiver on Azure Linux VM — same static-IP PACS integration pattern
+- Azure Communication Services Email relay for SMTP notifications
 
-### → Milestone 5 — SOC 2 Type II + Enterprise Integrations (Q3 2026)
+### ✓ Milestone 5 — Advanced Processing & Security (February 27, 2026)
+
+- Neuroimaging analytics service (FreeSurfer, FSL, ANTs, SPM) as Phase 3 pipeline — post-BIDS analysis on NIfTI outputs
+- Comprehensive DICOM format support: JPEG2000 lossless, JPEG-LS, Enhanced multi-frame, Siemens Mosaic across all 9 services
+- Pixel redaction pipeline step: automated detection and masking of burned-in PHI in DICOM pixel data
+- Vendor private tag preservation with automated PHI scanning of retained tag values
+- MIDI-B de-identification benchmark compliance (Tracks 1 & 2): date shifting, pseudonymization, text scrubbing, mapping export
+- Clinical trial access control: project membership roles, capability-based write guards, scoped study visibility
+- 8 phases of cross-cloud security hardening with CI enforcement scripts
+- 750+ automated tests (137+ Go, 617 Python), 303+ API routes, 115+ MCP tools, 72 database migrations
+
+### → Milestone 6 — SOC 2 Type II + Enterprise Integrations (Q3 2026)
 
 - SOC 2 Type II certification — formal audit after 6-month observation period
 - HL7 FHIR notifications — integrate with hospital EMR/RIS systems
 - Cross-tenant federated sharing — peer AEGIS instances can exchange approved studies
 - AWS Marketplace listing for enterprise procurement
 
-### → Milestone 6 — Enterprise GA (Q4 2026)
+### → Milestone 7 — Enterprise GA (Q4 2026)
 
 - On-premises deployment option for institutions with strict data residency requirements
 - PACS/VNA native query-retrieve — pull studies on demand rather than waiting for push

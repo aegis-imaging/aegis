@@ -19,13 +19,13 @@ const FEATURES = [
   },
   {
     icon: <ScanIcon />,
-    title: 'Burned-in PHI detection',
-    body: 'OCR scans image pixels for overlaid text. Studies with detected pixel-level PHI are flagged for review.',
+    title: 'PHI detection + pixel redaction',
+    body: 'OCR scans image pixels for overlaid text, then automatically masks detected PHI. Handles JPEG2000, Enhanced multi-frame, and Mosaic DICOM.',
   },
   {
     icon: <ImageIcon />,
-    title: 'All DICOM modalities',
-    body: 'MRI, CT, PET, ultrasound, X-ray, mammography, nuclear medicine, and more\u2014from a single platform.',
+    title: 'All DICOM modalities & formats',
+    body: 'MRI, CT, PET, ultrasound, X-ray, mammography, nuclear medicine\u2014with full JPEG2000, JPEG-LS, and Enhanced DICOM support.',
   },
   {
     icon: <ClipboardIcon />,

@@ -1,10 +1,10 @@
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
 const MOMENTUM = [
-  { value: '7',    label: 'days to production' },
-  { value: '846+', label: 'commits in week one' },
-  { value: '126+', label: 'API routes' },
-  { value: '400+', label: 'automated tests' },
+  { value: '7',     label: 'days to production' },
+  { value: '1,200+', label: 'git commits' },
+  { value: '303+',  label: 'API routes' },
+  { value: '750+',  label: 'automated tests' },
 ]
 
 type MilestoneStatus = 'done' | 'active' | 'planned'
@@ -24,11 +24,11 @@ const MILESTONES: Milestone[] = [
     date: 'Feb 17–24, 2026',
     title: 'Foundation — GCP Production',
     items: [
-      'Microservices architecture: Go API + 7 Python microservices, DIMSE C-STORE SCP, MCP server — 10+ services total',
-      'Full HIPAA pipeline: tag de-identification, defacing, PHI scan, QC, BIDS, protocol compliance',
-      'Terraform IaC + Cloud Build CI/CD — every merge to develop auto-deploys all services',
-      'Admin dashboard with Weasis DWV viewer, RBAC, audit trail, routing rules engine',
-      'AI-native operations: MCP server with 52+ read tools, 29+ write tools, agent orchestrator with DICOM diagnostics',
+      'Microservices architecture: Go API + 9 Python microservices, DIMSE C-STORE SCP, MCP server — 12+ services total',
+      'Full HIPAA pipeline: tag de-identification, defacing, PHI scan, pixel redaction, QC, BIDS, protocol compliance, analytics',
+      'Terraform IaC + Cloud Build CI/CD — every merge to develop auto-deploys all services across 3 clouds',
+      'Admin dashboard with Weasis DWV viewer, RBAC, audit trail, routing rules engine, clinical trial access control',
+      'AI-native operations: MCP server with 50+ read tools, 64+ write tools, agent orchestrator with DICOM diagnostics',
     ],
     tags: [
       { label: '✓ Live', style: 'done' },
@@ -71,19 +71,37 @@ const MILESTONES: Milestone[] = [
     liveUrl: 'https://aws.api.aegisimaging.ai/healthz',
   },
   {
-    status: 'active',
-    date: 'Feb 26, 2026 (Day 9)',
+    status: 'done',
+    date: 'Feb 26, 2026',
     title: 'Azure Deployment',
     items: [
-      'Azure Container Apps deployment — full three-cloud feature parity deploying now',
+      'Azure Container Apps deployment — full three-cloud feature parity live',
       'Terraform IaC + GitHub Actions CI/CD (OIDC federated auth) — same auto-deploy pattern as GCP and AWS',
       'Azure Database for PostgreSQL (Flexible Server), Azure Blob Storage, Azure Container Registry',
-      'DIMSE receiver on Azure Linux VM — static Elastic IP, TCP port 11112',
+      'DIMSE receiver on Azure Linux VM — static IP, TCP port 11112',
     ],
     tags: [
-      { label: '● Deploying', style: 'active' },
+      { label: '✓ Live', style: 'done' },
       { label: 'Azure', style: 'cloud' },
-      { label: 'Day 9', style: 'neutral' },
+      { label: 'Multi-Cloud', style: 'neutral' },
+    ],
+    liveUrl: 'https://azure.api.aegisimaging.ai/healthz',
+  },
+  {
+    status: 'done',
+    date: 'Feb 27, 2026',
+    title: 'Advanced Processing & Security',
+    items: [
+      'Neuroimaging analytics: FreeSurfer, FSL, ANTs, SPM pipelines on BIDS-converted data (Phase 3)',
+      'Comprehensive DICOM format support: JPEG2000, JPEG-LS, Enhanced multi-frame, Siemens Mosaic',
+      'Pixel redaction pipeline: automated detection and masking of burned-in PHI in pixel data',
+      'Clinical trial access control: project membership roles, capability-based write guards',
+      '8 phases of cross-cloud security hardening with CI enforcement',
+    ],
+    tags: [
+      { label: '✓ Complete', style: 'done' },
+      { label: 'Analytics', style: 'neutral' },
+      { label: 'Security', style: 'neutral' },
     ],
   },
   {
