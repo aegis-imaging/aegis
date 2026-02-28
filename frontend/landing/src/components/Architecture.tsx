@@ -1,4 +1,7 @@
+import { useEffect, useRef, useState } from 'react'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
+
+const DIAGRAM_INTRINSIC_WIDTH = 1875
 
 const TECH_TAGS = [
   'Go',
@@ -19,6 +22,28 @@ const CLOUDS = [
 
 export function Architecture() {
   const { ref, isVisible } = useScrollAnimation()
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [scale, setScale] = useState(1)
+  const [contentHeight, setContentHeight] = useState(1600)
+
+  useEffect(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width
+      setScale(Math.min(1, w / DIAGRAM_INTRINSIC_WIDTH))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const handleIframeLoad = () => {
+    try {
+      const h = iframeRef.current?.contentDocument?.documentElement.scrollHeight
+      if (h && h > 0) setContentHeight(h)
+    } catch { /* cross-origin fallback: keep default */ }
+  }
 
   return (
     <section id="architecture" className="section">
@@ -30,12 +55,24 @@ export function Architecture() {
           Microservices architecture, multi-cloud, built on established standards
         </p>
 
-        <div className={`arch__diagram-wrapper animate animate--scale-in animate--delay-2 ${isVisible ? 'animate--visible' : ''}`}>
+        <div
+          ref={wrapperRef}
+          className={`arch__diagram-wrapper animate animate--scale-in animate--delay-2 ${isVisible ? 'animate--visible' : ''}`}
+          style={{ height: `${contentHeight * scale}px`, overflow: 'hidden' }}
+        >
           <iframe
+            ref={iframeRef}
             src="/architecture.html"
             title="AEGIS system architecture diagram"
             className="arch__diagram-iframe"
             loading="lazy"
+            onLoad={handleIframeLoad}
+            style={{
+              width: `${DIAGRAM_INTRINSIC_WIDTH}px`,
+              height: `${contentHeight}px`,
+              transformOrigin: 'top left',
+              transform: `scale(${scale})`,
+            }}
           />
         </div>
 
