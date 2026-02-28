@@ -455,6 +455,213 @@
   }
 }
 
+/* ── Tab bar (mobile-first: visible; desktop: hidden) ─────────────────── */
+.az-tab-bar {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  margin-bottom: var(--space-3);
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-full);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.az-tab-bar::-webkit-scrollbar { display: none; }
+
+.az-tab {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.az-tab:hover { color: var(--text-secondary); }
+
+.az-tab--active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Zone-colored active tabs */
+.az-z-gcp .az-tab--active { color: #0F766E; }
+.az-z-aws .az-tab--active { color: #EA580C; }
+.az-z-azure .az-tab--active { color: #0078D4; }
+
+/* Tab panels: only active shown on mobile */
+.az-tab-panel { display: none; }
+.az-tab-panel--active { display: block; }
+
+/* Desktop: hide tab bar, show all panels */
+@media (min-width: 1024px) {
+  .az-tab-bar { display: none; }
+  .az-tab-panel { display: block; }
+  .az-tab-panel + .az-tab-panel { margin-top: var(--space-4); }
+}
+
+/* ── Multi-cloud parity table ──────────────────────────────────────────── */
+.az-parity-note {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+  line-height: 1.5;
+}
+
+.az-parity-table {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr 1fr 1fr;
+  gap: 0;
+  border: 1.5px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  font-size: var(--text-xs);
+}
+
+.az-parity-hdr {
+  display: contents;
+}
+
+.az-parity-hdr > span {
+  padding: var(--space-2) var(--space-2);
+  font-weight: var(--font-bold);
+  text-align: center;
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1.5px solid var(--border-default);
+}
+
+.az-parity-hdr > span:first-child {
+  text-align: left;
+}
+
+.az-parity-cloud { font-size: var(--text-xs); }
+.az-parity-cloud--gcp { color: #0F766E; }
+.az-parity-cloud--aws { color: #EA580C; }
+.az-parity-cloud--azure { color: #0078D4; }
+
+.az-parity-row {
+  display: contents;
+}
+
+.az-parity-row > span {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.az-parity-row:last-child > span {
+  border-bottom: none;
+}
+
+.az-parity-row > span:first-child {
+  text-align: left;
+}
+
+.az-parity-label {
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+/* ── Cross-cloud connectivity callout ──────────────────────────────────── */
+.az-cross-cloud {
+  margin-top: var(--space-4);
+  border: 1.5px solid #7C3AED;
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: #FAF5FF;
+}
+
+.az-cross-cloud-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  color: #7C3AED;
+  margin-bottom: var(--space-1);
+}
+
+.az-cross-cloud-desc {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+  line-height: 1.45;
+}
+
+.az-cross-cloud-paths {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.az-cross-cloud-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  flex-wrap: wrap;
+}
+
+.az-cross-cloud-badge {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-weight: var(--font-bold);
+  font-size: 0.625rem;
+  color: #fff;
+}
+
+.az-cross-cloud-badge--gcp { background: #0F766E; }
+.az-cross-cloud-badge--aws { background: #EA580C; }
+.az-cross-cloud-badge--azure { background: #0078D4; }
+
+.az-cross-cloud-arrow {
+  font-size: var(--text-sm);
+  color: #7C3AED;
+  font-weight: var(--font-bold);
+}
+
+.az-cross-cloud-method {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.az-cross-cloud-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.az-cross-cloud-list li {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  padding: 1.5px 0;
+  line-height: 1.45;
+}
+
+.az-cross-cloud-list li::before {
+  content: "\2022 ";
+  color: #7C3AED;
+  font-weight: var(--font-bold);
+}
+
+@media (min-width: 640px) {
+  .az-cross-cloud-paths {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+}
+
 /* ── Tech tags + cloud badges (kept from original) ──────────────────────── */
 .arch__details {
   display: flex;
@@ -557,3 +764,18 @@
 
 [data-theme="dark"] .az-kv-k--gray { color: var(--text-muted); }
 [data-theme="dark"] .az-sidecar-label { color: #60a5fa; }
+
+/* Tab bar dark */
+[data-theme="dark"] .az-tab-bar { background: rgba(255, 255, 255, 0.06); }
+[data-theme="dark"] .az-tab--active { background: var(--bg-surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+
+/* Parity table dark */
+[data-theme="dark"] .az-parity-table { border-color: var(--border-default); }
+[data-theme="dark"] .az-parity-hdr > span { background: rgba(255, 255, 255, 0.04); border-color: var(--border-default); }
+[data-theme="dark"] .az-parity-row > span { border-color: var(--border-default); }
+
+/* Cross-cloud dark */
+[data-theme="dark"] .az-cross-cloud {
+  background: rgba(124, 58, 237, 0.08);
+  border-color: rgba(124, 58, 237, 0.35);
+}
