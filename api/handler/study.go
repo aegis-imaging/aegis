@@ -51,6 +51,8 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 		InstitutionID: q.Get("institution_id"),
 		DateFrom:      dateFrom,
 		DateTo:        dateTo,
+		StudyDateFrom: q.Get("study_date_from"),
+		StudyDateTo:   q.Get("study_date_to"),
 		SortBy:        q.Get("sort_by"),
 		SortDir:       q.Get("sort_dir"),
 	}

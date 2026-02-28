@@ -18,6 +18,7 @@ type UploadSession struct {
 	StudyInstanceUID *string   `json:"study_instance_uid,omitempty"`
 	Modality         *string   `json:"modality,omitempty"`
 	BodyPart         *string   `json:"body_part,omitempty"`
+	StudyDate        *string   `json:"study_date,omitempty"`
 	ErrorMessage     *string   `json:"error_message,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
@@ -29,11 +30,11 @@ func CreateUploadSession(ctx context.Context, db *sql.DB, projectID string, file
 		INSERT INTO upload_sessions (project_id, file_count, storage_prefix, uploader_ip, uploader_email)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, project_id, status, file_count, storage_prefix, uploader_ip, uploader_email,
-		          institution_id, study_instance_uid, modality, body_part, error_message, created_at, updated_at`,
+		          institution_id, study_instance_uid, modality, body_part, study_date, error_message, created_at, updated_at`,
 		projectID, fileCount, storagePrefix, uploaderIP, uploaderEmail).
 		Scan(&s.ID, &s.ProjectID, &s.Status, &s.FileCount, &s.StoragePrefix, &s.UploaderIP, &s.UploaderEmail,
 			&s.InstitutionID,
-			&s.StudyInstanceUID, &s.Modality, &s.BodyPart, &s.ErrorMessage, &s.CreatedAt, &s.UpdatedAt)
+			&s.StudyInstanceUID, &s.Modality, &s.BodyPart, &s.StudyDate, &s.ErrorMessage, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -44,11 +45,11 @@ func GetUploadSession(ctx context.Context, db *sql.DB, id string) (*UploadSessio
 	var s UploadSession
 	err := db.QueryRowContext(ctx, `
 		SELECT id, project_id, status, file_count, storage_prefix, uploader_ip, uploader_email,
-		       institution_id, study_instance_uid, modality, body_part, error_message, created_at, updated_at
+		       institution_id, study_instance_uid, modality, body_part, study_date, error_message, created_at, updated_at
 		FROM upload_sessions WHERE id = $1`, id).
 		Scan(&s.ID, &s.ProjectID, &s.Status, &s.FileCount, &s.StoragePrefix, &s.UploaderIP, &s.UploaderEmail,
 			&s.InstitutionID,
-			&s.StudyInstanceUID, &s.Modality, &s.BodyPart, &s.ErrorMessage, &s.CreatedAt, &s.UpdatedAt)
+			&s.StudyInstanceUID, &s.Modality, &s.BodyPart, &s.StudyDate, &s.ErrorMessage, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +67,13 @@ func UpdateUploadSessionStatus(ctx context.Context, db *sql.DB, id, status strin
 	_, err := db.ExecContext(ctx, `
 		UPDATE upload_sessions SET status = $1, updated_at = now() WHERE id = $2`,
 		status, id)
+	return err
+}
+
+func UpdateUploadSessionMetadata(ctx context.Context, db *sql.DB, id string, modality, bodyPart, studyDate *string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE upload_sessions SET modality = $1, body_part = $2, study_date = $3, updated_at = now() WHERE id = $4`,
+		modality, bodyPart, studyDate, id)
 	return err
 }
 

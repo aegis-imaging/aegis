@@ -78,6 +78,7 @@ export async function uploadStudy(
         modality: summary.modality,
         body_part: summary.bodyPart,
         study_description: summary.studyDescription,
+        study_date: summary.studyDate,
         series_count: summary.seriesCount,
         instance_count: summary.imageCount,
       },

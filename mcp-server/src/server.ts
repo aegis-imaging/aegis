@@ -50,6 +50,7 @@ import {
   listStudyRelationshipsArgsSchema,
   linkStudiesArgsSchema,
   unlinkStudiesArgsSchema,
+  triggerLongitudinalAnalyticsArgsSchema,
   getDailySummaryArgsSchema,
   listDigestSubscriptionsArgsSchema,
   createDigestSubscriptionArgsSchema,
@@ -511,6 +512,22 @@ const tools: Tool[] = [
     name: "trigger_analytics",
     description: "Trigger analytics for one study UID with precondition checks.",
     inputSchema: writeInputSchema
+  },
+  {
+    name: "trigger_longitudinal_analytics",
+    description: "Trigger longitudinal analytics (TBM-SyN) for a follow-up study against its baseline. Auto-computes scan_interval_days from study_date if both studies have it.",
+    inputSchema: {
+      type: "object",
+      required: ["study_uid", "baseline_study_id", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_uid: { type: "string", pattern: "^[0-9.]+$", description: "Follow-up study DICOM UID" },
+        baseline_study_id: { type: "string", format: "uuid", description: "Baseline study database UUID" },
+        scan_interval_days: { type: "number", minimum: 0, description: "Days between scans; auto-computed from study_date if omitted" },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      }
+    }
   },
   {
     name: "trigger_export",
@@ -3163,6 +3180,8 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
       if (parsed.date_from) query.set("date_from", parsed.date_from);
       if (parsed.date_to) query.set("date_to", parsed.date_to);
       if (parsed.flagged) query.set("flagged", "true");
+      if (parsed.study_date_from) query.set("study_date_from", parsed.study_date_from);
+      if (parsed.study_date_to) query.set("study_date_to", parsed.study_date_to);
       if (parsed.sort_by) query.set("sort_by", parsed.sort_by);
       if (parsed.sort_dir) query.set("sort_dir", parsed.sort_dir);
 
@@ -4223,6 +4242,11 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleDeleteRoutingRule(parsedRule.request_id ?? buildRequestId(), parsedRule);
       }
 
+      if (name === "trigger_longitudinal_analytics") {
+        const laParsed = triggerLongitudinalAnalyticsArgsSchema.parse(args);
+        return handleTriggerLongitudinalAnalytics(laParsed.request_id ?? buildRequestId(), laParsed);
+      }
+
       const parsed = writeArgsSchema.parse(args);
 
       if (name === "trigger_classification") {
@@ -4761,6 +4785,50 @@ async function handleTriggerAnalytics(
   return formatSuccess(requestId, "trigger_analytics", {
     accepted: true,
     study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTriggerLongitudinalAnalytics(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    baseline_study_id: string;
+    scan_interval_days?: number;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "trigger_longitudinal_analytics");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_longitudinal_analytics",
+      false,
+      "trigger_longitudinal_analytics"
+    );
+  }
+
+  const body: Record<string, unknown> = {
+    baseline_study_id: parsed.baseline_study_id
+  };
+  if (parsed.scan_interval_days !== undefined && parsed.scan_interval_days > 0) {
+    body.scan_interval_days = parsed.scan_interval_days;
+  }
+
+  const data = await client.post(
+    `/api/studies/${encodeURIComponent(parsed.study_uid)}/longitudinal-analytics`,
+    body
+  );
+  return formatSuccess(requestId, "trigger_longitudinal_analytics", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    baseline_study_id: parsed.baseline_study_id,
     reason: parsed.reason,
     result: data
   });

@@ -38,6 +38,7 @@ from .backends.ants import ANTsBackend
 from .backends.spm import SPMBackend
 from .backends.atlas_roi import AtlasROIBackend
 from .backends.tbm_syn import TBMSyNBackend
+from .backends.freesurfer_long import FreeSurferLongBackend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,6 +56,7 @@ ALL_BACKENDS: list[AnalyticsBackend] = [
 
 LONGITUDINAL_BACKENDS: list[LongitudinalBackend] = [
     TBMSyNBackend(),
+    FreeSurferLongBackend(),
 ]
 
 

@@ -36,6 +36,8 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 		Search:        q.Get("search"),
 		Label:         q.Get("label"),
 		InstitutionID: q.Get("institution_id"),
+		StudyDateFrom: q.Get("study_date_from"),
+		StudyDateTo:   q.Get("study_date_to"),
 		DateFrom:      dateFrom,
 		DateTo:        dateTo,
 	}
@@ -59,7 +61,7 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{
-		"id", "study_instance_uid", "modality", "body_part", "study_description",
+		"id", "study_instance_uid", "modality", "body_part", "study_description", "study_date",
 		"status", "source", "series_count", "instance_count", "dicom_store",
 		"defacing_required", "phi_scan_status", "pixel_redaction_status", "qc_status", "bids_status",
 		"classification_status", "protocol_status", "analytics_status", "export_status",
@@ -71,12 +73,17 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 		if st.InstitutionID != nil {
 			instID = *st.InstitutionID
 		}
+		studyDate := ""
+		if st.StudyDate != nil {
+			studyDate = *st.StudyDate
+		}
 		_ = cw.Write([]string{
 			st.ID,
 			st.StudyInstanceUID,
 			st.Modality,
 			st.BodyPart,
 			st.StudyDescription,
+			studyDate,
 			st.Status,
 			st.Source,
 			strconv.Itoa(st.SeriesCount),
