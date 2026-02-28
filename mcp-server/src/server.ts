@@ -218,6 +218,8 @@ type StudySummary = {
   protocol_status?: string;
   phi_scan_required?: boolean;
   phi_scan_status?: string;
+  pixel_redaction_required?: boolean;
+  pixel_redaction_status?: string;
 };
 
 type ListStudiesResponse = {
@@ -481,6 +483,11 @@ const tools: Tool[] = [
   {
     name: "trigger_phi_scan",
     description: "Trigger PHI scan for one study UID with precondition checks.",
+    inputSchema: writeInputSchema
+  },
+  {
+    name: "trigger_pixel_redaction",
+    description: "Trigger pixel redaction for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
@@ -4239,6 +4246,10 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleTriggerPhiScan(requestId, parsed);
       }
 
+      if (name === "trigger_pixel_redaction") {
+        return handleTriggerPixelRedaction(requestId, parsed);
+      }
+
       if (name === "retrieve_pacs_study") {
         const parsed = retrievePacsStudyArgsSchema.parse(args);
         return handleRetrievePacsStudy(parsed.request_id ?? buildRequestId(), parsed);
@@ -5029,6 +5040,63 @@ async function handleTriggerPhiScan(
 
   const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/phi-scan`);
   return formatSuccess(requestId, "trigger_phi_scan", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTriggerPixelRedaction(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "trigger_pixel_redaction");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_pixel_redaction",
+      false,
+      "trigger_pixel_redaction"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_pixel_redaction");
+  }
+
+  if (matched.pixel_redaction_required === false) {
+    return formatError(requestId, "CONFLICT", "Study does not require pixel redaction", false, "trigger_pixel_redaction");
+  }
+
+  if (matched.pixel_redaction_status === "redacting") {
+    return formatError(requestId, "CONFLICT", "Pixel redaction already in progress", false, "trigger_pixel_redaction");
+  }
+
+  if (matched.pixel_redaction_status && !["pending", "failed"].includes(matched.pixel_redaction_status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `Pixel redaction trigger blocked for current status: ${matched.pixel_redaction_status}`,
+      false,
+      "trigger_pixel_redaction"
+    );
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/pixel-redaction`);
+  return formatSuccess(requestId, "trigger_pixel_redaction", {
     accepted: true,
     study_uid: parsed.study_uid,
     reason: parsed.reason,

@@ -38,20 +38,23 @@ func (s *Server) GetPipelineFunnel(w http.ResponseWriter, r *http.Request) {
 
 	// Single-pass aggregation: all counts in one SQL query.
 	var (
-		received      int
-		classified    int
-		phiScanned    int
-		defaced       int
-		qcPassed      int
-		bidsConverted int
-		approved      int
-		exported      int
+		received       int
+		classified     int
+		phiScanned     int
+		pixelRedacted  int
+		defaced        int
+		qcPassed       int
+		bidsConverted  int
+		approved       int
+		exported       int
 	)
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT
 		  COUNT(*) FILTER (WHERE true)                                                             AS received,
 		  COUNT(*) FILTER (WHERE classification_status = 'classified')                             AS classified,
 		  COUNT(*) FILTER (WHERE phi_scan_status IN ('clean', 'flagged'))                          AS phi_scanned,
+		  COUNT(*) FILTER (WHERE pixel_redaction_required = false
+		                      OR (pixel_redaction_required = true AND pixel_redaction_status = 'complete')) AS pixel_redacted,
 		  COUNT(*) FILTER (WHERE defacing_required = false
 		                      OR (defacing_required = true AND dicom_store = 'clean'))              AS defaced,
 		  COUNT(*) FILTER (WHERE qc_status IN ('pass', 'warn'))                                    AS qc_passed,
@@ -63,7 +66,7 @@ func (s *Server) GetPipelineFunnel(w http.ResponseWriter, r *http.Request) {
 		WHERE created_at >= $1
 		  AND ($2 = '' OR project_id = $2::uuid)`,
 		since, projectID,
-	).Scan(&received, &classified, &phiScanned, &defaced, &qcPassed,
+	).Scan(&received, &classified, &phiScanned, &pixelRedacted, &defaced, &qcPassed,
 		&bidsConverted, &approved, &exported)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "pipeline funnel query failed")
@@ -84,6 +87,7 @@ func (s *Server) GetPipelineFunnel(w http.ResponseWriter, r *http.Request) {
 		{"received", received},
 		{"classified", classified},
 		{"phi_scanned", phiScanned},
+		{"pixel_redacted", pixelRedacted},
 		{"defaced", defaced},
 		{"qc_passed", qcPassed},
 		{"bids_converted", bidsConverted},

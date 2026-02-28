@@ -159,6 +159,8 @@ func buildStudyDiagnosticsSummary(
 		"Classification", fmt.Sprintf("POST /api/studies/%s/classify", study.StudyInstanceUID), addBlocker, addAction)
 	evaluateRequiredStage(study.PhiScanRequired, study.PhiScanStatus,
 		"PHI scan", fmt.Sprintf("POST /api/studies/%s/phi-scan", study.StudyInstanceUID), addBlocker, addAction)
+	evaluateRequiredStage(study.PixelRedactionRequired, study.PixelRedactionStatus,
+		"Pixel redaction", fmt.Sprintf("POST /api/studies/%s/pixel-redaction", study.StudyInstanceUID), addBlocker, addAction)
 	evaluateRequiredStage(study.ProtocolRequired, study.ProtocolStatus,
 		"Protocol check", fmt.Sprintf("POST /api/studies/%s/protocol-check", study.StudyInstanceUID), addBlocker, addAction)
 	evaluateRequiredStage(study.QcRequired, study.QcStatus,
@@ -225,6 +227,7 @@ func evaluateRequiredStage(
 		"converting":  true,
 		"defacing":    true,
 		"exporting":   true,
+		"redacting":   true,
 	}
 	if inProgress[normalized] {
 		addBlocker(fmt.Sprintf("%s is in progress (%s)", name, normalized))
