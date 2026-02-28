@@ -194,6 +194,13 @@ resource "azurerm_container_app" "api" {
         name  = "SCT_SERVICE_URL"
         value = "https://${local.prefix}-sct-service.internal.${local.aca_internal_domain}"
       }
+      dynamic "env" {
+        for_each = local.dimse_enabled ? [azurerm_network_interface.dimse[0].private_ip_address] : []
+        content {
+          name  = "DIMSE_RECEIVER_URL"
+          value = "http://${env.value}:8080"
+        }
+      }
       # ── Email / SMTP (Azure Communication Services) ──────────────────────────
       # smtp.azurecomm.net:587 — blank SMTP_HOST disables email (Go API no-op).
       env {

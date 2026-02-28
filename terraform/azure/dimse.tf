@@ -50,6 +50,20 @@ resource "azurerm_network_security_group" "dimse" {
     destination_address_prefix = "*"
   }
 
+  # Allow Container Apps subnet to reach the DIMSE ops API (port 8080) for
+  # health checks, retry management, and C-ECHO forwarding.
+  security_rule {
+    name                       = "allow-ops-api-inbound"
+    priority                   = 120
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8080"
+    source_address_prefix      = azurerm_subnet.apps.address_prefixes[0]
+    destination_address_prefix = "*"
+  }
+
   # SSH access — disabled by default (empty list). Set dimse_admin_ssh_ranges
   # to operator CIDRs to enable. Mirrors GCP/AWS where SSH is not exposed publicly.
   dynamic "security_rule" {
