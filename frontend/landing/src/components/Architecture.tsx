@@ -308,32 +308,43 @@ export function Architecture() {
               </div>
             </div>
             <div className="az-cross-cloud">
-              <div className="az-cross-cloud-title">Cross-Cloud Connectivity</div>
-              <div className="az-cross-cloud-desc">Cloud instances can route, replicate, and share studies between each other.</div>
+              <div className="az-cross-cloud-title">Secure Cross-Instance Connectivity</div>
+              <div className="az-cross-cloud-desc">
+                Every AEGIS instance — cloud or on-premises — can securely route, replicate, and share
+                approved studies with any other instance. Connections are configurable per-project via
+                routing rules and fire automatically on study approval.
+              </div>
               <div className="az-cross-cloud-paths">
                 <div className="az-cross-cloud-path">
                   <span className="az-cross-cloud-badge az-cross-cloud-badge--gcp">GCP</span>
                   <span className="az-cross-cloud-arrow">&harr;</span>
                   <span className="az-cross-cloud-badge az-cross-cloud-badge--aws">AWS</span>
-                  <span className="az-cross-cloud-method">STOW-RS + DIMSE C-STORE</span>
+                  <span className="az-cross-cloud-method">STOW-RS + DIMSE</span>
                 </div>
                 <div className="az-cross-cloud-path">
                   <span className="az-cross-cloud-badge az-cross-cloud-badge--gcp">GCP</span>
                   <span className="az-cross-cloud-arrow">&harr;</span>
                   <span className="az-cross-cloud-badge az-cross-cloud-badge--azure">Azure</span>
-                  <span className="az-cross-cloud-method">STOW-RS + DIMSE C-STORE</span>
+                  <span className="az-cross-cloud-method">STOW-RS + DIMSE</span>
                 </div>
                 <div className="az-cross-cloud-path">
                   <span className="az-cross-cloud-badge az-cross-cloud-badge--aws">AWS</span>
                   <span className="az-cross-cloud-arrow">&harr;</span>
                   <span className="az-cross-cloud-badge az-cross-cloud-badge--azure">Azure</span>
-                  <span className="az-cross-cloud-method">STOW-RS + DIMSE C-STORE</span>
+                  <span className="az-cross-cloud-method">STOW-RS + DIMSE</span>
+                </div>
+                <div className="az-cross-cloud-path">
+                  <span className="az-cross-cloud-badge az-cross-cloud-badge--onprem">On-Prem</span>
+                  <span className="az-cross-cloud-arrow">&harr;</span>
+                  <span className="az-cross-cloud-badge az-cross-cloud-badge--any">Any Cloud</span>
+                  <span className="az-cross-cloud-method">Planned</span>
                 </div>
               </div>
               <ul className="az-cross-cloud-list">
-                <li>Routing rules forward approved studies to any cloud destination</li>
-                <li>DICOMweb STOW-RS for HTTP-based transfer, DIMSE C-STORE for legacy PACS</li>
-                <li>Federation peers registry for multi-tenant replication</li>
+                <li>Routing rules auto-forward approved studies to any registered destination</li>
+                <li>DICOMweb STOW-RS (HTTP/TLS) or DIMSE C-STORE (TCP) — configurable per rule</li>
+                <li>Federation peers registry enables multi-tenant replication across institutions</li>
+                <li>On-premises deployment target planned — same Docker images, local storage mode</li>
               </ul>
             </div>
           </Zone>
@@ -350,6 +361,91 @@ export function Architecture() {
               <Stage color="cyan" name="7. Analytics" desc="18 backends, brain · spine" />
               <Stage color="cyan2" name="8. SCT" desc="cord CSA, compression" />
               <Stage color="gray" name="9. Export Fwd" desc="STOW-RS or DIMSE" />
+            </div>
+          </Zone>
+
+          {/* NOVEL PLATFORM CAPABILITIES */}
+          <Zone className="az-z-novel" title="Novel Platform Capabilities" sub="Differentiating features that set AEGIS apart from legacy PACS and imaging platforms">
+            <div className="az-g3">
+              <InfoBox color="purple" bg="lavender" title="AEGIS Agent — AI-Powered Operations" sections={[
+                { heading: 'Model Context Protocol (MCP)', items: [
+                  '191 typed tools (96 read + 95 write)',
+                  'Natural language study triage and diagnostics',
+                  'Automated pipeline monitoring and alerting',
+                  'Cohort analysis and project health briefings',
+                ] },
+                { heading: 'Agent Capabilities', items: [
+                  '"Why is this study stuck?" — root-cause analysis',
+                  'Routing simulation and optimization',
+                  'Daily ops summaries and anomaly detection',
+                  'Batch operations with audit trail and confirmation',
+                ] },
+              ]} />
+              <InfoBox color="cyan" bg="mint" title="Neuroimaging Analytics Pipelines" sections={[
+                { heading: 'Brain Imaging (12 backends)', items: [
+                  'FreeSurfer recon-all — cortical reconstruction',
+                  'SynthSeg — contrast-agnostic segmentation',
+                  'FSL / ANTs / SPM — extraction, thickness, DTI',
+                  'TBM-SyN + FreeSurfer Long — longitudinal atrophy',
+                ] },
+                { heading: 'Spine Imaging (4 backends)', items: [
+                  'Spinal Cord Toolbox — cord segmentation + CSA',
+                  'TotalSpineSeg — vertebrae C1 through sacrum',
+                  'SPINEPS — 14 vertebral substructure classes',
+                  'MedSAM2 — general-purpose prompted segmentation',
+                ] },
+              ]} />
+              <InfoBox color="teal2" title="Analytics Outputs Database" sections={[
+                { heading: 'Structured Results', items: [
+                  'Per-study segmentation volumes and ROI metrics',
+                  'Cortical thickness, DTI scalars (FA, MD, AD, RD)',
+                  'Spinal cord CSA, compression (aMCC, aSCOR)',
+                  'QSM susceptibility maps, ASL perfusion CBF',
+                ] },
+                { heading: 'Longitudinal & Cohort', items: [
+                  'Baseline vs follow-up atrophy rates',
+                  'AD-signature composite (31-region weighted)',
+                  'Per-subject cohort reports + modality coverage',
+                  'BIDS-compliant NIfTI export for downstream tools',
+                ] },
+              ]} />
+            </div>
+            <div className="az-g3">
+              <InfoBox color="orange" title="Zero-Install Browser De-Identification" sections={[
+                { items: [
+                  'DICOM PS3.15 Annex E tag anonymization runs entirely in the browser',
+                  'PHI is stripped before data leaves the hospital network',
+                  'HIPAA Safe Harbor: 18 identifier types removed automatically',
+                  'Deterministic UID hashing + configurable date shifting',
+                  'Pseudonymization with project-scoped salts',
+                  'Per-project retained-tag anonymization profiles',
+                  'No software install, no VPN — works from any modern browser',
+                ] },
+              ]} />
+              <InfoBox color="blue" title="Configurable 9-Stage Auto-Pipeline" sections={[
+                { items: [
+                  'Routing rules engine — pattern-match by modality, body part, source, project',
+                  'Rules auto-fire on ingest; pipeline dispatches required steps in dependency order',
+                  'Phase 0: Classification → Phase 1: PHI + Protocol + Deface (parallel)',
+                  'Phase 2: QC + BIDS (post-deface) → Phase 3: Analytics + SCT (post-BIDS)',
+                  'Each step idempotent with reset/re-trigger support',
+                  'Pipeline failure email alerts + stuck-study SLA monitoring',
+                  'Rule simulator for dry-run evaluation before deploying changes',
+                ] },
+              ]} />
+              <InfoBox color="green" title="Event-Driven Integration & Observability" sections={[
+                { heading: 'Webhook Subscriptions', items: [
+                  '5 events: approved, rejected, PHI flagged, export complete, stuck',
+                  'HMAC-SHA256 signed payloads for receiver verification',
+                  'Immutable delivery log with per-attempt tracking',
+                ] },
+                { heading: 'Observability', items: [
+                  'Full audit trail — every action, every actor, every timestamp',
+                  'Pipeline processing time stats (avg / P95 / min / max)',
+                  'Destination health probes with auto-scheduled monitoring',
+                  'Per-rule hit analytics to identify stale or unused rules',
+                ] },
+              ]} />
             </div>
           </Zone>
 
