@@ -261,6 +261,12 @@ variable "sidecar_max_instances" {
   default     = 5
 }
 
+variable "kms_crypto_key_id" {
+  description = "Optional Cloud KMS crypto key resource ID for CMEK encryption on GCS buckets and Cloud SQL. Created by terraform/project module. Empty = Google-managed default encryption."
+  type        = string
+  default     = ""
+}
+
 variable "vpc_cidr" {
   description = "CIDR range for primary application subnet"
   type        = string
@@ -608,6 +614,13 @@ resource "google_storage_bucket" "staging" {
       age = 7
     }
   }
+
+  dynamic "encryption" {
+    for_each = var.kms_crypto_key_id != "" ? [1] : []
+    content {
+      default_kms_key_name = var.kms_crypto_key_id
+    }
+  }
 }
 
 resource "google_storage_bucket" "archive" {
@@ -625,12 +638,21 @@ resource "google_storage_bucket" "archive" {
       age = 30
     }
   }
+
+  dynamic "encryption" {
+    for_each = var.kms_crypto_key_id != "" ? [1] : []
+    content {
+      default_kms_key_name = var.kms_crypto_key_id
+    }
+  }
 }
 
 resource "google_sql_database_instance" "aegis" {
   name             = "${local.name_prefix}-postgres"
   database_version = "POSTGRES_15"
   region           = var.region
+
+  encryption_key_name = var.kms_crypto_key_id != "" ? var.kms_crypto_key_id : null
 
   depends_on = [google_service_networking_connection.private_vpc_connection]
 

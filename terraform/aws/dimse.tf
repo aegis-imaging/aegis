@@ -181,6 +181,30 @@ resource "aws_ssm_parameter" "dimse_image" {
   }
 }
 
+# ── EBS volume — persistent retry/dead-letter state across instance restarts ──
+
+resource "aws_ebs_volume" "dimse_data" {
+  count             = local.dimse_enabled ? 1 : 0
+  availability_zone = "${var.aws_region}a"
+  size              = 10
+  type              = "gp3"
+  encrypted         = true
+  kms_key_id        = aws_kms_key.main.arn
+
+  tags = {
+    Name        = "${var.project_name}-dimse-data"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_volume_attachment" "dimse_data" {
+  count       = local.dimse_enabled ? 1 : 0
+  device_name = "/dev/xvdf"
+  volume_id   = aws_ebs_volume.dimse_data[0].id
+  instance_id = aws_instance.dimse_receiver[0].id
+}
+
 # ── Elastic IP — stable address for PACS AE title registration ────────────────
 
 resource "aws_eip" "dimse" {
@@ -268,19 +292,35 @@ resource "aws_instance" "dimse_receiver" {
     echo "==> Pulling image: $IMAGE"
     docker pull "$IMAGE"
 
+    # ---- Mount EBS data volume (idempotent) ----
+    DATA_DEV="/dev/xvdf"
+    DATA_MNT="/mnt/dimse-data"
+    if [ -b "$DATA_DEV" ]; then
+      echo "==> Mounting EBS data volume..."
+      mkdir -p "$DATA_MNT"
+      # Format only if not already formatted (idempotent)
+      if ! blkid "$DATA_DEV" &>/dev/null; then
+        mkfs.ext4 -L dimse-data "$DATA_DEV"
+      fi
+      mount -o defaults "$DATA_DEV" "$DATA_MNT" 2>/dev/null || true
+      # Ensure mount persists across reboots
+      grep -q "$DATA_MNT" /etc/fstab || echo "$DATA_DEV $DATA_MNT ext4 defaults,nofail 0 2" >> /etc/fstab
+    else
+      echo "==> No EBS data volume found, using local dir"
+      DATA_MNT="/var/aegis-dimse"
+      mkdir -p "$DATA_MNT"
+    fi
+
     # ---- Start the container ----
     echo "==> Starting dimse-receiver container..."
     docker stop dimse-receiver 2>/dev/null || true
     docker rm   dimse-receiver 2>/dev/null || true
-    # Bind-mount /var/aegis-dimse on the host for retry/dead-letter state
-    # persistence across container restarts (DICOM files go directly to S3).
-    mkdir -p /var/aegis-dimse
     docker run -d \
       --name dimse-receiver \
       --restart unless-stopped \
       -p 11112:11112 \
       -p 8080:8080 \
-      -v /var/aegis-dimse:/app/data \
+      -v "$DATA_MNT":/app/data \
       -e DIMSE_DATA_DIR=/app/data \
       -e DIMSE_INGEST_DURABLE_STORE_PATH=/app/data/dimse-ingest-retry-state.json \
       -e API_URL="http://api.aegis.local:8080" \
