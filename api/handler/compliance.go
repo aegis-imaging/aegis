@@ -30,9 +30,12 @@ type complianceStudies struct {
 }
 
 type compliancePhiDetect struct {
-	Scanned     int     `json:"scanned"`
-	Flagged     int     `json:"flagged"`
-	FlagRatePct float64 `json:"flag_rate_pct"`
+	Scanned              int     `json:"scanned"`
+	Flagged              int     `json:"flagged"`
+	FlagRatePct          float64 `json:"flag_rate_pct"`
+	PixelRedactionTotal  int     `json:"pixel_redaction_total"`
+	PixelRedacted        int     `json:"pixel_redacted"`
+	PixelRedactionFailed int     `json:"pixel_redaction_failed"`
 }
 
 type complianceDefacing struct {
@@ -108,12 +111,17 @@ func (s *Server) GetProjectComplianceReport(w http.ResponseWriter, r *http.Reque
 	// ── PHI detection ─────────────────────────────────────────────────────────
 	row = s.db.QueryRowContext(r.Context(), `
 		SELECT
-			COUNT(*) FILTER (WHERE phi_scan_status NOT IN ('','pending')) AS scanned,
-			COUNT(*) FILTER (WHERE phi_scan_status = 'flagged')           AS flagged
+			COUNT(*) FILTER (WHERE phi_scan_status NOT IN ('','pending'))                AS scanned,
+			COUNT(*) FILTER (WHERE phi_scan_status = 'flagged')                          AS flagged,
+			COUNT(*) FILTER (WHERE pixel_redaction_required)                             AS pixel_total,
+			COUNT(*) FILTER (WHERE pixel_redaction_status = 'complete')                  AS pixel_redacted,
+			COUNT(*) FILTER (WHERE pixel_redaction_status = 'failed')                    AS pixel_failed
 		FROM studies
 		WHERE project_id = $1
 		  AND created_at >= $2`, projectID, since)
-	row.Scan(&report.PhiDetect.Scanned, &report.PhiDetect.Flagged) //nolint:errcheck
+	row.Scan(&report.PhiDetect.Scanned, &report.PhiDetect.Flagged,
+		&report.PhiDetect.PixelRedactionTotal, &report.PhiDetect.PixelRedacted,
+		&report.PhiDetect.PixelRedactionFailed) //nolint:errcheck
 	if report.PhiDetect.Scanned > 0 {
 		report.PhiDetect.FlagRatePct = float64(report.PhiDetect.Flagged) / float64(report.PhiDetect.Scanned) * 100
 	}
@@ -224,12 +232,17 @@ func (s *Server) ExportComplianceReportCSV(w http.ResponseWriter, r *http.Reques
 
 	s.db.QueryRowContext(r.Context(), `
 		SELECT
-			COUNT(*) FILTER (WHERE phi_scan_status NOT IN ('','pending')) AS scanned,
-			COUNT(*) FILTER (WHERE phi_scan_status = 'flagged')           AS flagged
+			COUNT(*) FILTER (WHERE phi_scan_status NOT IN ('','pending'))                AS scanned,
+			COUNT(*) FILTER (WHERE phi_scan_status = 'flagged')                          AS flagged,
+			COUNT(*) FILTER (WHERE pixel_redaction_required)                             AS pixel_total,
+			COUNT(*) FILTER (WHERE pixel_redaction_status = 'complete')                  AS pixel_redacted,
+			COUNT(*) FILTER (WHERE pixel_redaction_status = 'failed')                    AS pixel_failed
 		FROM studies
 		WHERE project_id = $1
 		  AND created_at >= $2`, projectID, since).Scan( //nolint:errcheck
-		&report.PhiDetect.Scanned, &report.PhiDetect.Flagged)
+		&report.PhiDetect.Scanned, &report.PhiDetect.Flagged,
+		&report.PhiDetect.PixelRedactionTotal, &report.PhiDetect.PixelRedacted,
+		&report.PhiDetect.PixelRedactionFailed)
 	if report.PhiDetect.Scanned > 0 {
 		report.PhiDetect.FlagRatePct = float64(report.PhiDetect.Flagged) / float64(report.PhiDetect.Scanned) * 100
 	}
@@ -303,6 +316,9 @@ func (s *Server) ExportComplianceReportCSV(w http.ResponseWriter, r *http.Reques
 	_ = cw.Write([]string{"phi_detection", "scanned", strconv.Itoa(report.PhiDetect.Scanned)})
 	_ = cw.Write([]string{"phi_detection", "flagged", strconv.Itoa(report.PhiDetect.Flagged)})
 	_ = cw.Write([]string{"phi_detection", "flag_rate_pct", fmt.Sprintf("%.2f", report.PhiDetect.FlagRatePct)})
+	_ = cw.Write([]string{"phi_detection", "pixel_redaction_total", strconv.Itoa(report.PhiDetect.PixelRedactionTotal)})
+	_ = cw.Write([]string{"phi_detection", "pixel_redacted", strconv.Itoa(report.PhiDetect.PixelRedacted)})
+	_ = cw.Write([]string{"phi_detection", "pixel_redaction_failed", strconv.Itoa(report.PhiDetect.PixelRedactionFailed)})
 
 	// Defacing
 	_ = cw.Write([]string{"defacing", "required", strconv.Itoa(report.Defacing.Required)})
