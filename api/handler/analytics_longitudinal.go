@@ -254,5 +254,8 @@ func (s *Server) runLongitudinalAnalytics(followup, baseline *model.Study, scanI
 			"scan_interval_days": scanIntervalDays,
 		})
 
+	// Store structured longitudinal ROI results in the biomarker database.
+	s.storeLongitudinalROIResults(ctx, followup, baseline, svcResp.Results, scanIntervalDays)
+
 	s.AdvancePipeline(ctx, followup.ID)
 }
