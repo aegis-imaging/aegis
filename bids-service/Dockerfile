@@ -3,6 +3,8 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    libgdcm-tools \
+    libopenjp2-7 \
     && rm -rf /var/lib/apt/lists/*
 
 # ── dcm2niix (static binary, ~5 MB) ────────────────────────────────────────

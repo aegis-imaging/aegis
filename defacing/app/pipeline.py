@@ -30,12 +30,22 @@ def group_by_series(dicom_paths: list[str]) -> dict[str, list[str]]:
     return groups
 
 
+def _is_mosaic(ds) -> bool:
+    """Detect Siemens mosaic format from ImageType tag."""
+    image_type = getattr(ds, "ImageType", [])
+    if isinstance(image_type, (list, pydicom.multival.MultiValue)):
+        return "MOSAIC" in [str(v).upper() for v in image_type]
+    return False
+
+
 def should_deface_series(dicom_paths: list[str]) -> bool:
     """
     Return True if this series needs defacing.
 
     Only 3D volumetric head/brain series are defaced. 2D localizers,
-    secondary captures, and structured reports are skipped.
+    secondary captures, structured reports, Enhanced (multi-frame) DICOM,
+    and mosaic DICOM are skipped — dcm2niix handles mosaic unwrapping
+    during BIDS conversion.
 
     Minimum slice count for a 3D volume is 20 (below this, likely a localizer).
     """
@@ -46,14 +56,29 @@ def should_deface_series(dicom_paths: list[str]) -> bool:
     try:
         ds = pydicom.dcmread(dicom_paths[0], stop_before_pixels=True)
         sop_class = str(getattr(ds, "SOPClassUID", ""))
-        # Skip secondary capture, structured reports, presentation states, etc.
+        # Skip secondary capture, structured reports, presentation states,
+        # and Enhanced (multi-frame) SOP classes.
         skip_classes = {
-            "1.2.840.10008.5.1.4.1.1.7",     # Secondary Capture
-            "1.2.840.10008.5.1.4.1.1.88.22",  # Enhanced SR
-            "1.2.840.10008.5.1.4.1.1.11.1",   # Grayscale Softcopy Presentation State
+            "1.2.840.10008.5.1.4.1.1.7",      # Secondary Capture
+            "1.2.840.10008.5.1.4.1.1.88.22",   # Enhanced SR
+            "1.2.840.10008.5.1.4.1.1.11.1",    # Grayscale Softcopy Presentation State
+            "1.2.840.10008.5.1.4.1.1.4.1",     # Enhanced MR Image Storage
+            "1.2.840.10008.5.1.4.1.1.2.1",     # Enhanced CT Image Storage
+            "1.2.840.10008.5.1.4.1.1.128.1",   # Enhanced PET Image Storage
         }
         if sop_class in skip_classes:
-            log.info("Skipping SOPClass %s", sop_class)
+            log.info("Skipping SOPClass %s (enhanced/unsupported)", sop_class)
+            return False
+
+        # Skip multi-frame DICOM (Enhanced DICOM with NumberOfFrames > 1)
+        num_frames = getattr(ds, "NumberOfFrames", None)
+        if num_frames is not None and int(num_frames) > 1:
+            log.info("Skipping multi-frame DICOM (%d frames)", int(num_frames))
+            return False
+
+        # Skip Siemens mosaic DICOM — dcm2niix handles unwrapping
+        if _is_mosaic(ds):
+            log.info("Skipping mosaic DICOM (Siemens mosaic format)")
             return False
     except Exception:
         pass

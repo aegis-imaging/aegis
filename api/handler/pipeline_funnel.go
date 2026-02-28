@@ -38,15 +38,16 @@ func (s *Server) GetPipelineFunnel(w http.ResponseWriter, r *http.Request) {
 
 	// Single-pass aggregation: all counts in one SQL query.
 	var (
-		received       int
-		classified     int
-		phiScanned     int
-		pixelRedacted  int
-		defaced        int
-		qcPassed       int
-		bidsConverted  int
-		approved       int
-		exported       int
+		received          int
+		classified        int
+		phiScanned        int
+		pixelRedacted     int
+		defaced           int
+		qcPassed          int
+		bidsConverted     int
+		analyticsComplete int
+		approved          int
+		exported          int
 	)
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT
@@ -59,6 +60,8 @@ func (s *Server) GetPipelineFunnel(w http.ResponseWriter, r *http.Request) {
 		                      OR (defacing_required = true AND dicom_store = 'clean'))              AS defaced,
 		  COUNT(*) FILTER (WHERE qc_status IN ('pass', 'warn'))                                    AS qc_passed,
 		  COUNT(*) FILTER (WHERE bids_status = 'complete')                                         AS bids_converted,
+		  COUNT(*) FILTER (WHERE analytics_required = false
+		                      OR (analytics_required = true AND analytics_status IN ('complete', 'partial'))) AS analytics_complete,
 		  COUNT(*) FILTER (WHERE status = 'approved')                                              AS approved,
 		  COUNT(*) FILTER (WHERE export_required = false
 		                      OR (export_required = true AND export_status = 'exported'))           AS exported
@@ -67,7 +70,7 @@ func (s *Server) GetPipelineFunnel(w http.ResponseWriter, r *http.Request) {
 		  AND ($2 = '' OR project_id = $2::uuid)`,
 		since, projectID,
 	).Scan(&received, &classified, &phiScanned, &pixelRedacted, &defaced, &qcPassed,
-		&bidsConverted, &approved, &exported)
+		&bidsConverted, &analyticsComplete, &approved, &exported)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "pipeline funnel query failed")
 		return
@@ -91,6 +94,7 @@ func (s *Server) GetPipelineFunnel(w http.ResponseWriter, r *http.Request) {
 		{"defaced", defaced},
 		{"qc_passed", qcPassed},
 		{"bids_converted", bidsConverted},
+		{"analytics_complete", analyticsComplete},
 		{"approved", approved},
 		{"exported", exported},
 	}
