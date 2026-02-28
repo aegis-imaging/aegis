@@ -39,7 +39,7 @@ css: |
   <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
   <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
   <p style="font-size: 13px; color: #6b7280; margin-top: 0; margin-bottom: 2px;">AEGIS Imaging LLC</p>
-  <p style="font-size: 13px; color: #9ca3af; margin-top: 0;">February 25, 2026</p>
+  <p style="font-size: 13px; color: #9ca3af; margin-top: 0;">February 28, 2026</p>
 </div>
 
 ---
@@ -93,7 +93,8 @@ The medical image exchange market is growing, driven by federal data sharing man
 | **Centralized audit trail** | Every upload, approval, rejection, and data export is logged with a timestamp and actor. Institutions can demonstrate HIPAA compliance from a single dashboard. |
 | **Clinician review before release** | Administrators review anonymized images in a web-based DICOM viewer (Weasis DWV) before approving studies for sharing. Side-by-side before/after defacing review is built in. Nothing is shared automatically without human sign-off. |
 | **Pixel redaction** | Automated detection and masking of burned-in PHI directly in DICOM pixel data — patient names, dates, and accession numbers overlaid on images are located by OCR and redacted at the pixel level. |
-| **Neuroimaging analytics** | Post-BIDS analysis pipelines using FreeSurfer (cortical/subcortical volumetrics), FSL (brain extraction, tissue segmentation, DTI), ANTs (cortical thickness, registration), and SPM (VBM segmentation). Results stored per-study for downstream analysis. |
+| **Neuroimaging analytics** | Post-BIDS analysis pipelines with 18 backends: brain (FreeSurfer, SynthSeg, BrainSuite, volBrain, Atlas ROI), spine (SCT, TotalSpineSeg, SPINEPS), whole-body (TotalSegmentator, nnU-Net, MedSAM2, MONAI Label), and specialized (PETSurfer, QSM, BASIL, FSL, ANTs, SPM, ITK-SNAP). Longitudinal analytics (TBM-SyN, FreeSurfer Long) for tracking brain volume changes over time. |
+| **Spinal cord analysis** | Spinal Cord Toolbox (SCT) integration: automated cord segmentation, cross-sectional area (CSA) per vertebral level, compression metrics (aMCC, aSCOR), and DTI mapping for spinal cord studies. |
 | **Comprehensive DICOM format support** | JPEG2000 lossless, JPEG-LS, Enhanced (multi-frame) DICOM, and Siemens Mosaic DICOM handled transparently across all processing services via decompression backends. |
 | **Vendor private tag preservation** | Per-project option to retain vendor-specific private tags (diffusion gradients, CSA headers) during de-identification, with automated PHI scanning of preserved tag values. |
 
@@ -115,7 +116,7 @@ AEGIS serves two audiences from a single de-identification and routing platform:
 | **Pipeline features** | Defacing, protocol compliance, QC, BIDS | Burned-in PHI, routing rules, export shares |
 | **Review workflow** | PI/coordinator approves before archive | Radiologist/admin approves before release |
 
-The underlying platform — de-identification engine, routing rules, audit trail, OHIF viewer, and admin dashboard — is shared. Research-specific features (defacing, BIDS, protocol templates) and enterprise features (DIMSE receive, HL7/FHIR notifications, tag standardization) extend it for each audience.
+The underlying platform — de-identification engine, routing rules, audit trail, Weasis DWV viewer, and admin dashboard — is shared. Research-specific features (defacing, BIDS, protocol templates) and enterprise features (DIMSE receive, HL7/FHIR notifications, tag standardization) extend it for each audience.
 
 ---
 
@@ -160,15 +161,15 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| **Backend** | Go on Cloud Run (GCP) or ECS Fargate (AWS) | Compiled binary, minimal dependencies, fast cold starts |
+| **Backend** | Go on Cloud Run (GCP), ECS Fargate (AWS), or Container Apps (Azure) | Compiled binary, minimal dependencies, fast cold starts |
 | **Frontend** | React + TypeScript | Runs in any modern browser, no installation required |
 | **Database** | PostgreSQL 15 (Cloud SQL / RDS) | Audit trail, project/user management, routing rules |
-| **DICOM Storage** | Cloud-neutral (GCS, S3, or local filesystem) | Abstracted behind a pluggable storage interface |
+| **DICOM Storage** | Cloud-neutral (GCS, S3, Azure Blob, or local filesystem) | Abstracted behind a pluggable storage interface |
 | **OCR / PHI Detection** | Tesseract OCR (local) / cloud AI (pluggable) | Detects burned-in text in image pixels |
 | **Defacing** | DeepDefacer (default), mri_deface, mri_reface | Multiple backends with automatic fallback; see `docs/research/mri-defacing-tools-comparison.md` |
 | **DICOM Viewer** | Weasis DWV (browser-based) | Lightweight, open-source; supports QIDO-RS/WADO-RS; built-in side-by-side defacing review |
 | **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
-| **Processing Pipeline** | Microservices architecture — 9 Python microservices (Cloud Run / ECS Fargate / Container Apps) + DIMSE receiver (Compute Engine VM / EC2 / Azure VM) + MCP server (Cloud Run) | Classification, PHI detection + pixel redaction, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation, neuroimaging analytics (FreeSurfer/FSL/ANTs/SPM) — auto-dispatched in 4-phase dependency order; DIMSE C-STORE SCP on dedicated VM (static IP, port 11112); MCP server exposes 50+ read tools + 64+ write tools; agent orchestrator with DICOM tag provenance and diagnostic toolchain |
+| **Processing Pipeline** | Microservices architecture — 9 Python microservices (Cloud Run / ECS Fargate / Container Apps) + DIMSE receiver (Compute Engine VM / EC2 / Azure VM) + MCP server (Cloud Run) | Classification, PHI detection + pixel redaction, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation, neuroimaging analytics (18 backends incl. FreeSurfer, FSL, ANTs, SPM, SynthSeg, nnU-Net, TotalSegmentator, MONAI Label, PETSurfer, QSM, BASIL), spinal cord analysis (SCT) — auto-dispatched in 4-phase dependency order; DIMSE C-STORE SCP on dedicated VM (static IP, port 11112); MCP server exposes 96 read tools + 95 write tools; agent orchestrator with DICOM tag provenance and diagnostic toolchain |
 | **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
 
 **Live deployments:** GCP — [admin.aegisimaging.ai](https://admin.aegisimaging.ai) (dashboard) · [api.aegisimaging.ai](https://api.aegisimaging.ai) (API) · AWS — [aws.admin.aegisimaging.ai](https://aws.admin.aegisimaging.ai) (dashboard) · [aws.api.aegisimaging.ai](https://aws.api.aegisimaging.ai) (API) · Azure — [azure.admin.aegisimaging.ai](https://azure.admin.aegisimaging.ai) (dashboard) · [azure.api.aegisimaging.ai](https://azure.api.aegisimaging.ai) (API).
@@ -222,7 +223,7 @@ XNAT and Flywheel serve research well but require software installation at sendi
 
 ## Development Velocity
 
-AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. AWS production followed on day 8. Azure Container Apps deployment completed on day 9. The resulting platform is production-grade across all three major clouds: version-controlled infrastructure, automated CI/CD, 750+ tests, and all services deployed and monitored simultaneously.
+AEGIS was built from a blank repository to full GCP production deployment in **7 days** (February 17–24, 2026), using AI-assisted development tooling. AWS production followed on day 8. Azure Container Apps deployment completed on day 9. The resulting platform is production-grade across all three major clouds: version-controlled infrastructure, automated CI/CD, 2,100+ tests, and all services deployed and monitored simultaneously.
 
 A single merge to `develop` deploys to GCP and AWS in parallel — GCP Cloud Build and GitHub Actions trigger concurrently, updating all services on both platforms within minutes from a single shared codebase. Cross-cloud DICOM routing (GCP→AWS via STOW-RS) is verified live and tested. Azure auto-deploys via GitHub Actions OIDC federated auth on every push to `develop`.
 
@@ -231,57 +232,50 @@ A single merge to `develop` deploys to GCP and AWS in parallel — GCP Cloud Bui
 | Days from first commit to GCP production | **7** |
 | Days from first commit to AWS production | **8** |
 | Days from first commit to Azure production | **9** |
-| Git commits | **1,200+** |
-| API routes (Go) | **303+** |
-| Automated tests (Go + Python) | **750+** |
-| Database migrations | **72** |
-| Cloud Run services deployed (GCP) | **14** |
+| Git commits | **1,300+** |
+| API routes (Go) | **322+** |
+| Automated tests (Go + Python + client) | **2,100+** |
+| Database migrations | **77** |
+| Cloud Run services deployed (GCP) | **15** |
 | ECR repositories provisioned (AWS) | **13** |
 | ECS Fargate services (AWS) | **10** |
+| Azure Container Apps | **15** |
 | Python processing services | **9** |
-| Pipeline phases | **4** (Classification → PHI/Protocol/Deface → QC/BIDS → Analytics) |
-| MCP AI agent tools (read + write) | **115+** |
+| Pipeline phases | **4** (Classification → PHI/Protocol/Deface → QC/BIDS → Analytics/SCT) |
+| MCP AI agent tools (read + write) | **191** |
 
 ---
 
 ## Phased Roadmap
 
-> **Production status:** The full platform is **live on three clouds.** GCP: Go API, admin dashboard, Weasis DWV viewer, 9 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM, static IP `35.232.172.221`, port 11112), and MCP server at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. AWS: 10 ECS Fargate services, RDS PostgreSQL, S3, ALB + Cognito auth at `aws.api.aegisimaging.ai` and `aws.admin.aegisimaging.ai`. Azure: Container Apps + PostgreSQL Flexible Server + Azure Blob Storage at `azure.api.aegisimaging.ai` and `azure.admin.aegisimaging.ai`. All clouds share one codebase; GCP Cloud Build and GitHub Actions deploy in parallel on every merge to `develop`. Cross-cloud DICOM routing (GCP→AWS→Azure) is verified live.
+> **Production status:** The full platform is **live on three clouds.** GCP: Go API, admin dashboard, Weasis DWV viewer, 9 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM, static IP `35.232.172.221`, port 11112), and MCP server at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. AWS: 10 ECS Fargate services, RDS PostgreSQL, S3, ALB + Cognito auth at `aws.api.aegisimaging.ai` and `aws.admin.aegisimaging.ai`. Azure: 15 Container Apps + PostgreSQL Flexible Server + Azure Blob Storage at `azure.api.aegisimaging.ai` and `azure.admin.aegisimaging.ai`. All clouds share one codebase; GCP Cloud Build and GitHub Actions deploy in parallel on every merge to `develop`. Cross-cloud DICOM routing (GCP→AWS→Azure) is verified live.
 
 ### ✓ Milestone 1 — Foundation + GCP Production (February 17–24, 2026)
 
 Everything listed below was built and deployed to GCP production within 7 days of the first commit:
 
 - Browser-based upload portal with DICOM tag anonymization (PS3.15 Basic Profile, 18 HIPAA identifiers), date shifting, pseudonymization, and before/after tag diff preview
-- Go API with 303+ routes: DICOM ingest, routing engine, DICOMweb proxy, export shares, audit trail, webhook subscriptions, API keys, clinical trial access control
+- Go API with 322+ routes: DICOM ingest, routing engine, DICOMweb proxy, export shares, audit trail, webhook subscriptions, API keys, clinical trial access control
 - Admin dashboard: study browser, RBAC (admin/viewer + capability-based guards), protocol templates, routing rules, institutions, 17+ management tabs
 - Weasis DWV viewer with side-by-side before/after defacing review (yoked scroll synchronization)
-- 9 Python processing services on Cloud Run: classification, PHI scan + pixel redaction, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation, neuroimaging analytics (FreeSurfer/FSL/ANTs/SPM)
+- 9 Python processing services on Cloud Run: classification, PHI scan + pixel redaction, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation, neuroimaging analytics (18 backends), spinal cord analysis (SCT)
 - DIMSE C-STORE SCP on dedicated Compute Engine VM (port 11112) — durable retry queue, dead-letter, exponential backoff
-- MCP server (50+ read tools + 64+ write tools) + agent orchestrator with DICOM tag provenance and diagnostic toolchain — AI-native platform operations
+- MCP server (96 read tools + 95 write tools) + agent orchestrator with DICOM tag provenance and diagnostic toolchain — AI-native platform operations
 - Terraform IaC (GCP + AWS + Azure modules), GitHub Actions CI, Cloud Build CD (auto-deploy on push to `develop`)
-- 750+ automated tests (137+ Go integration tests, 617 Python pytest tests across 9 sidecars)
+- 2,100+ automated tests (1,072 Go tests, 892 Python pytest tests across 9 sidecars, 166 client library tests)
 - Comprehensive DICOM format support: JPEG2000, JPEG-LS, Enhanced multi-frame, Siemens Mosaic
 - Vendor private tag preservation with automated PHI scanning of retained tag values
 - 8 phases of cross-cloud security hardening with CI enforcement
 
-### → Milestone 2 — Private Beta (Q1 2026)
-
-- First enterprise pilot customers (research institutions + radiology departments)
-- Business Associate Agreement (BAA) finalized; SOC 2 Type I audit initiated
-- DIMSE C-MOVE / C-FIND workflows for active PACS pull integration
-- Enterprise onboarding documentation and SLA monitoring
-
-### ✓ Milestone 3 — AWS Deployment (February 25, 2026)
+### ✓ Milestone 2 — AWS Deployment (February 25, 2026)
 
 - ECS Fargate (10 services), RDS PostgreSQL, S3, ALB + Cognito auth — fully live at `aws.api.aegisimaging.ai`
 - Terraform infrastructure provisioned; 13 ECR repositories; GitHub Actions CI/CD auto-deploys on every push to `develop`
 - DIMSE receiver on EC2 with Elastic IP, SSM-driven rolling deploys
 - **Cross-cloud DICOM routing verified live** — GCP→AWS STOW-RS tested end-to-end; bidirectional API key authentication; routing loop benign (deduplicated by unique constraint)
 - Single shared codebase; one merge deploys to both clouds simultaneously
-- AWS Marketplace listing for enterprise procurement (next)
 
-### ✓ Milestone 4 — Azure Deployment (February 26, 2026)
+### ✓ Milestone 3 — Azure Deployment (February 26, 2026)
 
 - Azure Container Apps deployment — same Go API, Python sidecars, and React frontends as GCP and AWS
 - Azure Database for PostgreSQL (Flexible Server), Azure Blob Storage (STORAGE_MODE=azure), Azure Container Registry
@@ -289,44 +283,64 @@ Everything listed below was built and deployed to GCP production within 7 days o
 - DIMSE receiver on Azure Linux VM — same static-IP PACS integration pattern
 - Azure Communication Services Email relay for SMTP notifications
 
-### ✓ Milestone 5 — Advanced Processing & Security (February 27, 2026)
+### ✓ Milestone 4 — Advanced Processing & Security (February 27, 2026)
 
-- Neuroimaging analytics service (FreeSurfer, FSL, ANTs, SPM) as Phase 3 pipeline — post-BIDS analysis on NIfTI outputs
 - Comprehensive DICOM format support: JPEG2000 lossless, JPEG-LS, Enhanced multi-frame, Siemens Mosaic across all 9 services
 - Pixel redaction pipeline step: automated detection and masking of burned-in PHI in DICOM pixel data
 - Vendor private tag preservation with automated PHI scanning of retained tag values
-- MIDI-B de-identification benchmark compliance (Tracks 1 & 2): date shifting, pseudonymization, text scrubbing, mapping export
 - Clinical trial access control: project membership roles, capability-based write guards, scoped study visibility
 - 8 phases of cross-cloud security hardening with CI enforcement scripts
-- 750+ automated tests (137+ Go, 617 Python), 303+ API routes, 115+ MCP tools, 72 database migrations
 
-### → Milestone 6 — SOC 2 Type II + Enterprise Integrations (Q3 2026)
+### ✓ Milestone 5 — Analytics Expansion & MIDI-B Compliance (February 28, 2026)
+
+- Neuroimaging analytics service with 18 backends: brain (FreeSurfer, SynthSeg, BrainSuite, volBrain, Atlas ROI), spine (SCT, TotalSpineSeg, SPINEPS), whole-body (TotalSegmentator, nnU-Net, MedSAM2, MONAI Label), and specialized (PETSurfer, QSM, BASIL, FSL, ANTs, SPM, ITK-SNAP)
+- Spinal Cord Toolbox (SCT) sidecar: cord segmentation, cross-sectional area (CSA), compression metrics (aMCC, aSCOR), DTI mapping
+- Longitudinal analytics: TBM-SyN tensor-based morphometry and FreeSurfer longitudinal stream for brain volume change tracking
+- Biomarker database: ROI volumetric results, QC ratings, demographics, analytics file management
+- MIDI-B de-identification benchmark compliance (Tracks 1 & 2): date shifting, pseudonymization, LLM-based text scrubbing, mapping export
+- Niivue NIfTI viewer embedded in admin dashboard for analytics output review
+- 2,100+ automated tests (1,072 Go, 892 Python, 166 client), 322+ API routes, 191 MCP tools, 77 database migrations
+
+### → Milestone 6 — Private Beta (Q1 2026)
+
+- First enterprise pilot customers (research institutions + radiology departments)
+- Invite-gated access with self-service request workflow
+- Gathering feedback on de-identification workflows, PACS integration, and protocol compliance
+- DIMSE C-MOVE / C-FIND workflows for active PACS pull integration
+- SLA monitoring, retention policies, and routing rules hardening for production workloads
+
+### → Milestone 7 — Beta Hardening + Compliance Foundations (Q2 2026)
+
+- Business Associate Agreement (BAA) template + countersigning workflow
+- SOC 2 Type I audit initiation — point-in-time controls assessment
+- DIMSE C-MOVE / C-FIND at scale — AEGIS actively queries and retrieves studies from PACS and VNA systems
+- AWS Marketplace listing for enterprise procurement
+
+### → Milestone 8 — SOC 2 Type II + Enterprise Integrations (Q3 2026)
 
 - SOC 2 Type II certification — formal audit after 6-month observation period
 - HL7 FHIR notifications — integrate with hospital EMR/RIS systems
 - Cross-tenant federated sharing — peer AEGIS instances can exchange approved studies
-- AWS Marketplace listing for enterprise procurement
 
-### → Milestone 7 — Enterprise GA (Q4 2026)
+### → Milestone 9 — Enterprise GA (Q4 2026)
 
 - On-premises deployment option for institutions with strict data residency requirements
 - PACS/VNA native query-retrieve — pull studies on demand rather than waiting for push
 - Multi-tenant SaaS with per-organization data isolation for radiology groups
-- Imaging data consortium marketplace — connect research networks to curated data sources
 
 ---
 
 ## Cost Estimate (Development / Proof of Concept)
 
-| Resource | GCP Monthly | AWS Monthly |
-|----------|------------|------------|
-| Containers (Cloud Run / ECS Fargate) | ~$5–15 | ~$5–15 |
-| PostgreSQL (Cloud SQL / RDS) | ~$10 | ~$15 |
-| Object Storage (GCS / S3) | ~$0.02/GB | ~$0.02/GB |
-| Load Balancer | Included | ~$16 (ALB) |
-| **Total (development)** | **~$20–40/month** | **~$40–60/month** |
+| Resource | GCP Monthly | AWS Monthly | Azure Monthly |
+|----------|------------|------------|--------------|
+| Containers (Cloud Run / ECS Fargate / Container Apps) | ~$5–15 | ~$5–15 | ~$5–15 |
+| PostgreSQL (Cloud SQL / RDS / Flexible Server) | ~$10 | ~$15 | ~$15 |
+| Object Storage (GCS / S3 / Azure Blob) | ~$0.02/GB | ~$0.02/GB | ~$0.02/GB |
+| Load Balancer | Included | ~$16 (ALB) | Included |
+| **Total (development)** | **~$20–40/month** | **~$40–60/month** | **~$25–50/month** |
 
-Production costs scale with data volume. A 1,000-session multi-site study (~500 GB) would cost approximately $50–100/month in storage on either cloud.
+Production costs scale with data volume. A 1,000-session multi-site study (~500 GB) would cost approximately $50–100/month in storage on any cloud.
 
 ---
 
