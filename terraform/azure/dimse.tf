@@ -160,18 +160,43 @@ resource "azurerm_linux_virtual_machine" "dimse" {
   }
 
   # Startup script: log into ACR via managed identity, pull image, run container.
-  # Image tag is passed via custom_data to allow Cloud Build-style image updates.
+  # Runs on first boot via cloud-init. CI/CD updates use az vm run-command.
   custom_data = base64encode(<<-EOF
     #!/bin/bash
-    set -e
+    set -euo pipefail
+    echo "==> AEGIS DIMSE startup: $(date)" | tee -a /var/log/dimse-startup.log
 
-    # Install Docker
-    apt-get update -qq
-    apt-get install -y docker.io azure-cli
+    # Install Docker (idempotent)
+    if ! command -v docker &>/dev/null; then
+      apt-get update -qq
+      apt-get install -y -q docker.io
+      systemctl enable docker
+      systemctl start docker
+    fi
 
-    # Log into ACR using VM managed identity
+    # Install Azure CLI (idempotent)
+    if ! command -v az &>/dev/null; then
+      apt-get update -qq
+      apt-get install -y -q azure-cli
+    fi
+
+    # Authenticate with user-assigned managed identity
+    az login --identity --username ${azurerm_user_assigned_identity.dimse[0].client_id}
+
+    # Log Docker into ACR
     ACR_TOKEN=$(az acr login --name ${azurerm_container_registry.main.name} --expose-token --output tsv --query accessToken)
     docker login ${local.acr_server} --username 00000000-0000-0000-0000-000000000000 --password "$ACR_TOKEN"
+
+    # Format + mount persistent data disk (idempotent)
+    DISK_DEV="/dev/disk/azure/scsi1/lun0"
+    MOUNT_DATA="/mnt/dimse-data"
+    mkdir -p "$MOUNT_DATA"
+    if ! mountpoint -q "$MOUNT_DATA"; then
+      if ! blkid "$DISK_DEV" 2>/dev/null | grep -q ext4; then
+        mkfs.ext4 -F "$DISK_DEV"
+      fi
+      mount -o discard,defaults "$DISK_DEV" "$MOUNT_DATA"
+    fi
 
     # Pull and start the DIMSE receiver
     DIMSE_IMAGE="${var.dimse_receiver_image}"
@@ -181,14 +206,17 @@ resource "azurerm_linux_virtual_machine" "dimse" {
       --name dimse-receiver \
       --restart unless-stopped \
       -p 11112:11112 \
+      -p 8080:8080 \
       -e DIMSE_AE_TITLE=AEGIS \
       -e DIMSE_PORT=11112 \
-      -e STORAGE_MODE=azure \
-      -e AZURE_STORAGE_ACCOUNT=${azurerm_storage_account.dicom.name} \
-      -e AZURE_STORAGE_CONTAINER=dicom \
+      -e DIMSE_DATA_DIR=/app/data \
+      -e DIMSE_INGEST_DURABLE_STORE_PATH=/app/persist/dimse-ingest-retry-state.json \
       -e API_URL=https://${azurerm_container_app.api.ingress[0].fqdn} \
       -e DIMSE_PROJECT_SLUG=default \
+      -v /mnt/dimse-data:/app/persist \
       "$DIMSE_IMAGE"
+
+    echo "==> DIMSE startup complete: $(date)" | tee -a /var/log/dimse-startup.log
   EOF
   )
 
