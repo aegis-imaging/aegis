@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
+/* ── Mobile detection (initial state only — no re-render on resize) ───── */
+const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+
 /* ── Tiny reusable sub-components ───────────────────────────────────────── */
 
-function Zone({ className, title, sub, children, defaultOpen = true }: {
+function Zone({ className, title, sub, children, defaultOpen }: {
   className: string; title: string; sub?: string; children: React.ReactNode; defaultOpen?: boolean
 }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(defaultOpen ?? !isMobile)
   return (
     <div className={`az-zone ${className}${open ? '' : ' az-zone--collapsed'}`}>
       <button className="az-zone-hdr" onClick={() => setOpen(!open)}>
@@ -15,6 +18,39 @@ function Zone({ className, title, sub, children, defaultOpen = true }: {
         <span className="az-zone-chevron">{open ? '−' : '+'}</span>
       </button>
       {open && <div className="az-zone-body">{children}</div>}
+    </div>
+  )
+}
+
+function TabZone({ className, title, sub, tabs, defaultOpen }: {
+  className: string; title: string; sub?: string
+  tabs: { label: string; content: React.ReactNode }[]
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen ?? !isMobile)
+  const [activeTab, setActiveTab] = useState(0)
+  return (
+    <div className={`az-zone ${className}${open ? '' : ' az-zone--collapsed'}`}>
+      <button className="az-zone-hdr" onClick={() => setOpen(!open)}>
+        <span className="az-zone-title">{title}</span>
+        {sub && <span className="az-zone-sub">{sub}</span>}
+        <span className="az-zone-chevron">{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="az-zone-body">
+          <div className="az-tab-bar">
+            {tabs.map((t, i) => (
+              <button key={i} className={`az-tab${i === activeTab ? ' az-tab--active' : ''}`}
+                onClick={() => setActiveTab(i)}>{t.label}</button>
+            ))}
+          </div>
+          {tabs.map((t, i) => (
+            <div key={i} className={`az-tab-panel${i === activeTab ? ' az-tab-panel--active' : ''}`}>
+              {t.content}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -139,152 +175,166 @@ export function Architecture() {
           </Zone>
 
           {/* GCP PROJECT */}
-          <Zone className="az-z-gcp" title="GCP Project" sub="aegis-prod-488120 · us-central1 · Live, February 2026">
-            <div className="az-lb-bar">
-              <strong>Cloud Armor (DDoS / WAF)</strong>
-              <span>+ Global HTTPS Load Balancer</span>
-              <span>+ Identity-Aware Proxy (admin routes)</span>
-              <span>+ Managed SSL cert v3</span>
-              <span>+ Cloud Run (API · Dashboard · Landing · 10 sidecars)</span>
-            </div>
-            <div className="az-core-grid">
-              <Card color="go" title="API Backend (Go / Cloud Run)" items={[
-                'Upload orchestration (sessions, chunked PUT)',
-                'Study / project / institution management',
-                'Routing rules engine → auto-pipeline dispatch',
-                'DICOMweb proxy (QIDO-RS + WADO-RS)',
-                'Export shares: token-auth, ZIP download',
-                'Email digest scheduler + SMTP relay',
-                'DIMSE retry control proxy',
-                'MCP tool backend + batch import CLI',
-                'distroless image — minimal CVE surface',
-              ]} />
-              <Card color="cyan" title="Admin Dashboard + Weasis DWV (React)" items={[
-                'Behind Identity-Aware Proxy (IAP)',
-                'Study browser: filter, search, paginate, bulk ops',
-                'Weasis DWV — yoked before/after defacing review',
-                '7-stage pipeline visualization per study',
-                'RBAC: admin (write) + viewer (read-only)',
-                'Routing rules, institutions, anon profiles',
-                'Protocol templates, API keys, webhooks',
-                'Audit log + CSV export, share management',
-                'Federation peers, project lifecycle',
-              ]} />
-              <div className="az-infra-stack">
-                <Card color="amber" title="Cloud SQL (PostgreSQL 15)" items={[
-                  'Studies, projects, institutions, admin users',
-                  'Routing rules, audit trail, export shares',
-                  'Private IP · Secret Manager credentials',
-                  'Point-in-time recovery (7-day retention)',
+          <TabZone className="az-z-gcp" title="GCP Project" sub="aegis-prod-488120 · us-central1 · Live, February 2026" tabs={[
+            { label: 'Core', content: <>
+              <div className="az-lb-bar">
+                <strong>Cloud Armor (DDoS / WAF)</strong>
+                <span>+ Global HTTPS Load Balancer</span>
+                <span>+ Identity-Aware Proxy (admin routes)</span>
+                <span>+ Managed SSL cert v3</span>
+                <span>+ Cloud Run (API · Dashboard · Landing · 10 sidecars)</span>
+              </div>
+              <div className="az-core-grid">
+                <Card color="go" title="API Backend (Go / Cloud Run)" items={[
+                  'Upload orchestration (sessions, chunked PUT)',
+                  'Study / project / institution management',
+                  'Routing rules engine → auto-pipeline dispatch',
+                  'DICOMweb proxy (QIDO-RS + WADO-RS)',
+                  'Export shares: token-auth, ZIP download',
+                  'Email digest scheduler + SMTP relay',
+                  'DIMSE retry control proxy',
+                  'MCP tool backend + batch import CLI',
+                  'distroless image — minimal CVE surface',
                 ]} />
-                <Card color="gcp-blue" title="Cloud Storage (GCS)" items={[
-                  'dicom/raw/{uid}/ — tag-de-identified',
-                  'dicom/clean/{uid}/ — defaced + processed',
-                  'bids/{uid}/ — NIfTI / BIDS output',
-                  'analytics/{uid}/ — segmentation + metrics',
-                  'Shared volume (Go API + all 10 sidecars)',
+                <Card color="cyan" title="Admin Dashboard + Weasis DWV (React)" items={[
+                  'Behind Identity-Aware Proxy (IAP)',
+                  'Study browser: filter, search, paginate, bulk ops',
+                  'Weasis DWV — yoked before/after defacing review',
+                  '7-stage pipeline visualization per study',
+                  'RBAC: admin (write) + viewer (read-only)',
+                  'Routing rules, institutions, anon profiles',
+                  'Protocol templates, API keys, webhooks',
+                  'Audit log + CSV export, share management',
+                  'Federation peers, project lifecycle',
+                ]} />
+                <div className="az-infra-stack">
+                  <Card color="amber" title="Cloud SQL (PostgreSQL 15)" items={[
+                    'Studies, projects, institutions, admin users',
+                    'Routing rules, audit trail, export shares',
+                    'Private IP · Secret Manager credentials',
+                    'Point-in-time recovery (7-day retention)',
+                  ]} />
+                  <Card color="gcp-blue" title="Cloud Storage (GCS)" items={[
+                    'dicom/raw/{uid}/ — tag-de-identified',
+                    'dicom/clean/{uid}/ — defaced + processed',
+                    'bids/{uid}/ — NIfTI / BIDS output',
+                    'analytics/{uid}/ — segmentation + metrics',
+                    'Shared volume (Go API + all 10 sidecars)',
+                  ]} />
+                </div>
+              </div>
+            </> },
+            { label: 'Sidecars', content: <>
+              <div className="az-sidecar-label">Processing Sidecars (Python / Cloud Run) — 9 services dispatched async by Go API</div>
+              <div className="az-g5">
+                <Card color="python" title="Defacing" items={['Head MRI / PET / CT facial removal', 'mri_reface / DeepDefacer / mri_deface', 'nibabel fallback for dev', 'Writes to clean/ store', 'SSIM-based QA score']} />
+                <Card color="python" title="PHI Detection" items={['Burned-in text OCR on pixels', 'Gemini / Vision / Azure / Textract / Tesseract', 'Pixel redaction — detect + mask', 'LLM text scrubbing', 'Per-project confidence config']} />
+                <Card color="python" title="QC Automation" items={['File integrity + DICOM tag check', 'Slice consistency', 'SNR estimation', 'Coverage completeness', 'Missing slice detection']} />
+                <Card color="python" title="Classification" items={['Fills modality + body_part', 'Heuristic: tags → SOP UID → description', 'Cloud AI fallback', 'Re-evaluates routing rules', 'Confidence threshold gating']} />
+                <Card color="python" title="BIDS Conversion" items={['DICOM → NIfTI via dcm2niix', 'BIDS-compliant directory structure', 'sub-{hash8}/anat | func | dwi | perf', 'JSON sidecar metadata', 'UID-hashed subject labels']} />
+              </div>
+              <div className="az-g4">
+                <Card color="python" title="Protocol Check" items={['Verifies TR / TE / flip / thickness', 'Classic + Enhanced DICOM', 'Per-project protocol templates', 'numeric / exact / range match', 'critical / warning / info severity']} />
+                <Card color="python" title="Analytics — 18 Backends" items={['Brain: FreeSurfer · SynthSeg · BrainSuite · volBrain', 'Spine: TotalSpineSeg · SPINEPS', 'Whole-body: TotalSegmentator · nnU-Net · MedSAM2', 'Specialized: PETSurfer · QSM · BASIL · FSL · ANTs', 'Longitudinal: TBM-SyN + FreeSurfer Long']} />
+                <Card color="python" title="SCT — Spinal Cord Toolbox" items={['Spinal cord segmentation', 'Vertebral labeling', 'CSA per vertebral level', 'Compression metrics: aMCC, aSCOR', 'DTI mapping: FA, MD, AD, RD']} />
+                <Card color="python" title="Synth MRI" items={['Synthetic brain MRI generation', 'CPU: Shepp-Logan phantom', 'GPU: MONAI BraTS LDM', 'T1w contrast, Rician noise', 'Seeded + reproducible']} />
+              </div>
+            </> },
+            { label: 'Security & Export', content: <>
+              <div className="az-g4">
+                <InfoBox color="orange" bg="rose" title="Security Layers" sections={[{ items: [
+                  'VPC private subnets + Cloud NAT', 'Cloud Armor DDoS / WAF', 'TLS 1.2+ on all endpoints',
+                  'CMEK (Cloud KMS)', 'IAM least privilege', 'Secret Manager (DB creds, API keys)',
+                  'distroless containers', 'IAP on all admin routes', 'No PHI in email / audit entries',
+                ]}]} />
+                <InfoBox color="teal2" bg="mint" title="Export & Sharing" sections={[
+                  { heading: 'Export Portal (React)', items: ['Token-authenticated share links', 'Study info, expiry countdown', 'ZIP download of approved DICOM'] },
+                  { heading: 'DICOM Forwarding', items: ['DICOMweb STOW-RS destinations', 'DIMSE C-STORE to remote AE Title', 'Cross-cloud: GCP↔AWS STOW-RS live'] },
+                  { heading: 'Share Lifecycle', items: ['Extend / revoke anytime', 'Immutable download log', 'Export analytics dashboard'] },
+                ]} />
+                <InfoBox color="purple" bg="lavender" title="MCP Server + AI Agent Tools" sections={[
+                  { heading: 'Model Context Protocol', items: ['96 read tools: studies, audit, stats, routing', '95 write tools (confirm + reason required)', 'Zod-validated schemas'] },
+                  { heading: 'Agent Orchestrator', items: ['DICOM tag provenance analysis', 'Diagnostic tools for study triage', 'Cohort report, pipeline funnel'] },
+                  { heading: 'Batch Import + Webhooks', items: ['aegis-import CLI — bulk migration', '5 webhook events, HMAC-SHA256 signed', 'Machine-to-machine bearer tokens'] },
+                ]} />
+                <Card color="react" title="Landing Page (nginx / Cloud Run)" items={[
+                  'aegisimaging.ai — public marketing site', 'React + Vite, served by nginx',
+                  'Interactive DICOM demo widget', 'Schedule Demo / Contact form',
+                  'LB default backend — no IAP required', 'www + apex domains on SSL cert v3',
                 ]} />
               </div>
-            </div>
-            <div className="az-sidecar-label">Processing Sidecars (Python / Cloud Run) — 9 services dispatched async by Go API</div>
-            <div className="az-g5">
-              <Card color="python" title="Defacing" items={['Head MRI / PET / CT facial removal', 'mri_reface / DeepDefacer / mri_deface', 'nibabel fallback for dev', 'Writes to clean/ store', 'SSIM-based QA score']} />
-              <Card color="python" title="PHI Detection" items={['Burned-in text OCR on pixels', 'Gemini / Vision / Azure / Textract / Tesseract', 'Pixel redaction — detect + mask', 'LLM text scrubbing', 'Per-project confidence config']} />
-              <Card color="python" title="QC Automation" items={['File integrity + DICOM tag check', 'Slice consistency', 'SNR estimation', 'Coverage completeness', 'Missing slice detection']} />
-              <Card color="python" title="Classification" items={['Fills modality + body_part', 'Heuristic: tags → SOP UID → description', 'Cloud AI fallback', 'Re-evaluates routing rules', 'Confidence threshold gating']} />
-              <Card color="python" title="BIDS Conversion" items={['DICOM → NIfTI via dcm2niix', 'BIDS-compliant directory structure', 'sub-{hash8}/anat | func | dwi | perf', 'JSON sidecar metadata', 'UID-hashed subject labels']} />
-            </div>
-            <div className="az-g4">
-              <Card color="python" title="Protocol Check" items={['Verifies TR / TE / flip / thickness', 'Classic + Enhanced DICOM', 'Per-project protocol templates', 'numeric / exact / range match', 'critical / warning / info severity']} />
-              <Card color="python" title="Analytics — 18 Backends" items={['Brain: FreeSurfer · SynthSeg · BrainSuite · volBrain', 'Spine: TotalSpineSeg · SPINEPS', 'Whole-body: TotalSegmentator · nnU-Net · MedSAM2', 'Specialized: PETSurfer · QSM · BASIL · FSL · ANTs', 'Longitudinal: TBM-SyN + FreeSurfer Long']} />
-              <Card color="python" title="SCT — Spinal Cord Toolbox" items={['Spinal cord segmentation', 'Vertebral labeling', 'CSA per vertebral level', 'Compression metrics: aMCC, aSCOR', 'DTI mapping: FA, MD, AD, RD']} />
-              <Card color="python" title="Synth MRI" items={['Synthetic brain MRI generation', 'CPU: Shepp-Logan phantom', 'GPU: MONAI BraTS LDM', 'T1w contrast, Rician noise', 'Seeded + reproducible']} />
-            </div>
-            <div className="az-g4">
-              <InfoBox color="orange" bg="rose" title="Security Layers" sections={[{ items: [
-                'VPC private subnets + Cloud NAT', 'Cloud Armor DDoS / WAF', 'TLS 1.2+ on all endpoints',
-                'CMEK (Cloud KMS)', 'IAM least privilege', 'Secret Manager (DB creds, API keys)',
-                'distroless containers', 'IAP on all admin routes', 'No PHI in email / audit entries',
-              ]}]} />
-              <InfoBox color="teal2" bg="mint" title="Export & Sharing" sections={[
-                { heading: 'Export Portal (React)', items: ['Token-authenticated share links', 'Study info, expiry countdown', 'ZIP download of approved DICOM'] },
-                { heading: 'DICOM Forwarding', items: ['DICOMweb STOW-RS destinations', 'DIMSE C-STORE to remote AE Title', 'Cross-cloud: GCP↔AWS STOW-RS live'] },
-                { heading: 'Share Lifecycle', items: ['Extend / revoke anytime', 'Immutable download log', 'Export analytics dashboard'] },
-              ]} />
-              <InfoBox color="purple" bg="lavender" title="MCP Server + AI Agent Tools" sections={[
-                { heading: 'Model Context Protocol', items: ['96 read tools: studies, audit, stats, routing', '95 write tools (confirm + reason required)', 'Zod-validated schemas'] },
-                { heading: 'Agent Orchestrator', items: ['DICOM tag provenance analysis', 'Diagnostic tools for study triage', 'Cohort report, pipeline funnel'] },
-                { heading: 'Batch Import + Webhooks', items: ['aegis-import CLI — bulk migration', '5 webhook events, HMAC-SHA256 signed', 'Machine-to-machine bearer tokens'] },
-              ]} />
-              <Card color="react" title="Landing Page (nginx / Cloud Run)" items={[
-                'aegisimaging.ai — public marketing site', 'React + Vite, served by nginx',
-                'Interactive DICOM demo widget', 'Schedule Demo / Contact form',
-                'LB default backend — no IAP required', 'www + apex domains on SSL cert v3',
-              ]} />
-            </div>
-          </Zone>
+            </> },
+          ]} />
 
-          {/* AWS ACCOUNT */}
-          <Zone className="az-z-aws" title="AWS Account" sub="us-east-1 · Live — aws.api.aegisimaging.ai · Cross-cloud routing verified">
-            <div className="az-g3">
-              <Card color="orange" title="ALB + Cognito (Auth Layer)" items={[
-                'HTTPS listener on ACM certificate', 'Cognito hosted UI — admin-create-only',
-                'authenticate-cognito default action', 'Public bypass rules: /healthz, upload, export',
-              ]} />
-              <Card color="go" title="API + Admin (ECS Fargate)" items={[
-                'Go API — same image as GCP (1 vCPU / 2 GB)', 'Admin Dashboard — React / nginx',
-                'Service discovery: api.aegis.local', 'Force-new-deployment via GitHub Actions',
-              ]} />
-              <Card color="python" title="9 Python Sidecars (ECS Fargate)" items={[
-                'defacing · phi-detection · qc-service', 'bids · classification · protocol',
-                'synth · analytics · sct', 'Cloud Map private DNS: svc.aegis.local:8080',
-              ]} />
+          {/* MULTI-CLOUD PARITY */}
+          <Zone className="az-z-aws" title="Multi-Cloud Parity" sub="Same Go API, same 9 Python sidecars, same Docker images — only the cloud-native primitives change">
+            <div className="az-parity-note">All three clouds run identical application code. The table below shows only what differs per cloud.</div>
+            <div className="az-parity-table">
+              <div className="az-parity-hdr">
+                <span></span><span className="az-parity-cloud az-parity-cloud--gcp">GCP</span><span className="az-parity-cloud az-parity-cloud--aws">AWS</span><span className="az-parity-cloud az-parity-cloud--azure">Azure</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">Compute</span><span>Cloud Run</span><span>ECS Fargate</span><span>Container Apps</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">Database</span><span>Cloud SQL</span><span>RDS</span><span>PostgreSQL Flex</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">Storage</span><span>GCS</span><span>S3</span><span>Azure Blob</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">Auth</span><span>IAP</span><span>ALB + Cognito</span><span>Easy Auth (AD)</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">WAF / DDoS</span><span>Cloud Armor</span><span>ALB WAF</span><span>NSG rules</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">Secrets</span><span>Secret Manager</span><span>Secrets Manager</span><span>Managed Identity</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">Encryption</span><span>Cloud KMS (CMEK)</span><span>KMS (S3+RDS)</span><span>Key Vault</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">DIMSE VM</span><span>GCE (e2-small)</span><span>EC2 (t3.small)</span><span>Azure VM (B2s)</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">CI/CD</span><span>Cloud Build</span><span>GitHub Actions</span><span>GitHub Actions (OIDC)</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">Registry</span><span>Artifact Registry</span><span>ECR</span><span>ACR</span>
+              </div>
+              <div className="az-parity-row">
+                <span className="az-parity-label">Status</span><span>Live</span><span>Live</span><span>Live</span>
+              </div>
             </div>
-            <div className="az-g3">
-              <Card color="amber" title="RDS + S3 (Data Layer)" items={[
-                'RDS PostgreSQL 15 — private subnet', 'Secrets Manager — master credentials',
-                'S3 DICOM bucket — versioned, KMS-encrypted', 'Same STORAGE_MODE=s3 (same Go code)',
-              ]} />
-              <Card color="python" title="DIMSE EC2 (t3.small)" items={[
-                'Elastic IP — stable for PACS registration', 'Amazon Linux 2023 — Docker + SSM',
-                'SSM Parameter Store → image URI on boot', 'GitHub Actions: write SSM + reboot',
-              ]} />
-              <Card color="gray" title="GitHub Actions CI/CD" items={[
-                'Triggers on push to develop', 'Matrix build: 11 services, linux/amd64',
-                'Push SHA + latest tag to 13 ECR repos', 'Force-new-deployment for 10 ECS services',
-              ]} />
-            </div>
-          </Zone>
-
-          {/* AZURE SUBSCRIPTION */}
-          <Zone className="az-z-azure" title="Azure Subscription" sub="Container Apps · PostgreSQL Flex · Azure Blob · GitHub Actions OIDC">
-            <div className="az-g3">
-              <Card color="azure" title="Azure Container Registry + Easy Auth" items={[
-                'ACR — private registry, OIDC push', 'Easy Auth on Container Apps',
-                'AUTH_PROVIDER=azure, AUTH_ENABLED=true', 'Federated OIDC — no long-lived credentials',
-              ]} />
-              <Card color="go" title="API + Admin (Container Apps)" items={[
-                'Go API — same image as GCP/AWS', 'Admin Dashboard — React / nginx Container App',
-                'Azure Communication Services SMTP relay', 'Force-new-revision via GitHub Actions',
-              ]} />
-              <Card color="python" title="9 Python Sidecars (Container Apps)" items={[
-                'defacing · phi-detection · qc-service', 'bids · classification · protocol',
-                'synth · analytics · sct', 'Internal ingress only — same Docker images',
-              ]} />
-            </div>
-            <div className="az-g3">
-              <Card color="amber" title="PostgreSQL Flex + Azure Blob" items={[
-                'Azure Database for PostgreSQL Flexible', 'Azure Blob Storage — STORAGE_MODE=azure',
-                'DefaultAzureCredential / Managed Identity', 'SAS tokens via user-delegation key',
-              ]} />
-              <Card color="python" title="DIMSE Azure VM (Standard_B2s)" items={[
-                'Debian 12 — Docker + VM Extensions', 'Static public IP — TCP 11112 for PACS',
-                'GitHub Actions: az vm run-command', 'Same pynetdicom C-STORE SCP as GCP/AWS',
-              ]} />
-              <Card color="gray" title="GitHub Actions CI/CD (OIDC)" items={[
-                'Triggers on push to develop', 'Federated OIDC — no stored credentials',
-                'Build 13 images → push ACR → update', 'deploy-dimse job: az vm run-command',
-              ]} />
+            <div className="az-cross-cloud">
+              <div className="az-cross-cloud-title">Cross-Cloud Connectivity</div>
+              <div className="az-cross-cloud-desc">Cloud instances can route, replicate, and share studies between each other.</div>
+              <div className="az-cross-cloud-paths">
+                <div className="az-cross-cloud-path">
+                  <span className="az-cross-cloud-badge az-cross-cloud-badge--gcp">GCP</span>
+                  <span className="az-cross-cloud-arrow">&harr;</span>
+                  <span className="az-cross-cloud-badge az-cross-cloud-badge--aws">AWS</span>
+                  <span className="az-cross-cloud-method">STOW-RS + DIMSE C-STORE</span>
+                </div>
+                <div className="az-cross-cloud-path">
+                  <span className="az-cross-cloud-badge az-cross-cloud-badge--gcp">GCP</span>
+                  <span className="az-cross-cloud-arrow">&harr;</span>
+                  <span className="az-cross-cloud-badge az-cross-cloud-badge--azure">Azure</span>
+                  <span className="az-cross-cloud-method">STOW-RS + DIMSE C-STORE</span>
+                </div>
+                <div className="az-cross-cloud-path">
+                  <span className="az-cross-cloud-badge az-cross-cloud-badge--aws">AWS</span>
+                  <span className="az-cross-cloud-arrow">&harr;</span>
+                  <span className="az-cross-cloud-badge az-cross-cloud-badge--azure">Azure</span>
+                  <span className="az-cross-cloud-method">STOW-RS + DIMSE C-STORE</span>
+                </div>
+              </div>
+              <ul className="az-cross-cloud-list">
+                <li>Routing rules forward approved studies to any cloud destination</li>
+                <li>DICOMweb STOW-RS for HTTP-based transfer, DIMSE C-STORE for legacy PACS</li>
+                <li>Federation peers registry for multi-tenant replication</li>
+              </ul>
             </div>
           </Zone>
 
