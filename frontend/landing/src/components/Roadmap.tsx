@@ -3,8 +3,8 @@ import { useScrollAnimation } from '../hooks/useScrollAnimation'
 const MOMENTUM = [
   { value: '7',     label: 'days to production' },
   { value: '1,300+', label: 'git commits' },
-  { value: '115+',  label: 'MCP tools' },
-  { value: '900+',  label: 'automated tests' },
+  { value: '191',   label: 'MCP tools' },
+  { value: '2,100+', label: 'automated tests' },
 ]
 
 type MilestoneStatus = 'done' | 'active' | 'planned'
@@ -28,7 +28,7 @@ const MILESTONES: Milestone[] = [
       'Full HIPAA pipeline: tag de-identification, defacing, PHI scan, pixel redaction, QC, BIDS, protocol compliance, analytics',
       'Terraform IaC + Cloud Build CI/CD — every merge to develop auto-deploys all services across 3 clouds',
       'Admin dashboard with Weasis DWV viewer, RBAC, audit trail, routing rules engine, clinical trial access control',
-      'AI-native operations: MCP server with 115+ typed tools (50 read, 65 write), agent orchestrator with DICOM diagnostics',
+      'AI-native operations: MCP server with 191 typed tools (96 read, 95 write), agent orchestrator with DICOM diagnostics',
     ],
     tags: [
       { label: '✓ Live', style: 'done' },
