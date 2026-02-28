@@ -1,8 +1,8 @@
 # DICOM Conformance Statement
 
 **Application**: Anonymization & Exchange Gateway for Imaging Studies (AEGIS)
-**Version**: 1.1
-**Date**: 2026-02-25
+**Version**: 1.2
+**Date**: 2026-02-27
 **Standard**: DICOM PS3 (2024c)
 
 ---
@@ -71,6 +71,8 @@ The DIMSE Receiver accepts the following transfer syntaxes for all SOP classes:
 | `1.2.840.10008.1.2.4.51` | JPEG Extended (Process 2 & 4) |
 | `1.2.840.10008.1.2.4.57` | JPEG Lossless (Process 14) |
 | `1.2.840.10008.1.2.4.70` | JPEG Lossless SV1 (Process 14, Selection Value 1) |
+| `1.2.840.10008.1.2.4.80` | JPEG-LS Lossless |
+| `1.2.840.10008.1.2.4.81` | JPEG-LS Near-Lossless |
 | `1.2.840.10008.1.2.4.90` | JPEG 2000 Lossless |
 | `1.2.840.10008.1.2.4.91` | JPEG 2000 |
 | `1.2.840.10008.1.2.5` | RLE Lossless |
@@ -249,8 +251,12 @@ AEGIS applies DICOM PS3.15 Annex E — Basic Application Level Confidentiality P
 |------|-------|-----------|
 | Facial feature removal (defacing) | Head/brain MRI, PET, CT | NIST SP 800-188; mri_deface / DeepDefacer backends |
 | Burned-in PHI detection | All modalities | PS3.15 §E.3 — pixel data de-identification |
+| Pixel redaction | All modalities | Detects and masks burned-in PHI text in pixel data |
+| Vendor private tag PHI scanning | All modalities | Scans private tags for embedded PHI before preservation |
 
 **Per-project retained tag overrides**: Administrators may configure named anonymization profiles that preserve specific DICOM tags (e.g., `StudyDate`, `PatientAge`) for research projects that require them under a Data Use Agreement.
+
+**Vendor private tag preservation**: When `keep_private_tags` is enabled on an anonymization profile, vendor-specific private tags (odd-group tags) are retained instead of being removed by the Basic Profile. A dedicated PHI scanning service inspects private tag values for embedded patient identifiers before preservation.
 
 ---
 
@@ -271,7 +277,9 @@ AEGIS applies DICOM PS3.15 Annex E — Basic Application Level Confidentiality P
 | C-GET | Not implemented. |
 | WADO-RS multipart/related bulk retrieve | Not implemented. Instances are retrieved one at a time. |
 | QIDO-RS tag-level filtering | Not implemented in the proxy. Use the AEGIS REST API for study-level filtering. |
-| Enhanced DICOM (multi-frame) | Accepted and stored as-is. Protocol compliance service reads Enhanced DICOM functional groups; viewer support depends on the Weasis DWV version deployed. |
+| Enhanced DICOM (multi-frame) | Fully supported. Protocol compliance reads Enhanced functional groups (`SharedFunctionalGroupsSequence`, `PerFrameFunctionalGroupsSequence`). Pixel processing services (PHI detection, QC, pixel redaction) handle multi-frame arrays `(frames, rows, cols)`. |
+| Siemens Mosaic DICOM | Detected via `ImageType` tag containing `MOSAIC`. Handled correctly during BIDS conversion — dcm2niix unwraps mosaic tiles into individual slices. Pixel processing operates on the mosaic tile as-is. |
+| Compressed DICOM pixel processing | Pixel processing services (PHI detection, QC, pixel redaction) transparently decompress compressed DICOM via python-gdcm and pylibjpeg backends. Supported compressed formats: JPEG Baseline, JPEG Lossless, JPEG 2000, JPEG-LS, and RLE. No manual decompression step is required. |
 | Study-level merging | Multiple associations for the same StudyInstanceUID are addended to the existing study record. |
 | Large series (>10,000 instances) | Not performance-tested. File count is stored but no chunked-retrieval pagination is implemented on the WADO-RS endpoint. |
 | TLS on DIMSE port | Not natively supported. Deploy behind a TLS proxy (stunnel, Nginx stream) for encrypted PACS communication. |

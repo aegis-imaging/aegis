@@ -44,6 +44,7 @@ aegis/
 ├── terraform/project/    # GCP project bootstrap (IAM, KMS, VPC-SC)
 ├── terraform/infra/      # GCP infrastructure (Cloud Run, Healthcare API, Cloud Armor)
 ├── terraform/aws/        # AWS infrastructure (ECS Fargate, S3, RDS, ALB)
+├── terraform/azure/      # Azure infrastructure (Container Apps, PostgreSQL Flexible, Blob, ACR)
 ├── api/                  # Go backend — upload orchestration, DICOMweb proxy
 ├── frontend/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
@@ -52,12 +53,15 @@ aegis/
 │   └── landing/          # React — public landing page (aegisimaging.ai)
 ├── client/               # TypeScript DICOM anonymization library (npm package)
 ├── defacing/             # Python defacing service (DeepDefacer, mri_deface, dcm2niix)
-├── phi-detection/        # Python burned-in PHI detection service (Tesseract / Cloud Vision / Textract)
+├── phi-detection/        # Python burned-in PHI detection + pixel redaction service
 ├── qc-service/           # Python QC automation service (pydicom + numpy)
 ├── bids-service/            # Python NIfTI/BIDS conversion service (dcm2niix)
 ├── classification-service/  # Python metadata classification service (heuristic / Cloud Vision / Rekognition)
 ├── protocol-service/        # Python MRI protocol compliance service (pydicom)
+├── synth-service/           # Python synthetic DICOM brain MRI generator (nibabel + NumPy)
+├── analytics-service/       # Python neuroimaging analytics (FreeSurfer, FSL, ANTs, SPM)
 ├── dimse-receiver/          # Python DIMSE adapter (pynetdicom C-STORE SCP + ingest trigger)
+├── mcp-server/              # TypeScript MCP server for AI agent operations
 └── docs/                    # Shared research, references, and analysis (see docs/README.md)
 ```
 
@@ -73,9 +77,10 @@ Planned to split into 5 separate repos once interfaces stabilize:
 - **DICOM Networking**: DIMSE receiver sidecar (pynetdicom C-STORE SCP on port 11112)
 - **Defacing**: Python — mri_deface, dcm2niix, pydicom
 - **Viewer**: Weasis DWV (embedded in admin dashboard)
-- **AI/ML**: Pluggable — local backends (Tesseract OCR, pydicom heuristics) or cloud AI (Google Cloud Vision, AWS Textract/Rekognition)
+- **AI/ML**: Pluggable — local backends (Tesseract OCR, pydicom heuristics) or cloud AI (Gemini, Google Cloud Vision, Azure Vision, AWS Textract/Rekognition)
+- **Analytics**: FreeSurfer, FSL, ANTs, SPM (post-BIDS neuroimaging analysis)
 - **Email**: Standard SMTP (works with any provider). Dev: Mailpit.
-- **Infrastructure**: Terraform (GCP and AWS modules), Docker Compose for local dev
+- **Infrastructure**: Terraform (GCP, AWS, and Azure modules), Docker Compose for local dev
 - **Auth**: Multi-provider — GCP IAP, Azure AD Easy Auth, AWS ALB + Cognito; dev mode auto-auth
 
 ### Multi-Cloud Support
@@ -103,7 +108,7 @@ Azure env vars (only used when `STORAGE_MODE=azure`):
 
 ### Testing (Go)
 
-The Go API has a comprehensive test suite (~120 tests) using `testify` for assertions and `testcontainers-go` for integration tests against real PostgreSQL.
+The Go API has a comprehensive test suite (~137 tests) using `testify` for assertions and `testcontainers-go` for integration tests against real PostgreSQL.
 
 ```bash
 # All tests (requires Docker for testcontainers)
@@ -301,7 +306,7 @@ Public-facing download page for export share recipients. Reads a share token fro
 
 ### Full-Stack Docker Compose
 
-`docker compose up` starts the entire platform: PostgreSQL, Mailpit, Weasis, Go API, and all 7 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
+`docker compose up` starts the entire platform: PostgreSQL, Mailpit, Weasis, Go API, and all 9 Python sidecar services. All services share a named `aegis-data` volume for DICOM file exchange.
 
 ```bash
 docker compose up -d          # start everything (background)
@@ -322,6 +327,8 @@ docker compose down -v        # stop all + destroy volumes
 | bids-service | (internal) | NIfTI/BIDS conversion (dcm2niix) |
 | classification-service | (internal) | Metadata classification |
 | protocol-service | (internal) | MRI protocol compliance |
+| synth-service | (internal) | Synthetic DICOM brain MRI generator |
+| analytics-service | (internal) | Neuroimaging analytics (FreeSurfer, FSL, ANTs, SPM) |
 | dimse-receiver | 11112 (DICOM), 8080 (internal health) | Receives DICOM via C-STORE and calls API ingest |
 
 Most sidecar services have no host port mapping — the Go API reaches them via Docker internal DNS (e.g., `http://defacing:8080`). `dimse-receiver` exposes port `11112` so external PACS systems can send C-STORE directly. The API's `LOCAL_STORAGE_DIR=/app/data` and all sidecars mount the same volume at `/app/data`.
@@ -1002,6 +1009,43 @@ uvicorn app.main:app --port 8088
 size (64/128/256/512), seed (randomisable), with-face toggle, and project selector.
 Result shows study UID, file count, tool, and duration; triggers a study list refresh automatically.
 
+### Analytics Service (`analytics-service/`, `api/handler/analytics.go`)
+
+Runs neuroimaging analysis tools on BIDS-converted NIfTI data. Phase 3 of the pipeline — triggered after BIDS conversion completes. Runs as a separate Python FastAPI service.
+
+**Running locally:**
+```bash
+cd analytics-service
+pip install -r requirements.txt
+uvicorn app.main:app --port 8089
+# Then set ANALYTICS_SERVICE_URL=http://localhost:8089 when running the Go API
+```
+
+**Env vars:**
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `ANALYTICS_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
+| `ANALYTICS_TOOL` | `auto` | Backend selection: `auto`, `freesurfer`, `fsl`, `ants`, `spm` |
+
+**Study fields:**
+- `analytics_required` — boolean flag, set by routing rule action
+- `analytics_status` — `''` (not required), `pending`, `running`, `complete`, `failed`
+
+**API:**
+- `POST /api/studies/{studyUID}/run-analytics` — trigger analytics (returns 202 Accepted, runs async)
+
+**Supported tools:**
+
+| Tool | Binary | What it does |
+|------|--------|-------------|
+| FreeSurfer | `recon-all` | Cortical reconstruction and volumetric segmentation |
+| FSL | `bet`, `fast`, `flirt`, `dtifit` | Brain extraction, tissue segmentation, registration, DTI fitting |
+| ANTs | `antsCorticalThickness.sh` | Cortical thickness analysis |
+| SPM | MATLAB/Octave | Segmentation, DARTEL spatial normalization |
+
+**Auto-selection priority:** freesurfer > fsl > ants > spm (first available wins)
+
 ### DIMSE Receiver Service (`dimse-receiver/`)
 
 Receives studies from PACS systems over DICOM network protocol (DIMSE C-STORE SCP). On each C-STORE it writes files to `dicom/raw/{studyUID}/{index}.dcm` in shared storage. When the DICOM association closes (`EVT_RELEASED`), it calls `POST /api/ingest` so the normal AEGIS routing + pipeline flow starts. The ingest payload includes `institution_ae_title` (calling AE title) for institution auto-attribution; `institution_id` or `institution_slug` can also be set explicitly.
@@ -1143,19 +1187,22 @@ After routing rules evaluate (upload complete, internal ingest, batch import), t
 | `PIPELINE_AUTO` | `true` | Set to `"false"` to disable auto-dispatch (manual-only mode) |
 | `PIPELINE_ALERT_EMAIL` | *(empty — disabled)* | Email address that receives an alert when any pipeline step fails; requires `SMTP_HOST` to be set |
 
-**Dependency graph (3 phases):**
+**Dependency graph (4 phases):**
 
 ```
 Phase 0: Classification (blocks — fills modality/body_part, re-evaluates routing)
     ↓
-Phase 1: PHI scan + Protocol check + Defacing (parallel, raw files)
+Phase 1: PHI scan + Pixel Redaction + Protocol check + Defacing (parallel, raw files)
     ↓
 Phase 2: QC check + BIDS conversion (after defacing, final files)
+    ↓
+Phase 3: Analytics (FreeSurfer, FSL, ANTs, SPM — post-BIDS, on NIfTI outputs)
 ```
 
 - **Phase 0**: Classification must complete first — it fills `modality`/`body_part` from DICOM headers, then re-evaluates routing rules which may add new requirements (e.g. `require_defacing` for HEAD studies)
-- **Phase 1**: PHI scan, protocol check, and defacing run in parallel on raw files. Each service is dispatched only if its URL is configured.
+- **Phase 1**: PHI scan, pixel redaction, protocol check, and defacing run in parallel on raw files. Each service is dispatched only if its URL is configured.
 - **Phase 2**: QC and BIDS run after defacing completes (if defacing is required). They operate on the final `dicom_store` (clean after defacing, raw otherwise).
+- **Phase 3**: Analytics runs after BIDS conversion completes. Neuroimaging analysis tools (FreeSurfer, FSL, ANTs, SPM) operate on the BIDS-converted NIfTI outputs.
 
 **How it works:**
 - `AdvancePipeline(ctx, studyID)` is called after routing rules evaluate and after each service completes
@@ -2007,6 +2054,7 @@ Two triggers are active in Cloud Build (configured by `scripts/gcp_setup_cloudbu
 | `classification-service` | `classification-service/` |
 | `protocol-service` | `protocol-service/` |
 | `synth-service` | `synth-service/` |
+| `analytics-service` | `analytics-service/` |
 | `aegis-mcp-server` | `mcp-server/` |
 | `aegis-prod-dimse-receiver` (GCE VM) | `dimse-receiver/` — see note below |
 
@@ -2039,11 +2087,11 @@ Monitor builds: `gcloud builds list --project=aegis-prod-488120 --limit=5`
 | Job | What it checks |
 |-----|---------------|
 | `go` | `go build ./...` + `go vet ./...` |
-| `go-test` | `go test -race -v -count=1 ./...` (~120 tests) |
+| `go-test` | `go test -race -v -count=1 ./...` (~137 tests) |
 | `infra-guard` | `scripts/check-infra-placeholders.sh` blocks known credential placeholders in Terraform |
 | `python` (7× matrix) | `py_compile` on all `.py` files per service |
 | `python-scripts` | `py_compile` on smoke/DIMSE harness scripts in `scripts/` |
-| `python-test` (7× matrix) | `pytest -v --tb=short` per service (~206 tests total) |
+| `python-test` (9× matrix) | `pytest -v --tb=short` per service (~617 tests total) |
 | `frontend` (5× matrix) | `npx tsc --noEmit` (client, upload-portal, admin-dashboard, export-portal, landing) |
 | `docker` (8× matrix) | `docker build` for all service images |
 
@@ -2067,8 +2115,10 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | protocol-service | 29 | Classic + Enhanced DICOM extraction, 4 match types (numeric/exact/contains_all/range), severity aggregation |
 | qc-service | 28 | 5 QC checks (file integrity, slice consistency, SNR, coverage, missing slices), controlled pixel arrays |
 | defacing | 26 | Pipeline (group_by_series, should_deface_series, run_pipeline), nibabel backend, AP axis detection |
-| phi-detection | 47 | Windowing, uint8 normalization, mock Tesseract OCR, Cloud Vision/Azure Vision/Textract OCR, pixel_utils, multi-file detection |
+| phi-detection | 134 | Windowing, uint8 normalization, mock Tesseract OCR, Cloud Vision/Azure Vision/Textract OCR, pixel_utils, multi-file detection, pixel redaction, LLM text scrubbing, private tag PHI scanning |
 | bids-service | 17 | Series classification (T1w/FLAIR/bold/DWI/ASL/PET/CT), subject label hashing, mock dcm2niix |
+| synth-service | 12 | Synthetic brain MRI generation, DICOM metadata, nibabel phantom pipeline |
+| analytics-service | 18 | FreeSurfer/FSL/ANTs/SPM backend selection, tool availability detection, endpoint tests |
 
 All tests use **synthetic DICOM files** generated via pydicom — no test data on disk. External tools (tesseract, dcm2niix, mri_deface) are mocked.
 

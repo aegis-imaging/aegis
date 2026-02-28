@@ -9,10 +9,11 @@ const PHASE_1_STEPS = [
 ]
 
 const PHASE_2_STEPS = [
-  'OCR scan for burned-in pixel PHI',
+  'OCR scan for burned-in pixel PHI + pixel redaction',
   'Automated defacing for head imaging',
   'Acquisition protocol compliance check',
   'Quality control and BIDS conversion',
+  'Neuroimaging analytics (FreeSurfer, FSL, ANTs, SPM)',
   'Administrator review and approval',
 ]
 
