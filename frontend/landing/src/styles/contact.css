@@ -25,28 +25,28 @@
   gap: var(--space-2);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
-  color: var(--color-gray-700);
+  color: var(--text-secondary);
 }
 
 .contact__input {
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-gray-200);
+  border: 1px solid var(--input-border);
   border-radius: var(--radius-md);
   font-size: var(--text-base);
   font-family: var(--font-sans);
-  color: var(--color-gray-900);
-  background: var(--color-white);
+  color: var(--input-text);
+  background: var(--input-bg);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .contact__input:focus {
   outline: none;
   border-color: var(--color-blue-500);
-  box-shadow: 0 0 0 3px var(--color-blue-100);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .contact__input::placeholder {
-  color: var(--color-gray-400);
+  color: var(--input-placeholder);
 }
 
 .contact__textarea {
@@ -73,7 +73,7 @@
   text-align: center;
   margin-top: var(--space-6);
   font-size: var(--text-sm);
-  color: var(--color-gray-400);
+  color: var(--text-faint);
 }
 
 .contact__direct a {
