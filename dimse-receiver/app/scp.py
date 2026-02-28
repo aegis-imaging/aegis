@@ -82,6 +82,7 @@ def handle_store(event: Any) -> int:
     modality = str(getattr(ds, "Modality", ""))
     body_part = str(getattr(ds, "BodyPartExamined", ""))
     study_desc = str(getattr(ds, "StudyDescription", ""))
+    study_date = str(getattr(ds, "StudyDate", ""))
     series_uid = str(getattr(ds, "SeriesInstanceUID", ""))
     calling_ae = str(getattr(event.assoc.requestor, "ae_title", ""))
 
@@ -109,6 +110,7 @@ def handle_store(event: Any) -> int:
                 modality=modality,
                 body_part=body_part,
                 study_description=study_desc,
+                study_date=study_date,
                 calling_ae_title=calling_ae,
             )
         acc = studies[study_uid]

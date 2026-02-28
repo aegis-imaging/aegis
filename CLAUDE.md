@@ -386,10 +386,12 @@ Returns a paginated envelope `{ studies, total, limit, offset }`.
 | `label` | Case-insensitive substring match on any `study_labels.label` for the study |
 | `subject_id` | Exact match on `subject_id` field |
 | `flagged` | `true` to return only priority-flagged studies |
-| `sort_by` | Column to sort by: `created_at` (default), `updated_at`, `status`, `modality`, `body_part`, `source`, `instance_count` |
+| `study_date_from` | Filter by `study_date >= value` (DICOM YYYYMMDD format) |
+| `study_date_to` | Filter by `study_date <= value` (DICOM YYYYMMDD format) |
+| `sort_by` | Column to sort by: `created_at` (default), `updated_at`, `status`, `modality`, `body_part`, `source`, `instance_count`, `study_date` |
 | `sort_dir` | Sort direction: `desc` (default) or `asc` |
 
-**Admin dashboard:** Column headers for Modality, Body Part, Source, Status, Files, and Received are clickable to sort ascending/descending. Active sort column shows ▲/▼ indicator; inactive columns show ⇅. Sort preference is persisted to `localStorage` (`aegis_studies_sort`).
+**Admin dashboard:** Column headers for Modality, Body Part, Study Date, Source, Status, Files, and Received are clickable to sort ascending/descending. Active sort column shows ▲/▼ indicator; inactive columns show ⇅. Sort preference is persisted to `localStorage` (`aegis_studies_sort`).
 
 ### Study Detail (`GET /api/studies/{id}`)
 
@@ -1045,6 +1047,29 @@ uvicorn app.main:app --port 8089
 | SPM | MATLAB/Octave | Segmentation, DARTEL spatial normalization |
 
 **Auto-selection priority:** freesurfer > fsl > ants > spm (first available wins)
+
+**Single-study backends:**
+
+| Backend | Binary | What it does |
+|---------|--------|-------------|
+| Atlas ROI | ANTs (`antsRegistrationSyN.sh`) | Atlas-based ROI volumetric labeling (AAL3 atlas, T1w → template registration) |
+
+**Longitudinal analytics** (`POST /api/studies/{studyUID}/longitudinal-analytics`):
+
+Paired analysis comparing a follow-up study against its baseline. Requires BIDS conversion complete on both studies.
+
+Request body: `{"baseline_study_id": "<uuid>", "scan_interval_days": 365}` — `scan_interval_days` is optional when both studies have `study_date` set (auto-computed from DICOM StudyDate).
+
+| Backend | Binary | What it does |
+|---------|--------|-------------|
+| TBM-SyN | ANTs (`antsRegistrationSyN.sh`, `CreateJacobianDeterminantImage`) | Tensor-Based Morphometry with Symmetric Normalization — log-Jacobian determinant maps, annualized atrophy rates, per-ROI statistics, AD-signature composite score |
+| FreeSurfer Long | `recon-all` | FreeSurfer longitudinal stream (`-base` + `-long`) — unbiased template creation, longitudinal cortical thickness, volumetric change tracking |
+
+**TBM-SyN outputs:** `log_jacobian.nii.gz`, `log_jacobian_annualized.nii.gz`, `roi_atrophy.csv`, `ad_composite.json` (31-region AD-signature weighted mean)
+
+**Auto-selection:** Both TBM-SyN and FreeSurfer Long run if available (not mutually exclusive).
+
+**MCP write tool:** `trigger_longitudinal_analytics` — `{study_uid (follow-up DICOM UID), baseline_study_id (UUID), scan_interval_days?, confirm, reason}`
 
 ### DIMSE Receiver Service (`dimse-receiver/`)
 
