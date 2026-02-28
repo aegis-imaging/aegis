@@ -323,16 +323,21 @@ jobs:
             --command-id RunShellScript \
             --scripts "
               set -euo pipefail
+              # Authenticate with VM's user-assigned managed identity
+              az login --identity 2>/dev/null
               ACR_TOKEN=\$(az acr login --name \"$ACR\" --expose-token --output tsv --query accessToken 2>/dev/null)
               docker login \"$ACR\" --username 00000000-0000-0000-0000-000000000000 --password \"\$ACR_TOKEN\"
               docker pull \"$ACR/dimse-receiver:$IMAGE_TAG\"
               # Capture env vars from the running container BEFORE removing it.
               PREV_ENV=\$(docker inspect --format '{{range .Config.Env}}-e {{.}} {{end}}' dimse-receiver 2>/dev/null || echo '')
+              PREV_VOLS=\$(docker inspect --format '{{range .Mounts}}-v {{.Source}}:{{.Destination}} {{end}}' dimse-receiver 2>/dev/null || echo '')
               docker rm -f dimse-receiver 2>/dev/null || true
               docker run -d \
                 --name dimse-receiver \
                 --restart unless-stopped \
                 -p 11112:11112 \
+                -p 8080:8080 \
                 \$PREV_ENV \
+                \$PREV_VOLS \
                 \"$ACR/dimse-receiver:$IMAGE_TAG\"
             "
