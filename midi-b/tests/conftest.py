@@ -86,7 +86,5 @@ def make_dicom_file(tmp_path: Path, ds: Dataset, filename: str = "test.dcm") -> 
     file_meta.MediaStorageSOPInstanceUID = getattr(ds, "SOPInstanceUID", "1.2.3.4")
     file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
     file_ds = FileDataset(str(filepath), ds, file_meta=file_meta, preamble=b"\x00" * 128)
-    file_ds.is_little_endian = True
-    file_ds.is_implicit_VR = False
-    file_ds.save_as(str(filepath), write_like_original=False)
+    file_ds.save_as(str(filepath))
     return filepath

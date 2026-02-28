@@ -1,4 +1,4 @@
-"""Token-level free-text PHI scrubbing (regex backend).
+"""Token-level free-text PHI scrubbing (regex and remote backends).
 
 Ported from ``client/src/dicom/text_scrub.ts`` and
 ``phi-detection/app/backends/text_scrub.py`` (RegexTextScrubBackend).
@@ -6,6 +6,7 @@ Ported from ``client/src/dicom/text_scrub.ts`` and
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 
@@ -181,3 +182,88 @@ def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
         else:
             merged.append((start, end))
     return merged
+
+
+# ---------------------------------------------------------------------------
+# Remote text scrub backend (calls phi-detection /scrub-text endpoint)
+# ---------------------------------------------------------------------------
+
+_remote_log = logging.getLogger(__name__)
+
+
+class RemoteTextScrubBackend:
+    """Text scrubbing backend that delegates to a remote phi-detection service.
+
+    Falls back to the local regex backend if the service call fails.
+    """
+
+    def __init__(self, service_url: str, timeout: float = 10.0):
+        self.service_url = service_url.rstrip("/")
+        self.timeout = timeout
+
+    def scrub(self, value: str, context: ScrubContext | None = None) -> ScrubResult:
+        """Scrub PHI from text using the remote service, with regex fallback."""
+        if not value:
+            return ScrubResult(text="", phi_found=False)
+        try:
+            return self._call_remote(value, context)
+        except Exception as e:
+            _remote_log.warning("Remote scrub failed, falling back to regex: %s", e)
+            return scrub_free_text(value, context)
+
+    def scrub_batch(
+        self, texts: list[str], context: ScrubContext | None = None,
+    ) -> list[ScrubResult]:
+        """Scrub multiple texts in a single HTTP call."""
+        if not texts:
+            return []
+        try:
+            return self._call_remote_batch(texts, context)
+        except Exception as e:
+            _remote_log.warning("Remote batch scrub failed, falling back to regex: %s", e)
+            return [scrub_free_text(t, context) for t in texts]
+
+    def _call_remote(self, value: str, context: ScrubContext | None) -> ScrubResult:
+        results = self._call_remote_batch([value], context)
+        return results[0]
+
+    def _call_remote_batch(
+        self, texts: list[str], context: ScrubContext | None,
+    ) -> list[ScrubResult]:
+        import urllib.request
+        import json
+
+        ctx_dict = None
+        if context:
+            ctx_dict = {}
+            if context.patient_name:
+                ctx_dict["patient_name"] = context.patient_name
+            if context.patient_id:
+                ctx_dict["patient_id"] = context.patient_id
+            if context.referring_physician:
+                ctx_dict["referring_physician"] = context.referring_physician
+            if context.institution_name:
+                ctx_dict["institution_name"] = context.institution_name
+
+        payload = json.dumps({"texts": texts, "context": ctx_dict or None}).encode()
+        req = urllib.request.Request(
+            f"{self.service_url}/scrub-text",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            body = json.loads(resp.read())
+
+        results: list[ScrubResult] = []
+        for item in body.get("results", []):
+            results.append(ScrubResult(
+                text=item.get("scrubbed", ""),
+                phi_found=item.get("phi_found", False),
+            ))
+
+        # Pad with regex fallback if the service returned fewer results
+        while len(results) < len(texts):
+            results.append(scrub_free_text(texts[len(results)]))
+
+        return results
