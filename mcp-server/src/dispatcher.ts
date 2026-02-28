@@ -228,6 +228,7 @@ import {
   handleToggleProjectRestricted,
   handleToggleStudyFlag,
   handleTriggerAnalytics,
+  handleTriggerSct,
   handleTriggerBidsConvert,
   handleTriggerClassification,
   handleTriggerDeface,
@@ -1437,6 +1438,10 @@ export async function executeTool(name: string, args: Record<string, unknown>, r
 
       if (name === "trigger_analytics") {
         return handleTriggerAnalytics(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
+      if (name === "trigger_sct") {
+        return handleTriggerSct(parsed.request_id ?? buildRequestId(), parsed);
       }
 
       if (name === "trigger_export") {

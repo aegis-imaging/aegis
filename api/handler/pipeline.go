@@ -20,7 +20,7 @@ import (
 //	Phase 0: Classification (blocks all other phases — fills modality/body_part)
 //	Phase 1: PHI scan, protocol check, defacing (parallel, raw files)
 //	Phase 2: QC check, BIDS conversion (after defacing completes, final files)
-//	Phase 3: Analytics (after BIDS conversion completes, consumes NIfTI outputs)
+//	Phase 3: Analytics + SCT (after BIDS conversion completes, consumes NIfTI outputs)
 func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 	if !s.cfg.PipelineAuto {
 		return
@@ -75,6 +75,7 @@ func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 		return
 	}
 	s.dispatchAnalytics(ctx, study)
+	s.dispatchSct(ctx, study)
 
 	// Fire study.processing_complete if all required steps are now terminal.
 	s.maybeFireProcessingComplete(ctx, study.ID)
@@ -111,10 +112,12 @@ func (s *Server) maybeFireProcessingComplete(ctx context.Context, studyID string
 		fresh.BidsStatus == "complete" || fresh.BidsStatus == "failed"
 	analyticsOK := !fresh.AnalyticsRequired ||
 		fresh.AnalyticsStatus == "complete" || fresh.AnalyticsStatus == "partial" || fresh.AnalyticsStatus == "failed"
+	sctOK := !fresh.SctRequired ||
+		fresh.SctStatus == "complete" || fresh.SctStatus == "partial" || fresh.SctStatus == "failed"
 	exportOK := !fresh.ExportRequired ||
 		fresh.ExportStatus == "exported" || fresh.ExportStatus == "failed"
 
-	if classOK && phiOK && pixelRedactOK && protocolOK && defacingOK && qcOK && bidsOK && analyticsOK && exportOK {
+	if classOK && phiOK && pixelRedactOK && protocolOK && defacingOK && qcOK && bidsOK && analyticsOK && sctOK && exportOK {
 		go webhook.Deliver(ctx, s.db, "study.processing_complete", fresh)
 	}
 }
@@ -317,6 +320,29 @@ func (s *Server) dispatchAnalytics(ctx context.Context, study *model.Study) {
 		"study_uid": study.StudyInstanceUID,
 	})
 	go s.runAnalytics(study)
+}
+
+func (s *Server) dispatchSct(ctx context.Context, study *model.Study) {
+	if !study.SctRequired || study.SctStatus != "pending" {
+		return
+	}
+	if s.cfg.SctServiceURL == "" {
+		return
+	}
+	claimed, err := model.ClaimSct(ctx, s.db, study.ID)
+	if err != nil {
+		log.Printf("pipeline: claim sct for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	if !claimed {
+		return
+	}
+	log.Printf("pipeline: dispatching sct for %s", study.StudyInstanceUID)
+	model.CreateAuditEntry(ctx, s.db, "pipeline.dispatch", "pipeline", "study", study.ID, "", map[string]any{
+		"service":   "sct",
+		"study_uid": study.StudyInstanceUID,
+	})
+	go s.runSct(study)
 }
 
 // notifyPipelineFailure sends a plain-text alert email when a pipeline service step fails.

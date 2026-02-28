@@ -77,6 +77,8 @@ export type StudySummary = {
   pixel_redaction_status?: string;
   analytics_required?: boolean;
   analytics_status?: string;
+  sct_required?: boolean;
+  sct_status?: string;
 };
 
 export type ListStudiesResponse = {

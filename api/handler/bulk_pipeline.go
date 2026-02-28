@@ -28,6 +28,7 @@ var validPipelineSteps = map[string]bool{
 	"export":          true,
 	"pixel_redaction": true,
 	"analytics":       true,
+	"sct":             true,
 }
 
 // BulkPipelineTrigger resets and re-dispatches a pipeline step for multiple
