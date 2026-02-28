@@ -11,11 +11,8 @@
 }
 
 .arch__diagram-iframe {
-  width: 100%;
-  min-height: 1200px;
   border: none;
   background: #F8FAFC;
-  transform-origin: top left;
 }
 
 .arch__details {
