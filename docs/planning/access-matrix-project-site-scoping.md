@@ -275,6 +275,7 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `adminOnly` | `DELETE /api/protocol-templates/{id}` | `DeleteProtocolTemplate` | `platform_admin` |
 | `adminOnly` | `POST /api/deface/{studyUID}` | `TriggerDeface` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/{studyUID}/phi-scan` | `TriggerPhiScan` | `platform_admin` |
+| `adminOnly` | `POST /api/studies/{studyUID}/pixel-redaction` | `TriggerPixelRedaction` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/{studyUID}/qc-check` | `TriggerQcCheck` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/{studyUID}/bids-convert` | `TriggerBidsConversion` | `platform_admin` |
 | `auth` | `GET /api/studies/{studyUID}/bids-download` | `ServeBidsDownload` | `project_member_site_scoped` |
