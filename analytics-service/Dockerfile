@@ -10,17 +10,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Each tool is gated behind a build arg. Set to "true" to install.
 # In production, prefer a custom base image with tools pre-installed.
 #
-# Tool         | MCR? | License          | Size
-# -------------|------|------------------|-------
-# FreeSurfer   | No   | Free registration| ~500 MB (minimal)
-# FSL          | No   | Oxford/academic  | ~2 GB
-# ANTs         | No   | Apache 2.0       | ~300 MB
-# SPM          | Yes  | GPL v2           | ~3 GB (includes MCR)
+# Tool             | MCR? | License          | Size
+# -----------------|------|------------------|-------
+# FreeSurfer       | No   | Free registration| ~500 MB (minimal)
+# FSL              | No   | Oxford/academic  | ~2 GB
+# ANTs             | No   | Apache 2.0       | ~300 MB
+# SPM              | Yes  | GPL v2           | ~3 GB (includes MCR)
+# SynthSeg         | No   | Apache 2.0       | ~200 MB (+ TensorFlow)
+# nnU-Net          | No   | Apache 2.0       | ~1 GB (+ PyTorch)
+# TotalSegmentator | No   | Apache 2.0       | ~1 GB (+ PyTorch)
 
 ARG INCLUDE_FREESURFER=false
 ARG INCLUDE_FSL=false
 ARG INCLUDE_ANTS=false
 ARG INCLUDE_SPM=false
+ARG INCLUDE_SYNTHSEG=false
+ARG INCLUDE_NNUNET=false
+ARG INCLUDE_TOTALSEGMENTATOR=false
 
 # FreeSurfer (minimal distribution — recon-all + stats tools)
 # Requires FS_LICENSE env var pointing to a license file at runtime.
@@ -59,6 +65,30 @@ RUN if [ "$INCLUDE_SPM" = "true" ]; then \
     echo "MCR download: https://ssd.mathworks.com/supportfiles/downloads/R2022b/Release/10/deployment_files/installer/complete/glnxa64/MATLAB_Runtime_R2022b_Update_10_glnxa64.zip" && \
     echo "SPM standalone: https://www.fil.ion.ucl.ac.uk/spm/download/restricted/utopia/spm12/spm12_r7771_Linux_R2022b.zip" && \
     echo "Set MCR_DIR and SPM_BIN env vars after installing"; \
+    fi
+
+# SynthSeg standalone (Apache 2.0, ~200 MB + TensorFlow)
+# Contrast-agnostic brain MRI segmentation — works on any MRI contrast/resolution.
+# Alternative: use FreeSurfer 7.3.2+ (mri_synthseg) when INCLUDE_FREESURFER=true.
+RUN if [ "$INCLUDE_SYNTHSEG" = "true" ]; then \
+    pip install --no-cache-dir tensorflow && \
+    pip install --no-cache-dir SynthSeg || \
+    echo "SynthSeg standalone not available via pip — use FreeSurfer mri_synthseg instead"; \
+    fi
+
+# nnU-Net v2 (Apache 2.0, ~1 GB + PyTorch)
+# Self-configuring DL segmentation. Pre-trained models must be volume-mounted
+# at NNUNET_MODEL_DIR (/opt/nnunet/models by default).
+RUN if [ "$INCLUDE_NNUNET" = "true" ]; then \
+    pip install --no-cache-dir nnunetv2; \
+    fi
+
+# TotalSegmentator (Apache 2.0, ~1 GB + PyTorch + nnU-Net)
+# 117-structure whole-body CT/MRI segmentation. Models auto-downloaded on first
+# run (~1.6 GB). Replaces 3D Slicer's SlicerTotalSegmentator extension.
+# Note: shares PyTorch with nnU-Net if both are enabled.
+RUN if [ "$INCLUDE_TOTALSEGMENTATOR" = "true" ]; then \
+    pip install --no-cache-dir TotalSegmentator; \
     fi
 
 # ── Atlas data ────────────────────────────────────────────────────────────
