@@ -1,9 +1,9 @@
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
 const STATS = [
-  { value: '9', label: 'Automated Processing Services' },
+  { value: '18', label: 'Analysis Tools' },
   { value: '18', label: 'HIPAA Identifiers Addressed' },
-  { value: '750+', label: 'Automated Tests' },
+  { value: '900+', label: 'Automated Tests' },
   { value: '3', label: 'Cloud Platforms Live' },
 ]
 
