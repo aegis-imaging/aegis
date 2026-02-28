@@ -6,7 +6,7 @@ export function FinalCTA() {
       <div className="final-cta__inner">
         <h2 className="final-cta__title">Ready to secure your imaging data?</h2>
         <p className="final-cta__subtitle">
-          AEGIS is live on GCP and ready for pilot deployments.
+          AEGIS is live on GCP, AWS, and Azure — ready for pilot deployments.
           Schedule a walkthrough to see real de-identified imaging data in action.
         </p>
         <div className="final-cta__buttons">
