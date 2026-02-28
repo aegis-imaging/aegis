@@ -21,6 +21,17 @@ export type { NaturalizedDataset } from './dicom/parser'
 export { deidentify } from './dicom/deid'
 export type { DeidResult, DeidOptions } from './dicom/deid'
 
+// Date shifting
+export { shiftDicomDate, shiftDicomDateTime, generateDateOffset } from './dicom/dateshift'
+
+// De-identification mapping
+export { createMappingCollector } from './dicom/mapping'
+export type { DeidMappings, MappingCollector } from './dicom/mapping'
+
+// Free-text PHI scrubbing
+export { scrubFreeText } from './dicom/text_scrub'
+export type { ScrubContext, ScrubResult } from './dicom/text_scrub'
+
 // Tag profile
 export { BASIC_PROFILE, getTagRule, isPrivateTag, ACTION_LABELS } from './dicom/tags'
 
