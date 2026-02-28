@@ -451,6 +451,60 @@ func ListSubjects(ctx context.Context, db *sql.DB, projectID string) ([]SubjectS
 	return out, rows.Err()
 }
 
+// StudyStub is a lightweight study reference for cross-study queries.
+type StudyStub struct {
+	ID               string  `json:"id"`
+	StudyInstanceUID string  `json:"study_instance_uid"`
+	SubjectID        *string `json:"subject_id,omitempty"`
+	StudyDate        *string `json:"study_date,omitempty"`
+}
+
+// ListStudiesBySubject returns study stubs for a subject, optionally filtered by project.
+func ListStudiesBySubject(ctx context.Context, db *sql.DB, subjectID, projectID string) ([]StudyStub, error) {
+	q := `SELECT id, study_instance_uid, subject_id, study_date FROM studies WHERE subject_id = $1`
+	args := []any{subjectID}
+	if projectID != "" {
+		q += ` AND project_id = $2`
+		args = append(args, projectID)
+	}
+	q += ` ORDER BY created_at`
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StudyStub
+	for rows.Next() {
+		var s StudyStub
+		if err := rows.Scan(&s.ID, &s.StudyInstanceUID, &s.SubjectID, &s.StudyDate); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// ListStudiesByProject returns study stubs for a project.
+func ListStudiesByProject(ctx context.Context, db *sql.DB, projectID string) ([]StudyStub, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, study_instance_uid, subject_id, study_date
+		FROM studies WHERE project_id = $1
+		ORDER BY created_at`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StudyStub
+	for rows.Next() {
+		var s StudyStub
+		if err := rows.Scan(&s.ID, &s.StudyInstanceUID, &s.SubjectID, &s.StudyDate); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 // SetPhiScanRequired sets the phi_scan_required flag and initialises phi_scan_status to "pending".
 func SetPhiScanRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
 	status := ""
