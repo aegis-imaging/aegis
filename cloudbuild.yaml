@@ -512,26 +512,23 @@ steps:
       - |
         set -euo pipefail
 
-        API_URL="${_API_URL}"
-        ADMIN_URL="${_ADMIN_URL}"
-
         echo "==> Checking API health: ${_API_URL}/healthz"
-        api_status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "${API_URL}/healthz" || echo "000")
+        api_status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "${_API_URL}/healthz" || echo "000")
         if [ "${api_status}" != "200" ]; then
-          echo "API health check failed with HTTP ${api_status}"
+          echo "API health check failed with HTTP $${api_status}"
           cat /tmp/healthz.json || true
           exit 1
         fi
         echo "API health check passed"
 
         echo "==> Checking admin endpoint reachability: ${_ADMIN_URL}"
-        admin_status=$(curl -s -o /tmp/admin_headers.txt -w '%{http_code}' -I "${ADMIN_URL}" || echo "000")
-        case "${admin_status}" in
+        admin_status=$(curl -s -o /tmp/admin_headers.txt -w '%{http_code}' -I "${_ADMIN_URL}" || echo "000")
+        case "$${admin_status}" in
           200|301|302|401|403)
-            echo "Admin endpoint reachable with HTTP ${admin_status}"
+            echo "Admin endpoint reachable with HTTP $${admin_status}"
             ;;
           *)
-            echo "Admin endpoint check failed with HTTP ${admin_status}"
+            echo "Admin endpoint check failed with HTTP $${admin_status}"
             cat /tmp/admin_headers.txt || true
             exit 1
             ;;
@@ -540,8 +537,8 @@ steps:
           echo "## Smoke Check Summary"
           echo ""
           echo "- Platform: GCP"
-          echo "- API URL: ${API_URL}"
-          echo "- API /healthz HTTP: ${api_status}"
-          echo "- Admin URL: ${ADMIN_URL}"
-          echo "- Admin HEAD HTTP: ${admin_status}"
+          echo "- API URL: ${_API_URL}"
+          echo "- API /healthz HTTP: $${api_status}"
+          echo "- Admin URL: ${_ADMIN_URL}"
+          echo "- Admin HEAD HTTP: $${admin_status}"
           echo "- Result: passed"
