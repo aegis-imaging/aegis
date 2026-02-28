@@ -3,12 +3,12 @@ body {
   font-size: var(--text-base);
   font-weight: var(--font-normal);
   line-height: var(--leading-normal);
-  color: var(--color-gray-700);
-  background: var(--color-white);
+  color: var(--text-secondary);
+  background: var(--bg-page);
 }
 
 h1, h2, h3, h4, h5, h6 {
-  color: var(--color-gray-900);
+  color: var(--text-primary);
   line-height: var(--leading-tight);
 }
 
@@ -17,6 +17,20 @@ a:hover {
 }
 
 ::selection {
-  background: var(--color-blue-100);
-  color: var(--color-navy-900);
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+/* ── Theme transition ──────────────────────────────────────────────────── */
+
+html[data-theme] *,
+html[data-theme] *::before,
+html[data-theme] *::after {
+  transition: background-color 0.3s ease, color 0.2s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+html.no-transitions *,
+html.no-transitions *::before,
+html.no-transitions *::after {
+  transition: none !important;
 }

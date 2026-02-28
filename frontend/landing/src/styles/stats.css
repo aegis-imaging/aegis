@@ -9,7 +9,7 @@
 .stats__inner {
   max-width: var(--max-width);
   margin: 0 auto;
-  background: var(--color-white);
+  background: var(--bg-surface-raised);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
   padding: var(--space-10) var(--space-8);
@@ -34,7 +34,7 @@
 .stats__label {
   display: block;
   font-size: var(--text-sm);
-  color: var(--color-gray-500);
+  color: var(--text-muted);
   font-weight: var(--font-medium);
   text-transform: uppercase;
   letter-spacing: 0.05em;

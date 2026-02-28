@@ -3,7 +3,7 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-lg), 0 0 40px rgba(37, 99, 235, 0.08);
-  border: 1px solid var(--color-gray-200);
+  border: 1px solid var(--border-default);
 }
 
 .arch__diagram {
@@ -32,12 +32,12 @@
   display: inline-flex;
   align-items: center;
   padding: var(--space-2) var(--space-3);
-  background: var(--color-gray-100);
-  border: 1px solid var(--color-gray-200);
+  background: var(--accent-neutral-bg);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
-  color: var(--color-gray-700);
+  color: var(--text-secondary);
 }
 
 .arch__cloud-badges {
@@ -57,15 +57,15 @@
 }
 
 .arch__cloud-badge--supported {
-  background: var(--color-green-50);
+  background: var(--accent-green-bg);
   color: var(--color-green-600);
   border: 1px solid var(--color-green-100);
 }
 
 .arch__cloud-badge--planned {
-  background: var(--color-gray-100);
-  color: var(--color-gray-500);
-  border: 1px solid var(--color-gray-200);
+  background: var(--accent-neutral-bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
 }
 
 @media (min-width: 768px) {
