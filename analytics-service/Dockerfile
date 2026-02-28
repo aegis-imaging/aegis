@@ -61,6 +61,25 @@ RUN if [ "$INCLUDE_SPM" = "true" ]; then \
     echo "Set MCR_DIR and SPM_BIN env vars after installing"; \
     fi
 
+# ── Atlas data ────────────────────────────────────────────────────────────
+# Atlases are stored in /opt/atlases/{name}/ with a NIfTI volume and
+# a {name}_labels.csv file. Custom atlases can be volume-mounted at runtime.
+#
+# AAL3: Tzourio-Mazoyer et al. NeuroImage 2002;15(1):273-289
+#   166 regions. Labels bundled in app/atlases/aal3_labels.csv.
+#   NIfTI must be provided at runtime or via INCLUDE_AAL3 build arg.
+#
+# MCALT/ADIR122: https://www.nitrc.org/projects/mcalt/ (CC-BY-NC-SA 4.0)
+#   Mayo Clinic template + atlas. Must be downloaded separately.
+
+ARG INCLUDE_AAL3=false
+
+RUN if [ "$INCLUDE_AAL3" = "true" ]; then \
+    mkdir -p /opt/atlases/aal3 && \
+    echo "AAL3: Place aal3v1_1mm.nii.gz in /opt/atlases/aal3/ at runtime" && \
+    echo "Download from: https://www.gin.cnrs.fr/en/tools/aal/"; \
+    fi
+
 # ── Python application ───────────────────────────────────────────────────
 
 WORKDIR /app

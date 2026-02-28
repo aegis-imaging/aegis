@@ -278,6 +278,8 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `adminOnly` | `POST /api/studies/{studyUID}/pixel-redaction` | `TriggerPixelRedaction` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/{studyUID}/qc-check` | `TriggerQcCheck` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/{studyUID}/bids-convert` | `TriggerBidsConversion` | `platform_admin` |
+| `adminOnly` | `POST /api/studies/{studyUID}/analytics` | `TriggerAnalytics` | `platform_admin` |
+| `adminOnly` | `POST /api/studies/{studyUID}/longitudinal-analytics` | `TriggerLongitudinalAnalytics` | `platform_admin` |
 | `auth` | `GET /api/studies/{studyUID}/bids-download` | `ServeBidsDownload` | `project_member_site_scoped` |
 | `adminOnly` | `POST /api/studies/{studyUID}/classify` | `TriggerClassification` | `platform_admin` |
 | `adminOnly` | `POST /api/studies/{studyUID}/protocol-check` | `TriggerProtocolCheck` | `platform_admin` |
