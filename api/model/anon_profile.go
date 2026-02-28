@@ -111,7 +111,7 @@ func SetProjectDefaultAnonProfile(ctx context.Context, db *sql.DB, projectID, pr
 func GetProjectDefaultAnonProfile(ctx context.Context, db *sql.DB, projectSlug string) (*AnonProfile, error) {
 	var p AnonProfile
 	err := scanAnonProfile(db.QueryRowContext(ctx, `
-		SELECT ap.id, ap.project_id, ap.name, ap.description, ap.retained_tags, ap.enabled,
+		SELECT ap.id, ap.project_id, ap.name, ap.description, ap.retained_tags, ap.keep_private_tags, ap.enabled,
 		       ap.created_at, ap.updated_at
 		FROM anon_profiles ap
 		JOIN projects pr ON pr.default_anon_profile_id = ap.id

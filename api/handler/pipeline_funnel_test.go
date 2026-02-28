@@ -36,7 +36,7 @@ func TestGetPipelineFunnel_Empty(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
 	assert.Equal(t, 30, resp.PeriodDays)
-	require.Len(t, resp.Funnel, 8)
+	require.Len(t, resp.Funnel, 10)
 	for _, s := range resp.Funnel {
 		assert.Equal(t, 0, s.Count)
 		assert.Equal(t, 0.0, s.PctOfTotal)
