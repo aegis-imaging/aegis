@@ -39,6 +39,8 @@ type Study struct {
 	PixelRedactionStatus   string     `json:"pixel_redaction_status"`
 	AnalyticsRequired      bool       `json:"analytics_required"`
 	AnalyticsStatus        string     `json:"analytics_status"`
+	SctRequired            bool       `json:"sct_required"`
+	SctStatus              string     `json:"sct_status"`
 	DefaceQaScore          *float64   `json:"deface_qa_score,omitempty"`
 	SubjectID              *string    `json:"subject_id,omitempty"`
 	RejectionReason        *string    `json:"rejection_reason,omitempty"`
@@ -60,6 +62,7 @@ const studyColumns = `
 	export_required, export_status,
 	pixel_redaction_required, pixel_redaction_status,
 	analytics_required, analytics_status,
+	sct_required, sct_status,
 	deface_qa_score,
 	subject_id,
 	rejection_reason,
@@ -86,6 +89,7 @@ func scanStudy(row scannable, s *Study) error {
 		&s.ExportRequired, &s.ExportStatus,
 		&s.PixelRedactionRequired, &s.PixelRedactionStatus,
 		&s.AnalyticsRequired, &s.AnalyticsStatus,
+		&s.SctRequired, &s.SctStatus,
 		&s.DefaceQaScore,
 		&s.SubjectID,
 		&s.RejectionReason,
@@ -108,8 +112,9 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		                     protocol_required, protocol_status,
 		                     export_required, export_status,
 		                     pixel_redaction_required, pixel_redaction_status,
-		                     analytics_required, analytics_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+		                     analytics_required, analytics_status,
+		                     sct_required, sct_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
 		s.StudyDescription, s.StudyDate, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
@@ -119,7 +124,8 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		s.ProtocolRequired, s.ProtocolStatus,
 		s.ExportRequired, s.ExportStatus,
 		s.PixelRedactionRequired, s.PixelRedactionStatus,
-		s.AnalyticsRequired, s.AnalyticsStatus).
+		s.AnalyticsRequired, s.AnalyticsStatus,
+		s.SctRequired, s.SctStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
@@ -780,6 +786,38 @@ func ClaimAnalytics(ctx context.Context, db *sql.DB, id string) (bool, error) {
 	res, err := db.ExecContext(ctx, `
 		UPDATE studies SET analytics_status = 'analyzing', updated_at = now()
 		WHERE id = $1 AND analytics_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// SetSctRequired sets the sct_required flag and initialises sct_status to "pending".
+func SetSctRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET sct_required = $1, sct_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdateSctStatus sets the sct_status field on a study.
+func UpdateSctStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET sct_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// ClaimSct atomically claims SCT dispatch.
+func ClaimSct(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET sct_status = 'analyzing', updated_at = now()
+		WHERE id = $1 AND sct_status = 'pending'`, id)
 	if err != nil {
 		return false, err
 	}

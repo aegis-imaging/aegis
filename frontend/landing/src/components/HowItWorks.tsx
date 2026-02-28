@@ -13,7 +13,7 @@ const PHASE_2_STEPS = [
   'Automated defacing for head imaging',
   'Acquisition protocol compliance check',
   'Quality control and BIDS conversion',
-  'Neuroimaging analytics (FreeSurfer, FSL, ANTs, SPM)',
+  'Neuroimaging analytics — 18 tools including FreeSurfer, SynthSeg, nnU-Net, MedSAM2, and TotalSpineSeg',
   'Administrator review and approval',
 ]
 

@@ -259,6 +259,11 @@ export const tools: Tool[] = [
     inputSchema: writeInputSchema
   },
   {
+    name: "trigger_sct",
+    description: "Trigger SCT (Spinal Cord Toolbox) analysis for one study UID with precondition checks.",
+    inputSchema: writeInputSchema
+  },
+  {
     name: "trigger_longitudinal_analytics",
     description: "Trigger longitudinal analytics (TBM-SyN) for a follow-up study against its baseline. Auto-computes scan_interval_days from study_date if both studies have it.",
     inputSchema: {
