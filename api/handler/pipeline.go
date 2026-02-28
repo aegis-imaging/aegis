@@ -15,11 +15,12 @@ import (
 //
 // No-op when cfg.PipelineAuto is false (manual mode).
 //
-// Dependency graph (3 phases):
+// Dependency graph (4 phases):
 //
 //	Phase 0: Classification (blocks all other phases — fills modality/body_part)
 //	Phase 1: PHI scan, protocol check, defacing (parallel, raw files)
 //	Phase 2: QC check, BIDS conversion (after defacing completes, final files)
+//	Phase 3: Analytics (after BIDS conversion completes, consumes NIfTI outputs)
 func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 	if !s.cfg.PipelineAuto {
 		return
@@ -68,6 +69,13 @@ func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 	s.dispatchQcCheck(ctx, study)
 	s.dispatchBidsConversion(ctx, study)
 
+	// Phase 3: Post-BIDS analytics on NIfTI outputs.
+	// Block if BIDS conversion is required but not yet complete.
+	if study.BidsRequired && study.BidsStatus != "complete" {
+		return
+	}
+	s.dispatchAnalytics(ctx, study)
+
 	// Fire study.processing_complete if all required steps are now terminal.
 	s.maybeFireProcessingComplete(ctx, study.ID)
 }
@@ -101,10 +109,12 @@ func (s *Server) maybeFireProcessingComplete(ctx context.Context, studyID string
 		fresh.QcStatus == "fail" || fresh.QcStatus == "failed"
 	bidsOK := !fresh.BidsRequired ||
 		fresh.BidsStatus == "complete" || fresh.BidsStatus == "failed"
+	analyticsOK := !fresh.AnalyticsRequired ||
+		fresh.AnalyticsStatus == "complete" || fresh.AnalyticsStatus == "partial" || fresh.AnalyticsStatus == "failed"
 	exportOK := !fresh.ExportRequired ||
 		fresh.ExportStatus == "exported" || fresh.ExportStatus == "failed"
 
-	if classOK && phiOK && pixelRedactOK && protocolOK && defacingOK && qcOK && bidsOK && exportOK {
+	if classOK && phiOK && pixelRedactOK && protocolOK && defacingOK && qcOK && bidsOK && analyticsOK && exportOK {
 		go webhook.Deliver(ctx, s.db, "study.processing_complete", fresh)
 	}
 }
@@ -284,6 +294,29 @@ func (s *Server) dispatchBidsConversion(ctx context.Context, study *model.Study)
 		"study_uid": study.StudyInstanceUID,
 	})
 	go s.runBidsConversion(fresh)
+}
+
+func (s *Server) dispatchAnalytics(ctx context.Context, study *model.Study) {
+	if !study.AnalyticsRequired || study.AnalyticsStatus != "pending" {
+		return
+	}
+	if s.cfg.AnalyticsServiceURL == "" {
+		return
+	}
+	claimed, err := model.ClaimAnalytics(ctx, s.db, study.ID)
+	if err != nil {
+		log.Printf("pipeline: claim analytics for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	if !claimed {
+		return
+	}
+	log.Printf("pipeline: dispatching analytics for %s", study.StudyInstanceUID)
+	model.CreateAuditEntry(ctx, s.db, "pipeline.dispatch", "pipeline", "study", study.ID, "", map[string]any{
+		"service":   "analytics",
+		"study_uid": study.StudyInstanceUID,
+	})
+	go s.runAnalytics(study)
 }
 
 // notifyPipelineFailure sends a plain-text alert email when a pipeline service step fails.

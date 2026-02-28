@@ -43,6 +43,26 @@ type phiScanServiceResponse struct {
 	Error           *string      `json:"error"`
 }
 
+// phiTagFinding describes PHI found in a private DICOM tag value.
+type phiTagFinding struct {
+	File         string `json:"file"`
+	Tag          string `json:"tag"`
+	ValuePreview string `json:"value_preview"`
+	Pattern      string `json:"pattern"`
+}
+
+// phiTagScanResponse is the response from the /detect-tags endpoint.
+type phiTagScanResponse struct {
+	StudyUID           string          `json:"study_uid"`
+	Status             string          `json:"status"`
+	PhiDetected        bool            `json:"phi_detected"`
+	Findings           []phiTagFinding `json:"findings"`
+	FilesScanned       int             `json:"files_scanned"`
+	PrivateTagsScanned int             `json:"private_tags_scanned"`
+	DurationSeconds    float64         `json:"duration_seconds"`
+	Error              *string         `json:"error"`
+}
+
 // TriggerPhiScan triggers the burned-in PHI detection pipeline for a study.
 // It dispatches to the Python service asynchronously and returns 202 Accepted.
 func (s *Server) TriggerPhiScan(w http.ResponseWriter, r *http.Request) {
@@ -155,9 +175,20 @@ func (s *Server) runPhiScan(study *model.Study) {
 		return
 	}
 
+	// Also scan private tag values for PHI if the project uses keep_private_tags.
+	var tagScanResp *phiTagScanResponse
+	if proj, _ := model.GetProjectByID(ctx, s.db, study.ProjectID); proj != nil {
+		if profile, _ := model.GetProjectDefaultAnonProfile(ctx, s.db, proj.Slug); profile != nil && profile.KeepPrivateTags {
+			tagScanResp = s.runTagPhiScan(ctx, studyUID, files)
+		}
+	}
+
 	// Determine result status.
 	newStatus := "clean"
 	if svcResp.PhiDetected {
+		newStatus = "flagged"
+	}
+	if tagScanResp != nil && tagScanResp.PhiDetected {
 		newStatus = "flagged"
 	}
 
@@ -183,8 +214,55 @@ func (s *Server) runPhiScan(study *model.Study) {
 	if svcResp.PhiDetected {
 		detail["findings"] = svcResp.Findings
 	}
+	if tagScanResp != nil && tagScanResp.PhiDetected {
+		detail["tag_phi_detected"] = true
+		detail["tag_phi_findings"] = tagScanResp.Findings
+		detail["private_tags_scanned"] = tagScanResp.PrivateTagsScanned
+	}
 	model.CreateAuditEntry(ctx, s.db, "phi_scan.complete", "system", "study", study.ID, "", detail)
 
 	// Advance pipeline — may dispatch next eligible services.
 	s.AdvancePipeline(ctx, study.ID)
+}
+
+// runTagPhiScan calls the PHI detection service's /detect-tags endpoint to
+// scan private DICOM tag values for PHI. Returns nil on any error (non-fatal).
+func (s *Server) runTagPhiScan(ctx context.Context, studyUID string, files []string) *phiTagScanResponse {
+	payload := phiScanRequest{
+		StudyUID:   studyUID,
+		InputPaths: files,
+	}
+	body, _ := json.Marshal(payload)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		s.cfg.PhiDetectionServiceURL+"/detect-tags", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("phi_scan: build tag-scan request for %s: %v", studyUID, err)
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		log.Printf("phi_scan: call tag-scan for %s: %v", studyUID, err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var tagResp phiTagScanResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tagResp); err != nil {
+		log.Printf("phi_scan: decode tag-scan response for %s: %v", studyUID, err)
+		return nil
+	}
+
+	if tagResp.Status != "complete" {
+		log.Printf("phi_scan: tag-scan failed for %s", studyUID)
+		return nil
+	}
+
+	if tagResp.PhiDetected {
+		log.Printf("phi_scan: PHI found in %d private tags for %s",
+			len(tagResp.Findings), studyUID)
+	}
+	return &tagResp
 }

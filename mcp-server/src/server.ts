@@ -220,6 +220,8 @@ type StudySummary = {
   phi_scan_status?: string;
   pixel_redaction_required?: boolean;
   pixel_redaction_status?: string;
+  analytics_required?: boolean;
+  analytics_status?: string;
 };
 
 type ListStudiesResponse = {
@@ -503,6 +505,11 @@ const tools: Tool[] = [
   {
     name: "trigger_bids_convert",
     description: "Trigger BIDS conversion for one study UID with precondition checks.",
+    inputSchema: writeInputSchema
+  },
+  {
+    name: "trigger_analytics",
+    description: "Trigger analytics for one study UID with precondition checks.",
     inputSchema: writeInputSchema
   },
   {
@@ -888,7 +895,7 @@ const tools: Tool[] = [
   },
   {
     name: "simulate_routing",
-    description: "Dry-run simulation of routing rule evaluation against a hypothetical study with given attributes. Returns which enabled rules would match (matched_rules), which would not (skipped_rules), and an action_summary showing boolean flags for each action type (require_defacing, require_phi_scan, require_qc_check, require_bids_conversion, require_classification, require_protocol_check, require_export, auto_approve, reject). For route_to rules, destination_name is also resolved. Use this to test routing rule changes before activating them, or to explain why a study did or did not trigger a pipeline step.",
+    description: "Dry-run simulation of routing rule evaluation against a hypothetical study with given attributes. Returns which enabled rules would match (matched_rules), which would not (skipped_rules), and an action_summary showing boolean flags for each action type (require_defacing, require_phi_scan, require_qc_check, require_bids_conversion, require_classification, require_protocol_check, require_export, require_analytics, auto_approve, reject). For route_to rules, destination_name is also resolved. Use this to test routing rule changes before activating them, or to explain why a study did or did not trigger a pipeline step.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1175,14 +1182,14 @@ const tools: Tool[] = [
   },
   {
     name: "reset_pipeline_step",
-    description: "Reset a single pipeline step back to 'pending' so it can be re-processed. Use for production error recovery: re-deface, re-scan PHI, re-run QC, re-convert BIDS, re-classify, re-check protocol, or re-export. Returns 409 if the step is currently in-flight. Requires confirm=true and a reason.",
+    description: "Reset a single pipeline step back to 'pending' so it can be re-processed. Use for production error recovery: re-deface, re-scan PHI, re-run QC, re-convert BIDS, re-classify, re-check protocol, re-export, or re-run analytics. Returns 409 if the step is currently in-flight. Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["study_id", "step", "reason", "confirm"],
       properties: {
         request_id: { type: "string" },
         study_id: { type: "string", format: "uuid" },
-        step: { type: "string", enum: ["deface", "phi_scan", "qc", "bids", "classify", "protocol", "export"], description: "Pipeline step to reset" },
+        step: { type: "string", enum: ["deface", "phi_scan", "qc", "bids", "classify", "protocol", "export", "analytics"], description: "Pipeline step to reset" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
       },
@@ -1901,7 +1908,7 @@ const tools: Tool[] = [
   },
   {
     name: "create_routing_rule",
-    description: "Create a new routing rule. Rules are evaluated on every study ingest in priority order (lower = first). All matching rules fire. Use action=route_to with a destination_id to forward DICOM files. Other actions: require_defacing, require_phi_scan, require_qc_check, require_bids_conversion, require_classification, require_protocol_check, require_export, auto_approve, require_qa, reject. Requires confirm=true and a reason.",
+    description: "Create a new routing rule. Rules are evaluated on every study ingest in priority order (lower = first). All matching rules fire. Use action=route_to with a destination_id to forward DICOM files. Other actions: require_defacing, require_phi_scan, require_qc_check, require_bids_conversion, require_classification, require_protocol_check, require_export, require_analytics, auto_approve, require_qa, reject. Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["name", "priority", "action", "reason", "confirm"],
@@ -1915,7 +1922,7 @@ const tools: Tool[] = [
         modality: { type: "string", maxLength: 16, description: "Filter by modality e.g. MRI, CT, PET (omit for any)" },
         body_part: { type: "string", maxLength: 64, description: "Filter by body part e.g. HEAD, CHEST (omit for any)" },
         source: { type: "string", enum: ["external", "internal"], description: "Filter by study source (omit for any)" },
-        action: { type: "string", enum: ["route_to", "require_defacing", "require_phi_scan", "require_qc_check", "require_bids_conversion", "require_classification", "require_protocol_check", "require_export", "auto_approve", "require_qa", "reject"] },
+        action: { type: "string", enum: ["route_to", "require_defacing", "require_phi_scan", "require_qc_check", "require_bids_conversion", "require_classification", "require_protocol_check", "require_export", "require_analytics", "auto_approve", "require_qa", "reject"] },
         destination_id: { type: "string", format: "uuid", description: "Required when action=route_to" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
@@ -1940,7 +1947,7 @@ const tools: Tool[] = [
         modality: { type: ["string", "null"], maxLength: 16, description: "null matches any modality" },
         body_part: { type: ["string", "null"], maxLength: 64, description: "null matches any body part" },
         source: { type: ["string", "null"], enum: ["external", "internal", null], description: "null matches any source" },
-        action: { type: "string", enum: ["route_to", "require_defacing", "require_phi_scan", "require_qc_check", "require_bids_conversion", "require_classification", "require_protocol_check", "require_export", "auto_approve", "require_qa", "reject"] },
+        action: { type: "string", enum: ["route_to", "require_defacing", "require_phi_scan", "require_qc_check", "require_bids_conversion", "require_classification", "require_protocol_check", "require_export", "require_analytics", "auto_approve", "require_qa", "reject"] },
         destination_id: { type: ["string", "null"], format: "uuid", description: "null clears destination link" },
         reason: { type: "string", minLength: 10, maxLength: 512 },
         confirm: { type: "boolean", const: true }
@@ -2636,7 +2643,7 @@ const tools: Tool[] = [
   },
   {
     name: "bulk_pipeline_trigger",
-    description: "Trigger a pipeline step for multiple studies in one call. Resets the specified step to 'pending' and lets the auto-pipeline re-dispatch it. Useful for batch re-processing after a service outage or configuration change. step must be one of: classify, phi_scan, protocol, deface, qc, bids, export. Returns {triggered, skipped, errors[]}. Skipped = step not required or already in-flight. Requires confirm=true and a reason.",
+    description: "Trigger a pipeline step for multiple studies in one call. Resets the specified step to 'pending' and lets the auto-pipeline re-dispatch it. Useful for batch re-processing after a service outage or configuration change. step must be one of: classify, phi_scan, protocol, deface, qc, bids, export, analytics. Returns {triggered, skipped, errors[]}. Skipped = step not required or already in-flight. Requires confirm=true and a reason.",
     inputSchema: {
       type: "object",
       required: ["study_ids", "step", "reason", "confirm"],
@@ -2651,7 +2658,7 @@ const tools: Tool[] = [
         },
         step: {
           type: "string",
-          enum: ["classify", "phi_scan", "protocol", "deface", "qc", "bids", "export"],
+          enum: ["classify", "phi_scan", "protocol", "deface", "qc", "bids", "export", "analytics"],
           description: "Pipeline step to reset and re-trigger"
         },
         reason: { type: "string", minLength: 10, maxLength: 512 },
@@ -4226,6 +4233,10 @@ async function executeTool(name: string, args: Record<string, unknown>, requestI
         return handleTriggerBidsConvert(parsed.request_id ?? buildRequestId(), parsed);
       }
 
+      if (name === "trigger_analytics") {
+        return handleTriggerAnalytics(parsed.request_id ?? buildRequestId(), parsed);
+      }
+
       if (name === "trigger_export") {
         return handleTriggerExport(parsed.request_id ?? buildRequestId(), parsed);
       }
@@ -4691,6 +4702,63 @@ async function handleTriggerBidsConvert(
 
   const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/bids-convert`);
   return formatSuccess(requestId, "trigger_bids_convert", {
+    accepted: true,
+    study_uid: parsed.study_uid,
+    reason: parsed.reason,
+    result: data
+  });
+}
+
+async function handleTriggerAnalytics(
+  requestId: string,
+  parsed: {
+    study_uid: string;
+    reason: string;
+    confirm: true;
+  }
+) {
+  if (config.mcpMode !== "operator") {
+    return formatError(requestId, "FORBIDDEN", "Caller is not permitted to execute write tools in readonly mode", false, "trigger_analytics");
+  }
+
+  if (!config.enableWriteTools) {
+    return formatError(
+      requestId,
+      "FORBIDDEN",
+      "Write tools are disabled; set MCP_ENABLE_WRITE_TOOLS=true to allow trigger_analytics",
+      false,
+      "trigger_analytics"
+    );
+  }
+
+  const studyResult = await client.get(`/api/studies?limit=200&offset=0&search=${encodeURIComponent(parsed.study_uid)}`);
+  const studies = extractStudies(studyResult);
+  const matched = studies.find((study) => study.study_instance_uid === parsed.study_uid);
+
+  if (!matched) {
+    return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_analytics");
+  }
+
+  if (matched.analytics_required === false) {
+    return formatError(requestId, "CONFLICT", "Study does not require analytics", false, "trigger_analytics");
+  }
+
+  if (matched.analytics_status === "analyzing") {
+    return formatError(requestId, "CONFLICT", "Analytics already in progress", false, "trigger_analytics");
+  }
+
+  if (matched.analytics_status && !["pending", "failed"].includes(matched.analytics_status)) {
+    return formatError(
+      requestId,
+      "CONFLICT",
+      `Analytics trigger blocked for current status: ${matched.analytics_status}`,
+      false,
+      "trigger_analytics"
+    );
+  }
+
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/analytics`);
+  return formatSuccess(requestId, "trigger_analytics", {
     accepted: true,
     study_uid: parsed.study_uid,
     reason: parsed.reason,

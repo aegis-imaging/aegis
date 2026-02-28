@@ -27,8 +27,27 @@ def _load_pynetdicom():
         VerificationPresentationContexts,
         evt,
     )
+    from pynetdicom.presentation import build_context
 
-    return AE, AllStoragePresentationContexts, VerificationPresentationContexts, evt
+    return AE, AllStoragePresentationContexts, VerificationPresentationContexts, evt, build_context
+
+
+# All transfer syntaxes we accept — includes compressed formats so PACS can
+# send JPEG2000, JPEG-LS, and RLE without transcoding first.
+ACCEPTED_TRANSFER_SYNTAXES = [
+    "1.2.840.10008.1.2",        # Implicit VR Little Endian
+    "1.2.840.10008.1.2.1",      # Explicit VR Little Endian
+    "1.2.840.10008.1.2.2",      # Explicit VR Big Endian
+    "1.2.840.10008.1.2.4.50",   # JPEG Baseline
+    "1.2.840.10008.1.2.4.51",   # JPEG Extended
+    "1.2.840.10008.1.2.4.57",   # JPEG Lossless
+    "1.2.840.10008.1.2.4.70",   # JPEG Lossless SV1
+    "1.2.840.10008.1.2.4.80",   # JPEG-LS Lossless
+    "1.2.840.10008.1.2.4.81",   # JPEG-LS Near-Lossless
+    "1.2.840.10008.1.2.4.90",   # JPEG 2000 Lossless
+    "1.2.840.10008.1.2.4.91",   # JPEG 2000
+    "1.2.840.10008.1.2.5",      # RLE Lossless
+]
 
 
 def _get_file_index(study_dir: Path) -> int:
@@ -131,13 +150,22 @@ def handle_release(event: Any) -> None:
 
 
 def create_scp():
-    """Create and configure the DICOM Application Entity."""
-    AE, all_storage_contexts, verification_contexts, _ = _load_pynetdicom()
+    """Create and configure the DICOM Application Entity.
+
+    Accepts all storage SOP classes with all common transfer syntaxes
+    including compressed formats (JPEG2000, JPEG-LS, RLE). This allows
+    PACS systems to send compressed DICOM without transcoding first.
+    """
+    AE, all_storage_contexts, verification_contexts, _, build_context = _load_pynetdicom()
 
     ae = AE(ae_title=config.DIMSE_AE_TITLE)
 
-    # Accept all storage SOP classes + verification
-    ae.supported_contexts = all_storage_contexts + verification_contexts
+    # Build contexts with all transfer syntaxes for each SOP class
+    contexts = []
+    for ctx in all_storage_contexts:
+        contexts.append(build_context(ctx.abstract_syntax, ACCEPTED_TRANSFER_SYNTAXES))
+
+    ae.supported_contexts = contexts + verification_contexts
 
     # Limit concurrent associations
     ae.maximum_associations = config.DIMSE_MAX_ASSOCIATIONS
@@ -147,7 +175,7 @@ def create_scp():
 
 def _get_scp_handlers() -> list[tuple[Any, Any]]:
     """Build pynetdicom event handler mapping lazily."""
-    _, _, _, evt = _load_pynetdicom()
+    _, _, _, evt, _ = _load_pynetdicom()
     return [
         (evt.EVT_C_ECHO, handle_echo),
         (evt.EVT_C_STORE, handle_store),

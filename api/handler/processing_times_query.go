@@ -57,7 +57,7 @@ durations AS (
   ) c ON true
   WHERE tr.stage IN (
     'deface', 'phi_scan', 'pixel_redaction', 'qc_check', 'bids_conversion',
-    'classification', 'protocol_check', 'export'
+    'classification', 'protocol_check', 'analytics', 'export'
   )
 )
 SELECT stage,

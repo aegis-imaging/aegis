@@ -167,6 +167,8 @@ func buildStudyDiagnosticsSummary(
 		"QC check", fmt.Sprintf("POST /api/studies/%s/qc-check", study.StudyInstanceUID), addBlocker, addAction)
 	evaluateRequiredStage(study.BidsRequired, study.BidsStatus,
 		"BIDS conversion", fmt.Sprintf("POST /api/studies/%s/bids-convert", study.StudyInstanceUID), addBlocker, addAction)
+	evaluateRequiredStage(study.AnalyticsRequired, study.AnalyticsStatus,
+		"Analytics", fmt.Sprintf("POST /api/studies/%s/analytics", study.StudyInstanceUID), addBlocker, addAction)
 
 	if study.ExportRequired {
 		if study.Status != "approved" {
@@ -228,6 +230,7 @@ func evaluateRequiredStage(
 		"defacing":    true,
 		"exporting":   true,
 		"redacting":   true,
+		"analyzing":   true,
 	}
 	if inProgress[normalized] {
 		addBlocker(fmt.Sprintf("%s is in progress (%s)", name, normalized))

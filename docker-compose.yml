@@ -67,6 +67,7 @@ services:
       DIMSE_RECEIVER_URL: "http://dimse-receiver:8080"
       DIMSE_OPERATOR_API_KEY: "${DIMSE_OPERATOR_API_KEY:-}"
       SYNTH_SERVICE_URL: "http://synth-service:8080"
+      ANALYTICS_SERVICE_URL: "http://analytics-service:8080"
     # Run as root in local dev so the API can create directories inside the
     # named volume (production uses GCS storage and distroless:nonroot from the
     # Dockerfile; the user override here is docker-compose-only).
@@ -235,6 +236,21 @@ services:
       SYNTH_USE_GPU: "${SYNTH_USE_GPU:-false}"
       SYNTH_MAX_SLICES: "${SYNTH_MAX_SLICES:-200}"
       SYNTH_MAX_SIZE: "${SYNTH_MAX_SIZE:-512}"
+    volumes:
+      - aegis-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  analytics-service:
+    build:
+      context: ./analytics-service
+    environment:
+      ANALYTICS_DATA_DIR: "/app/data"
+      ANALYTICS_TOOL: "auto"
     volumes:
       - aegis-data:/app/data
     healthcheck:

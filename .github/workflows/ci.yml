@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, synth-service, midi-b]
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, synth-service, midi-b, analytics-service]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -192,7 +192,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, synth-service, midi-b]
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, synth-service, midi-b, analytics-service]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -259,6 +259,7 @@ jobs:
           - { context: protocol-service, name: protocol-service }
           - { context: dimse-receiver, name: dimse-receiver }
           - { context: synth-service, name: synth-service }
+          - { context: analytics-service, name: analytics-service }
           - { context: mcp-server, name: mcp-server }
           - { context: weasis, name: weasis }
     steps:
