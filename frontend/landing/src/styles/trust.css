@@ -6,8 +6,8 @@
 }
 
 .trust__badge-card {
-  background: var(--color-white);
-  border: 1px solid var(--color-gray-200);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: var(--space-6);
   text-align: center;
@@ -26,7 +26,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--color-green-50);
+  background: var(--accent-green-bg);
   color: var(--color-green-600);
   margin-bottom: var(--space-4);
 }
@@ -44,7 +44,7 @@
 
 .trust__badge-desc {
   font-size: var(--text-sm);
-  color: var(--color-gray-500);
+  color: var(--text-muted);
   line-height: var(--leading-normal);
 }
 
@@ -71,7 +71,7 @@
   align-items: center;
   gap: var(--space-3);
   font-size: var(--text-base);
-  color: var(--color-gray-700);
+  color: var(--text-secondary);
 }
 
 .trust__list-item svg {

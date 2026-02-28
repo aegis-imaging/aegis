@@ -43,10 +43,11 @@
   --gradient-cta: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
-  --shadow-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.10), 0 8px 10px -6px rgba(15, 23, 42, 0.06);
+  --shadow-color: 15, 23, 42;
+  --shadow-sm: 0 1px 2px rgba(var(--shadow-color), 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(var(--shadow-color), 0.07), 0 2px 4px -2px rgba(var(--shadow-color), 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(var(--shadow-color), 0.08), 0 4px 6px -4px rgba(var(--shadow-color), 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(var(--shadow-color), 0.10), 0 8px 10px -6px rgba(var(--shadow-color), 0.06);
 
   /* Typography */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -101,4 +102,49 @@
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 400ms ease;
+
+  /* ── Semantic tokens (light theme defaults) ── */
+  --bg-page:           var(--color-white);
+  --bg-surface:        var(--color-white);
+  --bg-surface-alt:    var(--color-gray-50);
+  --bg-surface-raised: var(--color-white);
+
+  --text-primary:      var(--color-gray-900);
+  --text-secondary:    var(--color-gray-700);
+  --text-muted:        var(--color-gray-500);
+  --text-faint:        var(--color-gray-400);
+
+  --border-default:    var(--color-gray-200);
+  --border-subtle:     var(--color-gray-100);
+
+  --input-bg:          var(--color-white);
+  --input-border:      var(--color-gray-200);
+  --input-text:        var(--color-gray-900);
+  --input-placeholder: var(--color-gray-400);
+
+  --accent-blue-bg:    var(--color-blue-50);
+  --accent-green-bg:   var(--color-green-50);
+  --accent-red-bg:     var(--color-red-100);
+  --accent-purple-bg:  var(--color-purple-100);
+  --accent-neutral-bg: var(--color-gray-100);
+
+  --navbar-scrolled-bg:        rgba(255, 255, 255, 0.9);
+  --navbar-scrolled-text:      var(--color-gray-500);
+  --navbar-scrolled-active-bg: var(--color-blue-50);
+  --navbar-scrolled-wordmark:  var(--color-gray-900);
+  --navbar-scrolled-hamburger: var(--color-gray-700);
+  --navbar-mobile-bg:          var(--color-white);
+
+  --cs-toggle-bg:       var(--color-white);
+  --cs-toggle-hover-bg: var(--color-gray-50);
+  --cs-toggle-border:   var(--color-gray-100);
+
+  --selection-bg:   var(--color-blue-100);
+  --selection-text: var(--color-navy-900);
+
+  --focus-ring: var(--color-blue-100);
+
+  --roadmap-planned-node-bg: var(--color-white);
+  --roadmap-done-card-bg:    linear-gradient(135deg, var(--color-green-50) 0%, #fff 100%);
+  --roadmap-active-card-bg:  linear-gradient(135deg, var(--color-blue-50) 0%, #fff 100%);
 }

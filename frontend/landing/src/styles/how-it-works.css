@@ -6,8 +6,8 @@
 }
 
 .hiw__phase {
-  background: var(--color-white);
-  border: 1px solid var(--color-gray-200);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: var(--space-8);
   width: 100%;
@@ -34,12 +34,12 @@
 }
 
 .hiw__phase--browser .hiw__phase-number {
-  background: var(--color-blue-100);
+  background: var(--accent-blue-bg);
   color: var(--color-blue-600);
 }
 
 .hiw__phase--server .hiw__phase-number {
-  background: var(--color-green-100);
+  background: var(--accent-green-bg);
   color: var(--color-green-600);
 }
 
@@ -51,7 +51,7 @@
 
 .hiw__phase-label {
   font-size: var(--text-sm);
-  color: var(--color-gray-400);
+  color: var(--text-faint);
 }
 
 .hiw__steps {
@@ -65,7 +65,7 @@
   align-items: flex-start;
   gap: var(--space-3);
   font-size: var(--text-base);
-  color: var(--color-gray-700);
+  color: var(--text-secondary);
   line-height: var(--leading-snug);
 }
 
@@ -81,7 +81,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-gray-300);
+  color: var(--text-faint);
 }
 
 .hiw__connector svg {
@@ -99,7 +99,7 @@
   gap: var(--space-2);
   font-size: var(--text-base);
   font-weight: var(--font-medium);
-  color: var(--color-gray-700);
+  color: var(--text-secondary);
 }
 
 .hiw__footer svg {

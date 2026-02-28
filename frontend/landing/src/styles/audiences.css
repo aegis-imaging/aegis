@@ -5,8 +5,8 @@
 }
 
 .audiences__card {
-  background: var(--color-white);
-  border: 1px solid var(--color-gray-200);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: var(--space-8);
   border-top: 4px solid transparent;
@@ -43,12 +43,12 @@
 }
 
 .audiences__card--research .audiences__card-icon {
-  background: var(--color-blue-50);
+  background: var(--accent-blue-bg);
   color: var(--color-blue-600);
 }
 
 .audiences__card--radiology .audiences__card-icon {
-  background: var(--color-purple-100);
+  background: var(--accent-purple-bg);
   color: var(--color-purple-600);
 }
 
@@ -73,7 +73,7 @@
   align-items: flex-start;
   gap: var(--space-3);
   font-size: var(--text-base);
-  color: var(--color-gray-700);
+  color: var(--text-secondary);
   line-height: var(--leading-snug);
 }
 
