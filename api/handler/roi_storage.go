@@ -27,6 +27,20 @@ func (s *Server) storeROIResults(ctx context.Context, study *model.Study, result
 			s.storeGenericSegROIs(ctx, study, r.Metrics, "nnunet")
 		case "totalsegmentator":
 			s.storeGenericSegROIs(ctx, study, r.Metrics, "totalsegmentator")
+		case "itksnap":
+			s.storeGenericSegROIs(ctx, study, r.Metrics, "itksnap")
+		case "brainsuite":
+			s.storeGenericSegROIs(ctx, study, r.Metrics, "brainsuite")
+		case "monai_label":
+			s.storeGenericSegROIs(ctx, study, r.Metrics, "monai_label")
+		case "qsm":
+			s.storeGenericSegROIs(ctx, study, r.Metrics, "qsm")
+		case "volbrain":
+			s.storeVolBrainROIs(ctx, study, r.Metrics)
+		case "petsurfer":
+			s.storePETSurferROIs(ctx, study, r.Metrics)
+		case "basil":
+			s.storeBASILResults(ctx, study, r.Metrics)
 		}
 	}
 }
@@ -330,6 +344,162 @@ func (s *Server) storeGenericSegROIs(ctx context.Context, study *model.Study, me
 		return
 	}
 	log.Printf("roi-storage: stored %d %s ROI results for %s", len(rows), toolName, study.StudyInstanceUID)
+}
+
+// storeVolBrainROIs extracts per-ROI volumes from volBrain API results and
+// stores ICV as a CompositeScore.
+func (s *Server) storeVolBrainROIs(ctx context.Context, study *model.Study, metrics map[string]any) {
+	if err := model.DeleteROIResultsByStudy(ctx, s.db, study.ID); err != nil {
+		log.Printf("roi-storage: delete existing ROIs for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	var rows []model.ROIResult
+
+	if vols, ok := metrics["roi_volumes"].(map[string]any); ok {
+		for name, val := range vols {
+			rows = append(rows, model.ROIResult{
+				StudyID:     study.ID,
+				Tool:        "volbrain",
+				AtlasName:   "volbrain",
+				ROIName:     name,
+				MetricType:  "volume_mm3",
+				MetricValue: toFloat64(val),
+				Hemisphere:  hemisphereFromName(name),
+				ScanType:    "T1w",
+			})
+		}
+	}
+
+	if len(rows) > 0 {
+		if err := model.CreateROIResults(ctx, s.db, rows); err != nil {
+			log.Printf("roi-storage: insert volBrain ROIs for %s: %v", study.StudyInstanceUID, err)
+			return
+		}
+		log.Printf("roi-storage: stored %d volBrain ROI results for %s", len(rows), study.StudyInstanceUID)
+	}
+
+	// Store ICV as CompositeScore.
+	if icv, ok := metrics["icv"]; ok && icv != nil {
+		meta, _ := json.Marshal(map[string]any{
+			"roi_count": metrics["roi_count"],
+		})
+		score := &model.CompositeScore{
+			StudyID:    study.ID,
+			Tool:       "volbrain",
+			ScoreName:  "icv",
+			ScoreValue: toFloat64(icv),
+			Metadata:   meta,
+		}
+		if err := model.DeleteCompositeScoresByStudy(ctx, s.db, study.ID); err != nil {
+			log.Printf("roi-storage: delete existing composite scores for %s: %v", study.StudyInstanceUID, err)
+		}
+		if err := model.CreateCompositeScore(ctx, s.db, score); err != nil {
+			log.Printf("roi-storage: insert volBrain ICV score for %s: %v", study.StudyInstanceUID, err)
+		}
+	}
+}
+
+// storePETSurferROIs extracts per-ROI SUVR values from PETSurfer GTM PVC results.
+func (s *Server) storePETSurferROIs(ctx context.Context, study *model.Study, metrics map[string]any) {
+	if err := model.DeleteROIResultsByStudy(ctx, s.db, study.ID); err != nil {
+		log.Printf("roi-storage: delete existing ROIs for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	var rows []model.ROIResult
+
+	if suvr, ok := metrics["roi_suvr"].(map[string]any); ok {
+		for name, val := range suvr {
+			rows = append(rows, model.ROIResult{
+				StudyID:     study.ID,
+				Tool:        "petsurfer",
+				AtlasName:   "gtm",
+				ROIName:     name,
+				MetricType:  "suvr",
+				MetricValue: toFloat64(val),
+				Hemisphere:  hemisphereFromName(name),
+				ScanType:    "PET",
+			})
+		}
+	}
+
+	if len(rows) == 0 {
+		return
+	}
+
+	if err := model.CreateROIResults(ctx, s.db, rows); err != nil {
+		log.Printf("roi-storage: insert PETSurfer ROIs for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	log.Printf("roi-storage: stored %d PETSurfer ROI results for %s", len(rows), study.StudyInstanceUID)
+}
+
+// storeBASILResults extracts global and per-ROI CBF values from BASIL/oxford_asl output.
+func (s *Server) storeBASILResults(ctx context.Context, study *model.Study, metrics map[string]any) {
+	if err := model.DeleteROIResultsByStudy(ctx, s.db, study.ID); err != nil {
+		log.Printf("roi-storage: delete existing ROIs for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	var rows []model.ROIResult
+
+	// roi_cbf: []map with roi_name, mean, median, std
+	if cbfStats, ok := metrics["roi_cbf"].([]any); ok {
+		for _, item := range cbfStats {
+			stat, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := stat["roi_name"].(string)
+			if name == "" {
+				continue
+			}
+			hem := hemisphereFromName(name)
+
+			for _, metricKey := range []string{"mean", "median", "std"} {
+				if v, exists := stat[metricKey]; exists {
+					rows = append(rows, model.ROIResult{
+						StudyID:     study.ID,
+						Tool:        "basil",
+						AtlasName:   "basil",
+						ROIName:     name,
+						MetricType:  "cbf_ml_100g_min_" + metricKey,
+						MetricValue: toFloat64(v),
+						Hemisphere:  hem,
+						ScanType:    "ASL",
+					})
+				}
+			}
+		}
+	}
+
+	// Store global CBF as a CompositeScore.
+	if globalCBF, ok := metrics["global_cbf"].(map[string]any); ok {
+		meta, _ := json.Marshal(globalCBF)
+		meanVal := toFloat64(globalCBF["mean"])
+		score := &model.CompositeScore{
+			StudyID:    study.ID,
+			Tool:       "basil",
+			ScoreName:  "global_cbf_mean",
+			ScoreValue: meanVal,
+			Metadata:   meta,
+		}
+		if err := model.DeleteCompositeScoresByStudy(ctx, s.db, study.ID); err != nil {
+			log.Printf("roi-storage: delete existing composite scores for %s: %v", study.StudyInstanceUID, err)
+		}
+		if err := model.CreateCompositeScore(ctx, s.db, score); err != nil {
+			log.Printf("roi-storage: insert BASIL global CBF for %s: %v", study.StudyInstanceUID, err)
+		}
+	}
+
+	if len(rows) > 0 {
+		if err := model.CreateROIResults(ctx, s.db, rows); err != nil {
+			log.Printf("roi-storage: insert BASIL ROIs for %s: %v", study.StudyInstanceUID, err)
+			return
+		}
+		log.Printf("roi-storage: stored %d BASIL ROI results for %s", len(rows), study.StudyInstanceUID)
+	}
 }
 
 // synthsegHemisphere detects hemisphere from SynthSeg ROI names which use

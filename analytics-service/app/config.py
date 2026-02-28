@@ -42,3 +42,37 @@ NNUNET_USE_GPU = os.getenv("NNUNET_USE_GPU", "true").lower() == "true"
 TOTALSEG_TASK = os.getenv("TOTALSEG_TASK", "total")
 TOTALSEG_FAST = os.getenv("TOTALSEG_FAST", "false").lower() == "true"
 TOTALSEG_USE_GPU = os.getenv("TOTALSEG_USE_GPU", "true").lower() == "true"
+
+# ITK-SNAP / Convert3D
+C3D_BIN = os.getenv("C3D_BIN", "c3d")
+ITKSNAP_WT_BIN = os.getenv("ITKSNAP_WT_BIN", "itksnap-wt")
+
+# BrainSuite
+BRAINSUITE_DIR = os.getenv("BRAINSUITE_DIR", "/opt/BrainSuite")
+BSE_BIN = os.getenv("BSE_BIN", "bse")
+
+# volBrain (online service)
+VOLBRAIN_API_URL = os.getenv("VOLBRAIN_API_URL", "")
+VOLBRAIN_API_KEY = os.getenv("VOLBRAIN_API_KEY", "")
+VOLBRAIN_POLL_INTERVAL = int(os.getenv("VOLBRAIN_POLL_INTERVAL", "30"))
+VOLBRAIN_TIMEOUT = int(os.getenv("VOLBRAIN_TIMEOUT", "3600"))
+
+# MONAI Label
+MONAI_MODEL_DIR = os.getenv("MONAI_MODEL_DIR", "/opt/monai/models")
+MONAI_MODEL_NAME = os.getenv("MONAI_MODEL_NAME", "segmentation")
+MONAI_USE_GPU = os.getenv("MONAI_USE_GPU", "true").lower() == "true"
+
+# PETSurfer
+PETSURFER_PSF_FWHM = os.getenv("PETSURFER_PSF_FWHM", "6")
+PETSURFER_KM_REF = os.getenv("PETSURFER_KM_REF", "8 47")
+
+# QSM
+QSM_TOOL = os.getenv("QSM_TOOL", "auto")
+QSM_UNWRAP_METHOD = os.getenv("QSM_UNWRAP_METHOD", "laplacian")
+QSM_BFR_METHOD = os.getenv("QSM_BFR_METHOD", "vsharp")
+QSM_DIPOLE_METHOD = os.getenv("QSM_DIPOLE_METHOD", "ilsqr")
+
+# BASIL / oxford_asl
+BASIL_BOLUS_DURATION = os.getenv("BASIL_BOLUS_DURATION", "1.8")
+BASIL_TIS = os.getenv("BASIL_TIS", "3.6")
+BASIL_CALIB_METHOD = os.getenv("BASIL_CALIB_METHOD", "voxel")

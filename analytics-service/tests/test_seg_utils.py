@@ -11,6 +11,9 @@ from app.backends.seg_utils import (
     compute_label_stats,
     compute_label_volumes,
     find_any_nifti,
+    find_asl_nifti,
+    find_pet_nifti,
+    find_qsm_niftis,
     find_t1w_nifti,
 )
 
@@ -202,3 +205,131 @@ class TestComputeLabelStats:
 
             names = [s["roi_name"] for s in stats]
             assert names == ["A_region", "B_region", "C_region"]
+
+
+class TestFindPetNifti:
+    def test_returns_none_empty_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            assert find_pet_nifti(d) is None
+
+    def test_finds_pet_by_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            pet_dir = os.path.join(d, "sub-01", "pet")
+            os.makedirs(pet_dir)
+            pet = os.path.join(pet_dir, "sub-01_pet.nii.gz")
+            with open(pet, "wb") as f:
+                f.write(b"\x00" * 10)
+            assert find_pet_nifti(d) == pet
+
+    def test_finds_pet_in_pet_subdir(self):
+        with tempfile.TemporaryDirectory() as d:
+            pet_dir = os.path.join(d, "sub-01", "pet")
+            os.makedirs(pet_dir)
+            nifti = os.path.join(pet_dir, "sub-01_trc-PIB_run-1.nii.gz")
+            with open(nifti, "wb") as f:
+                f.write(b"\x00" * 10)
+            # Should find it in pet/ subdir even without "pet" in filename
+            # Actually it won't match filename patterns, but will match subdir
+            # This tests the fallback to pet/ directory
+            result = find_pet_nifti(d)
+            assert result == nifti
+
+    def test_ignores_non_pet(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            t1w = os.path.join(anat, "sub-01_T1w.nii.gz")
+            with open(t1w, "wb") as f:
+                f.write(b"\x00" * 10)
+            assert find_pet_nifti(d) is None
+
+
+class TestFindAslNifti:
+    def test_returns_none_empty_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            assert find_asl_nifti(d) is None
+
+    def test_finds_asl_by_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            perf = os.path.join(d, "sub-01", "perf")
+            os.makedirs(perf)
+            asl = os.path.join(perf, "sub-01_asl.nii.gz")
+            with open(asl, "wb") as f:
+                f.write(b"\x00" * 10)
+            assert find_asl_nifti(d) == asl
+
+    def test_finds_perf_by_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            func = os.path.join(d, "sub-01", "func")
+            os.makedirs(func)
+            perf = os.path.join(func, "sub-01_perfusion.nii.gz")
+            with open(perf, "wb") as f:
+                f.write(b"\x00" * 10)
+            assert find_asl_nifti(d) == perf
+
+    def test_finds_in_perf_subdir(self):
+        with tempfile.TemporaryDirectory() as d:
+            perf_dir = os.path.join(d, "sub-01", "perf")
+            os.makedirs(perf_dir)
+            nifti = os.path.join(perf_dir, "sub-01_cbf.nii.gz")
+            with open(nifti, "wb") as f:
+                f.write(b"\x00" * 10)
+            result = find_asl_nifti(d)
+            assert result == nifti
+
+    def test_ignores_non_asl(self):
+        with tempfile.TemporaryDirectory() as d:
+            anat = os.path.join(d, "sub-01", "anat")
+            os.makedirs(anat)
+            t1w = os.path.join(anat, "sub-01_T1w.nii.gz")
+            with open(t1w, "wb") as f:
+                f.write(b"\x00" * 10)
+            assert find_asl_nifti(d) is None
+
+
+class TestFindQSMNiftis:
+    def test_returns_none_empty_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            mag, phase = find_qsm_niftis(d)
+            assert mag is None
+            assert phase is None
+
+    def test_finds_magnitude_and_phase(self):
+        with tempfile.TemporaryDirectory() as d:
+            fmap = os.path.join(d, "sub-01", "fmap")
+            os.makedirs(fmap)
+            mag = os.path.join(fmap, "sub-01_magnitude1.nii.gz")
+            phase = os.path.join(fmap, "sub-01_phasediff.nii.gz")
+            for f in [mag, phase]:
+                with open(f, "wb") as fp:
+                    fp.write(b"\x00" * 10)
+
+            found_mag, found_phase = find_qsm_niftis(d)
+            assert found_mag == mag
+            assert found_phase == phase
+
+    def test_finds_phase_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            fmap = os.path.join(d, "sub-01", "fmap")
+            os.makedirs(fmap)
+            phase = os.path.join(fmap, "sub-01_phase.nii.gz")
+            with open(phase, "wb") as f:
+                f.write(b"\x00" * 10)
+
+            found_mag, found_phase = find_qsm_niftis(d)
+            assert found_mag is None
+            assert found_phase == phase
+
+    def test_echo_fallback(self):
+        with tempfile.TemporaryDirectory() as d:
+            fmap = os.path.join(d, "sub-01", "fmap")
+            os.makedirs(fmap)
+            echo1 = os.path.join(fmap, "sub-01_echo-1.nii.gz")
+            echo2 = os.path.join(fmap, "sub-01_echo-2.nii.gz")
+            for f in [echo1, echo2]:
+                with open(f, "wb") as fp:
+                    fp.write(b"\x00" * 10)
+
+            found_mag, found_phase = find_qsm_niftis(d)
+            assert found_mag == echo1
+            assert found_phase == echo2

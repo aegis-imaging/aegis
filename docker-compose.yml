@@ -251,6 +251,8 @@ services:
     environment:
       ANALYTICS_DATA_DIR: "/app/data"
       ANALYTICS_TOOL: "auto"
+      VOLBRAIN_API_URL: "${VOLBRAIN_API_URL:-}"
+      VOLBRAIN_API_KEY: "${VOLBRAIN_API_KEY:-}"
     volumes:
       - aegis-data:/app/data
     healthcheck:

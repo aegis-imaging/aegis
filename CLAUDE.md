@@ -62,7 +62,7 @@ aegis/
 ├── classification-service/  # Python metadata classification service (heuristic / Cloud Vision / Rekognition)
 ├── protocol-service/        # Python MRI protocol compliance service (pydicom)
 ├── synth-service/           # Python synthetic DICOM brain MRI generator (nibabel + NumPy)
-├── analytics-service/       # Python neuroimaging analytics (FreeSurfer, FSL, ANTs, SPM)
+├── analytics-service/       # Python neuroimaging analytics (15 backends incl. FreeSurfer, FSL, ANTs, SPM, SynthSeg, MONAI Label, PETSurfer, QSM, BASIL)
 ├── dimse-receiver/          # Python DIMSE adapter (pynetdicom C-STORE SCP + ingest trigger)
 ├── mcp-server/              # TypeScript MCP server for AI agent operations
 └── docs/                    # Shared research, references, and analysis (see docs/README.md)
@@ -81,7 +81,7 @@ Planned to split into 5 separate repos once interfaces stabilize:
 - **Defacing**: Python — mri_deface, dcm2niix, pydicom
 - **Viewer**: Weasis DWV (embedded in admin dashboard)
 - **AI/ML**: Pluggable — local backends (Tesseract OCR, pydicom heuristics) or cloud AI (Gemini, Google Cloud Vision, Azure Vision, AWS Textract/Rekognition)
-- **Analytics**: FreeSurfer, FSL, ANTs, SPM (post-BIDS neuroimaging analysis)
+- **Analytics**: FreeSurfer, FSL, ANTs, SPM, SynthSeg, nnU-Net, TotalSegmentator, ITK-SNAP, BrainSuite, volBrain, MONAI Label, PETSurfer, QSM, BASIL (post-BIDS neuroimaging analysis)
 - **Email**: Standard SMTP (works with any provider). Dev: Mailpit.
 - **Infrastructure**: Terraform (GCP, AWS, and Azure modules), Docker Compose for local dev
 - **Auth**: Multi-provider — GCP IAP, Azure AD Easy Auth, AWS ALB + Cognito; dev mode auto-auth
@@ -1031,7 +1031,7 @@ uvicorn app.main:app --port 8089
 | Var | Default | Notes |
 |-----|---------|-------|
 | `ANALYTICS_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
-| `ANALYTICS_TOOL` | `auto` | Backend selection: `auto`, `freesurfer`, `fsl`, `ants`, `spm`, `atlas_roi`, `synthseg`, `nnunet`, `totalsegmentator` |
+| `ANALYTICS_TOOL` | `auto` | Backend selection: `auto`, `freesurfer`, `fsl`, `ants`, `spm`, `atlas_roi`, `synthseg`, `nnunet`, `totalsegmentator`, `itksnap`, `brainsuite`, `volbrain`, `monai_label`, `petsurfer`, `qsm`, `basil` |
 
 **Study fields:**
 - `analytics_required` — boolean flag, set by routing rule action
@@ -1051,8 +1051,15 @@ uvicorn app.main:app --port 8089
 | SynthSeg | `mri_synthseg` | Contrast-agnostic brain segmentation (32 or 97 ROIs with --parc), ~6s GPU / ~2min CPU |
 | nnU-Net | `nnunetv2` (Python) | Self-configuring DL segmentation (brain tumors, any task with pre-trained model) |
 | TotalSegmentator | `TotalSegmentator` | 117-structure whole-body CT/MRI segmentation via nnU-Net |
+| ITK-SNAP/c3d | `c3d`, `itksnap-wt` | Semi-automated segmentation using active contour models |
+| BrainSuite | `bse`, `bfc`, `pvc`, `cerebro` | Cortical surface extraction, gray/white matter analysis |
+| volBrain | Online API | Automated brain volumetry and ICV from T1w MRI |
+| MONAI Label | `monailabel` (Python) | AI-based interactive/automatic segmentation framework |
+| PETSurfer | `mri_gtmpvc` | PET partial volume correction and SUVR quantification |
+| QSM | `tgv_qsm` or `scipy` (Python) | Quantitative Susceptibility Mapping from phase/magnitude data |
+| BASIL | `oxford_asl` | ASL perfusion CBF quantification (part of FSL) |
 
-**Auto-selection priority:** freesurfer > fsl > ants > spm > atlas_roi > synthseg > nnunet > totalsegmentator (first available wins)
+**Auto-selection priority:** freesurfer > fsl > ants > spm > atlas_roi > synthseg > nnunet > totalsegmentator > itksnap > brainsuite > volbrain > monai_label > petsurfer > qsm > basil (first available wins)
 
 **Single-study backends:**
 
@@ -1062,6 +1069,13 @@ uvicorn app.main:app --port 8089
 | SynthSeg | `mri_synthseg` or `SynthSeg` (Python) | Contrast-agnostic brain segmentation, built-in QC scoring |
 | nnU-Net | `nnunetv2` (Python API) | Self-configuring deep learning segmentation with pre-trained models |
 | TotalSegmentator | `totalsegmentator` (Python API or CLI) | Whole-body CT/MRI segmentation (117 anatomical structures) |
+| ITK-SNAP/c3d | `c3d` / `itksnap-wt` | Semi-automated NIfTI segmentation (threshold-based, active contours) |
+| BrainSuite | `bse` → `bfc` → `pvc` → `cerebro` | Multi-step cortical analysis pipeline |
+| volBrain | Online API (`VOLBRAIN_API_URL`) | Cloud brain volumetry service — ICV + subcortical volumes |
+| MONAI Label | `monailabel` (Python API) | Deep learning segmentation with pre-trained models |
+| PETSurfer | `mri_gtmpvc` (FreeSurfer) | GTM partial volume correction for PET SUVR quantification |
+| QSM | `tgv_qsm` or scipy | Susceptibility mapping from multi-echo GRE phase data |
+| BASIL | `oxford_asl` (FSL) | Cerebral blood flow quantification from ASL perfusion data |
 
 **Longitudinal analytics** (`POST /api/studies/{studyUID}/longitudinal-analytics`):
 
@@ -1230,13 +1244,13 @@ Phase 1: PHI scan + Pixel Redaction + Protocol check + Defacing (parallel, raw f
     ↓
 Phase 2: QC check + BIDS conversion (after defacing, final files)
     ↓
-Phase 3: Analytics (FreeSurfer, FSL, ANTs, SPM — post-BIDS, on NIfTI outputs)
+Phase 3: Analytics (15 backends — post-BIDS, on NIfTI outputs)
 ```
 
 - **Phase 0**: Classification must complete first — it fills `modality`/`body_part` from DICOM headers, then re-evaluates routing rules which may add new requirements (e.g. `require_defacing` for HEAD studies)
 - **Phase 1**: PHI scan, pixel redaction, protocol check, and defacing run in parallel on raw files. Each service is dispatched only if its URL is configured.
 - **Phase 2**: QC and BIDS run after defacing completes (if defacing is required). They operate on the final `dicom_store` (clean after defacing, raw otherwise).
-- **Phase 3**: Analytics runs after BIDS conversion completes. Neuroimaging analysis tools (FreeSurfer, FSL, ANTs, SPM) operate on the BIDS-converted NIfTI outputs.
+- **Phase 3**: Analytics runs after BIDS conversion completes. Neuroimaging analysis tools (15 backends including FreeSurfer, FSL, ANTs, SPM, SynthSeg, ITK-SNAP, BrainSuite, volBrain, MONAI Label, PETSurfer, QSM, BASIL) operate on the BIDS-converted NIfTI outputs.
 
 **How it works:**
 - `AdvancePipeline(ctx, studyID)` is called after routing rules evaluate and after each service completes
@@ -2152,7 +2166,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | phi-detection | 134 | Windowing, uint8 normalization, mock Tesseract OCR, Cloud Vision/Azure Vision/Textract OCR, pixel_utils, multi-file detection, pixel redaction, LLM text scrubbing, private tag PHI scanning |
 | bids-service | 17 | Series classification (T1w/FLAIR/bold/DWI/ASL/PET/CT), subject label hashing, mock dcm2niix |
 | synth-service | 12 | Synthetic brain MRI generation, DICOM metadata, nibabel phantom pipeline |
-| analytics-service | 186 | FreeSurfer/FSL/ANTs/SPM/SynthSeg/nnU-Net/TotalSegmentator backend selection, tool availability detection, seg_utils, endpoint tests |
+| analytics-service | 280+ | All 15 backends (FreeSurfer/FSL/ANTs/SPM/SynthSeg/nnU-Net/TotalSegmentator/ITK-SNAP/BrainSuite/volBrain/MONAI Label/PETSurfer/QSM/BASIL), tool availability detection, seg_utils, endpoint tests |
 
 All tests use **synthetic DICOM files** generated via pydicom — no test data on disk. External tools (tesseract, dcm2niix, mri_deface) are mocked.
 
