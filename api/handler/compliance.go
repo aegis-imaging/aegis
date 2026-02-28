@@ -19,6 +19,7 @@ type complianceReport struct {
 	PhiDetect   compliancePhiDetect `json:"phi_detection"`
 	Defacing    complianceDefacing  `json:"defacing"`
 	Protocol    complianceProtocol  `json:"protocol_compliance"`
+	Analytics   complianceAnalytics `json:"analytics"`
 	Exports     complianceExports   `json:"exports"`
 }
 
@@ -50,6 +51,13 @@ type complianceProtocol struct {
 	Compliant       int `json:"compliant"`
 	MinorDeviations int `json:"minor_deviations"`
 	NonCompliant    int `json:"non_compliant"`
+}
+
+type complianceAnalytics struct {
+	Required  int `json:"required"`
+	Complete  int `json:"complete"`
+	Partial   int `json:"partial"`
+	Failed    int `json:"failed"`
 }
 
 type complianceExports struct {
@@ -158,6 +166,23 @@ func (s *Server) GetProjectComplianceReport(w http.ResponseWriter, r *http.Reque
 		&report.Protocol.Compliant,
 		&report.Protocol.MinorDeviations,
 		&report.Protocol.NonCompliant,
+	) //nolint:errcheck
+
+	// ── Analytics ────────────────────────────────────────────────────────────
+	row = s.db.QueryRowContext(r.Context(), `
+		SELECT
+			COUNT(*) FILTER (WHERE analytics_required)                                        AS required,
+			COUNT(*) FILTER (WHERE analytics_required AND analytics_status = 'complete')      AS complete,
+			COUNT(*) FILTER (WHERE analytics_required AND analytics_status = 'partial')       AS partial,
+			COUNT(*) FILTER (WHERE analytics_required AND analytics_status = 'failed')        AS failed
+		FROM studies
+		WHERE project_id = $1
+		  AND created_at >= $2`, projectID, since)
+	row.Scan(
+		&report.Analytics.Required,
+		&report.Analytics.Complete,
+		&report.Analytics.Partial,
+		&report.Analytics.Failed,
 	) //nolint:errcheck
 
 	// ── Export shares ─────────────────────────────────────────────────────────
@@ -279,6 +304,21 @@ func (s *Server) ExportComplianceReportCSV(w http.ResponseWriter, r *http.Reques
 
 	s.db.QueryRowContext(r.Context(), `
 		SELECT
+			COUNT(*) FILTER (WHERE analytics_required)                                        AS required,
+			COUNT(*) FILTER (WHERE analytics_required AND analytics_status = 'complete')      AS complete,
+			COUNT(*) FILTER (WHERE analytics_required AND analytics_status = 'partial')       AS partial,
+			COUNT(*) FILTER (WHERE analytics_required AND analytics_status = 'failed')        AS failed
+		FROM studies
+		WHERE project_id = $1
+		  AND created_at >= $2`, projectID, since).Scan( //nolint:errcheck
+		&report.Analytics.Required,
+		&report.Analytics.Complete,
+		&report.Analytics.Partial,
+		&report.Analytics.Failed,
+	)
+
+	s.db.QueryRowContext(r.Context(), `
+		SELECT
 			COUNT(DISTINCT es.id)                        AS shares_created,
 			COUNT(DISTINCT es.id) FILTER (WHERE ed.id IS NOT NULL) AS shares_downloaded,
 			COUNT(ed.id)                                 AS total_downloads
@@ -331,6 +371,12 @@ func (s *Server) ExportComplianceReportCSV(w http.ResponseWriter, r *http.Reques
 	_ = cw.Write([]string{"protocol_compliance", "compliant", strconv.Itoa(report.Protocol.Compliant)})
 	_ = cw.Write([]string{"protocol_compliance", "minor_deviations", strconv.Itoa(report.Protocol.MinorDeviations)})
 	_ = cw.Write([]string{"protocol_compliance", "non_compliant", strconv.Itoa(report.Protocol.NonCompliant)})
+
+	// Analytics
+	_ = cw.Write([]string{"analytics", "required", strconv.Itoa(report.Analytics.Required)})
+	_ = cw.Write([]string{"analytics", "complete", strconv.Itoa(report.Analytics.Complete)})
+	_ = cw.Write([]string{"analytics", "partial", strconv.Itoa(report.Analytics.Partial)})
+	_ = cw.Write([]string{"analytics", "failed", strconv.Itoa(report.Analytics.Failed)})
 
 	// Exports
 	_ = cw.Write([]string{"exports", "shares_created", strconv.Itoa(report.Exports.SharesCreated)})

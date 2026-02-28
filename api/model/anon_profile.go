@@ -11,23 +11,24 @@ import (
 // Tags listed in RetainedTags are kept as-is instead of being stripped by the
 // PS3.15 Annex E Basic Profile de-identification applied client-side.
 type AnonProfile struct {
-	ID           string          `json:"id"`
-	ProjectID    string          `json:"project_id"`
-	Name         string          `json:"name"`
-	Description  string          `json:"description"`
-	RetainedTags json.RawMessage `json:"retained_tags"` // JSON array of DICOM keyword strings
-	Enabled      bool            `json:"enabled"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	ID              string          `json:"id"`
+	ProjectID       string          `json:"project_id"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	RetainedTags    json.RawMessage `json:"retained_tags"`     // JSON array of DICOM keyword strings
+	KeepPrivateTags bool            `json:"keep_private_tags"` // Retain vendor private tags (odd group numbers)
+	Enabled         bool            `json:"enabled"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 const anonProfileColumns = `
-	id, project_id, name, description, retained_tags, enabled, created_at, updated_at`
+	id, project_id, name, description, retained_tags, keep_private_tags, enabled, created_at, updated_at`
 
 func scanAnonProfile(row scannable, p *AnonProfile) error {
 	return row.Scan(
 		&p.ID, &p.ProjectID, &p.Name, &p.Description,
-		&p.RetainedTags, &p.Enabled, &p.CreatedAt, &p.UpdatedAt,
+		&p.RetainedTags, &p.KeepPrivateTags, &p.Enabled, &p.CreatedAt, &p.UpdatedAt,
 	)
 }
 
@@ -36,10 +37,10 @@ func CreateAnonProfile(ctx context.Context, db *sql.DB, p *AnonProfile) error {
 		p.RetainedTags = json.RawMessage("[]")
 	}
 	return db.QueryRowContext(ctx, `
-		INSERT INTO anon_profiles (project_id, name, description, retained_tags, enabled)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO anon_profiles (project_id, name, description, retained_tags, keep_private_tags, enabled)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at, updated_at`,
-		p.ProjectID, p.Name, p.Description, p.RetainedTags, p.Enabled,
+		p.ProjectID, p.Name, p.Description, p.RetainedTags, p.KeepPrivateTags, p.Enabled,
 	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 }
 
@@ -78,9 +79,9 @@ func UpdateAnonProfile(ctx context.Context, db *sql.DB, p *AnonProfile) error {
 	}
 	_, err := db.ExecContext(ctx, `
 		UPDATE anon_profiles SET
-			name=$1, description=$2, retained_tags=$3, enabled=$4, updated_at=now()
-		WHERE id=$5`,
-		p.Name, p.Description, p.RetainedTags, p.Enabled, p.ID)
+			name=$1, description=$2, retained_tags=$3, keep_private_tags=$4, enabled=$5, updated_at=now()
+		WHERE id=$6`,
+		p.Name, p.Description, p.RetainedTags, p.KeepPrivateTags, p.Enabled, p.ID)
 	return err
 }
 

@@ -21,6 +21,8 @@ ARG MRI_DEFACE_VERSION=1.22
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    libgdcm-tools \
+    libopenjp2-7 \
     && rm -rf /var/lib/apt/lists/*
 
 # ── dcm2niix (static binary, ~5 MB) ────────────────────────────────────────

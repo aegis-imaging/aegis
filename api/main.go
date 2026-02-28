@@ -546,6 +546,7 @@ func main() {
 	mux.HandleFunc("POST /api/studies/{studyUID}/classify", adminOnly(srv.TriggerClassification))
 	mux.HandleFunc("POST /api/studies/{studyUID}/protocol-check", adminOnly(srv.TriggerProtocolCheck))
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-download", auth(srv.ServeDicomDownload))
+	mux.HandleFunc("POST /api/studies/{studyUID}/analytics", adminOnly(srv.TriggerAnalytics))
 	mux.HandleFunc("POST /api/studies/{studyUID}/trigger-export", adminOnly(srv.TriggerExport))
 
 	// Synthetic MRI generation — creates a new synthetic brain MRI study.
