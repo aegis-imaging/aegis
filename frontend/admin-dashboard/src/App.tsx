@@ -81,6 +81,7 @@ type Study = {
   modality: string
   body_part: string
   study_description: string
+  study_date?: string
   series_count: number
   source: string
   status: string
@@ -97,6 +98,8 @@ type Study = {
   protocol_status: string
   export_required: boolean
   export_status: string
+  analytics_required: boolean
+  analytics_status: string
   dicom_store: string
   instance_count: number
   study_size_bytes: number
@@ -1753,6 +1756,11 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [rejectReasonText, setRejectReasonText] = useState('')
 
+  // Longitudinal analytics state
+  const [longAnalyticsOpen, setLongAnalyticsOpen] = useState(false)
+  const [longBaselineId, setLongBaselineId] = useState('')
+  const [longWorking, setLongWorking] = useState(false)
+
   // Link study form state (for relationships tab)
   const [linkStudyUID, setLinkStudyUID] = useState('')
   const [linkRelType, setLinkRelType] = useState('follow_up')
@@ -1940,6 +1948,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       <div className="study-detail__meta">
         <div className="study-detail__meta-item"><strong>Modality</strong> {study.modality || '—'}</div>
         <div className="study-detail__meta-item"><strong>Body Part</strong> {study.body_part || '—'}</div>
+        <div className="study-detail__meta-item"><strong>Study Date</strong> {study.study_date ? study.study_date.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : '—'}</div>
         <div className="study-detail__meta-item"><strong>Files</strong> {study.instance_count}</div>
         <div className="study-detail__meta-item"><strong>Series</strong> {study.series_count}</div>
         <div className="study-detail__meta-item"><strong>Size</strong> {study.study_size_bytes > 0 ? formatBytes(study.study_size_bytes) : '—'}</div>
@@ -2024,6 +2033,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           {isAdmin && canQcCheck && <button type="button" className="btn btn--qc-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/qc-check`)}>Run QC</button>}
           {isAdmin && canBidsConvert && <button type="button" className="btn btn--bids-convert" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/bids-convert`)}>Convert to BIDS</button>}
           {canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
+          {isAdmin && study.bids_status === 'complete' && study.analytics_status !== 'analyzing' && (
+            <button type="button" className="btn btn--secondary" onClick={() => setLongAnalyticsOpen(o => !o)}>{longAnalyticsOpen ? 'Cancel' : 'Longitudinal Analytics'}</button>
+          )}
           {study.status === 'approved' && <a href={`/api/studies/${study.study_instance_uid}/dicom-download`} className="btn btn--dicom-download" download>Download DICOM</a>}
           {isAdmin && study.export_required && (study.export_status === 'pending' || study.export_status === 'failed') && study.status === 'approved' && (
             <button type="button" className="btn btn--export" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/trigger-export`)}>Export</button>
@@ -2048,6 +2060,59 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
             </select>
             <button type="button" className="btn btn--approve" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
             <button type="button" className="btn btn--secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
+          </div>
+        )}
+        {isAdmin && longAnalyticsOpen && (
+          <div style={{ marginTop: 12, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '12px 16px' }}>
+            <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#1e40af' }}>Longitudinal Analytics (TBM-SyN + FreeSurfer)</p>
+            <p style={{ margin: '0 0 8px', fontSize: 13, color: '#374151' }}>Select the baseline study to compare against this follow-up. Scan interval is auto-computed from study dates when available.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 13, fontWeight: 500 }}>Baseline Study ID:</label>
+              <input
+                className="form-input"
+                style={{ width: 320, padding: '4px 8px', fontSize: 13 }}
+                value={longBaselineId}
+                onChange={e => setLongBaselineId(e.target.value)}
+                placeholder="Baseline study UUID"
+              />
+              <button
+                type="button"
+                className="btn btn--approve"
+                disabled={longWorking || !longBaselineId.trim()}
+                onClick={async () => {
+                  setLongWorking(true)
+                  try {
+                    const res = await fetch(`/api/studies/${study.study_instance_uid}/longitudinal-analytics`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ baseline_study_id: longBaselineId.trim() }),
+                    })
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+                      alert(`Longitudinal analytics failed: ${err.error || res.status}`)
+                    } else {
+                      setLongAnalyticsOpen(false)
+                      setLongBaselineId('')
+                      loadData()
+                    }
+                  } finally {
+                    setLongWorking(false)
+                  }
+                }}
+              >{longWorking ? 'Starting…' : 'Start Analysis'}</button>
+              <button type="button" className="btn btn--secondary" onClick={() => { setLongAnalyticsOpen(false); setLongBaselineId('') }}>Cancel</button>
+            </div>
+            {relationships.length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+                Related studies: {relationships.map(r => (
+                  <span key={r.id} style={{ marginRight: 8 }}>
+                    <button type="button" className="link-btn" style={{ fontSize: 12 }} onClick={() => setLongBaselineId(r.related_study_id)}>
+                      {r.relationship}: {r.related_study.study_instance_uid.slice(0, 20)}…
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {projectCaps.canApproveReject && rejectModalOpen && (
@@ -2817,6 +2882,7 @@ function StudyRow({
         )}
         <td>{study.modality || '—'}</td>
         <td>{study.body_part || '—'}</td>
+        <td>{study.study_date ? study.study_date.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : '—'}</td>
         <td><Badge label={study.source} prefix="source" /></td>
         <td><Badge label={study.status} prefix="status" /></td>
         <td>{study.phi_scan_required ? <Badge label={study.phi_scan_status || 'n/a'} prefix="phi" /> : '—'}</td>
@@ -10291,6 +10357,7 @@ export function App() {
                     {showDescCol && <th>Description</th>}
                     <th className="th-sortable" onClick={() => setSortF('modality')} title="Sort by modality">Modality{sortIcon('modality')}</th>
                     <th className="th-sortable" onClick={() => setSortF('body_part')} title="Sort by body part">Body Part{sortIcon('body_part')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('study_date')} title="Sort by study date">Study Date{sortIcon('study_date')}</th>
                     <th className="th-sortable" onClick={() => setSortF('source')} title="Sort by source">Source{sortIcon('source')}</th>
                     <th className="th-sortable" onClick={() => setSortF('status')} title="Sort by status">Status{sortIcon('status')}</th>
                     <th>PHI Scan</th>

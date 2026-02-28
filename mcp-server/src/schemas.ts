@@ -15,7 +15,9 @@ export const listStudiesArgsSchema = z.object({
   date_from: z.string().datetime().optional(),
   date_to: z.string().datetime().optional(),
   flagged: z.boolean().optional(),
-  sort_by: z.enum(["created_at", "updated_at", "status", "modality", "body_part", "source", "instance_count"]).optional(),
+  study_date_from: z.string().regex(/^\d{4,8}$/).optional().describe("Filter by study_date >= this value (DICOM YYYYMMDD format)"),
+  study_date_to: z.string().regex(/^\d{4,8}$/).optional().describe("Filter by study_date <= this value (DICOM YYYYMMDD format)"),
+  sort_by: z.enum(["created_at", "updated_at", "status", "modality", "body_part", "source", "instance_count", "study_date"]).optional(),
   sort_dir: z.enum(["asc", "desc"]).optional()
 });
 
@@ -152,6 +154,15 @@ export const unlinkStudiesArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   study_id: z.string().uuid(),
   relationship_id: z.string().uuid(),
+  reason: z.string().min(10).max(512),
+  confirm: z.literal(true)
+});
+
+export const triggerLongitudinalAnalyticsArgsSchema = z.object({
+  request_id: z.string().min(8).max(128).optional(),
+  study_uid: z.string().min(4).max(256).regex(/^[0-9.]+$/).describe("Follow-up study DICOM UID"),
+  baseline_study_id: z.string().uuid().describe("Baseline study database UUID"),
+  scan_interval_days: z.number().positive().optional().describe("Days between scans; auto-computed from study_date if omitted"),
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
 });
@@ -1222,6 +1233,7 @@ export const writeToolNames = [
   "trigger_export",
   "trigger_deface",
   "trigger_analytics",
+  "trigger_longitudinal_analytics",
   "retry_dimse_study",
   "approve_study",
   "reject_study",

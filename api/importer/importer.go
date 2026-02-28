@@ -80,6 +80,7 @@ type StudyGroup struct {
 	Modality         string
 	BodyPart         string
 	StudyDescription string
+	StudyDate        string
 	SeriesUIDs       map[string]bool
 	SeriesMeta       map[string]*SeriesInfo // keyed by SeriesInstanceUID
 	Files            []string               // absolute file paths
@@ -291,7 +292,7 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 
 		result.FilesScanned++
 
-		studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, parseErr := parseDICOMHeaders(path)
+		studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate, parseErr := parseDICOMHeaders(path)
 		if parseErr != nil {
 			result.FilesSkipped++
 			result.Errors = append(result.Errors, fmt.Sprintf("parse %s: %v", filepath.Base(path), parseErr))
@@ -305,6 +306,7 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 				Modality:         modality,
 				BodyPart:         strings.ToUpper(bodyPart),
 				StudyDescription: studyDesc,
+				StudyDate:        studyDate,
 				SeriesUIDs:       make(map[string]bool),
 				SeriesMeta:       make(map[string]*SeriesInfo),
 			}
@@ -332,10 +334,10 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 }
 
 // parseDICOMHeaders extracts key tags from a DICOM file without loading pixel data.
-func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc string, err error) {
+func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", "", "", "", "", fmt.Errorf("open: %w", err)
+		return "", "", "", "", "", "", "", fmt.Errorf("open: %w", err)
 	}
 	defer f.Close()
 
@@ -345,7 +347,7 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 	// io.ReadAll always returns actual bytes regardless of metadata.
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return "", "", "", "", "", "", fmt.Errorf("read: %w", err)
+		return "", "", "", "", "", "", "", fmt.Errorf("read: %w", err)
 	}
 
 	dataset, err := dicom.Parse(bytes.NewReader(data), int64(len(data)), nil,
@@ -356,7 +358,7 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 		dicom.AllowMissingMetaElementGroupLength(),
 	)
 	if err != nil {
-		return "", "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
+		return "", "", "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
 	}
 
 	studyUID = getStringTag(dataset, tag.StudyInstanceUID)
@@ -365,11 +367,12 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 	studyDesc = getStringTag(dataset, tag.StudyDescription)
 	seriesUID = getStringTag(dataset, tag.SeriesInstanceUID)
 	seriesDesc = getStringTag(dataset, tag.SeriesDescription)
+	studyDate = getStringTag(dataset, tag.StudyDate)
 
 	if studyUID == "" {
-		return "", "", "", "", "", "", fmt.Errorf("missing StudyInstanceUID")
+		return "", "", "", "", "", "", "", fmt.Errorf("missing StudyInstanceUID")
 	}
-	return studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, nil
+	return studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate, nil
 }
 
 // getStringTag extracts a string value from a DICOM dataset element.
@@ -425,6 +428,10 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 	defacingRequired := bodyPart == "HEAD" || bodyPart == "BRAIN"
 
 	// Build study record.
+	var studyDate *string
+	if g.StudyDate != "" {
+		studyDate = &g.StudyDate
+	}
 	study := &model.Study{
 		ProjectID:        project.ID,
 		UploadSessionID:  &session.ID,
@@ -432,6 +439,7 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 		Modality:         g.Modality,
 		BodyPart:         g.BodyPart,
 		StudyDescription: g.StudyDescription,
+		StudyDate:        studyDate,
 		SeriesCount:      len(g.SeriesUIDs),
 		InstanceCount:    len(g.Files),
 		Status:           "received",

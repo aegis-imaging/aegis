@@ -88,12 +88,17 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	bodyPart := strings.ToUpper(req.Metadata.BodyPart)
 	defacingRequired := bodyPart == "HEAD" || bodyPart == "BRAIN"
 
+	var studyDate *string
+	if req.Metadata.StudyDate != "" {
+		studyDate = &req.Metadata.StudyDate
+	}
 	study := &model.Study{
 		ProjectID:        project.ID,
 		StudyInstanceUID: studyUID,
 		Modality:         req.Metadata.Modality,
 		BodyPart:         req.Metadata.BodyPart,
 		StudyDescription: req.Metadata.StudyDescription,
+		StudyDate:        studyDate,
 		SeriesCount:      req.Metadata.SeriesCount,
 		InstanceCount:    req.Metadata.InstanceCount,
 		Status:           "received",

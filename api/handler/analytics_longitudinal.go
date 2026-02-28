@@ -13,6 +13,14 @@ import (
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
+// parseDicomDate parses a DICOM YYYYMMDD date string into a time.Time.
+func parseDicomDate(s string) (time.Time, error) {
+	if len(s) < 8 {
+		return time.Time{}, fmt.Errorf("invalid DICOM date: %q", s)
+	}
+	return time.Parse("20060102", s[:8])
+}
+
 // longitudinalAnalyticsBody is the request body for triggering longitudinal analytics.
 type longitudinalAnalyticsBody struct {
 	BaselineStudyID  string  `json:"baseline_study_id"`
@@ -54,11 +62,6 @@ func (s *Server) TriggerLongitudinalAnalytics(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if body.ScanIntervalDays <= 0 {
-		s.writeError(w, http.StatusBadRequest, "scan_interval_days must be positive")
-		return
-	}
-
 	// Resolve follow-up study
 	followup, err := model.GetStudyByUID(r.Context(), s.db, followupUID)
 	if err != nil {
@@ -71,6 +74,28 @@ func (s *Server) TriggerLongitudinalAnalytics(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		s.writeError(w, http.StatusNotFound, "baseline study not found")
 		return
+	}
+
+	// Auto-compute scan_interval_days from study_date if not provided.
+	if body.ScanIntervalDays <= 0 {
+		if baseline.StudyDate != nil && followup.StudyDate != nil && *baseline.StudyDate != "" && *followup.StudyDate != "" {
+			baseDate, err1 := parseDicomDate(*baseline.StudyDate)
+			followDate, err2 := parseDicomDate(*followup.StudyDate)
+			if err1 == nil && err2 == nil {
+				days := followDate.Sub(baseDate).Hours() / 24
+				if days <= 0 {
+					s.writeError(w, http.StatusBadRequest, "follow-up study_date must be after baseline study_date")
+					return
+				}
+				body.ScanIntervalDays = days
+			} else {
+				s.writeError(w, http.StatusBadRequest, "scan_interval_days is required (could not parse study_date on both studies)")
+				return
+			}
+		} else {
+			s.writeError(w, http.StatusBadRequest, "scan_interval_days is required when study_date is not set on both studies")
+			return
+		}
 	}
 
 	// Validate BIDS conversion complete on both
