@@ -203,6 +203,28 @@ func TestCreateRoutingRule_RequirePhiScan(t *testing.T) {
 	assert.Equal(t, 10, result.Priority)
 }
 
+func TestCreateRoutingRule_RequirePixelRedaction(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	body := map[string]any{
+		"name":     "Pixel redact all",
+		"action":   "require_pixel_redaction",
+		"priority": 15,
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/routing-rules", bytes.NewReader(b))
+	rr := httptest.NewRecorder()
+
+	srv.CreateRoutingRule(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	var result model.RoutingRule
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, "require_pixel_redaction", result.Action)
+	assert.Equal(t, 15, result.Priority)
+}
+
 func TestCreateRoutingRule_MissingName(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
