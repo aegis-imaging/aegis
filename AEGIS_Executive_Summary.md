@@ -236,19 +236,36 @@ A single merge to `develop` deploys to all three clouds simultaneously — GCP C
 | API routes (Go) | **322+** |
 | Automated tests (Go + Python + client) | **2,100+** |
 | Database migrations | **77** |
-| Cloud Run services deployed (GCP) | **15** |
-| ECR repositories provisioned (AWS) | **13** |
-| ECS Fargate services (AWS) | **10** |
-| Azure Container Apps | **15** |
-| Python processing services | **9** |
+| Services deployed **per cloud** | **15** (14 container + 1 VM) |
+| Python processing sidecars | **9** |
 | Pipeline phases | **4** (Classification → PHI/Protocol/Deface → QC/BIDS → Analytics/SCT) |
 | MCP AI agent tools (read + write) | **191** |
+
+**Cross-cloud service parity:** All three clouds deploy the same 15 services from a single shared codebase. The DIMSE receiver requires raw TCP (port 11112), so it runs on a VM instead of a managed container platform.
+
+| Service | GCP | AWS | Azure |
+|---------|-----|-----|-------|
+| Go API | Cloud Run | ECS Fargate | Container App |
+| Admin Dashboard | Cloud Run | ECS Fargate | Container App |
+| Landing Page | Cloud Run | ECS Fargate | Container App |
+| Weasis DWV Viewer | Cloud Run | ECS Fargate | Container App |
+| MCP Server | Cloud Run | ECS Fargate | Container App |
+| Defacing | Cloud Run | ECS Fargate | Container App |
+| PHI Detection | Cloud Run | ECS Fargate | Container App |
+| QC Service | Cloud Run | ECS Fargate | Container App |
+| BIDS Service | Cloud Run | ECS Fargate | Container App |
+| Classification | Cloud Run | ECS Fargate | Container App |
+| Protocol Service | Cloud Run | ECS Fargate | Container App |
+| Synth Service | Cloud Run | ECS Fargate | Container App |
+| Analytics Service | Cloud Run | ECS Fargate | Container App |
+| SCT Service | Cloud Run | ECS Fargate | Container App |
+| DIMSE Receiver | Compute Engine VM | EC2 instance | Azure Linux VM |
 
 ---
 
 ## Phased Roadmap
 
-> **Production status:** The full platform is **live on three clouds.** GCP: Go API, admin dashboard, Weasis DWV viewer, 9 Python processing services (Cloud Run), DIMSE receiver (Compute Engine VM, static IP `35.232.172.221`, port 11112), and MCP server at `api.aegisimaging.ai` and `admin.aegisimaging.ai`. AWS: 10 ECS Fargate services, RDS PostgreSQL, S3, ALB + Cognito auth, DIMSE receiver (EC2 with Elastic IP, port 11112) at `aws.api.aegisimaging.ai` and `aws.admin.aegisimaging.ai`. Azure: 15 Container Apps + PostgreSQL Flexible Server + Azure Blob Storage, DIMSE receiver (Azure Linux VM, static IP `20.97.180.87`, port 11112) at `azure.api.aegisimaging.ai` and `azure.admin.aegisimaging.ai`. All clouds share one codebase; GCP Cloud Build and GitHub Actions deploy in parallel on every merge to `develop`. Cross-cloud DICOM routing (GCP→AWS→Azure) is verified live. **All three DIMSE C-STORE receivers are operational** — accepting inbound studies from PACS systems on TCP port 11112.
+> **Production status:** The full platform is **live on three clouds** with **15 services each** (14 container services + 1 DIMSE VM). GCP: 14 Cloud Run services + Compute Engine VM (static IP `35.232.172.221`) at `api.aegisimaging.ai` / `admin.aegisimaging.ai`. AWS: 14 ECS Fargate services + EC2 instance (Elastic IP) at `aws.api.aegisimaging.ai` / `aws.admin.aegisimaging.ai`. Azure: 14 Container Apps + Azure Linux VM (static IP `20.97.180.87`) at `azure.api.aegisimaging.ai` / `azure.admin.aegisimaging.ai`. All clouds share one codebase; a single merge to `develop` deploys to all three simultaneously. Cross-cloud DICOM routing (STOW-RS and DIMSE C-STORE) is verified live. **All three DIMSE C-STORE receivers are operational** — accepting inbound studies from PACS systems on TCP port 11112.
 
 ### ✓ Milestone 1 — Foundation + GCP Production (February 17–24, 2026)
 
@@ -269,8 +286,8 @@ Everything listed below was built and deployed to GCP production within 7 days o
 
 ### ✓ Milestone 2 — AWS Deployment (February 25, 2026)
 
-- ECS Fargate (10 services), RDS PostgreSQL, S3, ALB + Cognito auth — fully live at `aws.api.aegisimaging.ai`
-- Terraform infrastructure provisioned; 13 ECR repositories; GitHub Actions CI/CD auto-deploys on every push to `develop`
+- ECS Fargate (14 services), RDS PostgreSQL, S3, ALB + Cognito auth — fully live at `aws.api.aegisimaging.ai`
+- Terraform infrastructure provisioned; 15 ECR repositories; GitHub Actions CI/CD auto-deploys on every push to `develop`
 - DIMSE receiver on EC2 with Elastic IP, SSM-driven rolling deploys
 - **Cross-cloud DICOM routing verified live** — GCP→AWS STOW-RS tested end-to-end; bidirectional API key authentication; routing loop benign (deduplicated by unique constraint)
 - Single shared codebase; one merge deploys to all three clouds simultaneously
