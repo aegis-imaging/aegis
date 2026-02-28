@@ -1,8 +1,6 @@
-export function FinalCTA() {
-  const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-  }
+import { Link } from 'react-router-dom'
 
+export function FinalCTA() {
   return (
     <section className="final-cta">
       <div className="final-cta__inner">
@@ -12,9 +10,9 @@ export function FinalCTA() {
           Schedule a walkthrough to see real de-identified imaging data in action.
         </p>
         <div className="final-cta__buttons">
-          <button className="btn btn--white btn--lg" onClick={() => scrollTo('contact')}>
+          <Link to="/contact" className="btn btn--white btn--lg">
             Schedule Demo
-          </button>
+          </Link>
           <a href="mailto:contact@aegisimaging.ai" className="btn btn--ghost-white btn--lg">
             Talk to Us
           </a>

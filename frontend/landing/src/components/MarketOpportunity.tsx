@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 
 const MARKET_CARDS = [
@@ -28,6 +29,7 @@ const MARKET_CARDS = [
 ]
 
 export function MarketOpportunity() {
+  const navigate = useNavigate()
   const { ref, isVisible } = useScrollAnimation()
 
   return (
@@ -132,7 +134,7 @@ export function MarketOpportunity() {
             </div>
           </div>
           <button
-            onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
+            onClick={() => navigate('/contact')}
             style={{
               padding: '12px 28px', borderRadius: '8px',
               background: 'var(--gradient-cta)', color: '#fff',
