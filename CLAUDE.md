@@ -29,6 +29,9 @@ Current research files:
 - `docs/research/medical-imaging-deidentification.md` — citations for de-identification failures, face reconstruction from MRI, burned-in PHI, NIH DMS policy, HIPAA Safe Harbor, DICOM PS3.15, MIDI-B challenge, market sizing
 - `docs/research/mri-protocol-compliance.md` — MRI acquisition parameter ranges, consortia protocols (ADNI4, HCP, ABCD, UK Biobank, ENIGMA), tolerance recommendations, mrQA tool, Enhanced vs Classic DICOM
 - `docs/research/mri-defacing-tools-comparison.md` — tool comparison (afni_refacer, DeepDefacer, PyDeface, mri_deface, Quickshear), success rates, speed benchmarks, Docker size, licensing
+- `docs/research/nnunet-integration.md` — nnU-Net v2 self-configuring DL segmentation framework, Python API, model management, BraTS integration
+- `docs/research/synthseg-integration.md` — SynthSeg contrast-agnostic brain segmentation, FreeSurfer integration, standalone package, QC scoring
+- `docs/research/3d-slicer-server-side-integration.md` — 3D Slicer server-side analysis (impractical), TotalSegmentator as replacement
 
 Operational docs:
 - `docs/dicom-conformance.md` — formal DICOM conformance statement: supported SOP classes, transfer syntaxes, DICOMweb (QIDO-RS/STOW-RS/WADO-RS), DIMSE (C-STORE SCP, C-ECHO SCP, C-STORE SCU), de-identification profile, limitations
@@ -1028,7 +1031,7 @@ uvicorn app.main:app --port 8089
 | Var | Default | Notes |
 |-----|---------|-------|
 | `ANALYTICS_SERVICE_URL` | *(empty — disabled)* | Set to enable; empty = studies stay in "pending" |
-| `ANALYTICS_TOOL` | `auto` | Backend selection: `auto`, `freesurfer`, `fsl`, `ants`, `spm` |
+| `ANALYTICS_TOOL` | `auto` | Backend selection: `auto`, `freesurfer`, `fsl`, `ants`, `spm`, `atlas_roi`, `synthseg`, `nnunet`, `totalsegmentator` |
 
 **Study fields:**
 - `analytics_required` — boolean flag, set by routing rule action
@@ -1045,14 +1048,20 @@ uvicorn app.main:app --port 8089
 | FSL | `bet`, `fast`, `flirt`, `dtifit` | Brain extraction, tissue segmentation, registration, DTI fitting |
 | ANTs | `antsCorticalThickness.sh` | Cortical thickness analysis |
 | SPM | MATLAB/Octave | Segmentation, DARTEL spatial normalization |
+| SynthSeg | `mri_synthseg` | Contrast-agnostic brain segmentation (32 or 97 ROIs with --parc), ~6s GPU / ~2min CPU |
+| nnU-Net | `nnunetv2` (Python) | Self-configuring DL segmentation (brain tumors, any task with pre-trained model) |
+| TotalSegmentator | `TotalSegmentator` | 117-structure whole-body CT/MRI segmentation via nnU-Net |
 
-**Auto-selection priority:** freesurfer > fsl > ants > spm (first available wins)
+**Auto-selection priority:** freesurfer > fsl > ants > spm > atlas_roi > synthseg > nnunet > totalsegmentator (first available wins)
 
 **Single-study backends:**
 
 | Backend | Binary | What it does |
 |---------|--------|-------------|
 | Atlas ROI | ANTs (`antsRegistrationSyN.sh`) | Atlas-based ROI volumetric labeling (AAL3 atlas, T1w → template registration) |
+| SynthSeg | `mri_synthseg` or `SynthSeg` (Python) | Contrast-agnostic brain segmentation, built-in QC scoring |
+| nnU-Net | `nnunetv2` (Python API) | Self-configuring deep learning segmentation with pre-trained models |
+| TotalSegmentator | `totalsegmentator` (Python API or CLI) | Whole-body CT/MRI segmentation (117 anatomical structures) |
 
 **Longitudinal analytics** (`POST /api/studies/{studyUID}/longitudinal-analytics`):
 
@@ -2143,7 +2152,7 @@ cd {service} && pip install -r requirements.txt -r requirements-test.txt && pyte
 | phi-detection | 134 | Windowing, uint8 normalization, mock Tesseract OCR, Cloud Vision/Azure Vision/Textract OCR, pixel_utils, multi-file detection, pixel redaction, LLM text scrubbing, private tag PHI scanning |
 | bids-service | 17 | Series classification (T1w/FLAIR/bold/DWI/ASL/PET/CT), subject label hashing, mock dcm2niix |
 | synth-service | 12 | Synthetic brain MRI generation, DICOM metadata, nibabel phantom pipeline |
-| analytics-service | 18 | FreeSurfer/FSL/ANTs/SPM backend selection, tool availability detection, endpoint tests |
+| analytics-service | 186 | FreeSurfer/FSL/ANTs/SPM/SynthSeg/nnU-Net/TotalSegmentator backend selection, tool availability detection, seg_utils, endpoint tests |
 
 All tests use **synthetic DICOM files** generated via pydicom — no test data on disk. External tools (tesseract, dcm2niix, mri_deface) are mocked.
 
