@@ -50,16 +50,21 @@ resource "azurerm_network_security_group" "dimse" {
     destination_address_prefix = "*"
   }
 
-  security_rule {
-    name                       = "allow-ssh-inbound"
-    priority                   = 110
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
+  # SSH access — disabled by default (empty list). Set dimse_admin_ssh_ranges
+  # to operator CIDRs to enable. Mirrors GCP/AWS where SSH is not exposed publicly.
+  dynamic "security_rule" {
+    for_each = length(var.dimse_admin_ssh_ranges) > 0 ? [1] : []
+    content {
+      name                       = "allow-ssh-inbound"
+      priority                   = 110
+      direction                  = "Inbound"
+      access                     = "Allow"
+      protocol                   = "Tcp"
+      source_port_range          = "*"
+      destination_port_range     = "22"
+      source_address_prefixes    = var.dimse_admin_ssh_ranges
+      destination_address_prefix = "*"
+    }
   }
 
   tags = local.tags
