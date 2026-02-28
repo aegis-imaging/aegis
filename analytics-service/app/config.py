@@ -19,3 +19,10 @@ ANTSPATH = os.getenv("ANTSPATH", "/usr/local/ANTs/bin")
 # SPM
 SPM_BIN = os.getenv("SPM_BIN", "spm12")
 MCR_DIR = os.getenv("MCR_DIR", "/usr/local/MATLAB/MATLAB_Runtime")
+
+# Atlas ROI + TBM-SyN
+ATLAS_DIR = os.getenv("ATLAS_DIR", "/opt/atlases")
+DEFAULT_ATLAS = os.getenv("DEFAULT_ATLAS", "aal3")
+ANTS_TEMPLATE_DIR = os.getenv(
+    "ANTS_TEMPLATE_DIR", "/opt/ants/templates/OASIS-30_Atropos_template"
+)
