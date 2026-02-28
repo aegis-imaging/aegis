@@ -112,6 +112,7 @@ const MILESTONES: Milestone[] = [
       'Invite-gated access for early adopters — research institutions and imaging centers welcome',
       'Gathering feedback on de-identification workflows, PACS integration, and protocol compliance',
       'Spinal Cord Toolbox (SCT) integration for spinal cord cross-sectional area and white matter analysis',
+      'DIMSE C-STORE receivers operational on all three clouds — accepting inbound studies from external PACS',
       'DIMSE C-MOVE / C-FIND — query and pull studies directly from hospital imaging systems',
       'Hardening SLA monitoring, retention policies, and routing rules for production workloads',
     ],
