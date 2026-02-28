@@ -11,7 +11,8 @@ Endpoints:
 
 Environment variables:
   ANALYTICS_TOOL        -- "auto" | "freesurfer" | "fsl" | "ants" | "spm" |
-                           "atlas_roi"
+                           "atlas_roi" | "synthseg" | "nnunet" |
+                           "totalsegmentator"
   ANALYTICS_TIMEOUT     -- max seconds per study (default 86400 = 24h)
   FS_LICENSE            -- FreeSurfer license file path
   FSL_DIR               -- FSL installation directory
@@ -39,6 +40,9 @@ from .backends.spm import SPMBackend
 from .backends.atlas_roi import AtlasROIBackend
 from .backends.tbm_syn import TBMSyNBackend
 from .backends.freesurfer_long import FreeSurferLongBackend
+from .backends.synthseg import SynthSegBackend
+from .backends.nnunet import NNUNetBackend
+from .backends.totalsegmentator import TotalSegmentatorBackend
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,6 +56,9 @@ ALL_BACKENDS: list[AnalyticsBackend] = [
     ANTsBackend(),
     SPMBackend(),
     AtlasROIBackend(),
+    SynthSegBackend(),
+    NNUNetBackend(),
+    TotalSegmentatorBackend(),
 ]
 
 LONGITUDINAL_BACKENDS: list[LongitudinalBackend] = [
