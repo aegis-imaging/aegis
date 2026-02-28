@@ -38,9 +38,9 @@ variable "admin_domain" {
 }
 
 variable "enable_application_gateway_waf" {
-  description = "Enable Azure Application Gateway WAF v2 edge ingress for API/admin. Defaults to true for parity with GCP Cloud Armor and AWS WAF v2."
+  description = "Enable Azure Application Gateway WAF v2 edge ingress for API/admin. Requires app_gateway_certificate_secret_id, api_domain, and admin_domain."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "app_gateway_certificate_secret_id" {
