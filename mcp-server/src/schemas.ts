@@ -302,7 +302,7 @@ export const getIngestionTimelineArgsSchema = z.object({
 export const resetPipelineStepArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   study_id: z.string().uuid(),
-  step: z.enum(["deface", "phi_scan", "qc", "bids", "classify", "protocol", "export"]),
+  step: z.enum(["deface", "phi_scan", "qc", "bids", "classify", "protocol", "export", "analytics"]),
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
 });
@@ -525,7 +525,7 @@ export const createRoutingRuleArgsSchema = z.object({
   source: z.enum(["external", "internal"]).optional(),
   action: z.enum(["route_to", "require_defacing", "require_phi_scan", "require_qc_check",
     "require_bids_conversion", "require_classification", "require_protocol_check",
-    "require_export", "auto_approve", "require_qa", "reject"]),
+    "require_export", "require_analytics", "auto_approve", "require_qa", "reject"]),
   destination_id: z.string().uuid().optional(),
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
@@ -544,7 +544,7 @@ export const updateRoutingRuleArgsSchema = z.object({
   source: z.enum(["external", "internal"]).optional().nullable(),
   action: z.enum(["route_to", "require_defacing", "require_phi_scan", "require_qc_check",
     "require_bids_conversion", "require_classification", "require_protocol_check",
-    "require_export", "auto_approve", "require_qa", "reject"]).optional(),
+    "require_export", "require_analytics", "auto_approve", "require_qa", "reject"]).optional(),
   destination_id: z.string().uuid().optional().nullable(),
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
@@ -878,7 +878,7 @@ export const deleteStudyArgsSchema = z.object({
 export const bulkPipelineTriggerArgsSchema = z.object({
   request_id: z.string().min(8).max(128).optional(),
   study_ids: z.array(z.string().uuid()).min(1).max(200),
-  step: z.enum(["classify", "phi_scan", "protocol", "deface", "qc", "bids", "export"]),
+  step: z.enum(["classify", "phi_scan", "protocol", "deface", "qc", "bids", "export", "analytics"]),
   reason: z.string().min(10).max(512),
   confirm: z.literal(true)
 });
@@ -1221,6 +1221,7 @@ export const writeToolNames = [
   "trigger_bids_convert",
   "trigger_export",
   "trigger_deface",
+  "trigger_analytics",
   "retry_dimse_study",
   "approve_study",
   "reject_study",

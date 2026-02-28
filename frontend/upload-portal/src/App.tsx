@@ -340,12 +340,16 @@ export function App() {
     try {
       // Fetch the project's active anonymization profile
       let retainedTags: string[] | undefined
+      let keepPrivateTags = false
       try {
         const profileRes = await fetch(`/api/projects/${selectedProject}/active-anon-profile`)
         if (profileRes.ok) {
-          const profile = await profileRes.json() as { retained_tags: string[] }
+          const profile = await profileRes.json() as { retained_tags: string[]; keep_private_tags?: boolean }
           if (Array.isArray(profile.retained_tags) && profile.retained_tags.length > 0) {
             retainedTags = profile.retained_tags
+          }
+          if (profile.keep_private_tags) {
+            keepPrivateTags = true
           }
         }
       } catch {
@@ -368,7 +372,7 @@ export function App() {
           onFileStart: (filename) => setCurrentFile(filename),
           uploaderEmail: uploaderEmail.trim() || undefined,
           institutionId: attributionInstitutionId ?? undefined,
-          deid: retainedTags ? { retainedTags } : undefined,
+          deid: (retainedTags || keepPrivateTags) ? { retainedTags, keepPrivateTags } : undefined,
         })
         results.push(result)
         filesUploaded += group.files.length

@@ -4,3 +4,6 @@ pydicom>=2.4.0
 Pillow>=10.0.0
 pytesseract>=0.3.10
 numpy>=1.24.0
+pylibjpeg>=2.0
+pylibjpeg-openjpeg>=2.0
+pylibjpeg-libjpeg>=2.0

@@ -37,6 +37,7 @@ from .backends.aws_textract import AWSTextractBackend
 from .backends.gemini import GeminiBackend
 from .backends.pixel_redact import redact_dicom_pixels
 from .backends.text_scrub import TextScrubBackend, select_text_scrub_backend
+from .backends.tag_phi import scan_private_tags
 
 logging.basicConfig(
     level=logging.INFO,
@@ -415,6 +416,104 @@ def scrub_text(req: ScrubTextRequest) -> ScrubTextResponse:
             status="failed",
             results=[],
             tool_used=backend.name,
+            duration_seconds=duration,
+            error=str(e),
+        )
+
+
+# ---------------------------------------------------------------------------
+# POST /detect-tags — scan private DICOM tags for PHI
+# ---------------------------------------------------------------------------
+
+class DetectTagsRequest(BaseModel):
+    """Request to scan private tags for PHI."""
+    study_uid: str
+    input_paths: list[str]
+
+
+class TagFindingModel(BaseModel):
+    """A private tag value that may contain PHI."""
+    file: str
+    tag: str
+    value_preview: str
+    pattern: str
+
+
+class DetectTagsResponse(BaseModel):
+    """Response from /detect-tags."""
+    study_uid: str
+    status: str  # "complete" | "failed"
+    phi_detected: bool
+    findings: list[TagFindingModel]
+    files_scanned: int
+    private_tags_scanned: int
+    duration_seconds: float
+    error: str | None = None
+
+
+@app.post("/detect-tags", response_model=DetectTagsResponse)
+def detect_tags(req: DetectTagsRequest) -> DetectTagsResponse:
+    """Scan private DICOM tag values for PHI patterns.
+
+    Checks vendor-specific private tags (odd group numbers) for patterns
+    that look like patient names, SSNs, MRNs, dates of birth, accession
+    numbers, and phone numbers. Used when ``keep_private_tags`` is enabled
+    on an anonymization profile to warn about PHI leakage.
+    """
+    if not req.input_paths:
+        raise HTTPException(status_code=400, detail="input_paths is required")
+
+    missing = [p for p in req.input_paths if not Path(p).exists()]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Input files not found: {missing[:5]}",
+        )
+
+    log.info(
+        "Scanning private tags for PHI in study %s: %d files",
+        req.study_uid, len(req.input_paths),
+    )
+
+    start = time.monotonic()
+    try:
+        result = scan_private_tags(req.input_paths)
+        duration = time.monotonic() - start
+
+        findings = [
+            TagFindingModel(
+                file=f.file,
+                tag=f.tag,
+                value_preview=f.value_preview,
+                pattern=f.pattern,
+            )
+            for f in result.findings
+        ]
+
+        log.info(
+            "Private tag scan complete for %s: %d findings in %d tags across %d files (%.1fs)",
+            req.study_uid, len(findings), result.private_tags_scanned,
+            result.files_scanned, duration,
+        )
+        return DetectTagsResponse(
+            study_uid=req.study_uid,
+            status="complete",
+            phi_detected=len(findings) > 0,
+            findings=findings,
+            files_scanned=result.files_scanned,
+            private_tags_scanned=result.private_tags_scanned,
+            duration_seconds=duration,
+        )
+    except Exception as e:
+        duration = time.monotonic() - start
+        log.error("Private tag scan failed for %s: %s", req.study_uid, e, exc_info=True)
+        return DetectTagsResponse(
+            study_uid=req.study_uid,
+            status="failed",
+            phi_detected=False,
+            findings=[],
+            files_scanned=0,
+            private_tags_scanned=0,
             duration_seconds=duration,
             error=str(e),
         )

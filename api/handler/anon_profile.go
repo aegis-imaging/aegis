@@ -88,6 +88,7 @@ func (s *Server) UpdateAnonProfile(w http.ResponseWriter, r *http.Request) {
 	existing.Name = update.Name
 	existing.Description = update.Description
 	existing.RetainedTags = update.RetainedTags
+	existing.KeepPrivateTags = update.KeepPrivateTags
 	existing.Enabled = update.Enabled
 
 	if err := model.UpdateAnonProfile(r.Context(), s.db, existing); err != nil {
