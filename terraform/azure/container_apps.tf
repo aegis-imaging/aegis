@@ -470,7 +470,7 @@ resource "azurerm_container_app" "mcp_server" {
       memory = "1Gi"
 
       env {
-        name  = "AEGIS_API_URL"
+        name  = "AEGIS_API_BASE_URL"
         value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
       }
       env {
