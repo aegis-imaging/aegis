@@ -30,7 +30,7 @@ Private beta is active. Next sprint focuses on production hardening, compliance,
 | 14 | AWS Production Deployment (ECS Fargate, RDS, S3, ALB + Cognito) | ✅ DONE | 2026-02-25 |
 | 15 | Cross-Cloud DICOM Routing (GCP→AWS STOW-RS verified live) | ✅ DONE | 2026-02-25 |
 | 16 | Agent Orchestrator (DICOM tag provenance + 9 diagnostic tools) | ✅ DONE | 2026-02-25 |
-| 17 | Azure Container Apps Deployment (Terraform + GitHub Actions OIDC) | ✅ DEPLOYING | 2026-02-26 |
+| 17 | Azure Container Apps Deployment (Terraform + GitHub Actions OIDC) | ✅ DONE | 2026-02-26 |
 
 ---
 
