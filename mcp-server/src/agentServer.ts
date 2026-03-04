@@ -1,7 +1,7 @@
 import http from "node:http";
 import { AegisApiClient, DisallowedPathError, UpstreamHttpError } from "./aegisClient.js";
 import { InMemoryRateLimiter } from "./rateLimiter.js";
-import { buildLlmConfig, runAgentWithLlm, ALLOWED_MODEL_OVERRIDES } from "./agentOrchestrator.js";
+import { buildLlmConfig, runAgentWithLlm, ALLOWED_MODEL_OVERRIDES, ALLOWED_BEDROCK_MODELS, ALLOWED_VERTEX_MODELS } from "./agentOrchestrator.js";
 
 export type AgentHttpConfig = {
   port: number;
@@ -55,7 +55,7 @@ function buildRequestId(): string {
   return `agent_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
 }
 
-function sendJson(res: http.ServerResponse, status: number, payload: AgentResponse, allowedOrigin: string): void {
+function sendJson(res: http.ServerResponse, status: number, payload: AgentResponse | Record<string, unknown>, allowedOrigin: string): void {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
@@ -159,6 +159,27 @@ export function startAgentHttpServer(client: AegisApiClient, config: AgentHttpCo
 
     if (req.method === "GET" && url.pathname === "/healthz") {
       sendJson(res, 200, { ok: true, request_id: buildRequestId() }, allowedOrigin);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/agent/info") {
+      const backend = llmConfig?.useAwsBedrock ? "bedrock" : "vertex";
+      const modelSet = llmConfig?.useAwsBedrock ? ALLOWED_BEDROCK_MODELS : ALLOWED_VERTEX_MODELS;
+      const BEDROCK_LABELS: Record<string, string> = {
+        "us.anthropic.claude-3-5-haiku-20241022-v1:0":   "Claude 3.5 Haiku",
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0":  "Claude 3.5 Sonnet",
+        "us.anthropic.claude-3-7-sonnet-20250219-v1:0":  "Claude 3.7 Sonnet",
+        "us.amazon.nova-lite-v1:0":                       "Amazon Nova Lite",
+        "us.amazon.nova-pro-v1:0":                        "Amazon Nova Pro",
+      };
+      const VERTEX_LABELS: Record<string, string> = {
+        "google/gemini-2.5-pro":        "Gemini 2.5 Pro",
+        "google/gemini-2.5-flash":      "Gemini 2.5 Flash",
+        "google/gemini-2.5-flash-lite": "Gemini 2.5 Flash-Lite",
+      };
+      const labels = llmConfig?.useAwsBedrock ? BEDROCK_LABELS : VERTEX_LABELS;
+      const models = Array.from(modelSet).map((v) => ({ value: v, label: labels[v] ?? v }));
+      sendJson(res, 200, { ok: true, request_id: buildRequestId(), data: { backend, models } }, allowedOrigin);
       return;
     }
 

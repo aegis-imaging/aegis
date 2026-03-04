@@ -32,9 +32,7 @@ type AgentPanelProps = {
   prefillStudyUid?: string
 }
 
-const GEMINI_MODELS = [
-  { value: '', label: 'Server default' },
-  // GCP — Gemini 2.5 series (only valid when MCP server uses GCP Vertex AI)
+const FALLBACK_MODELS = [
   { value: 'google/gemini-2.5-pro',        label: 'Gemini 2.5 Pro' },
   { value: 'google/gemini-2.5-flash',      label: 'Gemini 2.5 Flash' },
   { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
@@ -60,6 +58,16 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AgentResult | null>(null)
+  const [availableModels, setAvailableModels] = useState<{ value: string; label: string }[]>(FALLBACK_MODELS)
+
+  useEffect(() => {
+    fetch(`${baseUrl}/info`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => {
+        if (json?.data?.models?.length) setAvailableModels(json.data.models)
+      })
+      .catch(() => { /* keep fallback */ })
+  }, [baseUrl])
 
   useEffect(() => {
     if (prefillStudyId || prefillStudyUid) {
@@ -198,9 +206,10 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
             className="form-input"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            title="'Server default' uses whichever model the MCP server is configured with. Gemini overrides are only valid on GCP."
+            title="'Server default' uses the model configured on the MCP server."
           >
-            {GEMINI_MODELS.map((m) => (
+            <option value="">Server default</option>
+            {availableModels.map((m) => (
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
