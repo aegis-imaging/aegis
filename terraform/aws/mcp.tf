@@ -91,7 +91,7 @@ resource "aws_iam_role_policy" "mcp_server_bedrock" {
         # Bedrock checks Marketplace subscription status at invocation time for
         # cross-region inference profiles. aws-marketplace actions require Resource "*".
         Effect   = "Allow"
-        Action   = ["aws-marketplace:ViewSubscriptions"]
+        Action   = ["aws-marketplace:ViewSubscriptions", "aws-marketplace:Subscribe"]
         Resource = "*"
       }
     ]
