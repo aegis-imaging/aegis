@@ -47,7 +47,7 @@ type LlmConfig = {
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
-// Allowed Gemini model overrides — must be models available on Vertex AI OpenAI-compatible endpoint.
+// Allowed model overrides per backend
 export const ALLOWED_BEDROCK_MODELS = new Set([
   // Cross-region inference profiles (recommended for production — multi-AZ resilience)
   "us.anthropic.claude-3-5-haiku-20241022-v1:0",
@@ -57,15 +57,22 @@ export const ALLOWED_BEDROCK_MODELS = new Set([
   "us.amazon.nova-pro-v1:0",
 ]);
 
-const ALLOWED_MODEL_OVERRIDES = new Set([
+export const ALLOWED_VERTEX_MODELS = new Set([
   // Gemini 2.5 series (stable — production recommended)
   "google/gemini-2.5-pro",
   "google/gemini-2.5-flash",
   "google/gemini-2.5-flash-lite",
 ]);
 
+// Combined set — used for schema validation in agentServer
+export const ALLOWED_MODEL_OVERRIDES = new Set([
+  ...ALLOWED_VERTEX_MODELS,
+  ...ALLOWED_BEDROCK_MODELS,
+]);
+
 function resolveModel(requested: string | undefined, config: LlmConfig): string {
-  if (requested && ALLOWED_MODEL_OVERRIDES.has(requested)) {
+  const allowed = config.useAwsBedrock ? ALLOWED_BEDROCK_MODELS : ALLOWED_VERTEX_MODELS;
+  if (requested && allowed.has(requested)) {
     return requested;
   }
   return config.model;
@@ -768,4 +775,4 @@ export function buildLlmConfig(env: {
   };
 }
 
-export { ALLOWED_MODEL_OVERRIDES };
+// Re-export for external consumers (ALLOWED_MODEL_OVERRIDES already exported above)
