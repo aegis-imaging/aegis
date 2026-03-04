@@ -7,7 +7,7 @@ Scope reviewed: All services, API, frontend, Terraform, CI, MCP, docs.
 
 - **GCP production is live**: `aegis-prod-488120`, `us-central1` — day 7
 - **AWS production is live**: `301691475234`, `us-east-1` — day 8; cross-cloud routing GCP→AWS verified
-- **Azure deploying**: Container Apps + PostgreSQL Flex + Azure Blob — day 9
+- **Azure live**: Container Apps + PostgreSQL Flex + Azure Blob — live as of Feb 26
 - Go API: 126+ routes, 64 handler files, all fully implemented
 - 400+ automated tests (160+ Go integration tests, 244+ Python pytest tests across 8 sidecars)
 - MCP Server: 52+ read tools + 29+ write tools — all APIs covered
