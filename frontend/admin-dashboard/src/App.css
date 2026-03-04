@@ -761,6 +761,41 @@
 .deface-viewer-label--before { color: #94a3b8; }  /* slate — neutral "before/raw" */
 .deface-viewer-label--after  { color: #0d9488; }  /* teal — positive "after/defaced" */
 
+.deface-slice-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #0f172a;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.deface-slice-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.deface-slice-btn:hover {
+  color: #5eead4;
+  background: #0f3a35;
+}
+
+.deface-slice-counter {
+  font-family: monospace;
+  font-size: 11px;
+  color: #e2e8f0;
+  min-width: 48px;
+  text-align: center;
+  padding: 0 2px;
+}
+
 .deface-open-tab {
   padding: 3px 12px;
   font-size: 11px;
