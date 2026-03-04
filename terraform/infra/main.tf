@@ -1210,6 +1210,13 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
         }
       }
 
+      # nginx uses variable-based proxy_pass for /api/ and /agent/ — requires an
+      # explicit resolver directive so nginx can resolve hostnames at request time.
+      env {
+        name  = "NGINX_RESOLVER_DIRECTIVE"
+        value = "resolver 169.254.169.254 valid=30s;"
+      }
+
       liveness_probe {
         failure_threshold     = 5
         initial_delay_seconds = 20
