@@ -1137,9 +1137,10 @@ resource "aws_ecs_task_definition" "admin" {
         # admin ALB is forwarded intact — the public ALB strips X-Amzn-Oidc-Data
         # on a second hop, breaking auth middleware.
         { name = "API_URL", value = "http://api.aegis.local:8080" },
-        # MCP server not yet deployed on AWS; route /agent/* to GCP MCP server as fallback.
-        # Update to http://mcp-server.aegis.local:8080 once AWS MCP is deployed.
-        { name = "MCP_SERVER_URL", value = "https://aegis-mcp-server-uk5cvzf5nq-uc.a.run.app" },
+        { name = "MCP_SERVER_URL", value = "http://mcp-server.aegis.local:8080" },
+        # AWS VPC DNS — re-resolves service discovery hostnames (e.g. api.aegis.local) every 10s.
+        # Prevents nginx from caching stale task IPs after ECS task replacements.
+        { name = "NGINX_RESOLVER_DIRECTIVE", value = "resolver 169.254.169.253 valid=10s;" },
       ]
       logConfiguration = {
         logDriver = "awslogs"

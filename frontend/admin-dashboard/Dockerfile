@@ -26,4 +26,4 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
 # Substitute ${API_URL} in the nginx config template, then start nginx.
-CMD ["/bin/sh", "-c", "envsubst '${API_URL} ${MCP_SERVER_URL}' < /etc/nginx/conf.d/nginx.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+CMD ["/bin/sh", "-c", "envsubst '${API_URL} ${MCP_SERVER_URL} ${NGINX_RESOLVER_DIRECTIVE}' < /etc/nginx/conf.d/nginx.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
