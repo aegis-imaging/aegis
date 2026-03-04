@@ -71,21 +71,30 @@ resource "aws_iam_role_policy" "mcp_server_bedrock" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream"
-      ]
-      Resource = [
-        # Foundation model ARNs (direct single-region access)
-        "arn:aws:bedrock:*::foundation-model/anthropic.*",
-        "arn:aws:bedrock:*::foundation-model/amazon.*",
-        # Cross-region inference profiles (recommended for production resilience)
-        "arn:aws:bedrock:${var.aws_region}:*:inference-profile/us.anthropic.*",
-        "arn:aws:bedrock:${var.aws_region}:*:inference-profile/us.amazon.*"
-      ]
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ]
+        Resource = [
+          # Foundation model ARNs (direct single-region access)
+          "arn:aws:bedrock:*::foundation-model/anthropic.*",
+          "arn:aws:bedrock:*::foundation-model/amazon.*",
+          # Cross-region inference profiles (recommended for production resilience)
+          "arn:aws:bedrock:${var.aws_region}:*:inference-profile/us.anthropic.*",
+          "arn:aws:bedrock:${var.aws_region}:*:inference-profile/us.amazon.*"
+        ]
+      },
+      {
+        # Bedrock checks Marketplace subscription status at invocation time for
+        # cross-region inference profiles. aws-marketplace actions require Resource "*".
+        Effect   = "Allow"
+        Action   = ["aws-marketplace:ViewSubscriptions"]
+        Resource = "*"
+      }
+    ]
   })
 }
 
