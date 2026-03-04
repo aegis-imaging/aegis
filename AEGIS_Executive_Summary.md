@@ -40,7 +40,7 @@ css: |
   <p style="font-size: 13px; color: #9ca3af; margin-top: 12px; font-style: italic;">In Greek mythology, the <em>aegis</em> was the divine shield of Zeus and Athena — a symbol of protection. The name captures our mission: shielding patient identity while enabling the free flow of imaging data for research and clinical care.</p>
   <p style="font-size: 14px; color: #4a4a6a; margin-top: 20px; margin-bottom: 2px;"><strong>Matthew L. Senjem, M.S.</strong></p>
   <p style="font-size: 13px; color: #6b7280; margin-top: 0; margin-bottom: 2px;">AEGIS Imaging LLC</p>
-  <p style="font-size: 13px; color: #9ca3af; margin-top: 0;">February 28, 2026</p>
+  <p style="font-size: 13px; color: #9ca3af; margin-top: 0;">March 4, 2026</p>
 </div>
 
 ---
@@ -118,6 +118,30 @@ AEGIS serves two audiences from a single de-identification and routing platform:
 | **Review workflow** | PI/coordinator approves before archive | Radiologist/admin approves before release |
 
 The underlying platform — de-identification engine, routing rules, audit trail, Weasis DWV viewer, and admin dashboard — is shared. Research-specific features (defacing, BIDS, protocol templates) and enterprise features (DIMSE receive, HL7/FHIR notifications, tag standardization) extend it for each audience.
+
+---
+
+## Enterprise Adoption Path
+
+For healthcare enterprise stakeholders evaluating AEGIS for internal deployment or partnership:
+
+**AEGIS works alongside your existing infrastructure — no rip-and-replace required.** Studies arrive via DIMSE C-STORE push from your PACS, or are batch-imported from network storage. The AEGIS de-identification engine, routing rules, and audit trail sit between your PACS and any downstream consumer — research archives, AI/ML pipelines, referring physicians, payers, or registries.
+
+| Concern | AEGIS Answer |
+|---------|-------------|
+| **PACS integration** | No PACS/VNA replacement — AEGIS receives studies via standard DIMSE C-STORE (port 11112, any AE title) or DICOMweb STOW-RS |
+| **Software at sending sites** | None — external sites use a browser link; no desktop app, no IT approval at participating hospitals |
+| **Cloud preference** | Deploys on GCP, AWS, or Azure in your existing cloud tenancy; or runs locally via Docker Compose for evaluation |
+| **Compliance readiness** | BAA available; HIPAA audit trail built in from day one; SOC 2 Type I audit in progress |
+| **Time to first study** | Docker Compose local evaluation in minutes; cloud pilot deployment in days on your existing infrastructure |
+
+**Immediate internal use cases:**
+- Multi-site clinical trial data collection — send a browser link to each participating site, no installation
+- AI/ML training data preparation — de-identify and QC imaging data at scale before model training
+- Real-world evidence databases — build a HIPAA-compliant archive from your clinical imaging store
+- Cross-department and cross-institution imaging data sharing with full audit trail
+
+**Pilot structure:** We can deploy a project-isolated instance in your cloud tenancy within days. The platform is invite-gated — you control who can upload and who can access the admin dashboard. No data leaves your tenancy.
 
 ---
 
@@ -295,7 +319,7 @@ Everything listed below was built and deployed to GCP production within 7 days o
 
 ### ✓ Milestone 3 — Azure Deployment (February 26, 2026)
 
-- Azure Container Apps deployment — same Go API, Python sidecars, and React frontends as GCP and AWS
+- Azure Container Apps deployment — same Go API, Python sidecars, and React frontends as GCP and AWS — live at `azure.api.aegisimaging.ai` and `azure.admin.aegisimaging.ai`
 - Azure Database for PostgreSQL (Flexible Server), Azure Blob Storage (STORAGE_MODE=azure), Azure Container Registry
 - GitHub Actions CI/CD with OIDC federated auth — auto-deploy on every push to `develop`
 - DIMSE receiver on Azure Linux VM — same static-IP PACS integration pattern
