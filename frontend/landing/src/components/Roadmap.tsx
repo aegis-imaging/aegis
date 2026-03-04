@@ -39,7 +39,7 @@ const MILESTONES: Milestone[] = [
   },
   {
     status: 'done',
-    date: 'March 2026',
+    date: 'Feb 25, 2026',
     title: 'AWS Deployment',
     items: [
       '14 ECS Fargate services + EC2 DIMSE receiver — 15 services total, matching GCP parity',
