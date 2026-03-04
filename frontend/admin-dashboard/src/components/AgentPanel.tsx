@@ -33,10 +33,10 @@ type AgentPanelProps = {
 }
 
 const GEMINI_MODELS = [
-  { value: '', label: 'Server default (2.5 Flash)' },
-  // Gemini 2.5 series (stable — production recommended)
+  { value: '', label: 'Server default' },
+  // GCP — Gemini 2.5 series (only valid when MCP server uses GCP Vertex AI)
   { value: 'google/gemini-2.5-pro',        label: 'Gemini 2.5 Pro' },
-  { value: 'google/gemini-2.5-flash',      label: 'Gemini 2.5 Flash (Recommended)' },
+  { value: 'google/gemini-2.5-flash',      label: 'Gemini 2.5 Flash' },
   { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
 ]
 
@@ -198,7 +198,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
             className="form-input"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            title="Choose a Gemini model — 'Server default' uses whichever model the MCP server is configured with"
+            title="'Server default' uses whichever model the MCP server is configured with. Gemini overrides are only valid on GCP."
           >
             {GEMINI_MODELS.map((m) => (
               <option key={m.value} value={m.value}>{m.label}</option>
