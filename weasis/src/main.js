@@ -125,13 +125,14 @@ if (!studyUID) {
     if (!viewLayer) return
     const vc = viewLayer.getViewController()
     if (!vc) return
-    const currentIdx = vc.getCurrentIndex()
-    if (!currentIdx || typeof currentIdx.get !== 'function') return
-    const currentK = currentIdx.get(2)
+    const currentK = vc.getCurrentIndexScrollValue()
     const delta = targetK - currentK
     if (delta === 0) return
     yokeReceiving = true
-    vc.incrementScrollIndex(delta)
+    const step = delta > 0
+      ? () => vc.incrementPositionAlongScroll()
+      : () => vc.decrementPositionAlongScroll()
+    for (let i = 0; i < Math.abs(delta); i++) step()
     // Reset after a brief delay — positionchange may fire synchronously or via
     // microtask, so 100 ms is enough to swallow the echo without noticeable lag.
     setTimeout(() => { yokeReceiving = false }, 100)
