@@ -517,7 +517,8 @@ async function callBedrockLlm(
   // Use unknown[] and cast to avoid SDK discriminated-union strictness.
   type BMsg = { role: "user" | "assistant"; content: unknown[] };
   const bedrockMessages: BMsg[] = [];
-  for (const msg of conversationMessages) {
+  for (let i = 0; i < conversationMessages.length; i++) {
+    const msg = conversationMessages[i];
     if (msg.role === "assistant") {
       const content: unknown[] = [];
       if (msg.content) content.push({ text: msg.content });
@@ -530,16 +531,21 @@ async function callBedrockLlm(
       }
       bedrockMessages.push({ role: "assistant", content });
     } else if (msg.role === "tool") {
-      // Bedrock requires tool results as user messages
-      bedrockMessages.push({
-        role: "user",
-        content: [{
+      // Bedrock requires ALL tool results for one assistant turn in a SINGLE user
+      // message. Collect consecutive tool messages and merge them.
+      const toolResultContent: unknown[] = [];
+      while (i < conversationMessages.length && conversationMessages[i].role === "tool") {
+        const t = conversationMessages[i];
+        toolResultContent.push({
           toolResult: {
-            toolUseId: msg.tool_call_id ?? "",
-            content: [{ text: msg.content }]
+            toolUseId: t.tool_call_id ?? "",
+            content: [{ text: t.content }]
           }
-        }]
-      });
+        });
+        i++;
+      }
+      i--; // outer loop will increment
+      bedrockMessages.push({ role: "user", content: toolResultContent });
     } else {
       // user role
       bedrockMessages.push({ role: "user", content: [{ text: msg.content }] });
