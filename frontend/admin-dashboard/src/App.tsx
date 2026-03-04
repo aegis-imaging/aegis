@@ -1276,18 +1276,53 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
 
 const WEASIS_BASE_DEFACE = import.meta.env.VITE_WEASIS_BASE_URL || 'http://localhost:3005'
 
+function buildDefacePopupHtml(beforeUrl: string, afterUrl: string, uid: string): string {
+  // All interpolated values are URL strings (beforeUrl/afterUrl) or a DICOM UID
+  // (digits + dots only). Escaping is belt-and-suspenders.
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return [
+    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>',
+    `<title>Defacing Review \u2014 ${esc(uid)}</title>`,
+    '<style>',
+    '*{margin:0;padding:0;box-sizing:border-box}',
+    'body{background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}',
+    'header{padding:6px 14px;background:#16213e;display:flex;align-items:center;border-bottom:1px solid #1f2d4a;flex-shrink:0}',
+    '.title{font-size:13px;font-weight:600;color:#fde68a}',
+    '.uid{font-family:monospace;font-size:11px;color:#9ca3af;margin-left:8px}',
+    '.hint{font-size:11px;color:#9ca3af;padding:4px 14px;background:#16213e;border-bottom:1px solid #1f2d4a;flex-shrink:0}',
+    '.viewers{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0}',
+    '.col{display:flex;flex-direction:column;border-right:1px solid #1f2d4a}',
+    '.col:last-child{border-right:none}',
+    '.lbl{padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:#0f172a}',
+    '.lbl-b{color:#94a3b8}.lbl-a{color:#0d9488}',
+    'iframe{flex:1;border:none;min-height:0}',
+    '</style></head><body>',
+    '<header><span class="title">Defacing Review</span>',
+    `<span class="uid">${esc(uid)}</span></header>`,
+    '<p class="hint">Verify that facial features have been removed. Approve only if the right panel (defaced) shows no identifiable face.</p>',
+    '<div class="viewers">',
+    `<div class="col"><div class="lbl lbl-b">Before (raw)</div><iframe src="${esc(beforeUrl)}" allow="fullscreen"></iframe></div>`,
+    `<div class="col"><div class="lbl lbl-a">After (defaced)</div><iframe src="${esc(afterUrl)}" allow="fullscreen"></iframe></div>`,
+    '</div></body></html>',
+  ].join('')
+}
+
 function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
   const beforeUrl = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=raw`
   const afterUrl  = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=clean`
   const [yokeEnabled, setYokeEnabled] = useState(true)
+  const [currentK, setCurrentK] = useState<number | null>(null)
   const beforeRef = useRef<HTMLIFrameElement>(null)
   const afterRef  = useRef<HTMLIFrameElement>(null)
+  const totalSlices = study.instance_count ?? null
 
+  // Yoke sync + slice position tracking via postMessage
   useEffect(() => {
-    if (!yokeEnabled) return
     const handler = (e: MessageEvent) => {
       if (!e.data || e.data.type !== 'dwv-position') return
       if (typeof e.data.k !== 'number') return
+      setCurrentK(e.data.k)
+      if (!yokeEnabled) return
       const cmd = { type: 'dwv-goto', k: e.data.k }
       if (e.source === beforeRef.current?.contentWindow) {
         afterRef.current?.contentWindow?.postMessage(cmd, '*')
@@ -1299,6 +1334,23 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
     return () => window.removeEventListener('message', handler)
   }, [yokeEnabled])
 
+  function stepSlice(delta: number) {
+    const next = (currentK ?? 0) + delta
+    const cmd = { type: 'dwv-goto', k: next }
+    beforeRef.current?.contentWindow?.postMessage(cmd, '*')
+    afterRef.current?.contentWindow?.postMessage(cmd, '*')
+    setCurrentK(next)
+  }
+
+  function openPopup() {
+    const html = buildDefacePopupHtml(beforeUrl, afterUrl, study.study_instance_uid)
+    const blob = new Blob([html], { type: 'text/html' })
+    const blobUrl = URL.createObjectURL(blob)
+    window.open(blobUrl, '_blank', 'width=1440,height=860,menubar=no,toolbar=no,location=no,scrollbars=no')
+    // Revoke after the new window has had time to load
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 15000)
+  }
+
   return (
     <div className="deface-panel">
       <div className="deface-panel-header">
@@ -1307,6 +1359,13 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
           <span className="deface-panel-uid">{uidShort(study.study_instance_uid)}</span>
         </div>
         <div className="deface-header-actions">
+          <div className="deface-slice-nav">
+            <button type="button" className="deface-slice-btn" onClick={() => stepSlice(1)} title="Next slice">▲</button>
+            <span className="deface-slice-counter">
+              {currentK !== null ? currentK + 1 : '\u2014'}{totalSlices ? `\u00a0/\u00a0${totalSlices}` : ''}
+            </span>
+            <button type="button" className="deface-slice-btn" onClick={() => stepSlice(-1)} title="Previous slice">▼</button>
+          </div>
           <button
             type="button"
             className={`deface-yoke-btn${yokeEnabled ? ' deface-yoke-btn--on' : ''}`}
@@ -1315,7 +1374,10 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
           >
             {yokeEnabled ? '⛓ Yoked' : '⛓ Free'}
           </button>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">×</button>
+          <button type="button" className="deface-yoke-btn" onClick={openPopup} title="Open in new window">
+            &#x2922; Pop out
+          </button>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">&times;</button>
         </div>
       </div>
       <p className="deface-panel-hint">
