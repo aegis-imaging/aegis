@@ -14,8 +14,11 @@
 
 FROM ohif/app:v3.11.0
 
+# Switch to root to install packages (ohif/app runs as non-root by default)
+USER root
+
 # gettext provides envsubst for runtime API_URL substitution in nginx config
-RUN apk add --no-cache gettext || apt-get install -y gettext-base
+RUN apk add --no-cache gettext
 
 # Overlay AEGIS-specific OHIF configuration
 # app-config.js defines the two AEGIS data sources (aegis-clean + aegis-raw)
