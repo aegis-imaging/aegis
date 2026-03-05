@@ -198,7 +198,7 @@ func Load() *Config {
 		RateLimitRPS:     floatEnvOr("RATE_LIMIT_RPS", 20),
 		RateLimitBurst:   envInt("RATE_LIMIT_BURST", 50),
 
-		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,https://aegisimaging.ai,https://www.aegisimaging.ai"), ","),
+		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3006,https://aegisimaging.ai,https://www.aegisimaging.ai"), ","),
 
 		AuthEnabled:  os.Getenv("AUTH_ENABLED") == "true",
 		AuthProvider: envOr("AUTH_PROVIDER", "auto"),
