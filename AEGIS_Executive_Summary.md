@@ -92,7 +92,7 @@ The medical image exchange market is growing, driven by federal data sharing man
 | **Supports all DICOM modalities** | MRI, CT, PET, PET/CT, ultrasound, X-ray, mammography, nuclear medicine, and more — using the same upload and anonymization workflow. |
 | **MRI protocol compliance** | Automated verification that acquisition parameters (TR, TE, flip angle, resolution) match site-specific templates per scanner manufacturer, model, and software version — catching the 0.19–64% non-compliance rates found across multi-site studies.<sup><a href="#ref-10">[10]</a></sup> |
 | **Centralized audit trail** | Every upload, approval, rejection, and data export is logged with a timestamp and actor. Institutions can demonstrate HIPAA compliance from a single dashboard. |
-| **Clinician review before release** | Administrators review anonymized images in a web-based DICOM viewer (DWV) before approving studies for sharing. Side-by-side before/after defacing review is built in. Nothing is shared automatically without human sign-off. |
+| **Clinician review before release** | Administrators review anonymized images in a web-based DICOM viewer (dwvefore approving studies for sharing. Side-by-side before/after defacing review is built in. Nothing is shared automatically without human sign-off. |
 | **Pixel redaction** | Automated detection and masking of burned-in PHI directly in DICOM pixel data — patient names, dates, and accession numbers overlaid on images are located by OCR and redacted at the pixel level. |
 | **Neuroimaging analytics** | Post-BIDS analysis pipelines with 18 backends: brain (FreeSurfer, SynthSeg, BrainSuite, volBrain, Atlas ROI), spine (SCT, TotalSpineSeg, SPINEPS), whole-body (TotalSegmentator, nnU-Net, MedSAM2, MONAI Label), and specialized (PETSurfer, QSM, BASIL, FSL, ANTs, SPM, ITK-SNAP). Longitudinal analytics (TBM-SyN, FreeSurfer Long) for tracking brain volume changes over time. |
 | **Spinal cord analysis** | Spinal Cord Toolbox (SCT) integration: automated cord segmentation, cross-sectional area (CSA) per vertebral level, compression metrics (aMCC, aSCOR), and DTI mapping for spinal cord studies. |
@@ -117,7 +117,7 @@ AEGIS serves two audiences from a single de-identification and routing platform:
 | **Pipeline features** | Defacing, protocol compliance, QC, BIDS | Burned-in PHI, routing rules, export shares |
 | **Review workflow** | PI/coordinator approves before archive | Radiologist/admin approves before release |
 
-The underlying platform — de-identification engine, routing rules, audit trail, DWV viewer, and admin dashboard — is shared. Research-specific features (defacing, BIDS, protocol templates) and enterprise features (DIMSE receive, HL7/FHIR notifications, tag standardization) extend it for each audience.
+The underlying platform — de-identification engine, routing rules, audit trail, dwvewer, and admin dashboard — is shared. Research-specific features (defacing, BIDS, protocol templates) and enterprise features (DIMSE receive, HL7/FHIR notifications, tag standardization) extend it for each audience.
 
 ---
 
@@ -192,7 +192,7 @@ This two-phase design directly addresses the gaps identified in the Aryanto (201
 | **DICOM Storage** | Cloud-neutral (GCS, S3, Azure Blob, or local filesystem) | Abstracted behind a pluggable storage interface |
 | **OCR / PHI Detection** | Tesseract OCR (local) / cloud AI (pluggable) | Detects burned-in text in image pixels |
 | **Defacing** | DeepDefacer (default), mri_deface, mri_reface | Multiple backends with automatic fallback; see `docs/research/mri-defacing-tools-comparison.md` |
-| **DICOM Viewer** | DWV (browser-based) | Lightweight, open-source; supports QIDO-RS/WADO-RS; built-in side-by-side defacing review |
+| **DICOM Viewer** | dwvrowser-based) | Lightweight, open-source; supports QIDO-RS/WADO-RS; built-in side-by-side defacing review |
 | **Auth** | GCP IAP / AWS ALB+Cognito / Azure AD | Multi-provider auth middleware, auto-detection |
 | **Processing Pipeline** | Microservices architecture — 9 Python microservices (Cloud Run / ECS Fargate / Container Apps) + DIMSE receiver (Compute Engine VM / EC2 / Azure VM) + MCP server (Cloud Run) | Classification, PHI detection + pixel redaction, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation, neuroimaging analytics (18 backends incl. FreeSurfer, FSL, ANTs, SPM, SynthSeg, nnU-Net, TotalSegmentator, MONAI Label, PETSurfer, QSM, BASIL), spinal cord analysis (SCT) — auto-dispatched in 4-phase dependency order; DIMSE C-STORE SCP on dedicated VM (static IP, port 11112); MCP server exposes 96 read tools + 95 write tools; agent orchestrator with DICOM tag provenance and diagnostic toolchain |
 | **Infrastructure** | Terraform (GCP + AWS modules), Docker Compose | Reproducible, version-controlled, multi-cloud; local dev stack starts everything with one command |
@@ -273,7 +273,7 @@ A single merge to `develop` deploys to all three clouds simultaneously — GCP C
 | Go API | Cloud Run | ECS Fargate | Container App |
 | Admin Dashboard | Cloud Run | ECS Fargate | Container App |
 | Landing Page | Cloud Run | ECS Fargate | Container App |
-| DWV Viewer | Cloud Run | ECS Fargate | Container App |
+| dwvewer | Cloud Run | ECS Fargate | Container App |
 | MCP Server | Cloud Run | ECS Fargate | Container App |
 | Defacing | Cloud Run | ECS Fargate | Container App |
 | PHI Detection | Cloud Run | ECS Fargate | Container App |
@@ -299,7 +299,7 @@ Everything listed below was built and deployed to GCP production within 7 days o
 - Browser-based upload portal with DICOM tag anonymization (PS3.15 Basic Profile, 18 HIPAA identifiers), date shifting, pseudonymization, and before/after tag diff preview
 - Go API with 322+ routes: DICOM ingest, routing engine, DICOMweb proxy, export shares, audit trail, webhook subscriptions, API keys, clinical trial access control
 - Admin dashboard: study browser, RBAC (admin/viewer + capability-based guards), protocol templates, routing rules, institutions, 17+ management tabs
-- DWV viewer with side-by-side before/after defacing review (yoked scroll synchronization)
+- dwvewer with side-by-side before/after defacing review (yoked scroll synchronization)
 - 9 Python processing services on Cloud Run: classification, PHI scan + pixel redaction, protocol compliance, QC, defacing, BIDS conversion, synthetic MRI generation, neuroimaging analytics (18 backends), spinal cord analysis (SCT)
 - DIMSE C-STORE SCP on dedicated Compute Engine VM (port 11112) — durable retry queue, dead-letter, exponential backoff
 - MCP server (96 read tools + 95 write tools) + agent orchestrator with DICOM tag provenance and diagnostic toolchain — AI-native platform operations
