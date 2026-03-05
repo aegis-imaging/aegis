@@ -13,6 +13,7 @@ name: Deploy to GCP
 #     GCP_PROJECT_ID    = aegis-prod-488120
 #     GCP_REGION        = us-central1
 #     GCP_DWV_URL       = https://dwv-uk5cvzf5nq-uc.a.run.app
+#     GCP_OHIF_URL      = https://ohif-uk5cvzf5nq-uc.a.run.app
 #     GCP_API_URL       = https://api.aegisimaging.ai
 #     GCP_ADMIN_URL     = https://admin.aegisimaging.ai
 #     GCP_DIMSE_INSTANCE = aegis-prod-dimse-receiver   (leave empty to skip DIMSE VM deploy)
@@ -88,7 +89,7 @@ jobs:
           - service: admin-dashboard
             context: frontend/admin-dashboard
             dockerfile: frontend/admin-dashboard/Dockerfile
-            build_args: "--build-arg VITE_DWV_BASE_URL=$DWV_URL --build-arg VITE_API_BASE_URL=$API_URL"
+            build_args: "--build-arg VITE_DWV_BASE_URL=$DWV_URL --build-arg VITE_OHIF_BASE_URL=$OHIF_URL --build-arg VITE_API_BASE_URL=$API_URL"
           - service: landing
             context: .
             dockerfile: frontend/landing/Dockerfile
@@ -96,6 +97,9 @@ jobs:
           - service: dwv
             context: dwv
             dockerfile: dwv/Dockerfile
+          - service: ohif
+            context: ohif
+            dockerfile: ohif/Dockerfile
           - service: defacing
             context: defacing
             dockerfile: defacing/Dockerfile
@@ -135,6 +139,7 @@ jobs:
       REPO:      ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/aegis-services
       REGION:    ${{ vars.GCP_REGION }}
       DWV_URL:   ${{ vars.GCP_DWV_URL }}
+      OHIF_URL:  ${{ vars.GCP_OHIF_URL }}
       API_URL:   ${{ vars.GCP_API_URL }}
 
     steps:
@@ -228,6 +233,15 @@ jobs:
         run: |
           gcloud run deploy dwv \
             --image="$REPO/dwv:$IMAGE_TAG" \
+            --region="$REGION" --project="$PROJECT_ID" \
+            --set-env-vars="API_URL=$API_URL" \
+            --allow-unauthenticated \
+            --quiet
+
+      - name: Deploy — ohif
+        run: |
+          gcloud run deploy ohif \
+            --image="$REPO/ohif:$IMAGE_TAG" \
             --region="$REGION" --project="$PROJECT_ID" \
             --set-env-vars="API_URL=$API_URL" \
             --allow-unauthenticated \
