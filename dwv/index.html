@@ -79,6 +79,42 @@
       color: #ffffff;
     }
 
+    .toolbar-sep {
+      width: 1px;
+      height: 20px;
+      background: #334155;
+      margin: 0 4px;
+    }
+
+    .slice-btn {
+      background: transparent;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 2px 8px;
+      line-height: 1;
+      transition: background 0.1s, color 0.1s;
+    }
+
+    .slice-btn:hover:not(:disabled) {
+      background: #273449;
+      color: #e2e8f0;
+    }
+
+    .slice-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .slice-label {
+      font-size: 12px;
+      color: #64748b;
+      min-width: 52px;
+      text-align: center;
+    }
+
     #hint {
       background: #1e293b;
       border-bottom: 1px solid #334155;
@@ -120,8 +156,12 @@
     <button class="tool-btn" data-tool="Scroll" title="Scroll — mouse wheel to navigate slices">Scroll</button>
     <button class="tool-btn" data-tool="ZoomAndPan" title="Zoom/Pan — drag to pan, wheel to zoom">Zoom</button>
     <button class="tool-btn" data-tool="WindowLevel" title="Window/Level — drag to adjust brightness/contrast">W/L</button>
+    <div class="toolbar-sep"></div>
+    <button class="slice-btn" id="slice-prev" title="Previous slice">&#9664;</button>
+    <span id="slice-label" class="slice-label">—</span>
+    <button class="slice-btn" id="slice-next" title="Next slice">&#9654;</button>
   </div>
-  <div id="hint"><span>Scroll: wheel · Zoom: drag / wheel · W/L: drag</span></div>
+  <div id="hint"><span>Scroll: wheel · Zoom: drag / wheel · W/L: drag · Slices: ◀ ▶ buttons or wheel in Scroll mode</span></div>
   <div id="dwv-container"></div>
   <p id="error-message"></p>
   <script type="module" src="/src/main.js"></script>
