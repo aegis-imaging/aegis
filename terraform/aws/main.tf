@@ -164,26 +164,26 @@ variable "dimse_source_ranges" {
   default     = ["203.0.113.0/24"] # RFC 5737 TEST-NET-3 placeholder — replace with real PACS IP ranges
 }
 
-variable "weasis_domain" {
-  description = "Custom FQDN for Weasis viewer (e.g. aws.weasis.aegisimaging.ai). Empty = use raw ALB DNS."
+variable "dwv_domain" {
+  description = "Custom FQDN for DWV viewer (e.g. aws.dwv.aegisimaging.ai). Empty = use raw ALB DNS."
   type        = string
   default     = ""
 }
 
-variable "weasis_image_tag" {
-  description = "Container image tag for Weasis ECS task"
+variable "dwv_image_tag" {
+  description = "Container image tag for DWV ECS task"
   type        = string
   default     = "latest"
 }
 
-variable "weasis_cpu" {
-  description = "CPU units for Weasis ECS task definition"
+variable "dwv_cpu" {
+  description = "CPU units for DWV ECS task definition"
   type        = number
   default     = 256
 }
 
-variable "weasis_memory" {
-  description = "Memory (MiB) for Weasis ECS task definition"
+variable "dwv_memory" {
+  description = "Memory (MiB) for DWV ECS task definition"
   type        = number
   default     = 512
 }
@@ -481,16 +481,16 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "analytics-service", "sct-service", "dimse-receiver", "weasis", "mcp-server", "landing"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "analytics-service", "sct-service", "dimse-receiver", "dwv", "mcp-server", "landing"]
 
-  api_image    = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
-  admin_image  = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
-  weasis_image = "${aws_ecr_repository.services["weasis"].repository_url}:${var.weasis_image_tag}"
+  api_image   = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
+  admin_image = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
+  dwv_image   = "${aws_ecr_repository.services["dwv"].repository_url}:${var.dwv_image_tag}"
 
   # Friendly FQDNs — use custom domains when set, fall back to raw ALB DNS.
-  api_fqdn    = var.api_domain != "" ? var.api_domain : aws_lb.main.dns_name
-  admin_fqdn  = var.admin_domain != "" ? var.admin_domain : aws_lb.main.dns_name
-  weasis_fqdn = var.weasis_domain != "" ? var.weasis_domain : aws_lb.main.dns_name
+  api_fqdn   = var.api_domain != "" ? var.api_domain : aws_lb.main.dns_name
+  admin_fqdn = var.admin_domain != "" ? var.admin_domain : aws_lb.main.dns_name
+  dwv_fqdn   = var.dwv_domain != "" ? var.dwv_domain : aws_lb.main.dns_name
 
   cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
     "https://${local.admin_fqdn}/oauth2/idpresponse"
@@ -502,7 +502,7 @@ locals {
 
   resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : compact([
     "https://${local.admin_fqdn}",
-    "https://${local.weasis_fqdn}",
+    "https://${local.dwv_fqdn}",
     var.landing_domain != "" ? "https://${var.landing_domain}" : "",
   ])
 
@@ -685,8 +685,8 @@ resource "aws_lb_target_group" "admin" {
   tags = { Name = "${var.project_name}-admin-tg" }
 }
 
-resource "aws_lb_target_group" "weasis" {
-  name        = "${var.project_name}-weasis"
+resource "aws_lb_target_group" "dwv" {
+  name        = "${var.project_name}-dwv"
   port        = 8080
   protocol    = "HTTP"
   target_type = "ip"
@@ -701,7 +701,7 @@ resource "aws_lb_target_group" "weasis" {
     matcher             = "200-399"
   }
 
-  tags = { Name = "${var.project_name}-weasis-tg" }
+  tags = { Name = "${var.project_name}-dwv-tg" }
 }
 
 # HTTP listener — redirects to HTTPS
@@ -897,21 +897,21 @@ resource "aws_lb_listener_rule" "admin_subdomain" {
   }
 }
 
-resource "aws_lb_listener_rule" "weasis_subdomain" {
-  count        = var.weasis_domain != "" ? 1 : 0
+resource "aws_lb_listener_rule" "dwv_subdomain" {
+  count        = var.dwv_domain != "" ? 1 : 0
   listener_arn = aws_lb_listener.https.arn
   priority     = 3
 
-  # Weasis is served as a public iframe target — no Cognito gate on the container itself.
+  # DWV is served as a public iframe target — no Cognito gate on the container itself.
   # Security is provided by the Go API's DICOMweb auth (X-Amzn-Oidc-Data on /api/* calls).
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.weasis.arn
+    target_group_arn = aws_lb_target_group.dwv.arn
   }
 
   condition {
     host_header {
-      values = [var.weasis_domain]
+      values = [var.dwv_domain]
     }
   }
 }
@@ -1182,21 +1182,21 @@ resource "aws_ecs_service" "admin" {
   depends_on = [aws_lb_listener.https]
 }
 
-# --- Weasis DWV viewer ---
+# --- DWV viewer ---
 
-resource "aws_ecs_task_definition" "weasis" {
-  family                   = "${var.project_name}-weasis"
+resource "aws_ecs_task_definition" "dwv" {
+  family                   = "${var.project_name}-dwv"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = tostring(var.weasis_cpu)
-  memory                   = tostring(var.weasis_memory)
+  cpu                      = tostring(var.dwv_cpu)
+  memory                   = tostring(var.dwv_memory)
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([
     {
-      name      = "weasis"
-      image     = local.weasis_image
+      name      = "dwv"
+      image     = local.dwv_image
       essential = true
       portMappings = [
         {
@@ -1213,17 +1213,17 @@ resource "aws_ecs_task_definition" "weasis" {
         options = {
           awslogs-group         = aws_cloudwatch_log_group.main.name
           awslogs-region        = var.aws_region
-          awslogs-stream-prefix = "weasis"
+          awslogs-stream-prefix = "dwv"
         }
       }
     }
   ])
 }
 
-resource "aws_ecs_service" "weasis" {
-  name            = "${var.project_name}-weasis"
+resource "aws_ecs_service" "dwv" {
+  name            = "${var.project_name}-dwv"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.weasis.arn
+  task_definition = aws_ecs_task_definition.dwv.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
@@ -1239,8 +1239,8 @@ resource "aws_ecs_service" "weasis" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.weasis.arn
-    container_name   = "weasis"
+    target_group_arn = aws_lb_target_group.dwv.arn
+    container_name   = "dwv"
     container_port   = 8080
   }
 
@@ -1367,8 +1367,8 @@ output "cognito_user_pool_domain" {
   value = aws_cognito_user_pool_domain.admin.domain
 }
 
-output "weasis_base_url" {
-  value = "https://${local.weasis_fqdn}/"
+output "dwv_base_url" {
+  value = "https://${local.dwv_fqdn}/"
 }
 
 output "ecr_repositories" {
@@ -1505,7 +1505,7 @@ resource "aws_ecs_service" "landing" {
   }
 }
 
-# Landing page uses host-based routing (priority 4, after api/admin/weasis subdomains).
+# Landing page uses host-based routing (priority 4, after api/admin/dwv subdomains).
 # No Cognito auth — public-facing marketing site.
 resource "aws_lb_listener_rule" "landing_subdomain" {
   count        = local.landing_enabled && var.landing_domain != "" ? 1 : 0

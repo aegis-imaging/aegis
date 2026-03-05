@@ -11,7 +11,7 @@
 #   _REGION         GCP region                      (default: us-central1)
 #   _PROJECT_ID     GCP project ID                  (default: aegis-prod-488120)
 #   _REPO           Artifact Registry repo base URL
-#   _WEASIS_URL     DWV viewer Cloud Run URL (baked into admin-dashboard at build time)
+#   _DWV_URL        DWV viewer Cloud Run URL (baked into admin-dashboard at build time)
 #   _API_URL        Public API base URL  (baked into landing page at build time)
 ################################################################################
 
@@ -19,7 +19,7 @@ substitutions:
   _REGION: us-central1
   _PROJECT_ID: aegis-prod-488120
   _REPO: us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services
-  _WEASIS_URL: https://weasis-uk5cvzf5nq-uc.a.run.app
+  _DWV_URL: https://dwv-uk5cvzf5nq-uc.a.run.app
   _API_URL: https://api.aegisimaging.ai
   _ADMIN_URL: https://admin.aegisimaging.ai
   # DIMSE receiver — Compute Engine instance. Override in trigger if zone/name differ.
@@ -53,7 +53,7 @@ steps:
         docker push ${_REPO}/api:${SHORT_SHA}
         docker push ${_REPO}/api:latest
 
-  # --- admin-dashboard (VITE_WEASIS_BASE_URL baked in at build time) ---
+  # --- admin-dashboard (VITE_DWV_BASE_URL baked in at build time) ---
   - name: gcr.io/cloud-builders/docker
     id: build-push-admin-dashboard
     waitFor: ["-"]
@@ -63,7 +63,7 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          --build-arg VITE_WEASIS_BASE_URL=${_WEASIS_URL} \
+          --build-arg VITE_DWV_BASE_URL=${_DWV_URL} \
           -t ${_REPO}/admin-dashboard:${SHORT_SHA} \
           -t ${_REPO}/admin-dashboard:latest \
           frontend/admin-dashboard
@@ -88,9 +88,9 @@ steps:
         docker push ${_REPO}/landing:${SHORT_SHA}
         docker push ${_REPO}/landing:latest
 
-  # --- weasis (DWV-based DICOM viewer) ---
+  # --- dwv (DWV-based DICOM viewer) ---
   - name: gcr.io/cloud-builders/docker
-    id: build-push-weasis
+    id: build-push-dwv
     waitFor: ["-"]
     entrypoint: /bin/bash
     args:
@@ -98,11 +98,11 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          -t ${_REPO}/weasis:${SHORT_SHA} \
-          -t ${_REPO}/weasis:latest \
-          weasis
-        docker push ${_REPO}/weasis:${SHORT_SHA}
-        docker push ${_REPO}/weasis:latest
+          -t ${_REPO}/dwv:${SHORT_SHA} \
+          -t ${_REPO}/dwv:latest \
+          dwv
+        docker push ${_REPO}/dwv:${SHORT_SHA}
+        docker push ${_REPO}/dwv:latest
 
   # --- defacing ---
   - name: gcr.io/cloud-builders/docker
@@ -334,16 +334,16 @@ steps:
       - --project=${_PROJECT_ID}
       - --quiet
 
-  # --- deploy weasis ---
+  # --- deploy dwv ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-weasis
-    waitFor: [build-push-weasis]
+    id: deploy-dwv
+    waitFor: [build-push-dwv]
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - weasis
-      - --image=${_REPO}/weasis:${SHORT_SHA}
+      - dwv
+      - --image=${_REPO}/dwv:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --allow-unauthenticated

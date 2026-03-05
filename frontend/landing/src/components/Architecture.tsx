@@ -115,7 +115,7 @@ function KVBox({ title, rows }: { title: string; rows: { label: string; color: s
 
 /* ── Tech tags + cloud badges (kept from original) ─────────────────────── */
 
-const TECH_TAGS = ['Go', 'React 19', 'TypeScript', 'PostgreSQL 15', 'Python FastAPI', 'Terraform', 'Docker', 'Weasis DWV']
+const TECH_TAGS = ['Go', 'React 19', 'TypeScript', 'PostgreSQL 15', 'Python FastAPI', 'Terraform', 'Docker', 'DWV']
 
 const CLOUDS = [
   { name: 'Google Cloud', status: 'supported' as const, url: 'https://api.aegisimaging.ai/healthz' },
@@ -196,10 +196,10 @@ export function Architecture() {
                   'MCP tool backend + batch import CLI',
                   'distroless image — minimal CVE surface',
                 ]} />
-                <Card color="cyan" title="Admin Dashboard + Weasis DWV (React)" items={[
+                <Card color="cyan" title="Admin Dashboard + DWV (React)" items={[
                   'Behind Identity-Aware Proxy (IAP)',
                   'Study browser: filter, search, paginate, bulk ops',
-                  'Weasis DWV — yoked before/after defacing review',
+                  'DWV — yoked before/after defacing review',
                   '7-stage pipeline visualization per study',
                   'RBAC: admin (write) + viewer (read-only)',
                   'Routing rules, institutions, anon profiles',
@@ -471,7 +471,7 @@ export function Architecture() {
             <div className="az-g2">
               <KVBox title="Key Open-Source Dependencies" rows={[
                 { label: 'Go', color: 'go', value: 'suyashkumar/dicom · pgx · testcontainers-go · testify' },
-                { label: 'Browser', color: 'react', value: 'dcmjs · dicomParser · Weasis DWV (MIT) · React 19 · Vite' },
+                { label: 'Browser', color: 'react', value: 'dcmjs · dicomParser · DWV (MIT) · React 19 · Vite' },
                 { label: 'Defacing', color: 'python', value: 'mri_reface · DeepDefacer · mri_deface · dcm2niix · nibabel' },
                 { label: 'PHI/OCR', color: 'python', value: 'pytesseract · Google Cloud Vision · AWS Textract · Pillow' },
                 { label: 'QC/BIDS', color: 'python', value: 'pydicom · numpy · dcm2niix · pynetdicom (C-STORE SCP)' },

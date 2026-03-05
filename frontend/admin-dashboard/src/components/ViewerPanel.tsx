@@ -1,7 +1,7 @@
-const WEASIS_BASE = import.meta.env.VITE_WEASIS_BASE_URL || 'http://localhost:3005'
+const DWV_BASE = import.meta.env.VITE_DWV_BASE_URL || 'http://localhost:3005'
 
 export function ViewerPanel({ studyUID, onClose }: { studyUID: string; onClose: () => void }) {
-  const url = `${WEASIS_BASE}/viewer?studyUID=${studyUID}`
+  const url = `${DWV_BASE}/viewer?studyUID=${studyUID}`
 
   return (
     <div className="viewer-panel">

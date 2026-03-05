@@ -11,7 +11,7 @@ This matrix defines the expected deployment target for each production service.
 | api | Cloud Run | ECS Fargate | Container Apps | Core API |
 | admin-dashboard | Cloud Run | ECS Fargate | Container Apps | Internal UI |
 | landing | Cloud Run | ECS Fargate (optional by tf var) | Container Apps | Public site |
-| weasis | Cloud Run | ECS Fargate | Container Apps | Viewer |
+| dwv | Cloud Run | ECS Fargate | Container Apps | Viewer |
 | defacing | Cloud Run | ECS Fargate | Container Apps | Sidecar |
 | phi-detection | Cloud Run | ECS Fargate | Container Apps | Sidecar |
 | qc-service | Cloud Run | ECS Fargate | Container Apps | Sidecar |
@@ -27,7 +27,7 @@ This matrix defines the expected deployment target for each production service.
 - ECS deploy targets (must be covered by deploy loop when provisioned):
   - `aegis-api`
   - `aegis-admin-dashboard`
-  - `aegis-weasis`
+  - `aegis-dwv`
   - `aegis-defacing`
   - `aegis-phi-detection`
   - `aegis-qc-service`

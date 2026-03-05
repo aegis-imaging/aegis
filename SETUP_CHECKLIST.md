@@ -398,7 +398,7 @@ Add the following as **GitHub Secrets** on the repository:
 - `AZURE_RESOURCE_GROUP` — e.g. `aegis-prod`
 
 Add as **GitHub Variables**:
-- `AZURE_WEASIS_URL` — Weasis container app URL (set after first deploy)
+- `AZURE_DWV_URL` — DWV container app URL (set after first deploy)
 - `AZURE_API_URL` — API container app URL (set after first deploy)
 
 ### Apply Terraform
@@ -434,7 +434,7 @@ az acr login --name $ACR
 # Build all images
 docker build --platform linux/amd64 -t $ACR/api:latest api/
 docker build --platform linux/amd64 \
-  --build-arg VITE_WEASIS_BASE_URL=<weasis_url> \
+  --build-arg VITE_DWV_BASE_URL=<dwv_url> \
   --build-arg VITE_API_BASE_URL=<api_url> \
   -t $ACR/admin-dashboard:latest frontend/admin-dashboard/
 # ... repeat for all 13 services
@@ -494,10 +494,10 @@ docker push $ACR/api:latest
 
 - [ ] `cd frontend/admin-dashboard && npm install`
 - [ ] `npm run dev` — verify it runs on http://localhost:3001
-- [ ] Click **View** on any study row → Weasis viewer iframe appears inline
+- [ ] Click **View** on any study row → DWV viewer iframe appears inline
 - [ ] Click **Open in new tab ↗** → viewer opens in a new browser tab
 - [ ] Click **Audit Log** tab → shows event table (empty until actions are taken)
-- [ ] For a defaced head study: click **Review defacing** → side-by-side Weasis panel (Before/After)
+- [ ] For a defaced head study: click **Review defacing** → side-by-side DWV panel (Before/After)
 - [ ] Click **Routing** tab → Destinations and Rules sections load (empty state)
 - [ ] Click **Institutions** tab → Institutions table loads (empty state)
 
@@ -788,7 +788,7 @@ Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-
   cd api && STORAGE_MODE=s3 S3_BUCKET=aegis-dev S3_REGION=us-east-1 S3_ENDPOINT=http://localhost:4566 go run .
   ```
 - [ ] Upload a study via the Upload Portal → verify files stored in S3 bucket
-- [ ] View study in Weasis → verify DICOMweb proxy retrieves from S3
+- [ ] View study in DWV → verify DICOMweb proxy retrieves from S3
 - [ ] Verify signed URLs work: upload + download flows complete without error
 
 ### Azure AD App Registration Setup (for production Azure deployments)
@@ -1022,7 +1022,7 @@ The admin dashboard now includes a study detail view. Clicking a study UID in th
 - [ ] Verify meta row shows modality, body part, files, series, store, timestamps
 - [ ] Verify pipeline visualization shows 7 stages with color-coded dots
 - [ ] Test action buttons: Approve, Reject, Classify, Scan for PHI, etc.
-- [ ] Click "View" → Weasis viewer opens inline
+- [ ] Click "View" → DWV viewer opens inline
 - [ ] For approved studies: verify share form appears, create a share link
 - [ ] Check Audit Trail tab → shows all audit entries for this study
 - [ ] Check Routing Log tab → shows routing rule evaluations
@@ -1074,7 +1074,7 @@ make test-race   # full suite with race detector
 - [ ] `docker compose up -d` — builds and starts all 11 services
 - [ ] Verify API health: `curl http://localhost:8080/healthz | python3 -m json.tool`
   - Should show `"status":"ok"`, `"database":"healthy"`, `"storage":"healthy"`, and all configured sidecar services as `"healthy"`
-- [ ] Verify Weasis loads at http://localhost:3005
+- [ ] Verify DWV loads at http://localhost:3005
 - [ ] Verify Mailpit web UI at http://localhost:8025
 
 Services started by `docker compose up`:
@@ -1083,7 +1083,7 @@ Services started by `docker compose up`:
 |---------|------|-------|
 | postgres | 5432 | Data in `pgdata` named volume (persists across restarts) |
 | mailpit | 1025 / 8025 | SMTP capture + web UI |
-| weasis | 3005 | Weasis DWV viewer |
+| dwv | 3005 | DWV viewer |
 | api | 8080 | Go API (runs migrations on startup) |
 | defacing | (internal) | Defacing service |
 | phi-detection | (internal) | Burned-in PHI detection |
@@ -1378,7 +1378,7 @@ Use GitHub Organizations to separate codebases by company.
 
 ## 10. Future — Before Proposing to Work
 
-- [ ] Have a working end-to-end demo: upload → anonymize → view in Weasis
+- [ ] Have a working end-to-end demo: upload → anonymize → view in DWV
 - [ ] Prepare a 5-minute screen recording of the demo flow
 - [ ] Draft a one-page proposal covering: problem, solution, differentiation, cost estimate
 - [ ] Identify potential pilot users / departments at your institution

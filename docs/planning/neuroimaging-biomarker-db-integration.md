@@ -270,7 +270,7 @@ CREATE INDEX idx_subj_demo_project ON subject_demographics(project_id);
 
 ### Background
 
-AEGIS currently uses Weasis DWV for viewing raw DICOM files. But analytics pipeline outputs are NIfTI volumes, FreeSurfer surfaces, and overlay maps — formats Weasis cannot display. Desktop tools (FSLeyes, MRIcroGL, FreeView) require local installation. A web-based viewer is needed.
+AEGIS currently uses DWV for viewing raw DICOM files. But analytics pipeline outputs are NIfTI volumes, FreeSurfer surfaces, and overlay maps — formats DWV cannot display. Desktop tools (FSLeyes, MRIcroGL, FreeView) require local installation. A web-based viewer is needed.
 
 ### Tool Selection: Niivue
 
@@ -402,7 +402,7 @@ Component props:
 | Study detail panel → "View Surfaces" button | Click (FreeSurfer studies only) | Surface mode with pial + thickness |
 | Study detail panel → "View Longitudinal" button | Click (paired studies) | Comparison mode: baseline T1w vs Jacobian map |
 | ROI results table → ROI name click | Click on specific ROI | Volume mode with atlas, highlight clicked ROI |
-| Defacing review (existing) | Enhance existing | Add NIfTI view alongside existing DICOM Weasis view |
+| Defacing review (existing) | Enhance existing | Add NIfTI view alongside existing DICOM DWV view |
 
 #### 4. Niivue service container (optional, for SSR/thumbnails)
 
