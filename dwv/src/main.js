@@ -50,6 +50,40 @@ document.querySelectorAll('.tool-btn').forEach((btn) => {
   })
 })
 
+// ── Slice navigation helpers ──────────────────────────────────────────────────
+
+function getVC() {
+  const lg = app?.getActiveLayerGroup()
+  const vl = lg?.getActiveViewLayer()
+  return vl?.getViewController() ?? null
+}
+
+function updateSliceLabel() {
+  const vc = getVC()
+  if (!vc) return
+  const k = vc.getCurrentIndexScrollValue()
+  const total = typeof vc.getNumberOfSlices === 'function' ? vc.getNumberOfSlices() : null
+  const label = total != null ? `${k + 1} / ${total}` : `${k + 1}`
+  const labelEl = document.getElementById('slice-label')
+  const prevBtn = document.getElementById('slice-prev')
+  const nextBtn = document.getElementById('slice-next')
+  if (labelEl) labelEl.textContent = label
+  if (prevBtn) prevBtn.disabled = k <= 0
+  if (nextBtn) nextBtn.disabled = total != null && k >= total - 1
+}
+
+document.getElementById('slice-prev')?.addEventListener('click', () => {
+  const vc = getVC()
+  if (!vc) return
+  vc.getPositionHelper?.()?.decrementPositionAlongScroll()
+})
+
+document.getElementById('slice-next')?.addEventListener('click', () => {
+  const vc = getVC()
+  if (!vc) return
+  vc.getPositionHelper?.()?.incrementPositionAlongScroll()
+})
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 if (!studyUID) {
@@ -82,6 +116,7 @@ if (!studyUID) {
       }
       syncToolbar('Scroll')
     }
+    updateSliceLabel()
   })
 
   app.addEventListener('loadprogress', (e) => {
@@ -106,6 +141,7 @@ if (!studyUID) {
   let yokeReceiving = false  // prevent echo when we receive a dwv-goto command
 
   app.addEventListener('positionchange', () => {
+    updateSliceLabel()
     if (yokeReceiving) return
     if (window.parent === window) return   // not embedded in an iframe
     // Read k from the ViewController (reliable) instead of e.value[0] (may be a plain
