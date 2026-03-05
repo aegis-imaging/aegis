@@ -9,6 +9,11 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 ARG VITE_DWV_BASE_URL
 ENV VITE_DWV_BASE_URL=$VITE_DWV_BASE_URL
 
+# VITE_OHIF_BASE_URL is baked into the static build at compile time.
+# Set this to the OHIF Cloud Run service URL for production builds.
+ARG VITE_OHIF_BASE_URL
+ENV VITE_OHIF_BASE_URL=$VITE_OHIF_BASE_URL
+
 COPY . .
 RUN npm run build
 

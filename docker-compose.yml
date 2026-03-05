@@ -40,6 +40,23 @@ services:
       retries: 3
       start_period: 15s
 
+  ohif:
+    build:
+      context: ./ohif
+    ports:
+      - "3006:8080"
+    environment:
+      API_URL: "http://api:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   # ── Go API ──────────────────────────────────────────────────────────
 
   api:
