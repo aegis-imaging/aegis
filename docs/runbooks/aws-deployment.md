@@ -69,7 +69,7 @@ block in Terraform if present. Remove that block — DynamoDB encrypts at rest b
 - `aws.api.aegisimaging.ai`
 - `aws.admin.aegisimaging.ai`
 
-**To add a new subdomain** (e.g. `aws.weasis.aegisimaging.ai`):
+**To add a new subdomain** (e.g. `aws.dwv.aegisimaging.ai`):
 1. ACM Console → Request certificate → DNS validation
 2. Add all existing SANs **plus** the new one
 3. Add the new DNS validation CNAME to GoDaddy (existing SANs are already validated)
@@ -99,7 +99,7 @@ terraform apply -auto-approve
 - ALB (internet-facing) with HTTPS listener + ACM cert
 - Cognito user pool + app client + hosted domain
 - ALB listener rules (host-based + path-based)
-- ECS task definitions + services: API, admin-dashboard, sidecars, Weasis
+- ECS task definitions + services: API, admin-dashboard, sidecars, DWV
 - CloudWatch log group
 - Service discovery namespace `aegis.local` (for sidecar-to-sidecar DNS)
 - SNS + SQS for event notifications
@@ -116,7 +116,7 @@ via host-based listener rules:
 |----------|------|------|--------|
 | 1 | `aws.api.aegisimaging.ai` | None (Go API validates Cognito JWT) | API target group |
 | 2 | `aws.admin.aegisimaging.ai` | Cognito authenticate-cognito | Admin target group |
-| 3 | `aws.weasis.aegisimaging.ai` | None (public viewer) | Weasis target group |
+| 3 | `aws.dwv.aegisimaging.ai` | None (public viewer) | DWV target group |
 | 10 | any, `/healthz` | None | API target group |
 | 20 | any, `/api/upload/*` | None | API target group |
 | 30 | any, `/api/export/*` | None | API target group |
@@ -132,7 +132,7 @@ via host-based listener rules:
 ```
 aws.api.aegisimaging.ai    →  aegis-alb-2106903979.us-east-1.elb.amazonaws.com
 aws.admin.aegisimaging.ai  →  aegis-alb-2106903979.us-east-1.elb.amazonaws.com
-aws.weasis.aegisimaging.ai →  aegis-alb-2106903979.us-east-1.elb.amazonaws.com
+aws.dwv.aegisimaging.ai    →  aegis-alb-2106903979.us-east-1.elb.amazonaws.com
 ```
 
 ---
@@ -182,11 +182,11 @@ docker build --platform linux/amd64 \
 docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/api:latest
 ```
 
-### Build & push admin dashboard (AWS-specific: Weasis URL baked in)
+### Build & push admin dashboard (AWS-specific: DWV URL baked in)
 
 ```bash
 docker build --platform linux/amd64 \
-  --build-arg VITE_WEASIS_BASE_URL=https://aws.weasis.aegisimaging.ai \
+  --build-arg VITE_DWV_BASE_URL=https://aws.dwv.aegisimaging.ai \
   -t 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:latest \
   -f frontend/admin-dashboard/Dockerfile frontend/admin-dashboard/
 docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:latest
@@ -194,13 +194,13 @@ docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:l
 
 Note: `API_URL` is NOT a build arg — it is set at runtime via ECS task definition env var.
 
-### Build & push Weasis
+### Build & push DWV
 
 ```bash
 docker build --platform linux/amd64 \
-  -t 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/weasis:latest \
-  weasis/
-docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/weasis:latest
+  -t 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/dwv:latest \
+  dwv/
+docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/dwv:latest
 ```
 
 ### Build & push sidecars (defacing, phi-detection, qc-service, bids-service,
@@ -237,7 +237,7 @@ aws ecs update-service \
 
 aws ecs update-service \
   --cluster aegis-cluster \
-  --service aegis-weasis \
+  --service aegis-dwv \
   --force-new-deployment \
   --region us-east-1
 ```
@@ -246,7 +246,7 @@ Monitor rollout:
 ```bash
 aws ecs describe-services \
   --cluster aegis-cluster \
-  --services aegis-api aegis-admin-dashboard aegis-weasis \
+  --services aegis-api aegis-admin-dashboard aegis-dwv \
   --region us-east-1 \
   --query 'services[*].{name:serviceName,running:runningCount,desired:desiredCount,status:status}'
 ```
@@ -356,7 +356,7 @@ cd terraform/aws && terraform output ecr_repositories
 | File storage | `STORAGE_MODE=gcs` | `STORAGE_MODE=s3` |
 | Containers | Cloud Run | ECS Fargate |
 | Admin dashboard API URL | `https://api.aegisimaging.ai` (default) | `https://aws.api.aegisimaging.ai` (via `API_URL` env) |
-| Weasis URL | `https://weasis-uk5cvzf5nq-uc.a.run.app` (Cloud Run, baked as build arg) | `https://aws.weasis.aegisimaging.ai` (baked as build arg) |
+| DWV URL | `https://dwv-uk5cvzf5nq-uc.a.run.app` (Cloud Run, baked as build arg) | `https://aws.dwv.aegisimaging.ai` (baked as build arg) |
 | CI/CD | Cloud Build auto-deploys on push to `develop` | Manual ECR push + ECS force-deploy (no CI yet) |
 | Terraform state | GCS bucket `aegis-prod-488120-tfstate` | S3 bucket `aegis-prod-terraform-state` |
 
@@ -366,11 +366,11 @@ cd terraform/aws && terraform output ecr_repositories
 
 ### ALB Target Group Port vs Container Port
 Docker Compose `ports: "HOST:CONTAINER"` shows host-side mapping. ECS `containerPort` must be the
-**container** port (`8080`), not the host port. The Weasis docker-compose maps `3005:8080` — the
+**container** port (`8080`), not the host port. The DWV docker-compose maps `3005:8080` — the
 container listens on `8080`.
 
 ### `envsubst` Requires Exported Variables
-`docker-entrypoint.sh` in the Weasis container sets `API_URL` as a shell variable. If `API_URL` is
+`docker-entrypoint.sh` in the DWV container sets `API_URL` as a shell variable. If `API_URL` is
 not already in the container's exported environment, `envsubst` (a child process) sees it as unset
 and substitutes an empty string. The symptom is:
 ```

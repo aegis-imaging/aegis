@@ -1274,7 +1274,7 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
 
 // ── Defacing Review Panel ─────────────────────────────────────────────────────
 
-const WEASIS_BASE_DEFACE = import.meta.env.VITE_WEASIS_BASE_URL || 'http://localhost:3005'
+const DWV_BASE_DEFACE = import.meta.env.VITE_DWV_BASE_URL || 'http://localhost:3005'
 
 function buildDefacePopupHtml(beforeUrl: string, afterUrl: string, uid: string): string {
   // All interpolated values are URL strings (beforeUrl/afterUrl) or a DICOM UID
@@ -1308,8 +1308,8 @@ function buildDefacePopupHtml(beforeUrl: string, afterUrl: string, uid: string):
 }
 
 function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
-  const beforeUrl = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=raw`
-  const afterUrl  = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=clean`
+  const beforeUrl = `${DWV_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=raw`
+  const afterUrl  = `${DWV_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=clean`
   const [yokeEnabled, setYokeEnabled] = useState(true)
   const [currentK, setCurrentK] = useState<number | null>(null)
   const beforeRef = useRef<HTMLIFrameElement>(null)

@@ -7,10 +7,10 @@ REPOSITORY="${REPOSITORY:-aegis-services}"
 TAG="${TAG:-latest}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 PUSH=1
-# WEASIS_BASE_URL: set to Weasis Cloud Run URL to bake it into the admin-dashboard build.
-# Example: WEASIS_BASE_URL=https://weasis-abc123-uc.a.run.app
+# DWV_BASE_URL: set to DWV Cloud Run URL to bake it into the admin-dashboard build.
+# Example: DWV_BASE_URL=https://dwv-abc123-uc.a.run.app
 # Leave empty to use localhost:3005 fallback (local dev).
-WEASIS_BASE_URL="${WEASIS_BASE_URL:-}"
+DWV_BASE_URL="${DWV_BASE_URL:-}"
 
 for arg in "$@"; do
   case "$arg" in
@@ -19,7 +19,7 @@ for arg in "$@"; do
     --repository=*) REPOSITORY="${arg#*=}" ;;
     --tag=*) TAG="${arg#*=}" ;;
     --platform=*) PLATFORM="${arg#*=}" ;;
-    --weasis-base-url=*) WEASIS_BASE_URL="${arg#*=}" ;;
+    --dwv-base-url=*) DWV_BASE_URL="${arg#*=}" ;;
     --no-push) PUSH=0 ;;
     -h|--help)
       cat <<'USAGE'
@@ -30,10 +30,10 @@ Options:
   --repository=<repo>       Default: aegis-services
   --tag=<tag>               Default: latest
   --platform=<platform>     Default: linux/amd64
-  --weasis-base-url=<url>   Weasis viewer URL baked into admin-dashboard build (optional)
+  --dwv-base-url=<url>      DWV viewer URL baked into admin-dashboard build (optional)
   --no-push                 Build locally (uses --load) instead of pushing
 
-Environment variables supported: PROJECT_ID, REGION, REPOSITORY, TAG, PLATFORM, WEASIS_BASE_URL
+Environment variables supported: PROJECT_ID, REGION, REPOSITORY, TAG, PLATFORM, DWV_BASE_URL
 USAGE
       exit 0
       ;;
@@ -91,10 +91,10 @@ for service in "${SERVICES[@]}"; do
   fi
 done
 
-# admin-dashboard is built separately because it takes an optional WEASIS_BASE_URL build arg
+# admin-dashboard is built separately because it takes an optional DWV_BASE_URL build arg
 ADMIN_IMAGE="${REPO_BASE}/admin-dashboard:${TAG}"
 echo "==> Building ${ADMIN_IMAGE} from frontend/admin-dashboard"
-ADMIN_BUILD_ARGS="--build-arg VITE_WEASIS_BASE_URL=${WEASIS_BASE_URL}"
+ADMIN_BUILD_ARGS="--build-arg VITE_DWV_BASE_URL=${DWV_BASE_URL}"
 if [ "$PUSH" -eq 1 ]; then
   # shellcheck disable=SC2086
   docker buildx build --platform "$PLATFORM" $ADMIN_BUILD_ARGS -t "$ADMIN_IMAGE" --push "frontend/admin-dashboard"
