@@ -346,11 +346,30 @@ Most sidecar services have no host port mapping — the Go API reaches them via 
 
 ### DWV Viewer
 
-DWV (DICOM Web Viewer) runs as a Docker container on `:3005`, configured to load DICOM images via the Go API's DICOMweb proxy. It is the sole viewer used in the admin dashboard.
+DWV (DICOM Web Viewer) runs as a Docker container on `:3005`, configured to load DICOM images via the Go API's DICOMweb proxy. It is the **default** viewer in the admin dashboard; OHIF is an optional second viewer (see below).
 
 **URL params**: `?studyUID=<UID>` (required) and `?store=raw|clean` (optional, default `clean`). When `store=raw`, all DICOMweb fetches use `/dicomweb-raw/` instead of `/dicomweb/`.
 
 **Build arg** (`VITE_DWV_BASE_URL`): baked into admin-dashboard at build time via `--build-arg VITE_DWV_BASE_URL=<url>`.
+
+### OHIF Viewer
+
+OHIF (Open Health Imaging Foundation) runs as a Docker container on `:3006` (local dev) / Cloud Run service `ohif`. It is an **optional second viewer** alongside DWV. Users toggle between DWV and OHIF via a "DWV | OHIF" button in the viewer panel header; preference is persisted in `localStorage` (`aegis_viewer_engine`).
+
+**URL params**: `?StudyInstanceUIDs=<UID>` (required, note plural). Raw store: `?StudyInstanceUIDs=<UID>&dataSources=aegis-raw`.
+
+**Build arg** (`VITE_OHIF_BASE_URL`): baked into admin-dashboard at build time via `--build-arg VITE_OHIF_BASE_URL=<url>`.
+
+**Two data sources** configured in `ohif/app-config.js`:
+
+- `aegis-clean` — reads from `/dicomweb/` (default, de-identified store)
+- `aegis-raw` — reads pixel data from `/dicomweb-raw/` (pre-defacing store); QIDO-RS still uses `/dicomweb/`
+
+**Why two viewers?** DWV is simpler and has working yoked scrolling for defacing review. OHIF adds 3D MPR, PET/CT fusion, segmentation overlays, measurement tracking, and DICOM SR — features needed for research workflows.
+
+**Defacing review panel** still uses DWV (yoked cross-iframe scrolling via postMessage). OHIF does not support cross-iframe yoke natively.
+
+**Research doc**: `docs/research/ohif-viewer-integration.md` — full architecture analysis, DICOMweb gap analysis, and implementation roadmap.
 
 **DICOMweb proxy** (`api/handler/dicomweb.go`) — minimal QIDO-RS + WADO-RS, no DICOM library:
 - `GET /dicomweb/studies` — list studies from DB
