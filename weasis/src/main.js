@@ -105,12 +105,18 @@ if (!studyUID) {
 
   let yokeReceiving = false  // prevent echo when we receive a dwv-goto command
 
-  app.addEventListener('positionchange', (e) => {
+  app.addEventListener('positionchange', () => {
     if (yokeReceiving) return
     if (window.parent === window) return   // not embedded in an iframe
-    const pos = e.value?.[0]
-    if (!pos || typeof pos.get !== 'function') return
-    const k = pos.get(2)                   // k axis = scroll/slice dimension
+    // Read k from the ViewController (reliable) instead of e.value[0] (may be a plain
+    // array from getValues() in some DWV event paths, causing .get() to be undefined).
+    const layerGroup = app.getActiveLayerGroup()
+    if (!layerGroup) return
+    const viewLayer = layerGroup.getActiveViewLayer()
+    if (!viewLayer) return
+    const vc = viewLayer.getViewController()
+    if (!vc) return
+    const k = vc.getCurrentIndexScrollValue()
     if (typeof k !== 'number') return
     window.parent.postMessage({ type: 'dwv-position', k }, '*')
   })
@@ -125,13 +131,17 @@ if (!studyUID) {
     if (!viewLayer) return
     const vc = viewLayer.getViewController()
     if (!vc) return
+    // incrementPositionAlongScroll / decrementPositionAlongScroll live on PositionHelper,
+    // not on ViewController directly — must go through vc.getPositionHelper().
+    const posHelper = vc.getPositionHelper()
+    if (!posHelper) return
     const currentK = vc.getCurrentIndexScrollValue()
     const delta = targetK - currentK
     if (delta === 0) return
     yokeReceiving = true
     const step = delta > 0
-      ? () => vc.incrementPositionAlongScroll()
-      : () => vc.decrementPositionAlongScroll()
+      ? () => posHelper.incrementPositionAlongScroll()
+      : () => posHelper.decrementPositionAlongScroll()
     for (let i = 0; i < Math.abs(delta); i++) step()
     // Reset after a brief delay — positionchange may fire synchronously or via
     // microtask, so 100 ms is enough to swallow the echo without noticeable lag.
