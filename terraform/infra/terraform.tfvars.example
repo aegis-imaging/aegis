@@ -30,7 +30,7 @@ qc_service_image             = "us-central1-docker.pkg.dev/aegis-prod/aegis-serv
 bids_service_image           = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/bids-service:latest"
 classification_service_image = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/classification-service:latest"
 protocol_service_image       = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/protocol-service:latest"
-weasis_image                 = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/weasis:latest"
+dwv_image                    = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/dwv:latest"
 mcp_server_image             = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/mcp-server:latest"
 # mcp_server_aegis_api_token = ""  # populate via: gcloud secrets versions add <prefix>-mcp-aegis-api-token --data-file=-
 

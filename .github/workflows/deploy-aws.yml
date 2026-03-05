@@ -78,10 +78,10 @@ jobs:
           - service: admin-dashboard
             context: frontend/admin-dashboard
             dockerfile: frontend/admin-dashboard/Dockerfile
-            build_args: "--build-arg VITE_WEASIS_BASE_URL=https://aws.weasis.aegisimaging.ai"
-          - service: weasis
-            context: weasis
-            dockerfile: weasis/Dockerfile
+            build_args: "--build-arg VITE_DWV_BASE_URL=https://aws.dwv.aegisimaging.ai"
+          - service: dwv
+            context: dwv
+            dockerfile: dwv/Dockerfile
           - service: defacing
             context: defacing
             dockerfile: defacing/Dockerfile
@@ -198,7 +198,7 @@ jobs:
           for SVC in \
             aegis-api \
             aegis-admin-dashboard \
-            aegis-weasis \
+            aegis-dwv \
             aegis-defacing \
             aegis-phi-detection \
             aegis-qc-service \

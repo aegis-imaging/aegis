@@ -207,8 +207,8 @@ variable "synth_service_url" {
   default     = ""
 }
 
-variable "weasis_image" {
-  description = "Container image URI for the DWV/WEASIS viewer (empty = disabled)"
+variable "dwv_image" {
+  description = "Container image URI for the DWV viewer (empty = disabled)"
   type        = string
   default     = ""
 }
@@ -890,11 +890,11 @@ resource "google_cloud_run_service_iam_member" "sidecar_invoker" {
   member   = "allUsers"
 }
 
-# --- Cloud Run DWV (WEASIS) Viewer ---
+# --- Cloud Run DWV Viewer ---
 
-resource "google_cloud_run_v2_service" "weasis" {
-  count    = var.weasis_image != "" ? 1 : 0
-  name     = "weasis"
+resource "google_cloud_run_v2_service" "dwv" {
+  count    = var.dwv_image != "" ? 1 : 0
+  name     = "dwv"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -909,7 +909,7 @@ resource "google_cloud_run_v2_service" "weasis" {
     }
 
     containers {
-      image = var.weasis_image
+      image = var.dwv_image
 
       env {
         name  = "API_URL"
@@ -937,10 +937,10 @@ resource "google_cloud_run_v2_service" "weasis" {
   }
 }
 
-resource "google_cloud_run_service_iam_member" "weasis_invoker" {
-  count    = var.weasis_image != "" ? 1 : 0
+resource "google_cloud_run_service_iam_member" "dwv_invoker" {
+  count    = var.dwv_image != "" ? 1 : 0
   location = var.region
-  service  = google_cloud_run_v2_service.weasis[0].name
+  service  = google_cloud_run_v2_service.dwv[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -2249,8 +2249,8 @@ output "sidecar_service_uris" {
   value = { for name, svc in google_cloud_run_v2_service.sidecars : name => svc.uri }
 }
 
-output "weasis_service_uri" {
-  value = var.weasis_image != "" ? google_cloud_run_v2_service.weasis[0].uri : ""
+output "dwv_service_uri" {
+  value = var.dwv_image != "" ? google_cloud_run_v2_service.dwv[0].uri : ""
 }
 
 output "landing_service_uri" {

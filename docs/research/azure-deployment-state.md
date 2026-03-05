@@ -78,7 +78,7 @@ Container Apps retrieve it via Key Vault secret reference (managed identity).
 | api | 8080 | 1.0 | 2.0 Gi | 10 |
 | admin-dashboard | 80 | 0.25 | 0.5 Gi | 3 |
 | landing | 80 | 0.25 | 0.5 Gi | 3 |
-| weasis | 80 | 0.25 | 0.5 Gi | 3 |
+| dwv | 80 | 0.25 | 0.5 Gi | 3 |
 | mcp-server | 8080 | 0.5 | 1.0 Gi | 3 |
 
 **Internal ingress (sidecar services, scale-to-zero):**
@@ -158,9 +158,9 @@ Only created when `dimse_receiver_image != ""`. Runs on Debian 12 VM (`Standard_
 | # | Service | Build Context | Build Args |
 |---|---------|--------------|------------|
 | 1 | api | `api/` | None |
-| 2 | admin-dashboard | `frontend/admin-dashboard/` | `VITE_WEASIS_BASE_URL`, `VITE_API_BASE_URL` |
+| 2 | admin-dashboard | `frontend/admin-dashboard/` | `VITE_DWV_BASE_URL`, `VITE_API_BASE_URL` |
 | 3 | landing | `.` (monorepo root) | `VITE_API_BASE_URL` |
-| 4 | weasis | `weasis/` | None |
+| 4 | dwv | `dwv/` | None |
 | 5–11 | 7 Python sidecars | Each service dir | None |
 | 12 | mcp-server | `mcp-server/` | None |
 | 13 | dimse-receiver | `dimse-receiver/` | None |
@@ -174,7 +174,7 @@ Only created when `dimse_receiver_image != ""`. Runs on Debian 12 VM (`Standard_
 - `AZURE_ACR_REGISTRY`, `AZURE_RESOURCE_GROUP`
 
 **Required GitHub Variables:**
-- `AZURE_WEASIS_URL`, `AZURE_API_URL`
+- `AZURE_DWV_URL`, `AZURE_API_URL`
 - `AZURE_DIMSE_VM_NAME` (optional — empty skips DIMSE deploy)
 
 ### Terraform Workflow (`.github/workflows/terraform-azure.yml`)
@@ -395,7 +395,7 @@ CI/CD: GitHub Actions updates the SSM parameter `/aegis/dimse-image` and reboots
 
 - [ ] Configure GitHub repository secrets and variables:
   - Secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_ACR_REGISTRY`, `AZURE_RESOURCE_GROUP`, `AZURE_TERRAFORM_TFVARS`
-  - Variables: `AZURE_WEASIS_URL`, `AZURE_API_URL`, `AZURE_DIMSE_VM_NAME` (optional)
+  - Variables: `AZURE_DWV_URL`, `AZURE_API_URL`, `AZURE_DIMSE_VM_NAME` (optional)
 
 - [ ] Set up OIDC federated identity for GitHub Actions:
   ```bash

@@ -32,7 +32,7 @@ AEGIS is cloud-agnostic. The same application stack is certified for deployment 
 | AE Title | Role | Network Port | Transport |
 |----------|------|-------------|-----------|
 | `AEGIS` (configurable via `DIMSE_AE_TITLE`) | Storage SCP, C-FIND SCU, C-STORE SCU | 11112 (configurable via `DIMSE_PORT`) | TCP |
-| *(calling AE — Weasis DWV viewer or admin client)* | DICOMweb SCU | 8080 (Go API HTTP) | HTTP/HTTPS |
+| *(calling AE — DWV viewer or admin client)* | DICOMweb SCU | 8080 (Go API HTTP) | HTTP/HTTPS |
 
 ### 2.2 Association Policies
 
@@ -182,7 +182,7 @@ Empty-string values in `query_params` are treated as wildcard matches (standard 
 
 ## 5. DICOMweb Proxy (QIDO-RS, WADO-RS, STOW-RS)
 
-The Go API exposes DICOMweb endpoints at `/dicomweb` (and `/dicomweb-raw` for pre-defacing access). The proxy is consumed by the Weasis DWV viewer embedded in the admin dashboard, and by STOW-RS clients forwarding studies cross-cloud.
+The Go API exposes DICOMweb endpoints at `/dicomweb` (and `/dicomweb-raw` for pre-defacing access). The proxy is consumed by the DWV viewer embedded in the admin dashboard, and by STOW-RS clients forwarding studies cross-cloud.
 
 ### 5.1 QIDO-RS (Query)
 
@@ -343,4 +343,4 @@ Bidirectional cross-cloud study forwarding is implemented using DICOMweb STOW-RS
 - PS3.15 Annex E — Basic Application Level Confidentiality Profile
 - PS3.18 — Web Services (DICOMweb)
 - pynetdicom — https://pydicom.github.io/pynetdicom/
-- Weasis DWV — https://weasis.org/
+- DWV (DICOM Web Viewer) — https://ivmartel.github.io/dwv/
