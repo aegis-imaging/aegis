@@ -39,7 +39,7 @@ server {
     }
 
     # ── Raw DICOMweb proxy (pre-defacing store) ───────────────────────────────
-    # Used by the Weasis viewer when ?store=raw — routes QIDO-RS + WADO-RS
+    # Used by the DWV viewer when ?store=raw — routes QIDO-RS + WADO-RS
     # fetches to the /dicomweb-raw/ API endpoints (reads from raw DICOM store).
     location /dicomweb-raw/ {
         set $api_upstream ${API_URL};

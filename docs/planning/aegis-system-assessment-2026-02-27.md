@@ -33,7 +33,7 @@ Comprehensive assessment of the AEGIS platform (Anonymization & Exchange Gateway
 - Multi-cloud storage backends (local, GCS, S3, Azure Blob)
 - Authentication: GCP IAP, Azure AD, AWS ALB+Cognito, API key fallback
 - RBAC: admin/viewer roles enforced on all 33 write routes
-- DICOMweb proxy (QIDO-RS + WADO-RS) for Weasis viewer
+- DICOMweb proxy (QIDO-RS + WADO-RS) for DWV viewer
 - Export workflow: shares with HMAC-SHA256 signed tokens, forwarding to DICOMweb + DIMSE destinations
 - Batch import CLI, bulk operations, CSV export, audit trail
 - Webhook subscriptions with HMAC-signed payloads and retry delivery

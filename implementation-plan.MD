@@ -37,7 +37,7 @@ Source of truth: `hardening-plan.MD`
 
 ### 1.1 Build canonical service matrix
 - [ ] Create canonical list of required services:
-  - API, admin-dashboard, landing, weasis,
+  - API, admin-dashboard, landing, dwv,
   - defacing, phi-detection, qc-service, bids-service,
   - classification-service, protocol-service, synth-service,
   - mcp-server, dimse-receiver
