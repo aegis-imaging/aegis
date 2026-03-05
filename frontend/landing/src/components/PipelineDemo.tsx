@@ -477,7 +477,7 @@ export default function PipelineDemo() {
           <p style={{ fontSize: '1.05rem', color: '#94a3b8', maxWidth: '640px', margin: '0 auto' }}>
             Click to generate a real synthetic brain MRI on the AEGIS server.
             The platform anonymizes every DICOM tag and runs server-side defacing.
-            Compare before and after in the Weasis DICOM viewer.
+            Compare before and after in the DWV DICOM viewer.
           </p>
         </div>
 

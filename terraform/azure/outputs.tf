@@ -23,9 +23,9 @@ output "landing_url" {
   value       = var.landing_domain != "" ? "https://${var.landing_domain}" : "https://${azurerm_container_app.landing.ingress[0].fqdn}"
 }
 
-output "weasis_url" {
-  description = "Weasis DWV Viewer URL"
-  value       = "https://${azurerm_container_app.weasis.ingress[0].fqdn}"
+output "dwv_url" {
+  description = "DWV Viewer URL"
+  value       = "https://${azurerm_container_app.dwv.ingress[0].fqdn}"
 }
 
 output "mcp_server_url" {

@@ -12,7 +12,7 @@ name: Deploy to Azure
 #     AZURE_RESOURCE_GROUP     — Resource group name (e.g. aegis-prod)
 #     AZURE_TERRAFORM_TFVARS   — Full contents of terraform/azure/terraform.tfvars (for auto-apply)
 #   Variables:
-#     AZURE_WEASIS_URL          — Weasis container app URL (baked into admin-dashboard)
+#     AZURE_DWV_URL             — DWV container app URL (baked into admin-dashboard)
 #     AZURE_API_URL             — API container app URL (baked into landing + admin-dashboard)
 #     AZURE_DIMSE_VM_NAME       — DIMSE VM name (leave empty to skip DIMSE deploy)
 #
@@ -43,7 +43,7 @@ jobs:
 
       - name: Check required variables and secrets
         env:
-          WEASIS_URL:      ${{ vars.AZURE_WEASIS_URL }}
+          DWV_URL:         ${{ vars.AZURE_DWV_URL }}
           API_URL:         ${{ vars.AZURE_API_URL }}
           ACR_REGISTRY:    ${{ secrets.AZURE_ACR_REGISTRY }}
           RESOURCE_GROUP:  ${{ secrets.AZURE_RESOURCE_GROUP }}
@@ -52,7 +52,7 @@ jobs:
           SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           missing=()
-          [[ -n "$WEASIS_URL" ]]      || missing+=("AZURE_WEASIS_URL (var)")
+          [[ -n "$DWV_URL" ]]         || missing+=("AZURE_DWV_URL (var)")
           [[ -n "$API_URL" ]]         || missing+=("AZURE_API_URL (var)")
           [[ -n "$ACR_REGISTRY" ]]    || missing+=("AZURE_ACR_REGISTRY (secret)")
           [[ -n "$RESOURCE_GROUP" ]]  || missing+=("AZURE_RESOURCE_GROUP (secret)")
@@ -83,14 +83,14 @@ jobs:
           - service: admin-dashboard
             context: frontend/admin-dashboard
             dockerfile: frontend/admin-dashboard/Dockerfile
-            build_args: "--build-arg VITE_WEASIS_BASE_URL=$WEASIS_URL --build-arg VITE_API_BASE_URL=$API_URL"
+            build_args: "--build-arg VITE_DWV_BASE_URL=$DWV_URL --build-arg VITE_API_BASE_URL=$API_URL"
           - service: landing
             context: .
             dockerfile: frontend/landing/Dockerfile
             build_args: "--build-arg VITE_API_BASE_URL=$API_URL"
-          - service: weasis
-            context: weasis
-            dockerfile: weasis/Dockerfile
+          - service: dwv
+            context: dwv
+            dockerfile: dwv/Dockerfile
           - service: defacing
             context: defacing
             dockerfile: defacing/Dockerfile
@@ -128,7 +128,7 @@ jobs:
     env:
       IMAGE_TAG: ${{ github.sha }}
       ACR: ${{ secrets.AZURE_ACR_REGISTRY }}
-      WEASIS_URL: ${{ vars.AZURE_WEASIS_URL }}
+      DWV_URL: ${{ vars.AZURE_DWV_URL }}
       API_URL: ${{ vars.AZURE_API_URL }}
 
     steps:
@@ -155,7 +155,7 @@ jobs:
           SHA_TAG="$ACR/$SERVICE:$IMAGE_TAG"
           LATEST_TAG="$ACR/$SERVICE:latest"
 
-          # Expand build args (they reference env vars like $WEASIS_URL)
+          # Expand build args (they reference env vars like $DWV_URL)
           EXPANDED_ARGS=""
           if [[ -n "${BUILD_ARGS:-}" ]]; then
             EXPANDED_ARGS=$(eval echo "$BUILD_ARGS")
@@ -199,8 +199,8 @@ jobs:
       - name: Deploy — landing
         run: az containerapp update --name aegis-prod-landing --resource-group "$RG" --image "$ACR/landing:$IMAGE_TAG"
 
-      - name: Deploy — weasis
-        run: az containerapp update --name aegis-prod-weasis --resource-group "$RG" --image "$ACR/weasis:$IMAGE_TAG"
+      - name: Deploy — dwv
+        run: az containerapp update --name aegis-prod-dwv --resource-group "$RG" --image "$ACR/dwv:$IMAGE_TAG"
 
       - name: Deploy — defacing
         run: az containerapp update --name aegis-prod-defacing --resource-group "$RG" --image "$ACR/defacing:$IMAGE_TAG"

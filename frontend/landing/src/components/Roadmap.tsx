@@ -27,7 +27,7 @@ const MILESTONES: Milestone[] = [
       'Microservices architecture: Go API + 9 Python sidecars + DIMSE receiver + MCP server + 3 frontends — 15 services per cloud',
       'Full HIPAA pipeline: tag de-identification, defacing, PHI scan, pixel redaction, QC, BIDS, protocol compliance, analytics',
       'Terraform IaC + Cloud Build CI/CD — every merge to develop auto-deploys all services across 3 clouds',
-      'Admin dashboard with Weasis DWV viewer, RBAC, audit trail, routing rules engine, clinical trial access control',
+      'Admin dashboard with DWV viewer, RBAC, audit trail, routing rules engine, clinical trial access control',
       'AI-native operations: MCP server with 191 typed tools (96 read, 95 write), agent orchestrator with DICOM diagnostics',
     ],
     tags: [

@@ -11,7 +11,7 @@ fi
 required_build_services=(
   "service: api"
   "service: admin-dashboard"
-  "service: weasis"
+  "service: dwv"
   "service: defacing"
   "service: phi-detection"
   "service: qc-service"
@@ -27,7 +27,7 @@ required_build_services=(
 required_ecs_targets=(
   "aegis-api"
   "aegis-admin-dashboard"
-  "aegis-weasis"
+  "aegis-dwv"
   "aegis-defacing"
   "aegis-phi-detection"
   "aegis-qc-service"

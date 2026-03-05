@@ -2,7 +2,7 @@
 #
 # Defines all 14 Container App services:
 #   - api (Go API)
-#   - admin-dashboard, landing, weasis, mcp-server (frontends / tooling)
+#   - admin-dashboard, landing, dwv, mcp-server (frontends / tooling)
 #   - defacing, phi-detection, qc-service, bids-service,
 #     classification-service, protocol-service, synth-service,
 #     analytics-service, sct-service (Python sidecars)
@@ -380,10 +380,10 @@ resource "azurerm_container_app_custom_domain" "landing" {
   certificate_binding_type = "Disabled"
 }
 
-# ── Weasis DWV Viewer ─────────────────────────────────────────────────────────
+# ── DWV Viewer ────────────────────────────────────────────────────────────────
 
-resource "azurerm_container_app" "weasis" {
-  name                         = "${local.prefix}-weasis"
+resource "azurerm_container_app" "dwv" {
+  name                         = "${local.prefix}-dwv"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
@@ -415,8 +415,8 @@ resource "azurerm_container_app" "weasis" {
     max_replicas = 3
 
     container {
-      name   = "weasis"
-      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/weasis:${var.api_image_tag}"
+      name   = "dwv"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/dwv:${var.api_image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
     }
