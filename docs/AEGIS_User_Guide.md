@@ -128,7 +128,7 @@ Click a Study UID to open the **Study Detail Panel**. This panel shows:
 
 ### Approving or Rejecting a Study
 
-After reviewing the study (and optionally viewing it in the DWV viewer), click:
+After reviewing the study (and optionally viewing it in the dwvewer), click:
 
 - **Approve** — marks the study `approved`; uploader receives a notification email (if they provided one); auto-export triggers if a routing rule requires it
 - **Reject** — marks the study `rejected`; uploader is notified
@@ -240,7 +240,7 @@ No. The upload portal applies de-identification in your browser before transmitt
 
 **Q: What if I don't have a DICOM viewer — can I still verify the study?**
 
-Yes. The admin dashboard includes an embedded DWV viewer. Click **View** on any study to open it inline, or **Open in new tab** to view it full-screen.
+Yes. The admin dashboard includes an embedded dwvewer. Click **View** on any study to open it inline, or **Open in new tab** to view it full-screen.
 
 **Q: What happens if defacing or PHI scan fails?**
 

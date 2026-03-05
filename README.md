@@ -15,7 +15,7 @@ The name carries a double meaning. As an acronym it describes exactly what the s
 - **Server-side defacing** — Automated facial feature removal from 3D head scans (DeepDefacer, mri_deface, mri_reface). Non-head modalities bypass defacing automatically.
 - **Automated processing pipeline** — Classification, PHI detection, protocol compliance, QC, defacing, and BIDS conversion run automatically in dependency order after upload.
 - **Cloud-neutral storage** — DICOM files stored in local filesystem, S3, or GCS with a built-in DICOMweb proxy.
-- **Admin review** — DWV viewer for QC, defacing review (before/after), and study management.
+- **Admin review** — dwvewer for QC, defacing review (before/after), and study management.
 - **Controlled external sharing** — Token-authenticated export downloads, DICOMweb STOW-RS forwarding to external destinations, and configurable routing rules.
 - **Modality-agnostic** — Supports MRI, CT, PET, PET/CT, ultrasound, X-ray, nuclear medicine, mammography, and all other DICOM-compliant imaging. MVP focuses on brain MRI/PET/CT.
 
@@ -37,7 +37,7 @@ aegis/
 ├── api/                        # Go backend — upload orchestration, DICOMweb proxy
 ├── frontend/
 │   ├── upload-portal/          # React — public-facing upload + anonymization UI
-│   ├── admin-dashboard/        # React — internal QC, DWV viewer, study management
+│   ├── admin-dashboard/        # React — internal QC, dwvewer, study management
 │   ├── export-portal/          # React — public-facing export share download UI
 │   └── landing/                # React — marketing landing page (aegisimaging.ai)
 ├── client/                     # TypeScript DICOM anonymization library (npm)
@@ -60,7 +60,7 @@ aegis/
 - **Processing**: 7 Python services (6 processing sidecars + 1 DIMSE receiver adapter)
 - **AI/ML**: Pluggable — local backends (Tesseract, pydicom heuristics) or cloud AI (Google Cloud Vision, AWS Textract/Rekognition)
 - **Defacing**: DeepDefacer (default), mri_deface (fallback), mri_reface (research)
-- **Viewer**: DWV (embedded in admin dashboard)
+- **Viewer**: dwvmbedded in admin dashboard)
 - **Auth**: Multi-provider — GCP IAP, Azure AD Easy Auth, AWS ALB + Cognito
 - **Email**: Standard SMTP (any provider). Dev: Mailpit
 - **Infrastructure**: Terraform (GCP + AWS modules), Docker Compose for local dev
