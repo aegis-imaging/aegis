@@ -20,7 +20,7 @@ Primary risks are:
 
 ### 1) Service Deployment Parity
 
-- Core service set exists across clouds: API, admin dashboard, landing, weasis, defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, synth-service, mcp-server, dimse-receiver.
+- Core service set exists across clouds: API, admin dashboard, landing, dwv, defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, synth-service, mcp-server, dimse-receiver.
 - **Confirmed AWS drift:** deployment workflow updates only 10 ECS services and omits `mcp-server` (and does not actively deploy landing ECS service in the current loop), while images are built and infra references exist.
 - GCP Cloud Build and Azure deploy flow appear broader in service rollout coverage than AWS deploy loop.
 

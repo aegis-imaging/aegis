@@ -52,7 +52,7 @@ aegis/
 ├── api/                  # Go backend — upload orchestration, DICOMweb proxy
 ├── frontend/
 │   ├── upload-portal/    # React — public-facing upload + anonymization UI
-│   ├── admin-dashboard/  # React — internal QC, Weasis viewer, study management
+│   ├── admin-dashboard/  # React — internal QC, DWV viewer, study management
 │   ├── export-portal/    # React — public-facing export share download UI
 │   └── landing/          # React — public landing page (aegisimaging.ai)
 ├── client/               # TypeScript DICOM anonymization library (npm package)
