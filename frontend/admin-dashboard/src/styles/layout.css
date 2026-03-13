@@ -81,9 +81,9 @@
   padding: 12px 0;
   overflow-y: auto;
   position: sticky;
-  top: 0;
+  top: 45px;
   align-self: flex-start;
-  max-height: 100vh;
+  max-height: calc(100vh - 45px);
   transition: width 0.2s ease, min-width 0.2s ease;
 }
 
@@ -250,10 +250,11 @@
 
   .sidenav {
     position: fixed;
-    top: 0;
+    top: 45px;
     left: 0;
     z-index: 90;
-    height: 100vh;
+    height: calc(100vh - 45px);
+    max-height: calc(100vh - 45px);
     box-shadow: 4px 0 16px rgba(0,0,0,0.12);
   }
 
