@@ -9601,7 +9601,7 @@ export function App() {
         </div>
       )}
 
-      {/* Top bar */}
+      {/* Top bar — minimal: hamburger + title only */}
       <header className="topbar">
         <div className="topbar-left">
           <button type="button" className="hamburger-btn" onClick={toggleSidebar} title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}>
@@ -9609,39 +9609,52 @@ export function App() {
           </button>
           <h1 className="topbar-title">AEGIS</h1>
         </div>
-        <div className="topbar-actions">
-          {currentUser && (
-            <span className="auth-user-badge">
-              {currentUser.name || currentUser.email} ({currentUser.role})
-            </span>
-          )}
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={() => setDarkMode(d => !d)}
-            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-            aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            <span className="theme-toggle__icon">{darkMode ? '\u2600' : '\u263E'}</span>
-          </button>
-          <button
-            type="button"
-            className="btn-palette-trigger"
-            onClick={() => { setPaletteOpen(true); setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }}
-            title="Quick search (⌘K)"
-          >
-            <span>Search…</span>
-            <kbd>⌘K</kbd>
-          </button>
-          {tab === 'studies' && (
-            <button type="button" className="btn-refresh" onClick={() => setRefreshTick(t => t + 1)}>Refresh</button>
-          )}
-        </div>
       </header>
 
       <div className="layout-body">
         {/* Sidebar nav */}
         <nav className={`sidenav${sidebarOpen ? '' : ' sidenav--collapsed'}`}>
+          {/* Sidebar toolbar: search, theme toggle, refresh */}
+          {sidebarOpen && (
+            <div className="sidenav-toolbar">
+              <button
+                type="button"
+                className="btn-palette-trigger sidenav-toolbar__search"
+                onClick={() => { setPaletteOpen(true); setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }}
+                title="Quick search (⌘K)"
+              >
+                <span>Search…</span>
+                <kbd>⌘K</kbd>
+              </button>
+              <button
+                type="button"
+                className="theme-toggle"
+                onClick={() => setDarkMode(d => !d)}
+                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                <span className="theme-toggle__icon">{darkMode ? '\u2600' : '\u263E'}</span>
+              </button>
+              {tab === 'studies' && (
+                <button type="button" className="btn-refresh sidenav-toolbar__refresh" onClick={() => setRefreshTick(t => t + 1)} title="Refresh studies">&#x21BB;</button>
+              )}
+            </div>
+          )}
+          {/* Collapsed: just show theme toggle icon */}
+          {!sidebarOpen && (
+            <div className="sidenav-toolbar sidenav-toolbar--collapsed">
+              <button
+                type="button"
+                className="theme-toggle"
+                onClick={() => setDarkMode(d => !d)}
+                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                <span className="theme-toggle__icon">{darkMode ? '\u2600' : '\u263E'}</span>
+              </button>
+            </div>
+          )}
+
           <div className="sidenav-group">
             {sidebarOpen && <div className="sidenav-group-label">Overview</div>}
             {navItem('Studies', 'studies', '\u{1F4CB}', stuckCount > 0 ? <span className="sidenav-badge">{stuckCount}</span> : undefined)}
@@ -9735,6 +9748,11 @@ export function App() {
               <span className="auth-user-badge sidenav-footer__scope" title="Active project/scope">
                 {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
               </span>
+              {currentUser && (
+                <span className="auth-user-badge sidenav-footer__user">
+                  {currentUser.name || currentUser.email} ({currentUser.role})
+                </span>
+              )}
             </div>
           )}
         </nav>
