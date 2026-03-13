@@ -174,10 +174,10 @@ class TestFindApAxis:
 
         ap_dim, face_at_high = backend._find_ap_axis(ds, shape)
 
-        # With [1,0,0, 0,1,0]: col_cos = [0,1,0], dot with [0,1,0] = 1.0
-        # So A/P axis = dim 1 (rows), face at high end (dot > 0)
+        # With [1,0,0, 0,1,0]: col_cos = [0,1,0], dot with [0,-1,0] = -1.0
+        # So A/P axis = dim 1 (rows), face at low end (dot < 0, anterior in LPS)
         assert ap_dim == 1
-        assert face_at_high == True  # noqa: E712 — np.bool_ vs Python bool
+        assert face_at_high == False  # noqa: E712 — np.bool_ vs Python bool
 
     def test_fallback_without_iop(self, tmp_path):
         """
@@ -209,6 +209,6 @@ class TestFindApAxis:
 
         ap_dim, face_at_high = backend._find_ap_axis(ds, shape)
         # normal = cross([1,0,0], [0,0,-1]) = [0,1,0]
-        # dot([0,1,0], [0,1,0]) = 1.0 → dim 0, face_at_high = True
+        # dot([0,1,0], [0,-1,0]) = -1.0 → dim 0, face_at_high = False (anterior in LPS)
         assert ap_dim == 0
-        assert face_at_high == True  # noqa: E712 — np.bool_ vs Python bool
+        assert face_at_high == False  # noqa: E712 — np.bool_ vs Python bool
