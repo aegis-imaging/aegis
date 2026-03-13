@@ -71,6 +71,14 @@
   border-right-color: #30363d;
 }
 
+[data-theme="dark"] .sidenav-toolbar {
+  border-bottom-color: #30363d;
+}
+
+[data-theme="dark"] .sidenav-footer__user {
+  color: #8b949e;
+}
+
 [data-theme="dark"] .sidenav-group + .sidenav-group {
   border-top-color: #30363d;
 }
