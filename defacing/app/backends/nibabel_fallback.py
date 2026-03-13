@@ -126,7 +126,7 @@ class NibabelFallbackBackend(DefacingBackend):
         Return (axis_index, face_at_high_end) where axis_index is the dimension
         (0=slices, 1=rows, 2=cols) most aligned with the anterior direction.
         """
-        ap_vector = np.array([0.0, 1.0, 0.0])  # +Y = Anterior in RAS
+        ap_vector = np.array([0.0, -1.0, 0.0])  # -Y = Anterior in LPS (DICOM)
 
         try:
             iop = [float(x) for x in ds.ImageOrientationPatient]
