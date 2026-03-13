@@ -8661,6 +8661,11 @@ export function App() {
     const saved = localStorage.getItem('aegis_sidebar_open')
     return saved !== null ? saved === 'true' : true
   })
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('aegis_theme')
+    if (saved !== null) return saved === 'dark'
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  })
   const [state, setState] = useState<StudiesState>('loading')
   const [studies, setStudies] = useState<Study[]>([])
   const [studiesTotal, setStudiesTotal] = useState(0)
@@ -9282,6 +9287,12 @@ export function App() {
   useEffect(() => { setPaletteHighlight(0) }, [paletteItems.length])
   // ── end palette ─────────────────────────────────────────────────────────────
 
+  // Dark mode — sync data-theme attribute on <html>
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    localStorage.setItem('aegis_theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
+
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
     let cancelled = false
@@ -9620,6 +9631,15 @@ export function App() {
               )}
             </div>
           )}
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setDarkMode(d => !d)}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <span className="theme-toggle__icon">{darkMode ? '\u2600' : '\u263E'}</span>
+          </button>
           <div className="tz-control">
             <label className="tz-label" htmlFor="display-timezone-mode">TZ</label>
             <select
