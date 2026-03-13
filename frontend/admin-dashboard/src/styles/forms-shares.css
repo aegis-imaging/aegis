@@ -1,0 +1,143 @@
+/* ── Share panel ─────────────────────────────────────────────────────────── */
+.share-panel {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 20px;
+  background: #f9fafb;
+  margin-top: 8px;
+}
+
+.share-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.share-panel-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.share-url-box {
+  padding: 12px;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.share-url-label {
+  font-weight: 600;
+  color: #0f766e;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.share-url-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-url-code {
+  flex: 1;
+  font-size: 12px;
+  padding: 6px 8px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  overflow-x: auto;
+  display: block;
+  white-space: nowrap;
+}
+
+.share-url-meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 6px;
+}
+
+.form-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 10px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.form-error {
+  color: #ea580c;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.form-input,
+.form-select {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+.form-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.text-capitalize { text-transform: capitalize; }
+
+/* ── Shares list ─────────────────────────────────────────────────────────── */
+.shares-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.shares-table th {
+  text-align: left;
+  padding: 4px 8px;
+  color: #6b7280;
+  font-weight: 500;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.shares-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.shares-table .td-muted { color: #6b7280; }
+.td-subtle {
+  color: #9ca3af;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.share-row--inactive { opacity: 0.6; }
+
+.share-status--active   { color: #0f766e; font-weight: 600; }
+.share-status--expired  { color: #92400e; font-weight: 600; }
+.share-status--revoked  { color: #9a3412; font-weight: 600; }
+
+.shares-empty {
+  color: #9ca3af;
+  font-size: 13px;
+}
+
