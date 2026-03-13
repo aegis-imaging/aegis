@@ -9610,31 +9610,10 @@ export function App() {
           <h1 className="topbar-title">AEGIS</h1>
         </div>
         <div className="topbar-actions">
-          {projects.length > 1 && (
-            <div className="tz-control">
-              <label className="tz-label" htmlFor="global-project-select">Project</label>
-              <select
-                id="global-project-select"
-                className="tz-select"
-                value={globalProjectId}
-                onChange={e => {
-                  const next = e.target.value
-                  if (!canUseAllProjectsMode && !next) return
-                  setGlobalProjectId(next)
-                }}
-              >
-                {canUseAllProjectsMode ? (
-                  <option value="">All projects</option>
-                ) : !globalProjectId ? (
-                  <option value="">Select project…</option>
-                ) : null}
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              {canUseAllProjectsMode && globalProjectId && (
-                <button type="button" className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-                  onClick={() => setGlobalProjectId('')}>Clear</button>
-              )}
-            </div>
+          {currentUser && (
+            <span className="auth-user-badge">
+              {currentUser.name || currentUser.email} ({currentUser.role})
+            </span>
           )}
           <button
             type="button"
@@ -9645,38 +9624,6 @@ export function App() {
           >
             <span className="theme-toggle__icon">{darkMode ? '\u2600' : '\u263E'}</span>
           </button>
-          <div className="tz-control">
-            <label className="tz-label" htmlFor="display-timezone-mode">TZ</label>
-            <select
-              id="display-timezone-mode"
-              className="tz-select"
-              value={displayTimezoneMode}
-              onChange={(e) => setDisplayTimezoneMode(e.target.value as DisplayTimezoneMode)}
-            >
-              <option value="utc">UTC</option>
-              <option value="local">Local ({localTimeZone})</option>
-              <option value="custom">Custom</option>
-            </select>
-            {displayTimezoneMode === 'custom' && (
-              <>
-                <input
-                  className="tz-input"
-                  type="text"
-                  placeholder="America/Chicago"
-                  value={displayTimezoneCustom}
-                  onChange={(e) => setDisplayTimezoneCustom(e.target.value)}
-                />
-                {!validCustomTimeZone && displayTimezoneCustom.trim() && (
-                  <span className="tz-warning">Invalid IANA time zone</span>
-                )}
-              </>
-            )}
-          </div>
-          {currentUser && (
-            <span className="auth-user-badge">
-              {currentUser.name || currentUser.email} ({currentUser.role})
-            </span>
-          )}
           <button
             type="button"
             className="btn-palette-trigger"
@@ -9736,8 +9683,57 @@ export function App() {
 
           {sidebarOpen && (
             <div className="sidenav-footer">
-              <span className="auth-user-badge" title="Active project/scope">
-                Scope: {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
+              {projects.length > 1 && (
+                <div className="sidenav-footer__control">
+                  <label className="tz-label" htmlFor="global-project-select">Project</label>
+                  <select
+                    id="global-project-select"
+                    className="tz-select sidenav-footer__select"
+                    value={globalProjectId}
+                    onChange={e => {
+                      const next = e.target.value
+                      if (!canUseAllProjectsMode && !next) return
+                      setGlobalProjectId(next)
+                    }}
+                  >
+                    {canUseAllProjectsMode ? (
+                      <option value="">All projects</option>
+                    ) : !globalProjectId ? (
+                      <option value="">Select project…</option>
+                    ) : null}
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="sidenav-footer__control">
+                <label className="tz-label" htmlFor="display-timezone-mode">TZ</label>
+                <select
+                  id="display-timezone-mode"
+                  className="tz-select sidenav-footer__select"
+                  value={displayTimezoneMode}
+                  onChange={(e) => setDisplayTimezoneMode(e.target.value as DisplayTimezoneMode)}
+                >
+                  <option value="utc">UTC</option>
+                  <option value="local">Local ({localTimeZone})</option>
+                  <option value="custom">Custom</option>
+                </select>
+                {displayTimezoneMode === 'custom' && (
+                  <>
+                    <input
+                      className="tz-input sidenav-footer__select"
+                      type="text"
+                      placeholder="America/Chicago"
+                      value={displayTimezoneCustom}
+                      onChange={(e) => setDisplayTimezoneCustom(e.target.value)}
+                    />
+                    {!validCustomTimeZone && displayTimezoneCustom.trim() && (
+                      <span className="tz-warning">Invalid IANA time zone</span>
+                    )}
+                  </>
+                )}
+              </div>
+              <span className="auth-user-badge sidenav-footer__scope" title="Active project/scope">
+                {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
               </span>
             </div>
           )}

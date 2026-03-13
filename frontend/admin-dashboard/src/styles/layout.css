@@ -182,6 +182,27 @@
   font-size: 11px;
 }
 
+.sidenav-footer__control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.sidenav-footer__select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.sidenav-footer__scope {
+  display: block;
+  font-size: 10px;
+  margin-top: 4px;
+}
+
 /* Mobile overlay */
 .sidenav-overlay {
   display: none;
