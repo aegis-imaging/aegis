@@ -106,7 +106,15 @@
   background: rgba(0,0,0,0.5);
 }
 
-/* ── Main content ─────────────────────────────────────────────────────────── */
+/* ── Layout containers ────────────────────────────────────────────────────── */
+[data-theme="dark"] .admin-root {
+  background: #0d1117;
+}
+
+[data-theme="dark"] .layout-body {
+  background: #0d1117;
+}
+
 [data-theme="dark"] .main-content {
   background: #0d1117;
 }
