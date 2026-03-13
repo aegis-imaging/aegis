@@ -8657,6 +8657,10 @@ export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
   const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
   const [tab, setTab] = useState<AppTab>('studies')
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('aegis_sidebar_open')
+    return saved !== null ? saved === 'true' : true
+  })
   const [state, setState] = useState<StudiesState>('loading')
   const [studies, setStudies] = useState<Study[]>([])
   const [studiesTotal, setStudiesTotal] = useState(0)
@@ -9488,8 +9492,28 @@ export function App() {
   })()
   const pageEnd    = Math.min((page + 1) * PAGE_SIZE, studiesTotal)
 
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => {
+      localStorage.setItem('aegis_sidebar_open', String(!prev))
+      return !prev
+    })
+  }
+
+  const navItem = (label: string, target: AppTab, icon: string, badge?: React.ReactNode) => (
+    <button
+      type="button"
+      className={`sidenav-item${tab === target ? ' sidenav-item--active' : ''}`}
+      onClick={() => { setTab(target); if (window.innerWidth < 900) setSidebarOpen(false) }}
+      title={!sidebarOpen ? label : undefined}
+    >
+      <span className="sidenav-icon">{icon}</span>
+      {sidebarOpen && <span className="sidenav-label">{label}</span>}
+      {sidebarOpen && badge}
+    </button>
+  )
+
   return (
-    <div className="admin-root">
+    <div className={`admin-root${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}`}>
       {/* Cmd/Ctrl+K quick-search palette */}
       {paletteOpen && (
         <div className="palette-overlay" onClick={() => setPaletteOpen(false)}>
@@ -9561,13 +9585,15 @@ export function App() {
         </div>
       )}
 
-      <header className="header">
-        <div>
-          <h1>AEGIS Admin Dashboard</h1>
-          <p>Study review, QC, and export management</p>
+      {/* Top bar */}
+      <header className="topbar">
+        <div className="topbar-left">
+          <button type="button" className="hamburger-btn" onClick={toggleSidebar} title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}>
+            <span className="hamburger-icon">{sidebarOpen ? '\u2715' : '\u2630'}</span>
+          </button>
+          <h1 className="topbar-title">AEGIS</h1>
         </div>
-        <div className="header-actions">
-          {/* Global project selector */}
+        <div className="topbar-actions">
           {projects.length > 1 && (
             <div className="tz-control">
               <label className="tz-label" htmlFor="global-project-select">Project</label>
@@ -9594,11 +9620,8 @@ export function App() {
               )}
             </div>
           )}
-          <span className="auth-user-badge" title="Active project/scope">
-            Scope: {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
-          </span>
           <div className="tz-control">
-            <label className="tz-label" htmlFor="display-timezone-mode">Time Zone</label>
+            <label className="tz-label" htmlFor="display-timezone-mode">TZ</label>
             <select
               id="display-timezone-mode"
               className="tz-select"
@@ -9644,137 +9667,62 @@ export function App() {
         </div>
       </header>
 
-      {/* Tab nav */}
-      <nav className="tab-nav">
-        <button
-          type="button"
-          className={`tab-btn${tab === 'studies' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('studies')}
-        >
-          Studies
-          {stuckCount > 0 && <span className="tab-stuck-badge">{stuckCount} stuck</span>}
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'audit' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('audit')}
-        >
-          Audit Log
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'agent' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('agent')}
-        >
-          Agent
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'shares' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('shares')}
-        >
-          Shares
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'routing' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('routing')}
-        >
-          Routing
-        </button>
-        {isAdmin && (
-          <button
-            type="button"
-            className={`tab-btn${tab === 'dimse_ops' ? ' tab-btn--active' : ''}`}
-            onClick={() => setTab('dimse_ops')}
-          >
-            DIMSE Ops
-          </button>
-        )}
-        <button
-          type="button"
-          className={`tab-btn${tab === 'institutions' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('institutions')}
-        >
-          Institutions
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'profiles' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('profiles')}
-        >
-          Profiles
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'protocol_templates' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('protocol_templates')}
-        >
-          Protocol Templates
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'notifications' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('notifications')}
-        >
-          Notifications
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'projects' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('projects')}
-        >
-          Projects
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'federation' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('federation')}
-        >
-          Federation
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'tcia_import' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('tcia_import')}
-        >
-          TCIA Import
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'system' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('system')}
-        >
-          System
-        </button>
-        {isAdmin && (
-          <button
-            type="button"
-            className={`tab-btn${tab === 'users' ? ' tab-btn--active' : ''}`}
-            onClick={() => setTab('users')}
-          >
-            Users
-          </button>
-        )}
-        {isAdmin && (
-          <button
-            type="button"
-            className={`tab-btn${tab === 'api_keys' ? ' tab-btn--active' : ''}`}
-            onClick={() => setTab('api_keys')}
-          >
-            API Keys
-          </button>
-        )}
-        {isAdmin && (
-          <button
-            type="button"
-            className={`tab-btn${tab === 'invite_codes' ? ' tab-btn--active' : ''}`}
-            onClick={() => setTab('invite_codes')}
-          >
-            Invite Codes
-          </button>
-        )}
-      </nav>
+      <div className="layout-body">
+        {/* Sidebar nav */}
+        <nav className={`sidenav${sidebarOpen ? '' : ' sidenav--collapsed'}`}>
+          <div className="sidenav-group">
+            {sidebarOpen && <div className="sidenav-group-label">Overview</div>}
+            {navItem('Studies', 'studies', '\u{1F4CB}', stuckCount > 0 ? <span className="sidenav-badge">{stuckCount}</span> : undefined)}
+            {navItem('Audit Log', 'audit', '\u{1F4DC}')}
+            {navItem('Agent', 'agent', '\u{1F916}')}
+          </div>
+
+          <div className="sidenav-group">
+            {sidebarOpen && <div className="sidenav-group-label">Data</div>}
+            {navItem('Shares', 'shares', '\u{1F517}')}
+            {navItem('Routing', 'routing', '\u{1F6E4}')}
+            {isAdmin && navItem('DIMSE Ops', 'dimse_ops', '\u{1F4E1}')}
+          </div>
+
+          <div className="sidenav-group">
+            {sidebarOpen && <div className="sidenav-group-label">Config</div>}
+            {navItem('Projects', 'projects', '\u{1F4C1}')}
+            {navItem('Institutions', 'institutions', '\u{1F3E5}')}
+            {navItem('Profiles', 'profiles', '\u{1F6E1}')}
+            {navItem('Protocol', 'protocol_templates', '\u{1F4CF}')}
+            {navItem('Notifications', 'notifications', '\u{1F514}')}
+          </div>
+
+          <div className="sidenav-group">
+            {sidebarOpen && <div className="sidenav-group-label">Advanced</div>}
+            {navItem('Federation', 'federation', '\u{1F310}')}
+            {navItem('TCIA Import', 'tcia_import', '\u{1F4E5}')}
+            {navItem('System', 'system', '\u{2699}')}
+          </div>
+
+          {isAdmin && (
+            <div className="sidenav-group">
+              {sidebarOpen && <div className="sidenav-group-label">Admin</div>}
+              {navItem('Users', 'users', '\u{1F464}')}
+              {navItem('API Keys', 'api_keys', '\u{1F511}')}
+              {navItem('Invite Codes', 'invite_codes', '\u{1F3AB}')}
+            </div>
+          )}
+
+          {sidebarOpen && (
+            <div className="sidenav-footer">
+              <span className="auth-user-badge" title="Active project/scope">
+                Scope: {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
+              </span>
+            </div>
+          )}
+        </nav>
+
+        {/* Mobile overlay */}
+        {sidebarOpen && <div className="sidenav-overlay" onClick={() => setSidebarOpen(false)} />}
+
+        {/* Main content */}
+        <main className="main-content">
 
       {/* Studies tab */}
       {tab === 'studies' && selectedStudyId && (
@@ -10985,6 +10933,8 @@ export function App() {
 
       {/* System Health tab */}
       {tab === 'system' && <SystemHealthPanel />}
+        </main>
+      </div>{/* end layout-body */}
     </div>
   )
 }
