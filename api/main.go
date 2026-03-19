@@ -558,6 +558,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{id}/longitudinal-roi-results", auth(srv.ListLongitudinalROIResults))
 	mux.HandleFunc("DELETE /api/studies/{id}/roi-results", adminOnly(srv.DeleteROIResults))
 	mux.HandleFunc("GET /api/subjects/{subjectID}/roi-results", auth(srv.ListSubjectROIResults))
+	mux.HandleFunc("GET /api/subjects/{subjectID}/roi-export", auth(srv.ExportSubjectROIData))
 	mux.HandleFunc("GET /api/projects/{id}/roi-export", auth(srv.ExportProjectROIData))
 
 	// Analyst QC ratings — human quality assessments for studies.
@@ -572,9 +573,10 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}/demographics", auth(srv.ListProjectDemographics))
 	mux.HandleFunc("GET /api/projects/{id}/demographics.csv", auth(srv.ExportProjectDemographicsCSV))
 
-	// Analytics output files — browse and stream NIfTI/surface/stats files.
+	// Analytics output files — browse, stream, and bulk-download NIfTI/surface/stats files.
 	mux.HandleFunc("GET /api/studies/{id}/analytics-files", auth(srv.ListAnalyticsFiles))
 	mux.HandleFunc("GET /api/studies/{id}/analytics-files/{path...}", auth(srv.ServeAnalyticsFile))
+	mux.HandleFunc("GET /api/studies/{id}/analytics-download", auth(srv.ServeAnalyticsDownload))
 
 	// Synthetic MRI generation — creates a new synthetic brain MRI study.
 	mux.HandleFunc("POST /api/studies/generate-synthetic", adminOnly(srv.GenerateSyntheticStudy))
