@@ -120,7 +120,8 @@ type Config struct {
 
 	// Pipeline failure alerting — sends email whenever a pipeline service step fails.
 	// Disabled when PipelineAlertEmail is empty or SMTP is not configured.
-	PipelineAlertEmail string // PIPELINE_ALERT_EMAIL — recipient for pipeline step failure alerts
+	PipelineAlertEmail  string // PIPELINE_ALERT_EMAIL — recipient for pipeline step failure alerts
+	AutoShareExpiryDays int    // AUTO_SHARE_EXPIRY_DAYS — days until auto-generated share link expires (default 30)
 
 	// Destination health probe scheduler — automatically probes all enabled destinations.
 	// Disabled when DestHealthInterval is 0.
@@ -222,7 +223,8 @@ func Load() *Config {
 		SLAPipelineMinutes: envInt("SLA_PIPELINE_MINUTES", 0),
 		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),
 		SLAAlertEmail:      os.Getenv("SLA_ALERT_EMAIL"),
-		PipelineAlertEmail: os.Getenv("PIPELINE_ALERT_EMAIL"),
+		PipelineAlertEmail:  os.Getenv("PIPELINE_ALERT_EMAIL"),
+		AutoShareExpiryDays: envInt("AUTO_SHARE_EXPIRY_DAYS", 30),
 
 		DestHealthInterval:   envInt("DEST_HEALTH_INTERVAL", 0),
 		DestHealthAlertEmail: os.Getenv("DEST_HEALTH_ALERT_EMAIL"),

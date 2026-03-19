@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -572,6 +573,39 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:        share.CreatedBy,
 		DownloadURL:      downloadURL,
 		Files:            files,
+	})
+}
+
+// createAutoShareURL automatically creates an export share when all required pipeline
+// steps complete. Idempotent — skips if auto_share_url is already set on the study.
+func (s *Server) createAutoShareURL(ctx context.Context, study *model.Study) {
+	if study.AutoShareURL != nil && *study.AutoShareURL != "" {
+		return // already created
+	}
+
+	rawToken, tokenHash, err := generateShareToken()
+	if err != nil {
+		log.Printf("auto-share: generate token for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	expiresAt := time.Now().UTC().AddDate(0, 0, s.cfg.AutoShareExpiryDays)
+	share, err := model.CreateExportShare(ctx, s.db, study.ID, tokenHash, "", "Auto-generated", "pipeline", expiresAt, nil)
+	if err != nil {
+		log.Printf("auto-share: create share for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	_ = share
+
+	downloadURL := fmt.Sprintf("%s/api/export/%s/download", s.cfg.APIBaseURL, rawToken)
+	if err := model.SetStudyAutoShareURL(ctx, s.db, study.ID, downloadURL); err != nil {
+		log.Printf("auto-share: set url for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	model.CreateAuditEntry(ctx, s.db, "share.auto_created", "pipeline", "study", study.ID, "", map[string]any{
+		"study_uid":  study.StudyInstanceUID,
+		"expires_at": expiresAt,
 	})
 }
 
