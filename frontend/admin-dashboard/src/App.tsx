@@ -1,4 +1,8 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment, DragEvent } from 'react'
+import {
+  isDicomFile, parseDicomFile, buildStudySummary, deidentify, uploadStudy, groupByStudy,
+} from '@aegis/client'
+import type { ParsedDicomFile, StudySummary } from '@aegis/client'
 import './styles/layout.css'
 import './styles/components.css'
 import './styles/forms-shares.css'
@@ -9031,6 +9035,267 @@ type StudiesState = 'loading' | 'loaded' | 'error'
 
 const PAGE_SIZE = 50
 
+// ── UploadStudyModal ────────────────────────────────────────────────────────
+
+type UploadModalStage = 'idle' | 'parsing' | 'preview' | 'uploading' | 'done' | 'error'
+
+interface UploadStudyGroup {
+  studyUid: string
+  files: ParsedDicomFile[]
+  summary: StudySummary
+  tagChanges: { keyword: string; before: string; after: string }[]
+}
+
+function UploadStudyModal({ projects, onClose, onUploaded }: {
+  projects: Project[]
+  onClose: () => void
+  onUploaded: () => void
+}) {
+  const [stage, setStage]           = useState<UploadModalStage>('idle')
+  const [projectSlug, setProjectSlug] = useState<string>(projects[0]?.slug ?? '')
+  const [dragging, setDragging]     = useState(false)
+  const [parsedTotal, setParsedTotal] = useState(0)
+  const [parsedCount, setParsedCount] = useState(0)
+  const [groups, setGroups]         = useState<UploadStudyGroup[]>([])
+  const [currentGroupIdx, setCurrentGroupIdx] = useState(0)
+  const [uploadProgress, setUploadProgress]   = useState(0)
+  const [uploadTotal, setUploadTotal]         = useState(0)
+  const [uploadFilename, setUploadFilename]   = useState('')
+  const [doneUids, setDoneUids]     = useState<string[]>([])
+  const [errorMsg, setErrorMsg]     = useState('')
+  const abortRef = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFiles = useCallback(async (fileList: FileList | File[]) => {
+    const all = Array.from(fileList)
+    setStage('parsing')
+    setParsedCount(0)
+    setParsedTotal(all.length)
+    abortRef.current = false
+
+    const parsed: ParsedDicomFile[] = []
+    for (let i = 0; i < all.length; i++) {
+      if (abortRef.current) { setStage('idle'); return }
+      const file = all[i]
+      const isDcm = await isDicomFile(file)
+      if (!isDcm) { setParsedCount(i + 1); continue }
+      try {
+        const buf = await file.arrayBuffer()
+        const { parsed: p } = parseDicomFile(buf, file.name)
+        parsed.push(p)
+      } catch {
+        // skip unparseable files
+      }
+      setParsedCount(i + 1)
+    }
+
+    if (parsed.length === 0) {
+      setErrorMsg('No valid DICOM files found in the selection.')
+      setStage('error')
+      return
+    }
+
+    const byStudy = groupByStudy(parsed)
+    const gs: UploadStudyGroup[] = []
+    for (const [uid, files] of byStudy.entries()) {
+      const summary = buildStudySummary(files)
+      // Build tag diff preview from first file's tags (before/after)
+      const tagChanges: UploadStudyGroup['tagChanges'] = []
+      const firstFile = files[0]
+      for (const t of firstFile.tags) {
+        if (!t.originalValue || t.originalValue === '') continue
+        tagChanges.push({ keyword: t.keyword, before: String(t.originalValue), after: t.action === 'K' ? String(t.originalValue) : '[removed]' })
+        if (tagChanges.length >= 12) break
+      }
+      gs.push({ studyUid: uid, files, summary, tagChanges })
+    }
+
+    setGroups(gs)
+    setCurrentGroupIdx(0)
+    setStage('preview')
+  }, [])
+
+  const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragging(false)
+    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files)
+  }, [handleFiles])
+
+  const handleUpload = useCallback(async () => {
+    setStage('uploading')
+    const resultUids: string[] = []
+    for (const group of groups) {
+      setUploadProgress(0)
+      setUploadTotal(group.files.length)
+      setUploadFilename('')
+      try {
+        const result = await uploadStudy(group.files, projectSlug, group.summary, {
+          onProgress: (done, total) => { setUploadProgress(done); setUploadTotal(total) },
+          onFileStart: (fname) => setUploadFilename(fname),
+        })
+        resultUids.push(result.study?.studyInstanceUid ?? group.studyUid)
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : 'Upload failed')
+        setStage('error')
+        return
+      }
+    }
+    setDoneUids(resultUids)
+    setStage('done')
+    onUploaded()
+  }, [groups, projectSlug, onUploaded])
+
+  const reset = () => {
+    setStage('idle')
+    setGroups([])
+    setDoneUids([])
+    setErrorMsg('')
+    abortRef.current = false
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => { if ((e.target as HTMLElement).classList.contains('modal-overlay')) onClose() }}>
+      <div className="modal-box" style={{ maxWidth: 560, width: '100%' }}>
+        <div className="modal-header">
+          <h2 className="modal-title">Upload Study</h2>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close">×</button>
+        </div>
+
+        {/* Project selector */}
+        {projects.length > 1 && (
+          <div className="form-group" style={{ marginBottom: 12 }}>
+            <select className="form-select" value={projectSlug} onChange={e => setProjectSlug(e.target.value)} disabled={stage !== 'idle'}>
+              {projects.map(p => <option key={p.id} value={p.slug}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* idle: drop zone */}
+        {stage === 'idle' && (
+          <div
+            className={`drop-zone${dragging ? ' drop-zone--active' : ''}`}
+            onDragOver={e => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ cursor: 'pointer' }}
+          >
+            <div className="drop-zone__icon">⬆</div>
+            <div className="drop-zone__text">Drop DICOM files or folder here</div>
+            <div className="drop-zone__sub">or click to browse</div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              // @ts-expect-error webkitdirectory is non-standard
+              webkitdirectory=""
+              style={{ display: 'none' }}
+              onChange={e => e.target.files && handleFiles(e.target.files)}
+            />
+          </div>
+        )}
+
+        {/* parsing: progress */}
+        {stage === 'parsing' && (
+          <div style={{ padding: '20px 0' }}>
+            <div className="progress-label">Parsing files… {parsedCount} / {parsedTotal}</div>
+            <div className="progress-bar-wrap">
+              <div className="progress-bar-fill" style={{ width: parsedTotal ? `${(parsedCount / parsedTotal) * 100}%` : '0%' }} />
+            </div>
+            <button type="button" className="btn btn--secondary" style={{ marginTop: 12 }} onClick={() => { abortRef.current = true }}>Cancel</button>
+          </div>
+        )}
+
+        {/* preview: tag diff + confirm */}
+        {stage === 'preview' && groups.length > 0 && (
+          <div>
+            {groups.length > 1 && (
+              <div className="info-banner" style={{ marginBottom: 8 }}>
+                {groups.length} studies detected. Each will be uploaded as a separate session.
+              </div>
+            )}
+            {groups.map((g, i) => (
+              <div key={g.studyUid} style={{ marginBottom: 16 }}>
+                <div className="form-section-label">
+                  Study {groups.length > 1 ? `${i + 1} / ${groups.length} · ` : ''}{g.summary.modality || '?'} · {g.summary.bodyPart || '?'} · {g.files.length} files
+                </div>
+                <div className="preview-uid">{g.studyUid}</div>
+              </div>
+            ))}
+
+            <div className="form-section-label" style={{ marginTop: 8 }}>Anonymization preview (first study · first file)</div>
+            <div className="tag-diff-table-wrap" style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
+              <table className="tag-diff-table" style={{ width: '100%', fontSize: 12 }}>
+                <thead><tr><th>Tag</th><th>Before</th><th>After</th></tr></thead>
+                <tbody>
+                  {groups[0].tagChanges.map(tc => (
+                    <tr key={tc.keyword}>
+                      <td style={{ fontFamily: 'monospace' }}>{tc.keyword}</td>
+                      <td style={{ color: '#9a3412' }}>{tc.before}</td>
+                      <td style={{ color: tc.after === '[removed]' ? '#6b7280' : '#0f766e' }}>{tc.after}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn--secondary" onClick={reset}>Start over</button>
+              <button type="button" className="btn btn--approve" onClick={handleUpload}>Upload {groups.length > 1 ? `${groups.length} studies` : 'study'}</button>
+            </div>
+          </div>
+        )}
+
+        {/* uploading: progress */}
+        {stage === 'uploading' && (
+          <div style={{ padding: '20px 0' }}>
+            {groups.length > 1 && (
+              <div className="progress-label" style={{ marginBottom: 4 }}>
+                Study {currentGroupIdx + 1} of {groups.length}
+              </div>
+            )}
+            <div className="progress-label">
+              Uploading… {uploadProgress} / {uploadTotal}
+              {uploadFilename && <span style={{ color: '#6b7280', marginLeft: 6, fontSize: 11 }}>{uploadFilename}</span>}
+            </div>
+            <div className="progress-bar-wrap">
+              <div className="progress-bar-fill" style={{ width: uploadTotal ? `${(uploadProgress / uploadTotal) * 100}%` : '0%' }} />
+            </div>
+          </div>
+        )}
+
+        {/* done */}
+        {stage === 'done' && (
+          <div style={{ padding: '16px 0' }}>
+            <div className="success-banner" style={{ marginBottom: 12 }}>
+              ✓ {doneUids.length === 1 ? 'Study uploaded' : `${doneUids.length} studies uploaded`} successfully.
+            </div>
+            {doneUids.map(uid => (
+              <div key={uid} style={{ fontSize: 12, fontFamily: 'monospace', color: '#0f766e', marginBottom: 4 }}>
+                {uid}
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button type="button" className="btn btn--secondary" onClick={reset}>Upload another</button>
+              <button type="button" className="btn btn--approve" onClick={onClose}>Done</button>
+            </div>
+          </div>
+        )}
+
+        {/* error */}
+        {stage === 'error' && (
+          <div style={{ padding: '16px 0' }}>
+            <div className="error-banner" style={{ marginBottom: 12 }}>{errorMsg}</div>
+            <button type="button" className="btn btn--secondary" onClick={reset}>Try again</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 const GLOBAL_PROJECT_KEY    = 'aegis_global_project_id'
 const SAVED_FILTERS_KEY     = 'aegis_saved_filters'
 const STUDIES_SORT_KEY      = 'aegis_studies_sort'
@@ -9211,6 +9476,7 @@ export function App() {
 
   // Deleted Studies (Trash) panel
   type DeletedStudy = { id: string; study_instance_uid: string; modality: string; body_part: string; status: string; deleted_at: string }
+  const [showUploadModal, setShowUploadModal] = useState(false)
   const [showTrashPanel, setShowTrashPanel] = useState(false)
   const [trashStudies, setTrashStudies] = useState<DeletedStudy[]>([])
   const [trashTotal, setTrashTotal] = useState(0)
@@ -10494,6 +10760,15 @@ export function App() {
             )}
           </div>
 
+          {/* Upload Study button */}
+          {isAdmin && (
+            <div style={{ marginBottom: 10 }}>
+              <button type="button" className="btn btn--action" onClick={() => setShowUploadModal(true)}>
+                ↑ Upload Study
+              </button>
+            </div>
+          )}
+
           {/* Synthetic MRI generator */}
           <SynthPanel isAdmin={isAdmin} onStudyGenerated={() => setRefreshTick(t => t + 1)} />
 
@@ -11364,6 +11639,15 @@ export function App() {
       {tab === 'system' && <SystemHealthPanel />}
         </main>
       </div>{/* end layout-body */}
+
+      {/* Upload Study Modal */}
+      {showUploadModal && (
+        <UploadStudyModal
+          projects={projects}
+          onClose={() => setShowUploadModal(false)}
+          onUploaded={() => { setRefreshTick(t => t + 1); setShowUploadModal(false) }}
+        />
+      )}
     </div>
   )
 }
