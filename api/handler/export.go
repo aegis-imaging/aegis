@@ -207,7 +207,7 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.ExportPortalBaseURL != "" {
 		exportURL = fmt.Sprintf("%s?token=%s", s.cfg.ExportPortalBaseURL, rawToken)
 	} else {
-		exportURL = fmt.Sprintf("%s/api/export/%s", s.cfg.APIBaseURL, rawToken)
+		exportURL = fmt.Sprintf("%s/api/export/%s/download", s.cfg.APIBaseURL, rawToken)
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "share.created", actorEmail(r), "export_share", share.ID, clientIP(r), map[string]any{
 		"recipient":  req.RecipientEmail,
