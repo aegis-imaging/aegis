@@ -119,6 +119,7 @@ func (s *Server) maybeFireProcessingComplete(ctx context.Context, studyID string
 
 	if classOK && phiOK && pixelRedactOK && protocolOK && defacingOK && qcOK && bidsOK && analyticsOK && sctOK && exportOK {
 		go webhook.Deliver(ctx, s.db, "study.processing_complete", fresh)
+		go s.createAutoShareURL(ctx, fresh)
 	}
 }
 

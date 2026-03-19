@@ -49,6 +49,7 @@ type Study struct {
 	AssignedTo             *string    `json:"assigned_to,omitempty"`
 	AssignedAt             *time.Time `json:"assigned_at,omitempty"`
 	DeletedAt              *time.Time `json:"deleted_at,omitempty"`
+	AutoShareURL           *string    `json:"auto_share_url,omitempty"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 }
@@ -71,6 +72,7 @@ const studyColumns = `
 	assigned_to,
 	assigned_at,
 	deleted_at,
+	auto_share_url,
 	created_at, updated_at`
 
 type scannable interface {
@@ -98,8 +100,16 @@ func scanStudy(row scannable, s *Study) error {
 		&s.AssignedTo,
 		&s.AssignedAt,
 		&s.DeletedAt,
+		&s.AutoShareURL,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
+}
+
+func SetStudyAutoShareURL(ctx context.Context, db *sql.DB, studyID, url string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE studies SET auto_share_url = $1, updated_at = now() WHERE id = $2`,
+		url, studyID)
+	return err
 }
 
 func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {

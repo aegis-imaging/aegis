@@ -117,6 +117,7 @@ type Study = {
   deface_qa_score?: number
   subject_id?: string
   rejection_reason?: string
+  auto_share_url?: string
   created_at: string
   updated_at: string
 }
@@ -2552,6 +2553,31 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
         )}
 
         {detailTab === 'shares' && (
+          <>
+          {study?.auto_share_url && (
+            <div style={{
+              border: '1px solid #0d9488',
+              borderRadius: 6,
+              background: '#f0fdfa',
+              padding: '10px 14px',
+              marginBottom: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ color: '#0f766e', fontWeight: 600, fontSize: 13 }}>● Auto-generated share link — ready to send</span>
+              <code style={{ fontSize: 11, color: '#0f766e', flex: 1, wordBreak: 'break-all' }}>{study.auto_share_url}</code>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                style={{ fontSize: 12, padding: '2px 10px', whiteSpace: 'nowrap' }}
+                onClick={() => navigator.clipboard.writeText(study.auto_share_url!)}
+              >
+                Copy link
+              </button>
+            </div>
+          )}
           <table className="detail-table">
             <thead>
               <tr><th>Recipient</th><th>Created</th><th>Expires</th><th>Status</th><th>Downloads</th><th>Note</th></tr>
@@ -2586,6 +2612,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               })}
             </tbody>
           </table>
+          </>
         )}
 
         {detailTab === 'labels' && (
