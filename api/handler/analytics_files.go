@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"archive/zip"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -146,6 +148,59 @@ func (s *Server) ServeAnalyticsFile(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Disposition", "inline; filename=\""+info.Name()+"\"")
 	io.Copy(w, f)
+}
+
+// ServeAnalyticsDownload streams all analytics outputs for a study as a ZIP archive.
+// GET /api/studies/{id}/analytics-download
+func (s *Server) ServeAnalyticsDownload(w http.ResponseWriter, r *http.Request) {
+	studyID := r.PathValue("id")
+	if studyID == "" {
+		s.writeError(w, http.StatusBadRequest, "missing study ID")
+		return
+	}
+
+	study, err := model.GetStudyByID(r.Context(), s.db, studyID)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+
+	if study.AnalyticsStatus != "complete" && study.AnalyticsStatus != "partial" {
+		s.writeError(w, http.StatusBadRequest, "analytics not complete for this study")
+		return
+	}
+
+	analyticsDir := filepath.Join(s.cfg.LocalStorageDir, "analytics", study.StudyInstanceUID)
+	if _, err := os.Stat(analyticsDir); err != nil {
+		s.writeError(w, http.StatusNotFound, "analytics output not found on disk")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s_analytics.zip"`, study.StudyInstanceUID))
+
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	filepath.Walk(analyticsDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil || info.IsDir() {
+			return walkErr
+		}
+		relPath, _ := filepath.Rel(analyticsDir, path)
+		relPath = strings.ReplaceAll(relPath, string(filepath.Separator), "/")
+
+		fw, err := zw.Create(relPath)
+		if err != nil {
+			return err
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = io.Copy(fw, f)
+		return err
+	})
 }
 
 // classifyAnalyticsFile returns a type label for an analytics output file.

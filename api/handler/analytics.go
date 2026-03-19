@@ -40,13 +40,27 @@ type analyticsServiceResponse struct {
 	Error           *string               `json:"error"`
 }
 
+// triggerAnalyticsBody is the optional request body for TriggerAnalytics.
+type triggerAnalyticsBody struct {
+	// Tool specifies which analytics backend to run. Empty = auto-select.
+	Tool string `json:"tool"`
+}
+
 // TriggerAnalytics triggers the neuroimaging analytics pipeline for a study.
 // Analytics runs after BIDS conversion is complete, consuming NIfTI outputs.
+// An optional JSON body {"tool": "<backend>"} selects a specific backend.
+// Manual triggers auto-enable analytics_required on studies that don't have it set.
 func (s *Server) TriggerAnalytics(w http.ResponseWriter, r *http.Request) {
 	studyUID := r.PathValue("studyUID")
 	if studyUID == "" {
 		s.writeError(w, http.StatusBadRequest, "missing study UID")
 		return
+	}
+
+	// Parse optional tool selection from request body.
+	var body triggerAnalyticsBody
+	if r.ContentLength > 0 {
+		json.NewDecoder(r.Body).Decode(&body) // tolerate decode errors — tool defaults to ""
 	}
 
 	study, err := model.GetStudyByUID(r.Context(), s.db, studyUID)
@@ -55,20 +69,23 @@ func (s *Server) TriggerAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !study.AnalyticsRequired {
-		s.writeError(w, http.StatusBadRequest, "study does not require analytics")
-		return
-	}
-
 	if study.AnalyticsStatus == "analyzing" {
 		s.writeError(w, http.StatusConflict, "analytics already in progress")
 		return
 	}
 
-	// Analytics requires BIDS conversion to be complete.
+	// Auto-enable analytics_required when manually triggered.
+	if !study.AnalyticsRequired {
+		if err := model.SetAnalyticsRequired(r.Context(), s.db, study.ID, true); err != nil {
+			s.writeError(w, http.StatusInternalServerError, "failed to enable analytics for study")
+			return
+		}
+		study.AnalyticsRequired = true
+	}
+
+	// Warn (but don't block) when BIDS conversion is pending — some tools may still run.
 	if study.BidsRequired && study.BidsStatus != "complete" {
-		s.writeError(w, http.StatusBadRequest, "BIDS conversion must complete before analytics can run")
-		return
+		log.Printf("analytics: study %s has bids_required=true but bids_status=%q — proceeding with manual trigger", studyUID, study.BidsStatus)
 	}
 
 	if err := model.UpdateAnalyticsStatus(r.Context(), s.db, study.ID, "analyzing"); err != nil {
@@ -76,9 +93,11 @@ func (s *Server) TriggerAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	model.CreateAuditEntry(r.Context(), s.db, "analytics.triggered", actorEmail(r), "study", study.ID, clientIP(r), map[string]any{
-		"study_uid": studyUID,
-	})
+	auditMeta := map[string]any{"study_uid": studyUID}
+	if body.Tool != "" {
+		auditMeta["tool"] = body.Tool
+	}
+	model.CreateAuditEntry(r.Context(), s.db, "analytics.triggered", actorEmail(r), "study", study.ID, clientIP(r), auditMeta)
 
 	if s.cfg.AnalyticsServiceURL == "" {
 		log.Printf("analytics: ANALYTICS_SERVICE_URL not set — study %s queued but not processed", studyUID)
@@ -89,7 +108,7 @@ func (s *Server) TriggerAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go s.runAnalytics(study)
+	go s.runAnalytics(study, body.Tool)
 
 	s.writeJSON(w, http.StatusAccepted, map[string]string{
 		"status":  "analyzing",
@@ -98,7 +117,8 @@ func (s *Server) TriggerAnalytics(w http.ResponseWriter, r *http.Request) {
 }
 
 // runAnalytics calls the Python analytics service and updates the study record.
-func (s *Server) runAnalytics(study *model.Study) {
+// tool specifies which backend to run; empty string means auto-select.
+func (s *Server) runAnalytics(study *model.Study, tool string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 	defer cancel()
 
@@ -114,6 +134,9 @@ func (s *Server) runAnalytics(study *model.Study) {
 		StudyUID:  studyUID,
 		BidsDir:   bidsDir,
 		OutputDir: outputDir,
+	}
+	if tool != "" {
+		payload.Tools = []string{tool}
 	}
 	body, _ := json.Marshal(payload)
 
