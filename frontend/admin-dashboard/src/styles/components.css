@@ -119,6 +119,13 @@
 .badge--export-exported  { background: #ccfbf1; color: #0f766e; }
 .badge--export-failed    { background: #ffedd5; color: #9a3412; }
 
+/* Analytics badges */
+.badge--analytics-complete  { background: #ccfbf1; color: #0f766e; }
+.badge--analytics-partial   { background: #fef3c7; color: #92400e; }
+.badge--analytics-analyzing { background: #dbeafe; color: #1e40af; }
+.badge--analytics-pending   { background: #f3f4f6; color: #6b7280; }
+.badge--analytics-failed    { background: #ffedd5; color: #9a3412; }
+
 /* Status badges (generic) */
 .status-badge {
   display: inline-flex;

@@ -625,7 +625,7 @@ function formatBytes(bytes: number): string {
   return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i]
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' | 'export' }) {
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' | 'export' | 'analytics' }) {
   const modifier =
     (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
     (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
@@ -635,6 +635,9 @@ function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' |
     (prefix === 'protocol' && label === 'minor_deviations') ? 'protocol-minor_deviations' :
     (prefix === 'protocol' && label === 'non_compliant') ? 'protocol-non_compliant' :
     (prefix === 'export') ? `export-${label}` :
+    (prefix === 'analytics' && label === 'complete') ? 'analytics-complete' :
+    (prefix === 'analytics' && label === 'partial') ? 'analytics-partial' :
+    (prefix === 'analytics') ? `analytics-${label}` :
     label
   const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
@@ -1728,7 +1731,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
   const [seriesList, setSeriesList] = useState<SeriesRow[]>([])
   const [relationships, setRelationships] = useState<RelationshipWithStudy[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships' | 'notes' | 'analytics'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships' | 'notes' | 'analytics' | 'analytics_results'>('audit')
   type StudyNoteEntry = { id: string; actor: string; note: string; created_at: string }
   const [studyNotes, setStudyNotes] = useState<StudyNoteEntry[]>([])
   const [newLabel, setNewLabel] = useState('')
@@ -1829,6 +1832,20 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
   const [longBaselineId, setLongBaselineId] = useState('')
   const [longWorking, setLongWorking] = useState(false)
 
+  // Analytics tool dropdown state (study detail panel)
+  const [analyticsDetailMenuOpen, setAnalyticsDetailMenuOpen] = useState(false)
+  const analyticsDetailMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!analyticsDetailMenuOpen) return
+    function onOutsideClick(e: MouseEvent) {
+      if (analyticsDetailMenuRef.current && !analyticsDetailMenuRef.current.contains(e.target as Node)) {
+        setAnalyticsDetailMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick)
+    return () => document.removeEventListener('mousedown', onOutsideClick)
+  }, [analyticsDetailMenuOpen])
+
   // Link study form state (for relationships tab)
   const [linkStudyUID, setLinkStudyUID] = useState('')
   const [linkRelType, setLinkRelType] = useState('follow_up')
@@ -1908,6 +1925,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
     { label: 'Defacing', required: study.defacing_required, status: study.status === 'defaced' ? 'defaced' : study.status === 'defacing' ? 'defacing' : study.defacing_required ? 'pending' : '', step: 'deface' },
     { label: 'QC', required: study.qc_required, status: study.qc_status, step: 'qc' },
     { label: 'BIDS', required: study.bids_required, status: study.bids_status, step: 'bids' },
+    { label: 'Analytics', required: study.analytics_required, status: study.analytics_status, step: 'analytics' },
     { label: 'Export', required: study.export_required, status: study.export_status, step: 'export' },
   ]
 
@@ -2103,6 +2121,72 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           {canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
           {isAdmin && study.bids_status === 'complete' && study.analytics_status !== 'analyzing' && (
             <button type="button" className="btn btn--secondary" onClick={() => setLongAnalyticsOpen(o => !o)}>{longAnalyticsOpen ? 'Cancel' : 'Longitudinal Analytics'}</button>
+          )}
+          {isAdmin && study.analytics_status !== 'analyzing' && (
+            <div ref={analyticsDetailMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={() => setAnalyticsDetailMenuOpen(o => !o)}
+                title="Run a neuroimaging analytics tool on this study"
+              >
+                Run Analytics ▾
+              </button>
+              {analyticsDetailMenuOpen && (
+                <div style={{
+                  position: 'absolute', left: 0, top: '100%', zIndex: 100,
+                  background: '#1e1e1e', border: '1px solid #444', borderRadius: 6,
+                  minWidth: 210, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                }}>
+                  {ANALYTICS_TOOL_GROUPS.map(grp => {
+                    const isSpine = /spine|cord/i.test(study.body_part || '')
+                    return (
+                      <div key={grp.group}>
+                        <div style={{
+                          padding: '4px 12px', fontSize: '0.68rem', color: '#888',
+                          borderBottom: '1px solid #333', textTransform: 'uppercase', letterSpacing: '0.05em',
+                          background: isSpine && grp.group === 'Spine Tools' ? 'rgba(13,148,136,0.1)' : undefined,
+                        }}>
+                          {grp.group}
+                          {isSpine && grp.group === 'Spine Tools' && (
+                            <span style={{ marginLeft: 6, color: '#0d9488', fontSize: '0.65rem' }}>● detected</span>
+                          )}
+                        </div>
+                        {grp.tools.map(t => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            style={{
+                              display: 'block', width: '100%', textAlign: 'left',
+                              padding: '6px 14px', fontSize: '0.8rem', color: '#ddd',
+                              background: 'transparent', border: 'none', cursor: 'pointer',
+                            }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.07)' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                            onClick={async () => {
+                              setAnalyticsDetailMenuOpen(false)
+                              await fetch(`/api/studies/${study.study_instance_uid}/analytics`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ tool: t.id }),
+                              })
+                              loadData()
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {(study.analytics_status === 'complete' || study.analytics_status === 'partial') && (
+            <a href={`/api/studies/${study.id}/analytics-download`} className="btn btn--bids-download" download title="Download all analytics output files as a ZIP archive">
+              Download Analytics
+            </a>
           )}
           {study.status === 'approved' && <a href={`/api/studies/${study.study_instance_uid}/dicom-download`} className="btn btn--dicom-download" download>Download DICOM</a>}
           {isAdmin && study.export_required && (study.export_status === 'pending' || study.export_status === 'failed') && study.status === 'approved' && (
@@ -2402,9 +2486,14 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           <button type="button" className={`tab-btn${detailTab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('notes')}>
             Notes {studyNotes.length > 0 ? `(${studyNotes.length})` : ''}
           </button>
-          {study.bids_status === 'complete' && (
+          {(study.bids_status === 'complete' || study.analytics_status === 'complete' || study.analytics_status === 'partial') && (
             <button type="button" className={`tab-btn${detailTab === 'analytics' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('analytics')}>
               NIfTI Viewer
+            </button>
+          )}
+          {(study.analytics_status === 'complete' || study.analytics_status === 'partial') && (
+            <button type="button" className={`tab-btn${detailTab === 'analytics_results' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('analytics_results')}>
+              Analytics Results
             </button>
           )}
         </div>
@@ -2801,12 +2890,226 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
         {detailTab === 'analytics' && (
           <NiivueViewer studyId={study.id} />
         )}
+
+        {detailTab === 'analytics_results' && (
+          <AnalyticsResultsPanel studyId={study.id} studyUID={study.study_instance_uid} />
+        )}
       </div>
     </div>
   )
 }
 
+// ── Analytics Results Panel ───────────────────────────────────────────────────
+
+type CompositeScore = {
+  id: string
+  tool: string
+  score_name: string
+  score_value: number
+  score_unit?: string
+}
+
+type ROISummary = {
+  total_results: number
+  tools: string[]
+  atlases: string[]
+  metric_types: string[]
+}
+
+type ROIResult = {
+  id: string
+  tool: string
+  atlas_name: string
+  roi_name: string
+  metric_type: string
+  metric_value: number
+  hemisphere: string
+}
+
+function AnalyticsResultsPanel({ studyId, studyUID }: { studyId: string; studyUID: string }) {
+  const [scores, setScores] = useState<CompositeScore[]>([])
+  const [summary, setSummary] = useState<ROISummary | null>(null)
+  const [roiResults, setRoiResults] = useState<ROIResult[]>([])
+  const [roiOpen, setRoiOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [roiLoading, setRoiLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      fetch(`/api/studies/${studyId}/composite-scores`).then(r => r.ok ? r.json() : { scores: [] }),
+      fetch(`/api/studies/${studyId}/roi-results/summary`).then(r => r.ok ? r.json() : null),
+    ]).then(([scoresData, summaryData]) => {
+      setScores(scoresData.scores || [])
+      setSummary(summaryData)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [studyId])
+
+  const loadROI = async () => {
+    if (roiResults.length > 0) { setRoiOpen(o => !o); return }
+    setRoiLoading(true)
+    const r = await fetch(`/api/studies/${studyId}/roi-results?limit=500`)
+    if (r.ok) {
+      const data = await r.json()
+      setRoiResults(data.results || [])
+    }
+    setRoiLoading(false)
+    setRoiOpen(true)
+  }
+
+  if (loading) return <div style={{ padding: 24, color: '#888' }}>Loading analytics results…</div>
+
+  return (
+    <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Summary row */}
+      {summary && (
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+          <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: 8, padding: '12px 20px', minWidth: 140 }}>
+            <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Total ROIs</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0d9488' }}>{summary.total_results.toLocaleString()}</div>
+          </div>
+          {summary.tools?.length > 0 && (
+            <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: 8, padding: '12px 20px', minWidth: 160 }}>
+              <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Tools Run</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {summary.tools.map(t => (
+                  <span key={t} style={{ background: '#0d9488', color: '#fff', borderRadius: 4, padding: '1px 7px', fontSize: '0.72rem', fontWeight: 600 }}>{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {summary.atlases?.length > 0 && (
+            <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: 8, padding: '12px 20px', minWidth: 160 }}>
+              <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Atlases</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {summary.atlases.map(a => (
+                  <span key={a} style={{ background: '#374151', color: '#d1d5db', borderRadius: 4, padding: '1px 7px', fontSize: '0.72rem' }}>{a}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Composite scores */}
+      {scores.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#ccc', marginBottom: 8 }}>Composite Scores</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #333' }}>
+                <th style={{ textAlign: 'left', padding: '4px 8px', color: '#888', fontWeight: 500 }}>Metric</th>
+                <th style={{ textAlign: 'left', padding: '4px 8px', color: '#888', fontWeight: 500 }}>Tool</th>
+                <th style={{ textAlign: 'right', padding: '4px 8px', color: '#888', fontWeight: 500 }}>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scores.map(s => (
+                <tr key={s.id} style={{ borderBottom: '1px solid #222' }}>
+                  <td style={{ padding: '5px 8px', color: '#e5e7eb' }}>{s.score_name}</td>
+                  <td style={{ padding: '5px 8px', color: '#9ca3af' }}>{s.tool}</td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', color: '#0d9488', fontWeight: 600, fontFamily: 'monospace' }}>
+                    {typeof s.score_value === 'number' ? s.score_value.toFixed(4) : s.score_value}
+                    {s.score_unit && <span style={{ color: '#6b7280', marginLeft: 4, fontSize: '0.75rem' }}>{s.score_unit}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ROI results (collapsible) */}
+      {summary && summary.total_results > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={loadROI}
+            style={{ background: 'none', border: '1px solid #444', color: '#ccc', borderRadius: 6, padding: '5px 14px', cursor: 'pointer', fontSize: '0.8rem' }}
+          >
+            {roiLoading ? 'Loading ROI data…' : roiOpen ? `▲ Hide ROI results (${roiResults.length})` : `▼ Show ROI results (${summary.total_results.toLocaleString()} rows)`}
+          </button>
+          {roiOpen && roiResults.length > 0 && (
+            <div style={{ marginTop: 10, maxHeight: 400, overflowY: 'auto', border: '1px solid #333', borderRadius: 6 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                <thead style={{ position: 'sticky', top: 0, background: '#1a1a1a', zIndex: 1 }}>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Tool</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Atlas</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>ROI</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Hemi</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Metric</th>
+                    <th style={{ textAlign: 'right', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roiResults.map(r => (
+                    <tr key={r.id} style={{ borderBottom: '1px solid #1f1f1f' }}>
+                      <td style={{ padding: '3px 8px', color: '#9ca3af' }}>{r.tool}</td>
+                      <td style={{ padding: '3px 8px', color: '#9ca3af' }}>{r.atlas_name}</td>
+                      <td style={{ padding: '3px 8px', color: '#e5e7eb' }}>{r.roi_name}</td>
+                      <td style={{ padding: '3px 8px', color: '#9ca3af' }}>{r.hemisphere || '—'}</td>
+                      <td style={{ padding: '3px 8px', color: '#9ca3af' }}>{r.metric_type}</td>
+                      <td style={{ padding: '3px 8px', textAlign: 'right', color: '#0d9488', fontFamily: 'monospace' }}>{r.metric_value.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {summary.total_results > 500 && (
+                <div style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#888', borderTop: '1px solid #333' }}>
+                  Showing first 500 of {summary.total_results.toLocaleString()} rows.
+                  Use <a href={`/api/studies/${studyId}/analytics-download`} style={{ color: '#0d9488' }} download>Download Analytics ZIP</a> for the full dataset.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Downloads */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <a
+          href={`/api/studies/${studyId}/analytics-download`}
+          className="btn btn--bids-download"
+          download
+          title="Download all analytics output files as a ZIP archive"
+        >
+          ↓ Download Analytics ZIP
+        </a>
+      </div>
+
+      {scores.length === 0 && (!summary || summary.total_results === 0) && (
+        <div style={{ color: '#888', fontSize: '0.85rem' }}>No structured results available. Check the NIfTI Viewer tab to explore output files directly.</div>
+      )}
+    </div>
+  )
+}
+
 // ── Study Row ─────────────────────────────────────────────────────────────────
+
+const ANALYTICS_TOOL_GROUPS = [
+  { group: 'Auto', tools: [{ id: '', label: 'Auto (best available)' }] },
+  { group: 'Brain Tools', tools: [
+    { id: 'synthseg',         label: 'SynthSeg' },
+    { id: 'freesurfer',       label: 'FreeSurfer' },
+    { id: 'fsl',              label: 'FSL' },
+    { id: 'ants',             label: 'ANTs' },
+    { id: 'totalsegmentator', label: 'TotalSegmentator' },
+    { id: 'nnunet',           label: 'nnU-Net' },
+    { id: 'atlas_roi',        label: 'Atlas ROI' },
+  ]},
+  { group: 'Spine Tools', tools: [
+    { id: 'totalspineseg', label: 'TotalSpineSeg' },
+    { id: 'spineps',       label: 'SPINEPS' },
+  ]},
+  { group: 'Other', tools: [
+    { id: 'petsurfer',   label: 'PETSurfer' },
+    { id: 'basil',       label: 'BASIL (ASL)' },
+    { id: 'qsm',         label: 'QSM' },
+    { id: 'monai_label', label: 'MONAI Label' },
+  ]},
+]
 
 function StudyRow({
   study,
@@ -2829,12 +3132,25 @@ function StudyRow({
   onToggle: () => void
   showDescCol?: boolean
 }) {
-  const [shareOpen,      setShareOpen]      = useState(false)
-  const [viewOpen,       setViewOpen]       = useState(false)
-  const [defaceOpen,     setDefaceOpen]     = useState(false)
-  const [rejectRowOpen,  setRejectRowOpen]  = useState(false)
-  const [rejectRowText,  setRejectRowText]  = useState('')
-  const [uidCopied,      setUidCopied]      = useState(false)
+  const [shareOpen,         setShareOpen]         = useState(false)
+  const [viewOpen,          setViewOpen]          = useState(false)
+  const [defaceOpen,        setDefaceOpen]        = useState(false)
+  const [rejectRowOpen,     setRejectRowOpen]     = useState(false)
+  const [rejectRowText,     setRejectRowText]     = useState('')
+  const [uidCopied,         setUidCopied]         = useState(false)
+  const [analyticsMenuOpen, setAnalyticsMenuOpen] = useState(false)
+  const analyticsMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!analyticsMenuOpen) return
+    function onOutsideClick(e: MouseEvent) {
+      if (analyticsMenuRef.current && !analyticsMenuRef.current.contains(e.target as Node)) {
+        setAnalyticsMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick)
+    return () => document.removeEventListener('mousedown', onOutsideClick)
+  }, [analyticsMenuOpen])
 
   const copyUid = () => {
     navigator.clipboard.writeText(study.study_instance_uid).then(() => {
@@ -2968,6 +3284,7 @@ function StudyRow({
         <td>{study.classification_required ? <Badge label={study.classification_status || 'n/a'} prefix="classify" /> : '—'}</td>
         <td>{study.protocol_required ? <Badge label={study.protocol_status || 'n/a'} prefix="protocol" /> : '—'}</td>
         <td>{study.export_required ? <Badge label={study.export_status || 'n/a'} prefix="export" /> : '—'}</td>
+        <td>{study.analytics_required ? <Badge label={study.analytics_status || 'pending'} prefix="analytics" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
@@ -3018,6 +3335,67 @@ function StudyRow({
             <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>
               {viewOpen ? 'Close viewer' : 'View'}
             </button>
+            {isAdmin && study.analytics_status !== 'analyzing' && (
+              <div ref={analyticsMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => setAnalyticsMenuOpen(o => !o)}
+                  title="Run a neuroimaging analytics tool on this study"
+                >
+                  Analytics ▾
+                </button>
+                {analyticsMenuOpen && (
+                  <div style={{
+                    position: 'absolute', right: 0, top: '100%', zIndex: 100,
+                    background: '#1e1e1e', border: '1px solid #444', borderRadius: 6,
+                    minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                  }}>
+                    {ANALYTICS_TOOL_GROUPS.map(grp => {
+                      const isSpine = /spine|cord/i.test(study.body_part || '')
+                      return (
+                        <div key={grp.group}>
+                          <div style={{
+                            padding: '4px 12px', fontSize: '0.68rem', color: '#888',
+                            borderBottom: '1px solid #333', textTransform: 'uppercase', letterSpacing: '0.05em',
+                            background: isSpine && grp.group === 'Spine Tools' ? 'rgba(13,148,136,0.1)' : undefined,
+                          }}>
+                            {grp.group}
+                            {isSpine && grp.group === 'Spine Tools' && (
+                              <span style={{ marginLeft: 6, color: '#0d9488', fontSize: '0.65rem' }}>● detected</span>
+                            )}
+                          </div>
+                          {grp.tools.map(t => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              style={{
+                                display: 'block', width: '100%', textAlign: 'left',
+                                padding: '6px 14px', fontSize: '0.8rem', color: '#ddd',
+                                background: 'transparent', border: 'none', cursor: 'pointer',
+                              }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.07)' }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                              onClick={async () => {
+                                setAnalyticsMenuOpen(false)
+                                await fetch(`/api/studies/${study.study_instance_uid}/analytics`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ tool: t.id }),
+                                })
+                                onAction()
+                              }}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             <button type="button" className="btn btn--agent" onClick={onAskAgent}>
               Ask agent
             </button>
@@ -10081,6 +10459,7 @@ export function App() {
                             <th>Defaced</th>
                             <th>Exported</th>
                             <th>Latest study</th>
+                            <th>ROI Export</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -10095,6 +10474,16 @@ export function App() {
                               <td style={{textAlign:'center',color: s.has_defaced ? '#0f766e' : '#9ca3af'}}>{s.has_defaced ? '✓' : '—'}</td>
                               <td style={{textAlign:'center',color: s.has_exported ? '#0f766e' : '#9ca3af'}}>{s.has_exported ? '✓' : '—'}</td>
                               <td style={{color:'#6b7280'}}>{new Date(s.latest_study_at).toLocaleDateString()}</td>
+                              <td>
+                                <a
+                                  href={`/api/subjects/${encodeURIComponent(s.subject_id)}/roi-export${globalProjectId ? `?project_id=${globalProjectId}` : ''}`}
+                                  download
+                                  style={{color:'#0d9488',fontSize:'0.75rem',textDecoration:'none'}}
+                                  title="Download all ROI measurements for this subject as CSV"
+                                >
+                                  ↓ ROI CSV
+                                </a>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -10425,6 +10814,7 @@ export function App() {
                     <th>Class.</th>
                     <th>Protocol</th>
                     <th>Export</th>
+                    <th>Analytics</th>
                     <th className="align-right th-sortable" onClick={() => setSortF('instance_count')} title="Sort by file count">Files{sortIcon('instance_count')}</th>
                     <th className="th-sortable" onClick={() => setSortF('created_at')} title="Sort by received date">Received{sortIcon('created_at')}</th>
                     <th>Actions</th>

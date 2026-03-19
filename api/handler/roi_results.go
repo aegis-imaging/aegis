@@ -206,6 +206,68 @@ func (s *Server) ExportProjectROIData(w http.ResponseWriter, r *http.Request) {
 	cw.Flush()
 }
 
+// ExportSubjectROIData exports ROI results for a specific subject as CSV.
+// GET /api/subjects/{subjectID}/roi-export?project_id=
+func (s *Server) ExportSubjectROIData(w http.ResponseWriter, r *http.Request) {
+	subjectID := r.PathValue("subjectID")
+	projectID := r.URL.Query().Get("project_id")
+	if subjectID == "" {
+		s.writeError(w, http.StatusBadRequest, "missing subject ID")
+		return
+	}
+
+	studies, err := model.ListStudiesBySubject(r.Context(), s.db, subjectID, projectID)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to query subject studies")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="roi-results-%s.csv"`, subjectID))
+
+	cw := csv.NewWriter(w)
+	cw.Write([]string{
+		"subject_id", "study_id", "study_uid", "study_date", "tool", "atlas_name",
+		"roi_name", "metric_type", "metric_value", "hemisphere", "scan_type",
+	})
+
+	var rowCount int
+	const maxRows = 50000
+	for _, st := range studies {
+		if rowCount >= maxRows {
+			break
+		}
+		results, err := model.GetROIResultsByStudy(r.Context(), s.db, st.ID, model.ROIResultFilters{Limit: 2000})
+		if err != nil {
+			continue
+		}
+		studyDate := ""
+		if st.StudyDate != nil {
+			studyDate = *st.StudyDate
+		}
+		for _, roi := range results {
+			if rowCount >= maxRows {
+				break
+			}
+			cw.Write([]string{
+				subjectID,
+				st.ID,
+				st.StudyInstanceUID,
+				studyDate,
+				roi.Tool,
+				roi.AtlasName,
+				roi.ROIName,
+				roi.MetricType,
+				fmt.Sprintf("%.6f", roi.MetricValue),
+				roi.Hemisphere,
+				roi.ScanType,
+			})
+			rowCount++
+		}
+	}
+	cw.Flush()
+}
+
 // DeleteROIResults removes all ROI results for a study (for re-processing).
 // DELETE /api/studies/{id}/roi-results
 func (s *Server) DeleteROIResults(w http.ResponseWriter, r *http.Request) {

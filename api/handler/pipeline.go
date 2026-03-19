@@ -319,7 +319,7 @@ func (s *Server) dispatchAnalytics(ctx context.Context, study *model.Study) {
 		"service":   "analytics",
 		"study_uid": study.StudyInstanceUID,
 	})
-	go s.runAnalytics(study)
+	go s.runAnalytics(study, "") // auto-select tool via pipeline
 }
 
 func (s *Server) dispatchSct(ctx context.Context, study *model.Study) {

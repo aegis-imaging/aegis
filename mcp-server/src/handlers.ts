@@ -146,6 +146,7 @@ export async function handleTriggerAnalytics(
   requestId: string,
   parsed: {
     study_uid: string;
+    tool?: string;
     reason: string;
     confirm: true;
   }
@@ -172,25 +173,13 @@ export async function handleTriggerAnalytics(
     return formatError(requestId, "NOT_FOUND", `Study UID not found: ${parsed.study_uid}`, false, "trigger_analytics");
   }
 
-  if (matched.analytics_required === false) {
-    return formatError(requestId, "CONFLICT", "Study does not require analytics", false, "trigger_analytics");
-  }
-
   if (matched.analytics_status === "analyzing") {
     return formatError(requestId, "CONFLICT", "Analytics already in progress", false, "trigger_analytics");
   }
 
-  if (matched.analytics_status && !["pending", "failed"].includes(matched.analytics_status)) {
-    return formatError(
-      requestId,
-      "CONFLICT",
-      `Analytics trigger blocked for current status: ${matched.analytics_status}`,
-      false,
-      "trigger_analytics"
-    );
-  }
-
-  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/analytics`);
+  const analyticsBody: Record<string, string> = {};
+  if (parsed.tool) analyticsBody.tool = parsed.tool;
+  const data = await client.post(`/api/studies/${encodeURIComponent(parsed.study_uid)}/analytics`, analyticsBody);
   return formatSuccess(requestId, "trigger_analytics", {
     accepted: true,
     study_uid: parsed.study_uid,
