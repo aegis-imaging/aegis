@@ -255,8 +255,23 @@ export const tools: Tool[] = [
   },
   {
     name: "trigger_analytics",
-    description: "Trigger analytics for one study UID with precondition checks.",
-    inputSchema: writeInputSchema
+    description: "Trigger neuroimaging analytics for one study UID. Optionally specify a tool (synthseg, freesurfer, fsl, ants, totalsegmentator, nnunet, atlas_roi, totalspineseg, spineps, petsurfer, basil, qsm, monai_label, itksnap, brainsuite, volbrain, spm, medsam2). If tool is omitted, the auto-configured backend runs. Manual triggers auto-enable analytics for studies that don't have it set by a routing rule.",
+    inputSchema: {
+      type: "object",
+      required: ["study_uid", "reason", "confirm"],
+      properties: {
+        request_id: { type: "string" },
+        study_uid: { type: "string", pattern: "^[0-9.]+$" },
+        tool: {
+          type: "string",
+          enum: ["synthseg","freesurfer","fsl","ants","totalsegmentator","nnunet","atlas_roi","totalspineseg","spineps","petsurfer","basil","qsm","monai_label","itksnap","brainsuite","volbrain","spm","medsam2"],
+          description: "Specific analytics backend to run. Omit for auto-selection."
+        },
+        reason: { type: "string", minLength: 10, maxLength: 512 },
+        confirm: { type: "boolean", const: true }
+      },
+      additionalProperties: false
+    }
   },
   {
     name: "trigger_sct",
