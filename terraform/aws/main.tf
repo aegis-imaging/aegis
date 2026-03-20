@@ -243,6 +243,18 @@ variable "landing_memory" {
   default     = 512
 }
 
+variable "upload_portal_domain" {
+  description = "Custom FQDN for the upload portal (e.g. aws.upload.aegisimaging.ai). Empty = no upload portal."
+  type        = string
+  default     = ""
+}
+
+variable "upload_portal_image_tag" {
+  description = "Container image tag for the upload portal ECS task. Empty = skip upload portal resources."
+  type        = string
+  default     = ""
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -481,7 +493,7 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "analytics-service", "sct-service", "dimse-receiver", "dwv", "mcp-server", "landing"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "analytics-service", "sct-service", "dimse-receiver", "dwv", "mcp-server", "landing", "upload-portal"]
 
   api_image   = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
   admin_image = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
@@ -1527,4 +1539,136 @@ resource "aws_lb_listener_rule" "landing_subdomain" {
 output "landing_base_url" {
   description = "Landing page URL (empty when landing is not deployed)"
   value       = local.landing_enabled ? "https://${local.landing_fqdn}/" : ""
+}
+
+# ── Upload Portal (optional) ─────────────────────────────────────────────────
+
+locals {
+  upload_portal_enabled = var.upload_portal_image_tag != ""
+  upload_portal_image   = local.upload_portal_enabled ? "${aws_ecr_repository.services["upload-portal"].repository_url}:${var.upload_portal_image_tag}" : ""
+  upload_portal_fqdn    = var.upload_portal_domain != "" ? var.upload_portal_domain : aws_lb.main.dns_name
+}
+
+resource "aws_lb_target_group" "upload_portal" {
+  count = local.upload_portal_enabled ? 1 : 0
+
+  name        = "${var.project_name}-upload-portal"
+  port        = 8080
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.main.id
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher             = "200-399"
+  }
+
+  tags = { Name = "${var.project_name}-upload-portal-tg" }
+}
+
+resource "aws_ecs_task_definition" "upload_portal" {
+  count = local.upload_portal_enabled ? 1 : 0
+
+  family                   = "${var.project_name}-upload-portal"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "upload-portal"
+      image     = local.upload_portal_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        # Overrides the default GCP API URL baked into the image at build time.
+        { name = "API_URL", value = "https://${local.api_fqdn}" },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.main.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "upload-portal"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Name        = "${var.project_name}-upload-portal"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecs_service" "upload_portal" {
+  count = local.upload_portal_enabled ? 1 : 0
+
+  name            = "${var.project_name}-upload-portal"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.upload_portal[0].arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.upload_portal[0].arn
+    container_name   = "upload-portal"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.https]
+
+  tags = {
+    Name        = "${var.project_name}-upload-portal"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+# Upload portal uses host-based routing (priority 5, public — no Cognito auth).
+resource "aws_lb_listener_rule" "upload_portal_subdomain" {
+  count        = local.upload_portal_enabled && var.upload_portal_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 5
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.upload_portal[0].arn
+  }
+
+  condition {
+    host_header {
+      values = [var.upload_portal_domain]
+    }
+  }
+}
+
+output "upload_portal_base_url" {
+  description = "Upload portal URL (empty when upload portal is not deployed)"
+  value       = local.upload_portal_enabled ? "https://${local.upload_portal_fqdn}/" : ""
 }
