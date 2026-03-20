@@ -42,7 +42,7 @@ ENV API_URL=https://api.aegisimaging.ai
 # Default: GCP MCP server URL. Override with MCP_SERVER_URL env var for other clouds (e.g. AWS ECS).
 ENV MCP_SERVER_URL=https://aegis-mcp-server-uk5cvzf5nq-uc.a.run.app
 
-COPY nginx.conf /etc/nginx/conf.d/nginx.conf.template
+COPY frontend/admin-dashboard/nginx.conf /etc/nginx/conf.d/nginx.conf.template
 COPY --from=build /app/frontend/admin-dashboard/dist /usr/share/nginx/html
 
 EXPOSE 8080
