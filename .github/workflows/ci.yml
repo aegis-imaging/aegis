@@ -211,7 +211,7 @@ jobs:
         app:
           - { dir: client, name: "@aegis/client", needs_client: false }
           - { dir: frontend/upload-portal, name: upload-portal, needs_client: true }
-          - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: false }
+          - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: true }
           - { dir: frontend/landing, name: landing, needs_client: false }
           - { dir: frontend/export-portal, name: export-portal, needs_client: false }
           - { dir: mcp-server, name: mcp-server, needs_client: false }
@@ -248,7 +248,8 @@ jobs:
       matrix:
         service:
           - { context: api, name: api }
-          - { context: frontend/admin-dashboard, name: admin-dashboard }
+          # admin-dashboard uses @aegis/client (workspace dep) so it builds from repo root
+          - { context: ".", dockerfile: frontend/admin-dashboard/Dockerfile, name: admin-dashboard }
           # landing uses @aegis/client (workspace dep) so it builds from repo root
           - { context: ".", dockerfile: frontend/landing/Dockerfile, name: landing }
           - { context: defacing, name: defacing }
