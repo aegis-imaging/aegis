@@ -145,6 +145,12 @@ variable "landing_domain" {
   default     = ""
 }
 
+variable "upload_portal_domain" {
+  description = "Custom domain for the upload portal (e.g. azure.upload.aegisimaging.ai). Empty = ACA FQDN only."
+  type        = string
+  default     = ""
+}
+
 # ── Container Images ──────────────────────────────────────────────────────────
 
 variable "api_image_tag" {
