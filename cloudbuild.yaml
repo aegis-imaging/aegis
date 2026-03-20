@@ -65,11 +65,12 @@ steps:
       - |
         set -euo pipefail
         docker build \
+          -f frontend/admin-dashboard/Dockerfile \
           --build-arg VITE_DWV_BASE_URL=${_DWV_URL} \
           --build-arg VITE_OHIF_BASE_URL=${_OHIF_URL} \
           -t ${_REPO}/admin-dashboard:${SHORT_SHA} \
           -t ${_REPO}/admin-dashboard:latest \
-          frontend/admin-dashboard
+          .
         docker push ${_REPO}/admin-dashboard:${SHORT_SHA}
         docker push ${_REPO}/admin-dashboard:latest
 
