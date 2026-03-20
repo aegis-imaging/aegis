@@ -30,6 +30,8 @@ const NAV_LINKS = [
   { path: '/contact', label: 'Contact' },
 ]
 
+const UPLOAD_PORTAL_URL = import.meta.env.VITE_UPLOAD_PORTAL_URL || 'https://upload.aegisimaging.ai'
+
 export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -70,6 +72,14 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
+          <a
+            href={UPLOAD_PORTAL_URL}
+            className="btn btn--secondary btn--sm navbar__cta-mobile"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Submit Data ↗
+          </a>
           <button
             className="navbar__theme-toggle navbar__theme-toggle--mobile"
             onClick={toggle}
@@ -91,6 +101,15 @@ export function Navbar() {
         >
           {theme === 'light' ? <MoonIcon /> : <SunIcon />}
         </button>
+
+        <a
+          href={UPLOAD_PORTAL_URL}
+          className="btn btn--secondary btn--sm navbar__cta"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Submit Data ↗
+        </a>
 
         <Link to="/contact" className="btn btn--primary btn--sm navbar__cta">
           Schedule Demo

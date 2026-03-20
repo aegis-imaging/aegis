@@ -25,6 +25,8 @@ RUN npm ci --workspace=@aegis/landing --ignore-scripts
 # Defaults point to production; override with --build-arg when building for other environments.
 ARG VITE_API_BASE_URL=https://api.aegisimaging.ai
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ARG VITE_UPLOAD_PORTAL_URL=https://upload.aegisimaging.ai
+ENV VITE_UPLOAD_PORTAL_URL=$VITE_UPLOAD_PORTAL_URL
 # Gate is now server-side — VITE_INVITE_GATE_ENABLED is no longer needed.
 # The React-side hook stays in the code but is a no-op (GATE_ENABLED env
 # var on the server controls access; the client always sees the full app).
