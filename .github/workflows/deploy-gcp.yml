@@ -94,6 +94,10 @@ jobs:
             context: .
             dockerfile: frontend/landing/Dockerfile
             build_args: "--build-arg VITE_API_BASE_URL=$API_URL"
+          - service: upload-portal
+            context: .
+            dockerfile: frontend/upload-portal/Dockerfile
+            build_args: "--build-arg VITE_INVITE_GATE_ENABLED=true"
           - service: dwv
             context: dwv
             dockerfile: dwv/Dockerfile
@@ -228,6 +232,18 @@ jobs:
           gcloud run deploy aegis-prod-landing \
             --image="$REPO/landing:$IMAGE_TAG" \
             --region="$REGION" --project="$PROJECT_ID" --quiet
+
+      - name: Deploy — upload-portal
+        run: |
+          if gcloud run services describe aegis-prod-upload-portal \
+              --region="$REGION" --project="$PROJECT_ID" \
+              --format="value(name)" 2>/dev/null | grep -q aegis-prod-upload-portal; then
+            gcloud run deploy aegis-prod-upload-portal \
+              --image="$REPO/upload-portal:$IMAGE_TAG" \
+              --region="$REGION" --project="$PROJECT_ID" --quiet
+          else
+            echo "Skipping aegis-prod-upload-portal (service not provisioned)"
+          fi
 
       - name: Deploy — dwv
         run: |
