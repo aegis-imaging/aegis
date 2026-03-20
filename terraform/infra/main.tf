@@ -76,6 +76,12 @@ variable "landing_domain" {
   default     = ""
 }
 
+variable "upload_portal_domain" {
+  description = "FQDN for the public upload portal (example: upload.aegisimaging.ai). Leave empty to skip upload portal deployment."
+  type        = string
+  default     = ""
+}
+
 variable "export_portal_base_url" {
   description = "Public base URL of the export portal UI (example: https://export.aegisimaging.ai). When set, share email links point to the portal instead of the raw API endpoint. Leave empty to fall back to the API URL."
   type        = string
@@ -166,6 +172,12 @@ variable "protocol_service_image" {
 
 variable "landing_image" {
   description = "Container image URI for the landing page (React + nginx). Empty = landing Cloud Run service not deployed."
+  type        = string
+  default     = ""
+}
+
+variable "upload_portal_image" {
+  description = "Container image URI for the upload portal (React + nginx). Empty = upload portal Cloud Run service not deployed."
   type        = string
   default     = ""
 }
@@ -486,12 +498,14 @@ locals {
     var.admin_domain,
     var.landing_domain,
     var.landing_domain != "" ? "www.${var.landing_domain}" : "",
+    var.upload_portal_domain,
   ]))
 
-  resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : [
+  resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : compact([
     "https://${var.api_domain}",
     "https://${var.admin_domain}",
-  ]
+    var.upload_portal_domain != "" ? "https://${var.upload_portal_domain}" : "",
+  ])
 }
 
 check "db_password_source" {
@@ -1302,6 +1316,61 @@ resource "google_cloud_run_service_iam_member" "landing_invoker" {
   member   = "allUsers"
 }
 
+# --- Upload portal Cloud Run service ---
+
+resource "google_cloud_run_v2_service" "upload_portal" {
+  count    = var.upload_portal_image != "" ? 1 : 0
+  name     = "${local.name_prefix}-upload-portal"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+
+  deletion_protection = false
+
+  template {
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
+
+    containers {
+      image = var.upload_portal_image
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "256Mi"
+        }
+        cpu_idle = true
+      }
+
+      env {
+        name  = "API_URL"
+        value = "https://${var.api_domain}"
+      }
+
+      liveness_probe {
+        failure_threshold     = 3
+        initial_delay_seconds = 5
+        timeout_seconds       = 3
+        period_seconds        = 15
+
+        http_get {
+          path = "/healthz"
+        }
+      }
+    }
+  }
+}
+
+# Upload portal is public — invite gate is client-side (baked at build time).
+resource "google_cloud_run_service_iam_member" "upload_portal_invoker" {
+  count    = var.upload_portal_image != "" ? 1 : 0
+  location = var.region
+  service  = google_cloud_run_v2_service.upload_portal[0].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 # When IAP is enabled the IAP service agent (iap_invoker_admin) is the
 # only identity that needs run.invoker on the admin Cloud Run service.
 # Removing allUsers provides defense-in-depth: even if the LB IAP config
@@ -1532,6 +1601,32 @@ resource "google_compute_backend_service" "landing" {
   }
 }
 
+resource "google_compute_region_network_endpoint_group" "upload_portal_neg" {
+  count                 = var.upload_portal_image != "" ? 1 : 0
+  name                  = "${local.name_prefix}-upload-portal-neg"
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+  cloud_run {
+    service = google_cloud_run_v2_service.upload_portal[0].name
+  }
+}
+
+resource "google_compute_backend_service" "upload_portal" {
+  count                 = var.upload_portal_image != "" ? 1 : 0
+  name                  = "${local.name_prefix}-upload-portal-backend"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  protocol              = "HTTP"
+
+  log_config {
+    enable      = true
+    sample_rate = 0.1
+  }
+
+  backend {
+    group = google_compute_region_network_endpoint_group.upload_portal_neg[0].id
+  }
+}
+
 resource "google_compute_region_network_endpoint_group" "api_neg" {
   name                  = "${local.name_prefix}-api-neg"
   region                = var.region
@@ -1602,6 +1697,14 @@ resource "google_compute_url_map" "https" {
     }
   }
 
+  dynamic "host_rule" {
+    for_each = var.upload_portal_domain != "" ? [1] : []
+    content {
+      hosts        = [var.upload_portal_domain]
+      path_matcher = "upload-portal"
+    }
+  }
+
   host_rule {
     hosts        = [var.api_domain]
     path_matcher = "api"
@@ -1617,6 +1720,14 @@ resource "google_compute_url_map" "https" {
     content {
       name            = "landing"
       default_service = google_compute_backend_service.landing[0].id
+    }
+  }
+
+  dynamic "path_matcher" {
+    for_each = var.upload_portal_image != "" ? [1] : []
+    content {
+      name            = "upload-portal"
+      default_service = google_compute_backend_service.upload_portal[0].id
     }
   }
 
