@@ -380,6 +380,80 @@ resource "azurerm_container_app_custom_domain" "landing" {
   certificate_binding_type = "Disabled"
 }
 
+# ── Upload Portal ──────────────────────────────────────────────────────────────
+
+resource "azurerm_container_app" "upload_portal" {
+  name                         = "${local.prefix}-upload-portal"
+  container_app_environment_id = local.aca_env_id
+  resource_group_name          = azurerm_resource_group.main.name
+  revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [local.identity_id]
+  }
+
+  registry {
+    server   = local.acr_server
+    identity = local.identity_id
+  }
+
+  ingress {
+    allow_insecure_connections = false
+    external_enabled           = true
+    target_port                = 8080
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 3
+
+    container {
+      name   = "upload-portal"
+      image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/upload-portal:${var.api_image_tag}"
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      env {
+        name  = "API_URL"
+        value = "https://${var.api_domain}"
+      }
+    }
+  }
+
+  tags = local.tags
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
+}
+
+# ── Upload Portal — Custom Domain (optional) ──────────────────────────────────
+#
+# Step 1 (Terraform): Bind the custom domain to the Container App.
+# Step 2 (Manual, after DNS CNAME is live):
+#   az containerapp hostname bind \
+#     --hostname <upload_portal_domain> \
+#     -g <resource_group> \
+#     -n aegis-prod-upload-portal \
+#     --environment <aca_env_name> \
+#     --validation-method CNAME
+# This provisions a free Azure-managed TLS certificate for the domain.
+
+resource "azurerm_container_app_custom_domain" "upload_portal" {
+  count = var.upload_portal_domain != "" ? 1 : 0
+
+  name                     = var.upload_portal_domain
+  container_app_id         = azurerm_container_app.upload_portal.id
+  certificate_binding_type = "Disabled"
+}
+
 # ── DWV Viewer ────────────────────────────────────────────────────────────────
 
 resource "azurerm_container_app" "dwv" {
