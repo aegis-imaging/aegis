@@ -1566,7 +1566,7 @@ resource "google_compute_global_address" "lb_ip" {
 }
 
 resource "google_compute_managed_ssl_certificate" "lb_cert" {
-  name = "${local.name_prefix}-lb-cert-v3"
+  name = "${local.name_prefix}-lb-cert-v4"
   managed {
     domains = local.lb_domains
   }
