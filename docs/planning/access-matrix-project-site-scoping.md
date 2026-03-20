@@ -303,6 +303,7 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/studies/{id}/longitudinal-roi-results` | `ListLongitudinalROIResults` | `project_member_site_scoped` |
 | `adminOnly` | `DELETE /api/studies/{id}/roi-results` | `DeleteROIResults` | `platform_admin` |
 | `auth` | `GET /api/subjects/{subjectID}/roi-results` | `ListSubjectROIResults` | `project_member_any` |
+| `auth` | `GET /api/subjects/{subjectID}/roi-export` | `ExportSubjectROIData` | `project_member_any` |
 | `auth` | `GET /api/projects/{id}/roi-export` | `ExportProjectROIData` | `project_member_any` |
 | `auth` | `GET /api/studies/{id}/qc-ratings` | `ListQCRatings` | `project_member_site_scoped` |
 | `adminOnly` | `POST /api/studies/{id}/qc-ratings` | `SubmitQCRating` | `platform_admin` |
@@ -312,9 +313,10 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `adminOnly` | `PUT /api/subjects/{subjectID}/demographics` | `UpsertSubjectDemographics` | `platform_admin` |
 | `auth` | `GET /api/projects/{id}/demographics` | `ListProjectDemographics` | `project_member_any` |
 | `auth` | `GET /api/projects/{id}/demographics.csv` | `ExportProjectDemographicsCSV` | `project_member_any` |
+| `auth` | `GET /api/studies/{id}/analytics-download` | `ServeAnalyticsDownload` | `project_member_site_scoped` |
 | `auth` | `GET /api/studies/{id}/analytics-files` | `ListAnalyticsFiles` | `project_member_site_scoped` |
 | `auth` | `GET /api/studies/{id}/analytics-files/{path...}` | `ServeAnalyticsFile` | `project_member_site_scoped` |
 
 ## Coverage
-- Total mapped authenticated/admin routes: **294**
+- Total mapped authenticated/admin routes: **296**
 - Every `auth(...)` and `adminOnly(...)` route registration in `api/main.go` is included above.
