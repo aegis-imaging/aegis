@@ -88,6 +88,10 @@ jobs:
             context: .
             dockerfile: frontend/landing/Dockerfile
             build_args: "--build-arg VITE_API_BASE_URL=$API_URL"
+          - service: upload-portal
+            context: .
+            dockerfile: frontend/upload-portal/Dockerfile
+            build_args: "--build-arg VITE_INVITE_GATE_ENABLED=true"
           - service: dwv
             context: dwv
             dockerfile: dwv/Dockerfile
@@ -198,6 +202,14 @@ jobs:
 
       - name: Deploy — landing
         run: az containerapp update --name aegis-prod-landing --resource-group "$RG" --image "$ACR/landing:$IMAGE_TAG"
+
+      - name: Deploy — upload-portal
+        run: |
+          if az containerapp show --name aegis-prod-upload-portal --resource-group "$RG" &>/dev/null; then
+            az containerapp update --name aegis-prod-upload-portal --resource-group "$RG" --image "$ACR/upload-portal:$IMAGE_TAG"
+          else
+            echo "Skipping aegis-prod-upload-portal (container app not provisioned)"
+          fi
 
       - name: Deploy — dwv
         run: az containerapp update --name aegis-prod-dwv --resource-group "$RG" --image "$ACR/dwv:$IMAGE_TAG"
