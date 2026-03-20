@@ -23,6 +23,7 @@ substitutions:
   _OHIF_URL: https://ohif-uk5cvzf5nq-uc.a.run.app
   _API_URL: https://api.aegisimaging.ai
   _ADMIN_URL: https://admin.aegisimaging.ai
+  _UPLOAD_PORTAL_URL: https://upload.aegisimaging.ai
   # DIMSE receiver — Compute Engine instance. Override in trigger if zone/name differ.
   _DIMSE_ZONE: us-central1-a
   _DIMSE_INSTANCE: aegis-prod-dimse-receiver
@@ -84,11 +85,29 @@ steps:
         docker build \
           -f frontend/landing/Dockerfile \
           --build-arg VITE_API_BASE_URL=${_API_URL} \
+          --build-arg VITE_UPLOAD_PORTAL_URL=${_UPLOAD_PORTAL_URL} \
           -t ${_REPO}/landing:${SHORT_SHA} \
           -t ${_REPO}/landing:latest \
           .
         docker push ${_REPO}/landing:${SHORT_SHA}
         docker push ${_REPO}/landing:latest
+
+  # --- upload-portal (invite-gated public upload SPA for remote sending sites) ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-upload-portal
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          --build-arg VITE_INVITE_GATE_ENABLED=true \
+          -t ${_REPO}/upload-portal:${SHORT_SHA} \
+          -t ${_REPO}/upload-portal:latest \
+          frontend/upload-portal
+        docker push ${_REPO}/upload-portal:${SHORT_SHA}
+        docker push ${_REPO}/upload-portal:latest
 
   # --- dwv (DWV-based DICOM viewer) ---
   - name: gcr.io/cloud-builders/docker
@@ -350,6 +369,22 @@ steps:
       - --image=${_REPO}/landing:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
+      - --quiet
+
+  # --- deploy upload-portal ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-upload-portal
+    waitFor: [build-push-upload-portal]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - aegis-upload-portal
+      - --image=${_REPO}/upload-portal:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --allow-unauthenticated
+      - --set-env-vars=API_URL=https://api.aegisimaging.ai
       - --quiet
 
   # --- deploy dwv ---
