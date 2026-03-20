@@ -81,7 +81,7 @@ jobs:
             context: api
             dockerfile: api/Dockerfile
           - service: admin-dashboard
-            context: frontend/admin-dashboard
+            context: .
             dockerfile: frontend/admin-dashboard/Dockerfile
             build_args: "--build-arg VITE_DWV_BASE_URL=$DWV_URL --build-arg VITE_API_BASE_URL=$API_URL"
           - service: landing
