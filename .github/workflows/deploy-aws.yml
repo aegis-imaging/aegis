@@ -119,6 +119,10 @@ jobs:
             context: .
             dockerfile: frontend/landing/Dockerfile
             build_args: "--build-arg VITE_API_BASE_URL=https://aws.api.aegisimaging.ai"
+          - service: upload-portal
+            context: .
+            dockerfile: frontend/upload-portal/Dockerfile
+            build_args: "--build-arg VITE_INVITE_GATE_ENABLED=true"
 
     steps:
       - name: Checkout
@@ -213,6 +217,7 @@ jobs:
           done
 
           deploy_if_exists "aegis-landing"
+          deploy_if_exists "aegis-upload-portal"
 
   deploy-dimse:
     name: Deploy DIMSE EC2
