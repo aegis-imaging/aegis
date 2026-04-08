@@ -238,9 +238,9 @@ variable "api_memory" {
 }
 
 variable "api_min_instances" {
-  description = "Minimum API Cloud Run instances"
+  description = "Minimum API Cloud Run instances (0 = scale-to-zero for dev cost savings)"
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "api_max_instances" {
@@ -298,9 +298,9 @@ variable "db_private_peering_prefix_length" {
 }
 
 variable "db_tier" {
-  description = "Cloud SQL machine tier"
+  description = "Cloud SQL machine tier (db-f1-micro for dev, db-custom-2-7680 for prod)"
   type        = string
-  default     = "db-custom-2-7680"
+  default     = "db-f1-micro"
 }
 
 variable "db_availability_type" {
@@ -310,9 +310,9 @@ variable "db_availability_type" {
 }
 
 variable "db_disk_size_gb" {
-  description = "Cloud SQL disk size in GB"
+  description = "Cloud SQL disk size in GB (10 for dev, 50 for prod)"
   type        = number
-  default     = 50
+  default     = 10
 }
 
 variable "db_password" {
@@ -1210,7 +1210,7 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
     service_account = google_service_account.admin.email
 
     scaling {
-      min_instance_count = 1
+      min_instance_count = 0  # Scale-to-zero for dev cost savings (was 1)
       max_instance_count = 5
     }
 

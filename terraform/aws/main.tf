@@ -379,8 +379,9 @@ resource "aws_kms_alias" "main" {
 # --- S3 (DICOM file storage) ---
 
 resource "aws_s3_bucket" "dicom" {
-  bucket = "${var.project_name}-dicom-${var.environment}"
-  tags   = { Name = "${var.project_name}-dicom" }
+  bucket        = "${var.project_name}-dicom-${var.environment}"
+  force_destroy = true  # Allow destroy even with objects present (teardown)
+  tags          = { Name = "${var.project_name}-dicom" }
 }
 
 resource "aws_s3_bucket_versioning" "dicom" {
@@ -483,8 +484,8 @@ resource "aws_db_instance" "main" {
 
   backup_retention_period   = 7
   multi_az                  = false # Enable for production HA
-  deletion_protection       = true
-  skip_final_snapshot       = false
+  deletion_protection       = false  # Disabled for teardown
+  skip_final_snapshot       = true   # Skip final snapshot for teardown
   final_snapshot_identifier = "${var.project_name}-final-snapshot"
 
   tags = { Name = "${var.project_name}-postgres" }
@@ -568,6 +569,7 @@ resource "aws_ecr_repository" "services" {
 
   name                 = "${var.project_name}/${each.value}"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true  # Allow destroy even with images present (teardown)
 
   image_scanning_configuration { scan_on_push = true }
 
