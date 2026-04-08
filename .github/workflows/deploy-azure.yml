@@ -20,10 +20,12 @@ name: Deploy to Azure
 # Setup: https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure
 
 on:
-  push:
-    branches:
-      - develop
-  workflow_dispatch:
+  # DISABLED: Azure deployment shut down to reduce costs.
+  # Uncomment the push trigger below to re-enable auto-deploy.
+  # push:
+  #   branches:
+  #     - develop
+  workflow_dispatch:  # Manual-only trigger retained for emergency use
 
 permissions:
   id-token: write  # OIDC token exchange
