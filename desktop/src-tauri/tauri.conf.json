@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AEGIS Desktop",
+  "version": "0.1.0",
+  "identifier": "ai.aegisimaging.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AEGIS Desktop",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "msi", "appimage", "deb"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "AEGIS Desktop — on-device DICOM de-identification + upload",
+    "longDescription": "Native desktop client for the Anonymization & Exchange Gateway for Imaging Studies (AEGIS). Performs tag, pixel, and (where applicable) face de-identification entirely on your machine before uploading the cleaned study to your AEGIS project. Includes a 'watch folder' mode that auto-uploads new studies as they appear on disk.",
+    "category": "Healthcare",
+    "copyright": "© AEGIS"
+  }
+}

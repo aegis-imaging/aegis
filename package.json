@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "client",
-    "frontend/*"
+    "frontend/*",
+    "desktop"
   ]
 }

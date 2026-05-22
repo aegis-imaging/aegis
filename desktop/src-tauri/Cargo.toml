@@ -1,0 +1,33 @@
+[package]
+name = "aegis-desktop"
+version = "0.1.0"
+description = "AEGIS Desktop — native installer for the AEGIS upload portal + heavy-mode de-id pipeline"
+authors = ["AEGIS team"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "aegis_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = [] }
+tauri-plugin-dialog = "2.0"
+tauri-plugin-fs = "2.0"
+tauri-plugin-shell = "2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+notify = { version = "6", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = { version = "0.4", default-features = false }
+parking_lot = "0.12"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
