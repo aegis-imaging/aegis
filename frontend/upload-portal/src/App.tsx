@@ -1,15 +1,19 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import './App.css'
-import { FileDropZone } from './components/FileDropZone'
-import { StudySummary } from './components/StudySummary'
-import { TagDiffTable } from './components/TagDiffTable'
-import { HeavyModeToggle, type HeavyModeSettings } from './components/HeavyModeToggle'
-import { PixelScrubProgress, type PixelScrubProgressState } from './components/PixelScrubProgress'
+import {
+  FileDropZone,
+  StudySummary,
+  TagDiffTable,
+  HeavyModeToggle,
+  PixelScrubProgress,
+  BulkStudyTable,
+  type HeavyModeSettings,
+  type PixelScrubProgressState,
+} from '@aegis/upload-shared'
 import { parseDicomFile, buildStudySummary, isDicomFile, groupByStudy, studyLooksLikeHeadScan } from '@aegis/client'
 import { deidentify } from '@aegis/client'
 import { bulkUploadStudies } from '@aegis/client'
 import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag, UploadResult, FaceDeidResult, BulkProgress, PixelScrubResult } from '@aegis/client'
-import { BulkStudyTable } from './components/BulkStudyTable'
 
 type Stage = 'select' | 'parsing' | 'preview' | 'uploading' | 'ready'
 

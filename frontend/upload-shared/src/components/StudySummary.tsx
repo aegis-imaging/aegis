@@ -1,8 +1,8 @@
-import type { StudySummary as StudySummaryType } from '../types'
+import type { StudySummary as StudySummaryType } from '@aegis/client'
 
-type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
+export type DisplayTimezoneMode = 'utc' | 'local' | 'custom'
 
-interface StudySummaryProps {
+export interface StudySummaryProps {
   summary: StudySummaryType
   displayTimezoneMode: DisplayTimezoneMode
   displayTimezoneCustom: string

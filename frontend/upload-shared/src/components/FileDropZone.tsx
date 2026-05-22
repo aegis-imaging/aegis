@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 
-interface FileDropZoneProps {
+export interface FileDropZoneProps {
   onFilesSelected: (files: File[]) => void
   disabled?: boolean
 }

@@ -10,7 +10,11 @@ export interface PixelScrubProgressState {
   results: { filename: string; result: PixelScrubResult }[]
 }
 
-export function PixelScrubProgress({ state }: { state: PixelScrubProgressState }) {
+export interface PixelScrubProgressProps {
+  state: PixelScrubProgressState
+}
+
+export function PixelScrubProgress({ state }: PixelScrubProgressProps) {
   const completed = state.results.length
   const totalFindings = state.results.reduce((n, r) => n + r.result.totalFindings, 0)
   const filesWithFindings = state.results.filter(r => r.result.totalFindings > 0).length

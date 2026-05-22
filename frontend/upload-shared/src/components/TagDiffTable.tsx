@@ -1,7 +1,7 @@
-import type { DicomTag, TagAction } from '../types'
-import { ACTION_LABELS } from '../dicom/tags'
+import type { DicomTag, TagAction } from '@aegis/client'
+import { ACTION_LABELS } from '@aegis/client'
 
-interface TagDiffTableProps {
+export interface TagDiffTableProps {
   tags: DicomTag[]
   privateTagsRemoved: number
 }

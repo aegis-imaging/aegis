@@ -22,7 +22,11 @@ const STATUS_LABEL: Record<BulkStudyStatus, string> = {
   cancelled: '⊘ cancelled',
 }
 
-export function BulkStudyTable({ progress }: { progress: BulkProgress }) {
+export interface BulkStudyTableProps {
+  progress: BulkProgress
+}
+
+export function BulkStudyTable({ progress }: BulkStudyTableProps) {
   const totalCount = progress.studies.length
   if (totalCount === 0) return null
 

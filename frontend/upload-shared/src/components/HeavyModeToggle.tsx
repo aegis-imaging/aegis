@@ -16,6 +16,14 @@ export interface HeavyModeSettings {
   faceDeid: boolean
 }
 
+export interface HeavyModeToggleProps {
+  value: HeavyModeSettings
+  onChange: (next: HeavyModeSettings) => void
+  studyCount: number
+  fileCount: number
+  studyLooksLikeHead: boolean
+}
+
 export function HeavyModeToggle({
   value,
   onChange,

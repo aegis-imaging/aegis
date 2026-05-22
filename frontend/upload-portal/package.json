@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@aegis/client": "*",
+    "@aegis/upload-shared": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tesseract.js": "^5.1.0"

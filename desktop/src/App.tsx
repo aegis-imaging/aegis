@@ -18,6 +18,7 @@ import { bridge, type BridgeAvailable } from './desktop-bridge'
 import { WatchFolderPanel } from './WatchFolderPanel'
 import { QCDesktopPanel } from './QCDesktopPanel'
 import { bulkUpload, type BulkProgress } from '@aegis/client'
+import { FileDropZone, BulkStudyTable } from '@aegis/upload-shared'
 
 interface BootstrapState {
   apiBaseUrl: string
@@ -234,6 +235,9 @@ function DropZone({ bridgeAvailable, onFilesSelected }: {
 }
 
 function ProgressView({ progress }: { progress: BulkProgress }) {
+  // Reuse the shared BulkStudyTable so the desktop's progress view matches
+  // the upload-portal pixel-for-pixel. Wraps it with a phase header that's
+  // desktop-specific (the portal already has its own upload status banner).
   return (
     <section style={{
       border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, marginTop: 20,
@@ -244,21 +248,7 @@ function ProgressView({ progress }: { progress: BulkProgress }) {
         Completed: {progress.studiesCompleted}/{progress.totalStudies} ·
         Failed: {progress.studiesFailed}
       </div>
-      <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: 13 }}>
-        {progress.studies.map(s => (
-          <li key={s.studyInstanceUid} style={{ display: 'flex', gap: 8, padding: '4px 0' }}>
-            <span style={{ color: statusColor(s.status), fontWeight: 500, minWidth: 90 }}>
-              {s.status}
-            </span>
-            <span style={{ flex: 1 }}>
-              {s.patientId || '—'} · {s.studyDescription} ({s.fileCount} files)
-            </span>
-            {s.durationMs != null && (
-              <span style={{ color: '#9ca3af' }}>{(s.durationMs / 1000).toFixed(1)}s</span>
-            )}
-          </li>
-        ))}
-      </ul>
+      <BulkStudyTable progress={progress} />
     </section>
   )
 }
@@ -288,13 +278,5 @@ function inputStyle(): React.CSSProperties {
   }
 }
 
-function statusColor(status: string): string {
-  switch (status) {
-    case 'completed': return '#15803d'
-    case 'uploading': return '#2563eb'
-    case 'duplicate': return '#a16207'
-    case 'failed': return '#b91c1c'
-    case 'cancelled': return '#6b7280'
-    default: return '#9ca3af'
-  }
-}
+// statusColor moved to BulkStudyTable; this helper is no longer used since
+// the table renders status badges itself.
