@@ -1,7 +1,7 @@
 {
   "name": "@aegis/client",
-  "version": "0.1.0",
-  "description": "DICOM anonymization and upload library for AEGIS",
+  "version": "0.2.0",
+  "description": "DICOM anonymization and upload library for AEGIS (tag + pixel-level)",
   "type": "module",
   "exports": {
     ".": {
@@ -27,7 +27,16 @@
     "dcmjs": "^0.50.1",
     "dicom-parser": "^1.8.21"
   },
+  "peerDependencies": {
+    "tesseract.js": "^5.1.0"
+  },
+  "peerDependenciesMeta": {
+    "tesseract.js": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "tesseract.js": "^5.1.0",
     "typescript": "~5.7.0",
     "vitest": "^4.0.18"
   }
