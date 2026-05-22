@@ -99,25 +99,28 @@ export function HeavyModeToggle({
         </div>
       </label>
 
-      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 10, opacity: 0.6 }}>
+      <label style={{
+        display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 10,
+        opacity: studyLooksLikeHead ? 1 : 0.6,
+      }}>
         <input
           type="checkbox"
           checked={value.faceDeid}
-          disabled
-          onChange={() => {}}
+          disabled={!studyLooksLikeHead}
+          onChange={e => onChange({ ...value, faceDeid: e.target.checked })}
           style={{ marginTop: 3 }}
         />
         <div>
           <div style={{ fontWeight: 500 }}>
-            Remove face from MRI volume{' '}
+            Remove face from head MRI / CT volume{' '}
             <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 400 }}>
-              (coming soon)
+              (anterior-heuristic baseline)
             </span>
           </div>
           <div style={{ color: '#6b7280', fontSize: '12px' }}>
             {studyLooksLikeHead
-              ? 'Head/brain study detected. Once shipped, this will run a defacing model in WebGPU/WebGL on your machine before upload.'
-              : 'Looks like a non-head study; defacing would not run anyway.'}
+              ? 'Head/brain study detected. Zeros out the anterior ~35% of each axial slice (matches the Python nibabel_fallback baseline). A higher-quality TF.js model is the next iteration.'
+              : 'Non-head study detected — defacing skipped automatically.'}
           </div>
         </div>
       </label>

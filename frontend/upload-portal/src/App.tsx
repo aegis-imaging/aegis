@@ -8,6 +8,7 @@ import { PixelScrubProgress, type PixelScrubProgressState } from './components/P
 import { parseDicomFile, buildStudySummary, isDicomFile, groupByStudy, studyLooksLikeHeadScan } from '@aegis/client'
 import { deidentify } from '@aegis/client'
 import { uploadStudy } from '@aegis/client'
+import type { FaceDeidResult } from '@aegis/client'
 import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag, UploadResult } from '@aegis/client'
 
 type Stage = 'select' | 'parsing' | 'preview' | 'uploading' | 'ready'
@@ -139,6 +140,7 @@ export function App() {
   const [scrubProgress, setScrubProgress] = useState<PixelScrubProgressState>({
     currentFileIndex: 0, totalFiles: 0, currentFileName: '', results: [],
   })
+  const [faceDeidResults, setFaceDeidResults] = useState<{ studyUid: string; result: FaceDeidResult }[]>([])
 
   // Auth state — fire-and-forget; non-blocking (auth is handled at infra level)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -401,6 +403,14 @@ export function App() {
                     currentFileIndex: prev.results.length + 1,
                     results: [...prev.results, { filename, result: r }],
                   }))
+                },
+              }
+            : undefined,
+          faceDeid: heavyMode.faceDeid
+            ? {
+                enabled: true,
+                onResult: (r) => {
+                  setFaceDeidResults(prev => [...prev, { studyUid: group.uid, result: r }])
                 },
               }
             : undefined,
