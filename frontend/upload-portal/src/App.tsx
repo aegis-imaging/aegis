@@ -3,7 +3,9 @@ import './App.css'
 import { FileDropZone } from './components/FileDropZone'
 import { StudySummary } from './components/StudySummary'
 import { TagDiffTable } from './components/TagDiffTable'
-import { parseDicomFile, buildStudySummary, isDicomFile, groupByStudy } from '@aegis/client'
+import { HeavyModeToggle, type HeavyModeSettings } from './components/HeavyModeToggle'
+import { PixelScrubProgress, type PixelScrubProgressState } from './components/PixelScrubProgress'
+import { parseDicomFile, buildStudySummary, isDicomFile, groupByStudy, studyLooksLikeHeadScan } from '@aegis/client'
 import { deidentify } from '@aegis/client'
 import { uploadStudy } from '@aegis/client'
 import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag, UploadResult } from '@aegis/client'
@@ -131,6 +133,12 @@ export function App() {
   const [currentStudyIndex, setCurrentStudyIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [totalSize, setTotalSize] = useState(0)
+
+  // Heavy-mode (in-browser pixel/face de-id) state.
+  const [heavyMode, setHeavyMode] = useState<HeavyModeSettings>({ pixelScrub: false, faceDeid: false })
+  const [scrubProgress, setScrubProgress] = useState<PixelScrubProgressState>({
+    currentFileIndex: 0, totalFiles: 0, currentFileName: '', results: [],
+  })
 
   // Auth state — fire-and-forget; non-blocking (auth is handled at infra level)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -359,6 +367,16 @@ export function App() {
       const results: UploadResult[] = []
       let filesUploaded = 0
 
+      // Reset scrub progress with the running total across all groups.
+      if (heavyMode.pixelScrub) {
+        setScrubProgress({
+          currentFileIndex: 0,
+          totalFiles,
+          currentFileName: '',
+          results: [],
+        })
+      }
+
       for (let si = 0; si < studyGroups.length; si++) {
         if (abortController.signal.aborted) break
 
@@ -373,6 +391,19 @@ export function App() {
           uploaderEmail: uploaderEmail.trim() || undefined,
           institutionId: attributionInstitutionId ?? undefined,
           deid: (retainedTags || keepPrivateTags) ? { retainedTags, keepPrivateTags } : undefined,
+          pixelScrub: heavyMode.pixelScrub
+            ? {
+                enabled: true,
+                onResult: (filename, _i, r) => {
+                  setScrubProgress(prev => ({
+                    ...prev,
+                    currentFileName: filename,
+                    currentFileIndex: prev.results.length + 1,
+                    results: [...prev.results, { filename, result: r }],
+                  }))
+                },
+              }
+            : undefined,
         })
         results.push(result)
         filesUploaded += group.files.length
@@ -390,7 +421,7 @@ export function App() {
     } finally {
       uploadAbortRef.current = null
     }
-  }, [studyGroups, files, selectedProject, uploaderEmail, attributionRequired, attributionInstitutionId])
+  }, [studyGroups, files, selectedProject, uploaderEmail, attributionRequired, attributionInstitutionId, heavyMode])
 
   const totalFileCount = files.length
 
@@ -659,6 +690,15 @@ export function App() {
 
           <TagDiffTable tags={tagChanges} privateTagsRemoved={privateTagsRemoved} />
 
+          {/* Heavy mode: in-browser pixel/face de-id (opt-in) */}
+          <HeavyModeToggle
+            value={heavyMode}
+            onChange={setHeavyMode}
+            studyCount={studyGroups.length}
+            fileCount={totalFileCount}
+            studyLooksLikeHead={studyGroups.some(g => studyLooksLikeHeadScan(g.files))}
+          />
+
           {/* Optional email for upload confirmation */}
           <div style={{
             padding: '16px',
@@ -768,6 +808,11 @@ export function App() {
             <p className="upload-current-file">
               {currentFile.length > 48 ? '\u2026' + currentFile.slice(-46) : currentFile}
             </p>
+          )}
+          {heavyMode.pixelScrub && (
+            <div style={{ maxWidth: '500px', margin: '16px auto 0' }}>
+              <PixelScrubProgress state={scrubProgress} />
+            </div>
           )}
           <button
             onClick={handleCancelUpload}

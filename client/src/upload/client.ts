@@ -1,5 +1,6 @@
 import { parseDicomFile, serializeDataset } from '../dicom/parser'
 import { deidentify, type DeidOptions } from '../dicom/deid'
+import { scrubInstance, type PixelScrubOptions, type PixelScrubResult } from '../dicom/pixel_scrub'
 import type { ParsedDicomFile, StudySummary } from '../types'
 
 export interface UploadOptions {
@@ -15,6 +16,16 @@ export interface UploadOptions {
   deid?: DeidOptions
   /** Optional email address — uploader receives a confirmation when the study is processed. */
   uploaderEmail?: string
+  /**
+   * Heavy-mode: run in-browser pixel PHI scrub on every instance between tag
+   * de-id and upload. When omitted, no pixel scrub runs (current behavior).
+   * Pass `{ enabled: true }` to opt in with defaults.
+   */
+  pixelScrub?: PixelScrubOptions & {
+    enabled?: boolean
+    /** Called after each file's scrub finishes, with the per-file result. */
+    onResult?: (filename: string, index: number, result: PixelScrubResult) => void
+  }
 }
 
 export interface UploadResult {
@@ -23,6 +34,11 @@ export interface UploadResult {
   study?: {
     studyInstanceUid: string
   }
+  /**
+   * Per-file pixel-scrub results when heavy mode was enabled. Omitted when
+   * pixelScrub.enabled is false/undefined. Index matches `files[]`.
+   */
+  pixelScrubResults?: PixelScrubResult[]
 }
 
 /** Retry a fetch PUT up to maxAttempts times with exponential backoff (1s/2s/4s). */
@@ -105,21 +121,33 @@ export async function uploadStudy(
     throw new Error('Upload init returned unexpected URL count')
   }
 
-  // 2. De-identify, serialize, and upload each file
+  // 2. De-identify, optionally pixel-scrub, serialize, and upload each file
+  const pixelScrubEnabled = options.pixelScrub?.enabled === true
+  const pixelScrubResults: PixelScrubResult[] = []
+
   for (let i = 0; i < files.length; i++) {
     options.onFileStart?.(files[i].filename, i, files.length)
 
     // Re-parse from the original buffer to get a fresh mutable dataset + raw meta
     const { dataset, rawMeta } = parseDicomFile(files[i].arrayBuffer, files[i].filename)
 
-    // Apply PS3.15 Annex E Basic Profile de-identification
+    // Apply PS3.15 Annex E Basic Profile de-identification (tag-level)
     const { dataset: deidDataset } = await deidentify(dataset, {
       salt,
       keepPrivateTags: options.deid?.keepPrivateTags,
       retainedTags: options.deid?.retainedTags,
     })
 
-    // Re-serialize to DICOM bytes preserving the original transfer syntax
+    // Heavy mode: pixel-level PHI scrubbing (in-browser OCR + redaction).
+    if (pixelScrubEnabled) {
+      const r = await scrubInstance(deidDataset, options.pixelScrub)
+      pixelScrubResults.push(r)
+      options.pixelScrub?.onResult?.(files[i].filename, i, r)
+    }
+
+    // Re-serialize to DICOM bytes preserving the original transfer syntax.
+    // When pixel scrub mutated the dataset's PixelData, those changes flow
+    // through here unchanged.
     const deidBytes = serializeDataset(rawMeta, deidDataset)
 
     // Upload with automatic retry (up to 3 attempts, 1s/2s/4s backoff)
@@ -151,5 +179,6 @@ export async function uploadStudy(
     study: completeData.study
       ? { studyInstanceUid: completeData.study.study_instance_uid }
       : undefined,
+    pixelScrubResults: pixelScrubEnabled ? pixelScrubResults : undefined,
   }
 }

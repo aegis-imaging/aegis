@@ -12,7 +12,8 @@
   "dependencies": {
     "@aegis/client": "*",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tesseract.js": "^5.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

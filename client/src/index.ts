@@ -8,7 +8,7 @@
  *   import { isDicomFile, parseDicomFile, buildStudySummary, deidentify, uploadStudy } from '@aegis/client'
  */
 
-export const VERSION = '0.1.0'
+export const VERSION = '0.2.0'
 
 // Types
 export type { TagAction, DicomTag, StudySummary, ParsedDicomFile } from './types'
@@ -38,3 +38,34 @@ export { BASIC_PROFILE, getTagRule, isPrivateTag, ACTION_LABELS } from './dicom/
 // Upload
 export { uploadStudy } from './upload/client'
 export type { UploadOptions, UploadResult } from './upload/client'
+
+// Heavy-mode de-identification: pixel-level PHI scrubbing
+export {
+  decodeFrames,
+  transferSyntaxOf,
+  transferSyntaxLabel,
+  isCompressedTransferSyntax,
+  UnsupportedTransferSyntaxError,
+} from './dicom/pixel_decode'
+export type { DecodedFrame, DecodeOptions } from './dicom/pixel_decode'
+
+export { getOcrEngine, looksLikePhi, _resetEngineForTests } from './dicom/pixel_ocr'
+export type { OcrFinding, OcrOptions } from './dicom/pixel_ocr'
+
+export { scrubInstance, scrubStudyDatasets } from './dicom/pixel_scrub'
+export type {
+  PixelScrubOptions,
+  PixelScrubResult,
+  PixelScrubStatus,
+  StudyScrubOptions,
+  StudyScrubProgress,
+  StudyScrubSummary,
+} from './dicom/pixel_scrub'
+
+// Heavy-mode de-identification: face de-id (stub for now)
+export { defaceStudy, studyLooksLikeHeadScan } from './dicom/face_deid'
+export type {
+  FaceDeidResult,
+  FaceDeidStatus,
+  FaceDeidOptions,
+} from './dicom/face_deid'
