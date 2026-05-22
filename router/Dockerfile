@@ -28,6 +28,10 @@ RUN pip install -r /app/router/requirements.txt
 COPY midi-b /app/midi-b
 RUN pip install -e /app/midi-b
 
+# Install dimse-core (shared DICOM SCP / retry / audit primitives).
+COPY dimse-core /app/dimse-core
+RUN pip install -e /app/dimse-core
+
 # Application code
 COPY router /app/router
 

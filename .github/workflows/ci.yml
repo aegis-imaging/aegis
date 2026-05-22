@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, synth-service, midi-b, analytics-service, sct-service]
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, dimse-core, synth-service, midi-b, analytics-service, sct-service, router]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -192,7 +192,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, synth-service, midi-b, analytics-service, sct-service]
+        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, dimse-core, synth-service, midi-b, analytics-service, sct-service, router]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -200,6 +200,9 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: cd ${{ matrix.service }} && pip install -r requirements.txt -r requirements-test.txt
+      - name: Install dimse-core (shared library)
+        if: matrix.service == 'router'
+        run: pip install -e ./dimse-core
       - name: Run tests
         run: cd ${{ matrix.service }} && pytest -v --tb=short
 
