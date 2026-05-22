@@ -1,0 +1,568 @@
+<!DOCTYPE html><html><head><title></title><meta charset="utf-8"><style>* {
+	box-sizing: border-box;
+}
+
+html {
+	font-size: 100%;
+}
+
+body {
+	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell',
+		'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+	line-height: 1.6;
+	font-size: 0.6875em; /* 11 pt */
+	color: #111;
+	margin: 0;
+}
+
+body > :first-child {
+	padding-top: 0;
+	margin-top: 0;
+}
+
+body > :last-child {
+	margin-bottom: 0;
+	padding-bottom: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	margin: 0;
+	padding: 0.5em 0 0.25em;
+}
+
+h5,
+h6 {
+	padding: 0;
+}
+
+h5 {
+	font-size: 1em;
+}
+
+h6 {
+	font-size: 0.875em;
+	text-transform: uppercase;
+}
+
+p {
+	margin: 0.25em 0 1em;
+}
+
+blockquote {
+	margin: 0.5em 0 1em;
+	padding-left: 0.5em;
+	padding-right: 1em;
+	border-left: 4px solid gainsboro;
+	font-style: italic;
+}
+
+ul,
+ol {
+	margin: 0;
+	margin-left: 1em;
+	padding: 0 1.5em 0.5em;
+}
+
+pre {
+	white-space: pre-wrap;
+}
+
+h1 code,
+h2 code,
+h3 code,
+h4 code,
+h5 code,
+h6 code,
+p code,
+li code,
+pre code {
+	background-color: #f8f8f8;
+	padding: 0.1em 0.375em;
+	border: 1px solid #f8f8f8;
+	border-radius: 0.25em;
+	font-family: monospace;
+	font-size: 1.2em;
+}
+
+pre code {
+	display: block;
+	padding: 0.5em;
+}
+
+.page-break {
+	page-break-after: always;
+}
+
+img {
+	max-width: 100%;
+	margin: 1em 0;
+}
+
+table {
+	border-spacing: 0;
+	border-collapse: collapse;
+	display: block;
+	margin: 0 0 1em;
+	width: 100%;
+	overflow: auto;
+}
+
+table th,
+table td {
+	padding: 0.5em 1em;
+	border: 1px solid gainsboro;
+}
+
+table th {
+	font-weight: 600;
+}
+
+table tr {
+	background-color: white;
+	border-top: 1px solid gainsboro;
+}
+
+table tr:nth-child(2n) {
+	background-color: whitesmoke;
+}
+/*# sourceURL=/root/.npm/_npx/55158e48eb5c59f7/node_modules/md-to-pdf/markdown.css*/</style><style>pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em
+}
+code.hljs {
+  padding: 3px 5px
+}
+/*!
+  Theme: GitHub
+  Description: Light theme as seen on github.com
+  Author: github.com
+  Maintainer: @Hirse
+  Updated: 2021-05-15
+
+  Outdated base version: https://github.com/primer/github-syntax-light
+  Current colors taken from GitHub's CSS
+*/
+.hljs {
+  color: #24292e;
+  background: #ffffff
+}
+.hljs-doctag,
+.hljs-keyword,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  /* prettylights-syntax-keyword */
+  color: #d73a49
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__,
+.hljs-title.function_ {
+  /* prettylights-syntax-entity */
+  color: #6f42c1
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  /* prettylights-syntax-constant */
+  color: #005cc5
+}
+.hljs-regexp,
+.hljs-string,
+.hljs-meta .hljs-string {
+  /* prettylights-syntax-string */
+  color: #032f62
+}
+.hljs-built_in,
+.hljs-symbol {
+  /* prettylights-syntax-variable */
+  color: #e36209
+}
+.hljs-comment,
+.hljs-code,
+.hljs-formula {
+  /* prettylights-syntax-comment */
+  color: #6a737d
+}
+.hljs-name,
+.hljs-quote,
+.hljs-selector-tag,
+.hljs-selector-pseudo {
+  /* prettylights-syntax-entity-tag */
+  color: #22863a
+}
+.hljs-subst {
+  /* prettylights-syntax-storage-modifier-import */
+  color: #24292e
+}
+.hljs-section {
+  /* prettylights-syntax-markup-heading */
+  color: #005cc5;
+  font-weight: bold
+}
+.hljs-bullet {
+  /* prettylights-syntax-markup-list */
+  color: #735c0f
+}
+.hljs-emphasis {
+  /* prettylights-syntax-markup-italic */
+  color: #24292e;
+  font-style: italic
+}
+.hljs-strong {
+  /* prettylights-syntax-markup-bold */
+  color: #24292e;
+  font-weight: bold
+}
+.hljs-addition {
+  /* prettylights-syntax-markup-inserted */
+  color: #22863a;
+  background-color: #f0fff4
+}
+.hljs-deletion {
+  /* prettylights-syntax-markup-deleted */
+  color: #b31d28;
+  background-color: #ffeef0
+}
+.hljs-char.escape_,
+.hljs-link,
+.hljs-params,
+.hljs-property,
+.hljs-punctuation,
+.hljs-tag {
+  /* purposely ignored */
+  
+}/*# sourceURL=/root/.npm/_npx/55158e48eb5c59f7/node_modules/highlight.js/styles/github.css*/</style></head>
+	<body class="">
+		<h1 id="aegis-demo-setup">AEGIS Demo Setup</h1>
+<p><strong>Goal:</strong> clone the repo onto a Mac or Windows laptop and have the <em>whole</em> AEGIS
+platform — API, admin dashboard, upload portal, all the sidecars (defacing,
+PHI detection, QC, classification, protocol compliance, BIDS conversion,
+synthetic-MRI generation, analytics, SCT) — running with one command so you
+can demo it end-to-end to a colleague.</p>
+<p>Everything runs in Docker containers. You do <strong>not</strong> need to install
+PostgreSQL, Python, Go, or any of the imaging libraries on your host machine.</p>
+<hr>
+<h2 id="prerequisites">Prerequisites</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Why</th>
+<th>How to install</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Docker Desktop</strong></td>
+<td>Runs every service in containers</td>
+<td>Download from <a href="https://www.docker.com/products/docker-desktop">docker.com</a>. License is free for personal/educational use.</td>
+</tr>
+<tr>
+<td><strong>Git</strong></td>
+<td>Clone the repo</td>
+<td>Mac: <code>brew install git</code> · Windows: <a href="https://git-scm.com/">git-scm.com</a> (or via Git for Windows installer)</td>
+</tr>
+<tr>
+<td><strong>Disk space</strong></td>
+<td>First-time image builds total ~6 GB</td>
+<td>Docker Desktop → Settings → Resources should allow at least 6 GB</td>
+</tr>
+<tr>
+<td><strong>RAM</strong></td>
+<td>8 GB is the comfortable minimum, 16 GB is recommended</td>
+<td>Docker Desktop → Settings → Resources</td>
+</tr>
+</tbody></table>
+<p>Optional (only if you want to send synthetic DICOM studies for the demo):</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Python 3.11+</strong></td>
+<td>Runs the <code>aegis-router-send-test</code> helper that pushes test studies</td>
+</tr>
+<tr>
+<td><strong><code>pip install pynetdicom pydicom httpx</code></strong></td>
+<td>One-time install (~50 MB)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="one-time-setup-5-minutes">One-time setup (5 minutes)</h2>
+<h3 id="1-clone-the-repo">1. Clone the repo</h3>
+<pre><code class="hljs bash">git <span class="hljs-built_in">clone</span> https://github.com/aegis-imaging/aegis.git
+<span class="hljs-built_in">cd</span> aegis
+</code></pre>
+<h3 id="2-start-docker-desktop">2. Start Docker Desktop</h3>
+<p>Open Docker Desktop and wait until the whale icon settles into the menu bar
+(Mac) / system tray (Windows). The <code>docker info</code> command should succeed in
+your terminal.</p>
+<h3 id="3-choose-a-demo-path">3. Choose a demo path</h3>
+<p>There are three options depending on what you want to show. Pick one:</p>
+<h4 id="path-a--look-at-the-whole-aegis-platform-recommended-first-time">Path A — "Look at the whole AEGIS platform" (recommended first time)</h4>
+<p>Brings up the full cloud stack: API, admin dashboard, upload portal, every
+sidecar, Postgres, Mailpit (email capture), DWV viewer.</p>
+<pre><code class="hljs bash">docker compose up -d
+</code></pre>
+<p>Wait ~60–90 s on the first run (builds the images). On subsequent runs it's
+~5 s.</p>
+<p><strong>What you can show:</strong></p>
+<ul>
+<li>Upload portal at <a href="http://localhost:3000">http://localhost:3000</a> — drag a DICOM study, watch
+client-side tag de-id happen, click upload.</li>
+<li>Admin dashboard at <a href="http://localhost:3001">http://localhost:3001</a> — see the study appear, click
+through to the DWV viewer, see the audit log update.</li>
+<li>Synthetic MRI generator — generate a fake brain MRI study in the dashboard's
+Studies tab → it flows through classification → defacing → PHI scan → QC →
+BIDS without you doing anything else.</li>
+<li>Mailpit at <a href="http://localhost:8025">http://localhost:8025</a> — see the upload-confirmation email AEGIS
+sent (no real SMTP needed).</li>
+<li>The full system in Docker Desktop — open it and you'll see ~15 containers
+side by side. Visceral way to convey "this is a real platform."</li>
+</ul>
+<h4 id="path-b--look-how-this-fits-at-a-hospital-lighter-footprint">Path B — "Look how this fits at a hospital" (lighter footprint)</h4>
+<p>Brings up the on-prem <strong>AEGIS Router</strong> stack: DICOM SCP receiver, de-id
+pipeline, local quarantine, optional sidecars. Uses <strong>SQLite</strong> for local
+quarantine — no Postgres at all.</p>
+<pre><code class="hljs bash"><span class="hljs-built_in">cd</span> router
+<span class="hljs-built_in">cp</span> .env.example .<span class="hljs-built_in">env</span>
+docker compose up -d            <span class="hljs-comment"># router only, smallest footprint</span>
+<span class="hljs-comment"># or, with face de-id and PHI scrub sidecars:</span>
+docker compose --profile defacing --profile phi up -d
+</code></pre>
+<p><strong>What you can show:</strong></p>
+<ul>
+<li>The router is what a hospital would install on a single Linux VM (or in
+your case, Docker Desktop on Mac/Win).</li>
+<li>PACS auto-routing: simulate a hospital pushing a study by running the
+<code>aegis-router-send-test</code> script (see below).</li>
+<li>Local-only mode: leave <code>CLOUD_RECEIVER_URL</code> empty in <code>.env</code> and studies
+stay on your machine — nice for showing the privacy posture.</li>
+</ul>
+<h4 id="path-c--just-the-upload-portal-in-a-browser-smallest">Path C — "Just the upload portal in a browser" (smallest)</h4>
+<p>If you only want the browser-based upload portal without the rest of the
+stack:</p>
+<pre><code class="hljs bash"><span class="hljs-built_in">cd</span> frontend/upload-portal
+npm install
+npm run dev
+</code></pre>
+<p>Open <a href="http://localhost:3000">http://localhost:3000</a>. Won't be able to actually push studies anywhere
+without the API, but you can show the <strong>heavy-mode</strong> in-browser de-id flow
+(tag + pixel scrub + face de-id all in the browser).</p>
+<hr>
+<h2 id="sending-a-test-study-to-your-local-stack">Sending a test study to your local stack</h2>
+<p>Once one of the paths above is running, push a synthetic study at it so the
+demo isn't a blank screen.</p>
+<h3 id="option-1--synthetic-mri-generator-full-stack-only-no-cli-needed">Option 1 — synthetic MRI generator (full stack only, no CLI needed)</h3>
+<p>In the admin dashboard at <a href="http://localhost:3001">http://localhost:3001</a>:</p>
+<ol>
+<li>Click <strong>Studies</strong> in the sidebar.</li>
+<li>Click <strong>Generate synthetic MRI</strong>.</li>
+<li>Pick a number of slices (20 is fine), click Generate.</li>
+</ol>
+<p>The study flows through the whole pipeline automatically — refresh the
+Studies tab to watch it progress through classification → defacing → PHI scan
+→ QC → BIDS.</p>
+<h3 id="option-2--dimse-push-router-stack">Option 2 — DIMSE push (router stack)</h3>
+<p>If you're on Path B (router), use the included sender:</p>
+<pre><code class="hljs bash"><span class="hljs-comment"># In a new terminal</span>
+<span class="hljs-built_in">cd</span> /path/to/aegis/router
+pip install pynetdicom pydicom httpx
+./bin/aegis-router-send-test --slices 30
+</code></pre>
+<p>This generates a synthetic 30-slice MR study and pushes it via DICOM C-STORE
+to the router on localhost:11112. The router de-identifies it locally and
+either forwards to the cloud (if configured) or holds it in
+<code>/var/lib/aegis-router/studies/</code> (if not).</p>
+<pre><code class="hljs bash"><span class="hljs-comment"># Confirm what the pipeline did</span>
+curl http://localhost:8080/audit | jq
+</code></pre>
+<h3 id="option-3--web-upload-portal">Option 3 — web upload portal</h3>
+<p>If you have a real or synthetic DICOM file on disk:</p>
+<ol>
+<li>Open the upload portal at <a href="http://localhost:3000">http://localhost:3000</a>.</li>
+<li>Drag the DICOM file (or folder of files) onto the dropzone.</li>
+<li>Watch the in-browser tag de-id preview, then click Upload.</li>
+</ol>
+<p>For the <strong>heavy mode</strong> demo (in-browser pixel PHI scrub + face de-id),
+toggle "On-device deep de-identification" in the preview panel before
+clicking Upload.</p>
+<hr>
+<h2 id="tearing-down">Tearing down</h2>
+<pre><code class="hljs bash">docker compose down            <span class="hljs-comment"># stop everything, keep data</span>
+docker compose down -v         <span class="hljs-comment"># stop + delete the Postgres volume too</span>
+</code></pre>
+<p>If you took Path B (router):</p>
+<pre><code class="hljs bash"><span class="hljs-built_in">cd</span> router
+docker compose down -v
+</code></pre>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>docker compose up</code> says "no space left on device"</td>
+<td>Docker Desktop's disk allocation is too small</td>
+<td>Settings → Resources → Disk image size → bump to 64 GB+</td>
+</tr>
+<tr>
+<td>Dashboard shows "API unhealthy" for &gt;1 min</td>
+<td>Postgres still warming up</td>
+<td>Wait another 30 s; check <code>docker compose logs postgres</code></td>
+</tr>
+<tr>
+<td>Upload portal returns 5xx</td>
+<td>API not running or DB not ready</td>
+<td><code>docker compose ps</code> to see container state</td>
+</tr>
+<tr>
+<td>Port 3000/3001/8080/11112 in use</td>
+<td>Another service grabbed it</td>
+<td>Either stop the other thing or edit <code>docker-compose.yml</code> to remap</td>
+</tr>
+<tr>
+<td>Mac M-series build is slow</td>
+<td>First-time arm64 image builds</td>
+<td>Subsequent runs use cached layers; usually a one-time cost</td>
+</tr>
+</tbody></table>
+<p>For more, see <a href="runbooks/"><code>docs/runbooks/</code></a>.</p>
+<hr>
+<h2 id="whats-running-where">What's running where</h2>
+<p>Once <code>docker compose up</code> is happy, you'll see these containers in Docker
+Desktop:</p>
+<table>
+<thead>
+<tr>
+<th>Container</th>
+<th>Port</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>aegis-api</code></td>
+<td>8080</td>
+<td>Go HTTP API, the brain of the system</td>
+</tr>
+<tr>
+<td><code>aegis-admin-dashboard</code></td>
+<td>3001</td>
+<td>React UI for image analysts + admins</td>
+</tr>
+<tr>
+<td><code>aegis-upload-portal</code></td>
+<td>3000</td>
+<td>React UI for the public-facing upload flow</td>
+</tr>
+<tr>
+<td><code>postgres</code></td>
+<td>5432</td>
+<td>App database (users, studies, audit log)</td>
+</tr>
+<tr>
+<td><code>mailpit</code></td>
+<td>1025/8025</td>
+<td>Local SMTP capture so emails don't escape</td>
+</tr>
+<tr>
+<td><code>dwv</code></td>
+<td>3005</td>
+<td>DICOM Web Viewer for studies in the dashboard</td>
+</tr>
+<tr>
+<td><code>defacing</code></td>
+<td>(internal)</td>
+<td>Face de-id sidecar (mri_deface / DeepDefacer)</td>
+</tr>
+<tr>
+<td><code>phi-detection</code></td>
+<td>(internal)</td>
+<td>Burned-in PHI scrub (Tesseract OCR + cloud OCR options)</td>
+</tr>
+<tr>
+<td><code>qc-service</code></td>
+<td>(internal)</td>
+<td>Automated QC checks</td>
+</tr>
+<tr>
+<td><code>bids-service</code></td>
+<td>(internal)</td>
+<td>NIfTI/BIDS conversion (dcm2niix)</td>
+</tr>
+<tr>
+<td><code>classification-service</code></td>
+<td>(internal)</td>
+<td>Modality/body-part classifier</td>
+</tr>
+<tr>
+<td><code>protocol-service</code></td>
+<td>(internal)</td>
+<td>MRI protocol compliance checker</td>
+</tr>
+<tr>
+<td><code>synth-service</code></td>
+<td>(internal)</td>
+<td>Synthetic MRI generator (useful for demos)</td>
+</tr>
+<tr>
+<td><code>analytics-service</code></td>
+<td>(internal)</td>
+<td>FreeSurfer / FSL / ANTs / etc.</td>
+</tr>
+<tr>
+<td><code>sct-service</code></td>
+<td>(internal)</td>
+<td>Spinal Cord Toolbox</td>
+</tr>
+<tr>
+<td><code>dimse-receiver</code></td>
+<td>11112</td>
+<td>DICOM C-STORE SCP (what a PACS would push to)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="after-the-demo">After the demo</h2>
+<p>If your colleague is interested in deploying this for their lab, the
+relevant next steps depend on what they want:</p>
+<ul>
+<li><strong>Their own laptop</strong> — same instructions as above. Encourage them to clone
+the repo and try it themselves.</li>
+<li><strong>A shared server in their lab</strong> — point them at
+<a href="../router/docs/research-deployment.md"><code>router/docs/research-deployment.md</code></a>.</li>
+<li><strong>An on-prem deployment at a hospital</strong> — point them at
+<a href="../router/docs/spoke-deployment.md"><code>router/docs/spoke-deployment.md</code></a>.</li>
+<li><strong>A real cloud deployment</strong> — Terraform modules for GCP, AWS, and Azure
+live in <code>terraform/</code>. The cloud auto-deploys on push to <code>develop</code> via
+Cloud Build (GCP) and GitHub Actions (AWS, Azure).</li>
+</ul>
+<hr>
+<p><em>Built with <a href="https://claude.com/claude-code">Claude Code</a>. Questions to
+<a href="mailto:support@aegisimaging.ai">support@aegisimaging.ai</a>.</em></p>
+
+	
+
+</body></html>
