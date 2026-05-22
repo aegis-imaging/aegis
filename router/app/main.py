@@ -83,13 +83,13 @@ async def lifespan(app: FastAPI):
         # Defensive nil-check for typecheckers; _orchestrator is set above.
         assert _orchestrator is not None
         _orchestrator.submit(
-            acc.study_uid,
-            file_count=acc.instance_count,
+            acc.study_instance_uid,
+            file_count=acc.file_count,
             source=f"dimse({acc.calling_ae_title})",
         )
 
     _ae = scp_mod.create_ae(_cfg, _on_study_complete)
-    t = threading.Thread(target=scp_mod.start_listening, args=(_ae,), daemon=True, name="dimse-scp")
+    t = threading.Thread(target=scp_mod.start_listening, args=(_ae, _cfg), daemon=True, name="dimse-scp")
     t.start()
     log.info(
         "router up: site=%s ae=%s dimse_port=%d http_port=%d sidecars=%s cloud_forwarding=%s",
