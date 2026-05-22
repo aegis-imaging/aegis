@@ -39,6 +39,19 @@ export { BASIC_PROFILE, getTagRule, isPrivateTag, ACTION_LABELS } from './dicom/
 export { uploadStudy } from './upload/client'
 export type { UploadOptions, UploadResult } from './upload/client'
 
+// Bulk upload — multi-study orchestration with concurrency, dedup, cancel.
+// Used by light web, heavy web, and desktop app entry points alike.
+export { bulkUpload, bulkUploadStudies } from './upload/bulk'
+export type {
+  BulkUploadOptions,
+  BulkUploadResult,
+  BulkProgress,
+  BulkPhase,
+  BulkStudy,
+  BulkStudyState,
+  BulkStudyStatus,
+} from './upload/bulk'
+
 // Heavy-mode de-identification: pixel-level PHI scrubbing
 export {
   decodeFrames,

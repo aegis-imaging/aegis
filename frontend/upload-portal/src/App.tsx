@@ -7,9 +7,9 @@ import { HeavyModeToggle, type HeavyModeSettings } from './components/HeavyModeT
 import { PixelScrubProgress, type PixelScrubProgressState } from './components/PixelScrubProgress'
 import { parseDicomFile, buildStudySummary, isDicomFile, groupByStudy, studyLooksLikeHeadScan } from '@aegis/client'
 import { deidentify } from '@aegis/client'
-import { uploadStudy } from '@aegis/client'
-import type { FaceDeidResult } from '@aegis/client'
-import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag, UploadResult } from '@aegis/client'
+import { bulkUploadStudies } from '@aegis/client'
+import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag, UploadResult, FaceDeidResult, BulkProgress, PixelScrubResult } from '@aegis/client'
+import { BulkStudyTable } from './components/BulkStudyTable'
 
 type Stage = 'select' | 'parsing' | 'preview' | 'uploading' | 'ready'
 
@@ -141,6 +141,8 @@ export function App() {
     currentFileIndex: 0, totalFiles: 0, currentFileName: '', results: [],
   })
   const [faceDeidResults, setFaceDeidResults] = useState<{ studyUid: string; result: FaceDeidResult }[]>([])
+  const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null)
+  const [bulkConcurrency, setBulkConcurrency] = useState(1)
 
   // Auth state — fire-and-forget; non-blocking (auth is handled at infra level)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -366,10 +368,7 @@ export function App() {
         // Non-fatal: if profile fetch fails, fall back to full strip
       }
 
-      const results: UploadResult[] = []
-      let filesUploaded = 0
-
-      // Reset scrub progress with the running total across all groups.
+      // Reset heavy-mode progress with the running total across all groups.
       if (heavyMode.pixelScrub) {
         setScrubProgress({
           currentFileIndex: 0,
@@ -378,47 +377,55 @@ export function App() {
           results: [],
         })
       }
+      setBulkProgress(null)
 
-      for (let si = 0; si < studyGroups.length; si++) {
-        if (abortController.signal.aborted) break
-
-        const group = studyGroups[si]
-        setCurrentStudyIndex(si)
-
-        const result = await uploadStudy(group.files, selectedProject, group.summary, {
-          onProgress: (uploaded) => {
-            setUploadProgress({ current: filesUploaded + uploaded, total: totalFiles })
+      const bulkResult = await bulkUploadStudies(
+        studyGroups.map(g => ({
+          studyInstanceUid: g.uid,
+          files: g.files,
+          summary: g.summary,
+        })),
+        {
+          projectSlug: selectedProject,
+          concurrency: bulkConcurrency,
+          signal: abortController.signal,
+          onProgress: (p) => {
+            setBulkProgress({ ...p, studies: p.studies.map(s => ({ ...s })) })
+            const completed = p.studies.reduce((n, s) => n + (s.status === 'completed' || s.status === 'duplicate' ? s.fileCount : 0), 0)
+            setUploadProgress({ current: completed, total: totalFiles })
           },
-          onFileStart: (filename) => setCurrentFile(filename),
-          uploaderEmail: uploaderEmail.trim() || undefined,
-          institutionId: attributionInstitutionId ?? undefined,
-          deid: (retainedTags || keepPrivateTags) ? { retainedTags, keepPrivateTags } : undefined,
-          pixelScrub: heavyMode.pixelScrub
-            ? {
-                enabled: true,
-                onResult: (filename, _i, r) => {
-                  setScrubProgress(prev => ({
-                    ...prev,
-                    currentFileName: filename,
-                    currentFileIndex: prev.results.length + 1,
-                    results: [...prev.results, { filename, result: r }],
-                  }))
-                },
-              }
-            : undefined,
-          faceDeid: heavyMode.faceDeid
-            ? {
-                enabled: true,
-                onResult: (r) => {
-                  setFaceDeidResults(prev => [...prev, { studyUid: group.uid, result: r }])
-                },
-              }
-            : undefined,
-        })
-        results.push(result)
-        filesUploaded += group.files.length
-      }
+          uploadOptions: {
+            uploaderEmail: uploaderEmail.trim() || undefined,
+            institutionId: attributionInstitutionId ?? undefined,
+            deid: (retainedTags || keepPrivateTags) ? { retainedTags, keepPrivateTags } : undefined,
+            pixelScrub: heavyMode.pixelScrub
+              ? {
+                  enabled: true,
+                  onResult: (filename, _i, r) => {
+                    setScrubProgress(prev => ({
+                      ...prev,
+                      currentFileName: filename,
+                      currentFileIndex: prev.results.length + 1,
+                      results: [...prev.results, { filename, result: r }],
+                    }))
+                  },
+                }
+              : undefined,
+            faceDeid: heavyMode.faceDeid
+              ? {
+                  enabled: true,
+                  onResult: (r) => {
+                    setFaceDeidResults(prev => [...prev, { studyUid: r.studyInstanceUid, result: r }])
+                  },
+                }
+              : undefined,
+          },
+        }
+      )
 
+      const results: UploadResult[] = bulkResult.studies
+        .filter(s => s.uploadResult)
+        .map(s => s.uploadResult!)
       setUploadResults(results)
       setStage('ready')
     } catch (err) {
@@ -700,6 +707,41 @@ export function App() {
 
           <TagDiffTable tags={tagChanges} privateTagsRemoved={privateTagsRemoved} />
 
+          {/* Bulk-upload preview table (only when more than one study) */}
+          {studyGroups.length > 1 && (
+            <div>
+              <h3 style={{ margin: '0 0 8px', fontSize: '15px', fontWeight: 600, color: '#374151' }}>
+                Bulk upload — {studyGroups.length} studies detected
+              </h3>
+              <BulkStudyTable progress={{
+                phase: 'uploading',
+                totalStudies: studyGroups.length,
+                studiesCompleted: 0,
+                studiesFailed: 0,
+                active: [],
+                studies: studyGroups.map(g => ({
+                  studyInstanceUid: g.uid,
+                  studyDescription: g.summary.studyDescription || '(no description)',
+                  patientId: g.summary.patientId,
+                  fileCount: g.files.length,
+                  status: 'pending',
+                })),
+              }} />
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <span>Concurrency:</span>
+                <select
+                  value={String(bulkConcurrency)}
+                  onChange={e => setBulkConcurrency(Number(e.target.value))}
+                >
+                  <option value="1">1 (sequential, gentle on network)</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4 (fastest, may saturate uplink)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Heavy mode: in-browser pixel/face de-id (opt-in) */}
           <HeavyModeToggle
             value={heavyMode}
@@ -822,6 +864,11 @@ export function App() {
           {heavyMode.pixelScrub && (
             <div style={{ maxWidth: '500px', margin: '16px auto 0' }}>
               <PixelScrubProgress state={scrubProgress} />
+            </div>
+          )}
+          {bulkProgress && bulkProgress.studies.length > 1 && (
+            <div style={{ maxWidth: '700px', margin: '16px auto 0', textAlign: 'left' }}>
+              <BulkStudyTable progress={bulkProgress} />
             </div>
           )}
           <button
