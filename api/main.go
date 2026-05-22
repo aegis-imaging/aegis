@@ -341,6 +341,11 @@ func main() {
 	mux.HandleFunc("POST /api/institutions/{id}/contacts", adminOnly(srv.CreateInstitutionContact))
 	mux.HandleFunc("DELETE /api/institutions/{id}/contacts/{contactID}", adminOnly(srv.DeleteInstitutionContact))
 
+	// Spoke mTLS — enroll/revoke a client cert for a sender institution so an
+	// AEGIS Router at that spoke can authenticate without an API key.
+	mux.HandleFunc("PUT /api/institutions/{id}/client-cert", adminOnly(srv.SetInstitutionClientCert))
+	mux.HandleFunc("DELETE /api/institutions/{id}/client-cert", adminOnly(srv.RevokeInstitutionClientCert))
+
 	// Destinations — external DICOM endpoints studies can be forwarded to.
 	mux.HandleFunc("GET /api/destinations", auth(srv.ListDestinations))
 	mux.HandleFunc("GET /api/destinations/health", auth(srv.GetAllDestinationsHealth))
