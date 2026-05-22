@@ -29,6 +29,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, HTTPException, Path as PathParam, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
+from app import metrics as metrics_mod
 from app import quarantine as quarantine_mod
 from app import scp as scp_mod
 from app import storage
@@ -72,6 +73,7 @@ async def lifespan(app: FastAPI):
     Path(_cfg.data_dir).mkdir(parents=True, exist_ok=True)
     Path(_cfg.quarantine_dir).mkdir(parents=True, exist_ok=True)
 
+    metrics_mod.init()
     _store = quarantine_mod.QuarantineStore(quarantine_mod.default_db_path(_cfg.quarantine_dir))
     _audit = AuditLog(str(Path(_cfg.data_dir) / "audit.log"))
     _orchestrator = Orchestrator(_cfg, _store, _audit)
@@ -161,6 +163,16 @@ def healthz(cfg: RouterConfig = Depends(_require_cfg)) -> dict[str, Any]:
         "sidecars": list(cfg.enabled_sidecars().keys()),
         "cloud_forwarding": cfg.cloud_forwarding_configured(),
     }
+
+
+@app.get("/metrics")
+def metrics_endpoint() -> Any:
+    """Prometheus-text-format metrics. No auth — typical pattern for an
+    internal scrape endpoint. Front with a reverse proxy or firewall if
+    you're exposing the router to the open internet."""
+    from fastapi.responses import PlainTextResponse
+
+    return PlainTextResponse(metrics_mod.get().render(), media_type="text/plain; version=0.0.4")
 
 
 @app.get("/info")

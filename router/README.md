@@ -56,7 +56,86 @@ container:
 
 Profiles can stack: `docker compose --profile defacing --profile phi up -d`.
 
-## Quickstart
+## Install scenarios
+
+The router runs anywhere Docker runs. Three common patterns:
+
+### 1. Single laptop / dev workstation (no cloud)
+
+For self-testing on a Mac or Linux laptop. Runs the router locally; no AEGIS
+cloud account or certificate needed. Studies de-identify and stay on disk
+under `/var/lib/aegis-router/studies/` for inspection.
+
+```bash
+cd router
+cp .env.example .env
+# In .env, leave CLOUD_RECEIVER_URL empty so the router stays local-only.
+
+docker compose up -d                            # router only
+# or with face de-id + pixel scrub:
+docker compose --profile defacing --profile phi up -d
+
+# Send a synthetic study at it:
+pip install pynetdicom pydicom httpx
+./bin/aegis-router-send-test --slices 20
+
+# Inspect what the router did:
+curl http://localhost:8080/audit | jq
+./bin/aegis-router-deid-diff \
+    --raw  /var/lib/aegis-router/studies/<study_uid>/raw \
+    --deid /var/lib/aegis-router/studies/<study_uid>/deid
+```
+
+**Apple Silicon note:** all images in this stack have native ARM64 builds
+(`python:3.12-slim`, our wheels are pure Python). No Rosetta needed.
+
+### 2. Linux server + remote laptop client
+
+Run the router on a small server (a NUC, a workstation, an old desktop) and
+send DICOM to it from your laptop on the same LAN. Useful for testing PACS
+auto-routing setups before deploying to a clinical site.
+
+```bash
+# On the Linux server:
+cd router
+cp .env.example .env
+docker compose up -d
+sudo ufw allow 11112/tcp   # if you run ufw
+
+# Find the server's LAN IP:
+ip -4 addr show | grep inet
+
+# On your laptop (or any DICOM-capable client):
+pip install pynetdicom pydicom httpx
+./bin/aegis-router-send-test --host 192.168.1.42 --port 11112
+```
+
+Any DICOM client works (`storescu`, `dcm4che`, your PACS's auto-route config) —
+the router speaks standard DIMSE on `11112`. The router's web UI / operator
+API is on `8080` from the server's IP.
+
+### 3. University / research lab (thesis-grade)
+
+For long-running research deployments — measure throughput, validate
+de-identification accuracy, run modality-specific experiments. The "no-cloud"
+mode is fine here too if you're staying purely local; otherwise enroll an
+mTLS cert and forward to a cloud project you control.
+
+Recommended extras for a research install:
+- `--profile defacing --profile phi` to exercise the full de-id stack
+- A bind-mount (`/srv/aegis-router:/var/lib/aegis-router`) onto research
+  storage so the SQLite quarantine + audit log + study archive survives
+  container rebuilds
+- Scrape `:8080/metrics` from Prometheus for throughput tracking
+  (`aegis_router_studies_received_total`, `aegis_router_pipeline_duration_seconds`)
+- Use `bin/aegis-router-deid-diff` to produce tag-level evaluation tables for
+  the paper
+
+See [`docs/research-deployment.md`](docs/research-deployment.md) for the
+detailed walkthrough (cohorts, accuracy harness, throughput benchmarking,
+data retention).
+
+## Quickstart (production spoke)
 
 Pre-reqs at the spoke: a Linux host with Docker + Compose v2 and outbound
 HTTPS to the AEGIS cloud receiver. ~4 GB RAM minimum for router-only;

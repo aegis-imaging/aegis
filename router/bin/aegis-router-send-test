@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Send a synthetic DICOM study to a running AEGIS Router via DICOM C-STORE.
+
+Use this to validate an install on your own machine or LAN:
+
+  # MacBook self-test: router running locally on default port
+  ./bin/aegis-router-send-test
+
+  # Sending from a laptop to a router on a Linux server on the LAN
+  ./bin/aegis-router-send-test --host 192.168.1.42 --port 11112
+
+  # Send a longer study (more slices) for throughput benchmarking
+  ./bin/aegis-router-send-test --slices 60 --runs 100 --quiet
+
+  # Send real DICOM files from a directory
+  ./bin/aegis-router-send-test --from-dir /path/to/study
+
+After sending, the script polls the router's /audit endpoint to confirm what
+the pipeline did, so you don't have to tail logs to know it worked.
+
+Dependencies (install once):
+    pip install pynetdicom pydicom httpx
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import statistics
+import sys
+import time
+from pathlib import Path
+
+try:
+    import httpx
+    import pydicom
+    from pydicom.dataset import Dataset, FileMetaDataset
+    from pydicom.uid import ExplicitVRLittleEndian, generate_uid
+    from pynetdicom import AE, build_context, debug_logger
+    from pynetdicom.sop_class import MRImageStorage
+except ImportError as e:
+    print(f"missing dependency: {e}", file=sys.stderr)
+    print("install with: pip install pynetdicom pydicom httpx", file=sys.stderr)
+    sys.exit(2)
+
+
+def synth_instance(study_uid: str, series_uid: str, instance_number: int, rows: int = 64, cols: int = 64) -> Dataset:
+    """Create a single valid DICOM dataset in memory."""
+    import numpy as np
+
+    ds = Dataset()
+    ds.StudyInstanceUID = study_uid
+    ds.SeriesInstanceUID = series_uid
+    ds.SOPInstanceUID = generate_uid()
+    ds.SOPClassUID = MRImageStorage
+    ds.PatientName = "SYNTH^TEST"
+    ds.PatientID = "SYNTH-001"
+    ds.PatientBirthDate = "19700101"
+    ds.PatientSex = "O"
+    ds.Modality = "MR"
+    ds.BodyPartExamined = "HEAD"
+    ds.StudyDescription = "Synthetic MR head"
+    ds.SeriesDescription = "synth-axial"
+    ds.StudyDate = "20260301"
+    ds.StudyTime = "120000"
+    ds.SeriesNumber = 1
+    ds.InstanceNumber = instance_number
+    ds.AccessionNumber = f"ACC{instance_number:04d}"
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.Rows = rows
+    ds.Columns = cols
+    ds.BitsAllocated = 16
+    ds.BitsStored = 16
+    ds.HighBit = 15
+    ds.PixelRepresentation = 0
+    arr = (np.random.rand(rows, cols) * 4095).astype(np.uint16)
+    ds.PixelData = arr.tobytes()
+    ds.is_little_endian = True
+    ds.is_implicit_VR = False
+    fm = FileMetaDataset()
+    fm.MediaStorageSOPClassUID = ds.SOPClassUID
+    fm.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
+    fm.TransferSyntaxUID = ExplicitVRLittleEndian
+    ds.file_meta = fm
+    return ds
+
+
+def load_dicoms_from_dir(d: Path) -> list[Dataset]:
+    out: list[Dataset] = []
+    for p in sorted(d.rglob("*.dcm")):
+        try:
+            out.append(pydicom.dcmread(str(p)))
+        except Exception as e:
+            print(f"  skipping {p.name}: {e}", file=sys.stderr)
+    if not out:
+        raise SystemExit(f"no .dcm files found under {d}")
+    return out
+
+
+def send_study(
+    datasets: list[Dataset],
+    host: str,
+    port: int,
+    called_ae: str,
+    calling_ae: str,
+    quiet: bool = False,
+) -> tuple[bool, float, int]:
+    ae = AE(ae_title=calling_ae)
+    # Use a permissive context so any storage SOP class is acceptable.
+    ae.add_requested_context(MRImageStorage, ExplicitVRLittleEndian)
+    for ds in datasets:
+        sop = getattr(ds, "SOPClassUID", None)
+        if sop and sop != MRImageStorage:
+            ae.add_requested_context(sop, ExplicitVRLittleEndian)
+
+    started = time.monotonic()
+    assoc = ae.associate(host, port, ae_title=called_ae)
+    if not assoc.is_established:
+        return False, time.monotonic() - started, 0
+
+    sent = 0
+    failures = 0
+    try:
+        for ds in datasets:
+            status = assoc.send_c_store(ds)
+            if status and status.Status == 0x0000:
+                sent += 1
+            else:
+                failures += 1
+                if not quiet:
+                    print(f"  ! C-STORE failed for {ds.SOPInstanceUID}: status={status}")
+    finally:
+        assoc.release()
+
+    elapsed = time.monotonic() - started
+    if not quiet:
+        print(f"  → sent {sent}/{len(datasets)} instances in {elapsed:.2f}s ({failures} failures)")
+    return failures == 0, elapsed, sent
+
+
+def fetch_recent_audit(router_url: str, study_uid: str, operator_key: str, attempts: int = 10) -> dict | None:
+    headers = {}
+    if operator_key:
+        headers["Authorization"] = f"Bearer {operator_key}"
+    for _ in range(attempts):
+        try:
+            r = httpx.get(router_url.rstrip("/") + "/audit", params={"limit": 50}, headers=headers, timeout=5.0)
+            if r.status_code == 200:
+                for e in r.json().get("entries", []):
+                    if e.get("study_uid") == study_uid and e.get("event") in (
+                        "pipeline.shipped",
+                        "pipeline.complete_local_only",
+                        "pipeline.quarantined",
+                    ):
+                        return e
+        except httpx.HTTPError:
+            pass
+        time.sleep(1.0)
+    return None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Send a synthetic DICOM study to an AEGIS Router.")
+    parser.add_argument("--host", default=os.environ.get("ROUTER_HOST", "localhost"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("ROUTER_PORT", "11112")))
+    parser.add_argument("--called-ae", default=os.environ.get("ROUTER_AE_TITLE", "AEGIS_ROUTER"))
+    parser.add_argument("--calling-ae", default="TEST_SENDER")
+    parser.add_argument("--http-url", default=os.environ.get("ROUTER_HTTP_URL", "http://localhost:8080"),
+                        help="Router's HTTP base URL (used for /audit verification).")
+    parser.add_argument("--operator-key", default=os.environ.get("OPERATOR_API_KEY", ""),
+                        help="Operator key for /audit when set on the router.")
+    parser.add_argument("--slices", type=int, default=20, help="Slices per synthetic study.")
+    parser.add_argument("--runs", type=int, default=1, help="Number of studies to send back-to-back (throughput bench).")
+    parser.add_argument("--from-dir", type=Path, default=None, help="Send real DICOM files from this directory instead of synthesising.")
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--no-verify", action="store_true", help="Skip /audit verification (faster benchmarking).")
+    parser.add_argument("--debug", action="store_true", help="Enable pynetdicom debug logging.")
+    args = parser.parse_args()
+
+    if args.debug:
+        debug_logger()
+
+    if args.from_dir:
+        datasets_template = load_dicoms_from_dir(args.from_dir)
+    else:
+        datasets_template = None
+
+    durations: list[float] = []
+    failures = 0
+
+    for run in range(args.runs):
+        if datasets_template is not None:
+            # Re-use the same study/series UIDs only for run 0; otherwise
+            # the router would dedup. Regenerate UIDs per run.
+            datasets = []
+            new_study = generate_uid()
+            new_series = generate_uid()
+            for ds in datasets_template:
+                cp = ds.copy()
+                cp.StudyInstanceUID = new_study
+                cp.SeriesInstanceUID = new_series
+                cp.SOPInstanceUID = generate_uid()
+                datasets.append(cp)
+            study_uid = new_study
+        else:
+            study_uid = generate_uid()
+            series_uid = generate_uid()
+            datasets = [
+                synth_instance(study_uid, series_uid, i + 1) for i in range(args.slices)
+            ]
+
+        if not args.quiet:
+            print(f"[{run + 1}/{args.runs}] sending study {study_uid} ({len(datasets)} instances) → {args.host}:{args.port} ({args.called_ae})")
+        ok, elapsed, _ = send_study(
+            datasets, args.host, args.port, args.called_ae, args.calling_ae, quiet=args.quiet
+        )
+        if not ok:
+            failures += 1
+            continue
+        durations.append(elapsed)
+
+        if not args.no_verify:
+            entry = fetch_recent_audit(args.http_url, study_uid, args.operator_key)
+            if entry is None:
+                print(f"  ⚠ no pipeline audit entry found for {study_uid} within timeout")
+            elif not args.quiet:
+                evt = entry.get("event")
+                stages = entry.get("stages") or entry.get("stages_run") or []
+                print(f"  ✓ pipeline {evt} stages={stages}")
+
+    if durations:
+        print()
+        print(f"Throughput: {len(durations)} studies in {sum(durations):.2f}s")
+        print(f"  per-study: avg {statistics.mean(durations):.2f}s  median {statistics.median(durations):.2f}s  max {max(durations):.2f}s")
+        if failures:
+            print(f"  failures: {failures}")
+    return 0 if failures == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

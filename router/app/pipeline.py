@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from app import deid, quarantine, shipper, storage
+from app import deid, metrics, quarantine, shipper, storage
 from app.audit import AuditLog
 from app.config import RouterConfig
 
@@ -82,11 +82,18 @@ class Orchestrator:
     def _do_run(self, study_uid: str, file_count: int, source: str) -> PipelineResult:
         paths = storage.layout(self.cfg.data_dir, study_uid)
         self.audit.record("pipeline.start", study_uid=study_uid, source=source, file_count=file_count)
+        m = metrics.get()
+        m.inc("aegis_router_studies_received_total", {"source": _source_label(source)})
         started = time.time()
 
         # 1. De-identify
         deid_result = deid.run_pipeline(self.cfg, paths)
+        m.observe("aegis_router_deid_duration_seconds", deid_result.duration_seconds)
         if not deid_result.ok:
+            m.inc(
+                "aegis_router_studies_quarantined_total",
+                {"stage": deid_result.failed_stage or "deid"},
+            )
             self._quarantine(
                 paths,
                 study_uid,
@@ -106,11 +113,14 @@ class Orchestrator:
 
         # 2. Ship if cloud forwarding configured
         if not self.cfg.cloud_forwarding_configured():
+            duration = time.time() - started
+            m.observe("aegis_router_pipeline_duration_seconds", duration, {"outcome": "local_only"})
+            m.inc("aegis_router_studies_local_only_total")
             self.audit.record(
                 "pipeline.complete_local_only",
                 study_uid=study_uid,
                 stages=deid_result.stages_run,
-                duration_sec=time.time() - started,
+                duration_sec=duration,
             )
             return PipelineResult(
                 study_uid=study_uid,
@@ -123,6 +133,7 @@ class Orchestrator:
         try:
             ship_result = shipper.ship_study(self.cfg, paths, metadata)
         except shipper.ShipperError as e:
+            m.inc("aegis_router_studies_quarantined_total", {"stage": "ship"})
             self._quarantine(
                 paths,
                 study_uid,
@@ -140,13 +151,16 @@ class Orchestrator:
                 quarantined=True,
             )
 
+        duration = time.time() - started
+        m.observe("aegis_router_pipeline_duration_seconds", duration, {"outcome": "shipped"})
+        m.inc("aegis_router_studies_shipped_total")
         self.audit.record(
             "pipeline.shipped",
             study_uid=study_uid,
             stages=deid_result.stages_run,
             cloud_study_id=ship_result.cloud_study_id,
             files=ship_result.files_uploaded,
-            duration_sec=time.time() - started,
+            duration_sec=duration,
         )
         return PipelineResult(
             study_uid=study_uid,
@@ -184,3 +198,15 @@ class Orchestrator:
         entry = self.store.get(study_uid)
         if entry is not None:
             quarantine.notify_cloud(self.cfg.quarantine_alert_url, entry, self.cfg.site_id)
+
+
+def _source_label(s: str) -> str:
+    # Reduce free-form sources (e.g. "dimse(SOMEPACS)") to a small label set so
+    # Prometheus cardinality stays bounded.
+    if s.startswith("dimse"):
+        return "dimse"
+    if s.startswith("web") or s == "web_upload":
+        return "web_upload"
+    if s == "operator_retry":
+        return "operator_retry"
+    return "other"
