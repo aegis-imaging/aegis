@@ -159,6 +159,10 @@ func main() {
 	// Rate-limited to slow down brute-force token guessing.
 	mux.Handle("POST /api/spokes/enroll", rateLimit(srv.EnrollSpoke))
 
+	// Spokes overview — list institutions enrolled or with active enrollment
+	// tokens, with activity stats. Powers the admin-dashboard Spokes tab.
+	mux.HandleFunc("GET /api/spokes", auth(srv.ListSpokes))
+
 	// Upload portal — public-facing, rate-limited.
 	// Wrapped with spoke-mTLS so AEGIS Routers presenting a known client cert
 	// get their SpokeIdentity attached to ctx (passive — never rejects).
