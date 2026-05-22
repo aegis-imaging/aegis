@@ -1,0 +1,712 @@
+<!DOCTYPE html><html><head><title></title><meta charset="utf-8"><style>* {
+	box-sizing: border-box;
+}
+
+html {
+	font-size: 100%;
+}
+
+body {
+	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell',
+		'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+	line-height: 1.6;
+	font-size: 0.6875em; /* 11 pt */
+	color: #111;
+	margin: 0;
+}
+
+body > :first-child {
+	padding-top: 0;
+	margin-top: 0;
+}
+
+body > :last-child {
+	margin-bottom: 0;
+	padding-bottom: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	margin: 0;
+	padding: 0.5em 0 0.25em;
+}
+
+h5,
+h6 {
+	padding: 0;
+}
+
+h5 {
+	font-size: 1em;
+}
+
+h6 {
+	font-size: 0.875em;
+	text-transform: uppercase;
+}
+
+p {
+	margin: 0.25em 0 1em;
+}
+
+blockquote {
+	margin: 0.5em 0 1em;
+	padding-left: 0.5em;
+	padding-right: 1em;
+	border-left: 4px solid gainsboro;
+	font-style: italic;
+}
+
+ul,
+ol {
+	margin: 0;
+	margin-left: 1em;
+	padding: 0 1.5em 0.5em;
+}
+
+pre {
+	white-space: pre-wrap;
+}
+
+h1 code,
+h2 code,
+h3 code,
+h4 code,
+h5 code,
+h6 code,
+p code,
+li code,
+pre code {
+	background-color: #f8f8f8;
+	padding: 0.1em 0.375em;
+	border: 1px solid #f8f8f8;
+	border-radius: 0.25em;
+	font-family: monospace;
+	font-size: 1.2em;
+}
+
+pre code {
+	display: block;
+	padding: 0.5em;
+}
+
+.page-break {
+	page-break-after: always;
+}
+
+img {
+	max-width: 100%;
+	margin: 1em 0;
+}
+
+table {
+	border-spacing: 0;
+	border-collapse: collapse;
+	display: block;
+	margin: 0 0 1em;
+	width: 100%;
+	overflow: auto;
+}
+
+table th,
+table td {
+	padding: 0.5em 1em;
+	border: 1px solid gainsboro;
+}
+
+table th {
+	font-weight: 600;
+}
+
+table tr {
+	background-color: white;
+	border-top: 1px solid gainsboro;
+}
+
+table tr:nth-child(2n) {
+	background-color: whitesmoke;
+}
+/*# sourceURL=/root/.npm/_npx/55158e48eb5c59f7/node_modules/md-to-pdf/markdown.css*/</style><style>pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em
+}
+code.hljs {
+  padding: 3px 5px
+}
+/*!
+  Theme: GitHub
+  Description: Light theme as seen on github.com
+  Author: github.com
+  Maintainer: @Hirse
+  Updated: 2021-05-15
+
+  Outdated base version: https://github.com/primer/github-syntax-light
+  Current colors taken from GitHub's CSS
+*/
+.hljs {
+  color: #24292e;
+  background: #ffffff
+}
+.hljs-doctag,
+.hljs-keyword,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-variable.language_ {
+  /* prettylights-syntax-keyword */
+  color: #d73a49
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__,
+.hljs-title.function_ {
+  /* prettylights-syntax-entity */
+  color: #6f42c1
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-meta,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  /* prettylights-syntax-constant */
+  color: #005cc5
+}
+.hljs-regexp,
+.hljs-string,
+.hljs-meta .hljs-string {
+  /* prettylights-syntax-string */
+  color: #032f62
+}
+.hljs-built_in,
+.hljs-symbol {
+  /* prettylights-syntax-variable */
+  color: #e36209
+}
+.hljs-comment,
+.hljs-code,
+.hljs-formula {
+  /* prettylights-syntax-comment */
+  color: #6a737d
+}
+.hljs-name,
+.hljs-quote,
+.hljs-selector-tag,
+.hljs-selector-pseudo {
+  /* prettylights-syntax-entity-tag */
+  color: #22863a
+}
+.hljs-subst {
+  /* prettylights-syntax-storage-modifier-import */
+  color: #24292e
+}
+.hljs-section {
+  /* prettylights-syntax-markup-heading */
+  color: #005cc5;
+  font-weight: bold
+}
+.hljs-bullet {
+  /* prettylights-syntax-markup-list */
+  color: #735c0f
+}
+.hljs-emphasis {
+  /* prettylights-syntax-markup-italic */
+  color: #24292e;
+  font-style: italic
+}
+.hljs-strong {
+  /* prettylights-syntax-markup-bold */
+  color: #24292e;
+  font-weight: bold
+}
+.hljs-addition {
+  /* prettylights-syntax-markup-inserted */
+  color: #22863a;
+  background-color: #f0fff4
+}
+.hljs-deletion {
+  /* prettylights-syntax-markup-deleted */
+  color: #b31d28;
+  background-color: #ffeef0
+}
+.hljs-char.escape_,
+.hljs-link,
+.hljs-params,
+.hljs-property,
+.hljs-punctuation,
+.hljs-tag {
+  /* purposely ignored */
+  
+}/*# sourceURL=/root/.npm/_npx/55158e48eb5c59f7/node_modules/highlight.js/styles/github.css*/</style></head>
+	<body class="">
+		<h1 id="aegis-client-upload-options">AEGIS client upload options</h1>
+<p>AEGIS supports <strong>six</strong> distinct ways for a study to enter the system. Each
+has a different privacy posture, install footprint, throughput profile, and
+target user. This doc explains them all and helps you pick the right one for
+a given situation.</p>
+<h2 id="at-a-glance">At a glance</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Entry point</th>
+<th>Where PHI is de-identified</th>
+<th>Install</th>
+<th>Throughput</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><strong>Light web client</strong></td>
+<td>Cloud</td>
+<td>Zero</td>
+<td>One study at a time</td>
+<td>Casual contributors</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Heavy web client</strong></td>
+<td>User's browser</td>
+<td>Zero (~10 MB lazy on first use)</td>
+<td>One study at a time, slow</td>
+<td>Privacy-sensitive contributors</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Desktop app</strong> <em>(Tauri)</em></td>
+<td>User's machine (native)</td>
+<td>One installer per OS</td>
+<td>Many studies, native speed</td>
+<td>Power users (research coordinators)</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>AEGIS Router</strong></td>
+<td>On-prem site</td>
+<td><code>docker compose up</code> at the site</td>
+<td>Full PACS auto-route, high volume</td>
+<td>High-throughput hospitals/labs</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>Cloud-side DIMSE pull</strong></td>
+<td>Cloud</td>
+<td>Firewall rule only</td>
+<td>Pull from remote PACS via C-MOVE</td>
+<td>Sites that can't run a router but can open a port</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Direct API upload</strong></td>
+<td>Wherever the script runs</td>
+<td>API key + <code>curl</code>/SDK</td>
+<td>Scriptable, programmatic</td>
+<td>Pipelines, CI, MCP agent</td>
+</tr>
+</tbody></table>
+<p>The first three are user-facing UIs. The router is a sysadmin install. Cloud
+DIMSE pull and the direct API are alternate machine-to-machine entry points
+that aren't really "client tiers" so much as additional doors into the same
+backend.</p>
+<hr>
+<h2 id="1-light-web-client">1. Light web client</h2>
+<p>The default upload portal at <a href="https://upload.aegisimaging.ai">https://upload.aegisimaging.ai</a>. Already in
+production today.</p>
+<p><strong>What runs in the browser:</strong></p>
+<ul>
+<li>DICOM parsing (dcmjs)</li>
+<li>PS3.15 Annex E Basic Profile tag de-identification</li>
+<li>Date shifting</li>
+<li>Pseudonymization of PatientID + PatientName (deterministic SHA-256 with a
+per-project salt)</li>
+</ul>
+<p><strong>What the cloud does:</strong></p>
+<ul>
+<li>Pixel-level PHI scrubbing (OCR via Tesseract / Cloud Vision / Gemini / etc.)</li>
+<li>Face de-identification (mri_deface, DeepDefacer, mri_reface)</li>
+<li>QC checks, classification, protocol compliance</li>
+<li>BIDS conversion, analytics</li>
+<li>Routing rules to forwarding destinations</li>
+</ul>
+<p><strong>When to use it:</strong></p>
+<ul>
+<li>Casual contribution of one or a handful of studies</li>
+<li>Users on managed devices who shouldn't install anything</li>
+<li>Quick "drag and drop" workflow</li>
+<li>When the receiving project trusts the cloud's processing</li>
+</ul>
+<p><strong>Bundle size:</strong> ~1 MB JS.</p>
+<p><strong>Bulk:</strong> Drag a parent folder with multiple studies → the portal detects
+each <code>StudyInstanceUID</code> and uploads them sequentially with per-study
+progress.</p>
+<hr>
+<h2 id="2-heavy-web-client">2. Heavy web client</h2>
+<p>The same upload portal as #1, with an opt-in toggle for <strong>on-device deep
+de-identification</strong>. Enabled per-upload from the preview screen.</p>
+<p><strong>What runs in the browser</strong> (with heavy mode enabled):</p>
+<ul>
+<li>Everything from #1, plus:</li>
+<li><strong>Pixel PHI scrub</strong> — Tesseract.js (WASM, lazy-loaded ~10 MB) decodes
+uncompressed and JPEG-baseline DICOM, runs OCR per frame, redacts
+PHI-shaped tokens (dates, names, MRNs, accession numbers, etc.) with black
+boxes, re-encodes into the dataset's PixelData.</li>
+<li><strong>Face de-id</strong> — for head MR/CT studies. Composes a 3D voxel volume from
+the slices, applies an anterior-zero heuristic (or a TF.js model when one
+is configured), writes the defaced bytes back into the dataset.</li>
+</ul>
+<p><strong>What the cloud does:</strong></p>
+<ul>
+<li>Nothing for PHI removal — it's all done before upload.</li>
+<li>Still runs QC, classification, BIDS, analytics, routing — these don't
+reveal PHI.</li>
+</ul>
+<p><strong>When to use it:</strong></p>
+<ul>
+<li>IRB protocols mandating on-device de-id</li>
+<li>Regulatory environments that can't send pixel PHI to a third party</li>
+<li>Researchers contributing handfuls of studies who want the strongest
+privacy posture</li>
+<li>"Defense in depth" — heavy mode + server-side scrub catches anything the
+browser missed</li>
+</ul>
+<p><strong>Bundle size:</strong></p>
+<ul>
+<li>Default chunk unchanged from light mode (peer-dep import)</li>
+<li>First heavy-mode toggle: adds ~10 MB cached download for Tesseract.js +
+WASM core + language data</li>
+<li>Face de-id model (when configured): adds ~30 MB cached download for the
+TF.js weights</li>
+</ul>
+<p><strong>Performance:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Image type</th>
+<th>Pixel scrub per frame</th>
+<th>Face de-id per study</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>256×256 MR slice</td>
+<td>0.3–0.8 s</td>
+<td>n/a (volume-level)</td>
+</tr>
+<tr>
+<td>512×512 CT slice</td>
+<td>0.5–1.2 s</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>1024×1024 secondary capture</td>
+<td>1–2 s</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>200-slice head T1</td>
+<td>60–180 s total</td>
+<td>5–10 s (anterior heuristic), 30–120 s (TF.js model)</td>
+</tr>
+</tbody></table>
+<p><strong>Bulk:</strong> Same as light mode — drag many studies, each gets the full
+heavy-mode pipeline. Tesseract worker is reused across files in a session.</p>
+<hr>
+<h2 id="3-desktop-app-coming-next">3. Desktop app <em>(coming next)</em></h2>
+<p>A Tauri-based native installer for Mac, Windows, and Linux that wraps the
+same React upload portal as #1/#2. Cross-platform from one codebase.</p>
+<p><strong>Why it exists when the web client already does everything:</strong></p>
+<ul>
+<li><strong>Native filesystem access</strong> — drag a folder from Finder/Explorer, watch a
+"drop folder" for new studies and auto-upload them.</li>
+<li><strong>No 10 MB browser download</strong> — the WASM + Tesseract assets are bundled
+inside the installer, so first-use latency disappears.</li>
+<li><strong>Code-signed binaries</strong> — Mac notarization + Windows Authenticode, no
+scary "unidentified developer" warning.</li>
+<li><strong>Native ML acceleration</strong> — wraps native Tesseract / ONNX Runtime via
+Tauri commands for ~10× speedup on face de-id versus WASM in the browser.</li>
+<li><strong>Offline mode</strong> — if the cloud is unreachable, studies queue locally and
+ship when the link comes back.</li>
+</ul>
+<p><strong>What runs natively:</strong></p>
+<ul>
+<li>Everything from #2 (heavy mode), but accelerated.</li>
+<li>Optional: watch-folder daemon, native menu, auto-update.</li>
+</ul>
+<p><strong>Installer size:</strong> ~15-30 MB depending on whether the face de-id model is
+bundled.</p>
+<p><strong>When to use it:</strong></p>
+<ul>
+<li>Research coordinators uploading studies routinely (daily / weekly)</li>
+<li>Clinical assistants who want a drop folder</li>
+<li>Demoing on a laptop without spinning up Docker</li>
+</ul>
+<p><strong>Status:</strong> PR pending. The architectural foundation is in place — the
+desktop app reuses 100% of the <code>@aegis/client</code> library and the upload-portal
+React UI from #1 and #2.</p>
+<hr>
+<h2 id="4-aegis-router-on-prem">4. AEGIS Router (on-prem)</h2>
+<p>For sites that want <strong>every study they read</strong> to flow into AEGIS without
+human intervention. Documented in detail in
+<a href="../router/README.md"><code>router/README.md</code></a> and
+<a href="../router/docs/spoke-deployment.md"><code>router/docs/spoke-deployment.md</code></a>.</p>
+<p><strong>Two install scenarios:</strong></p>
+<ul>
+<li><strong>Single host</strong> (laptop, NUC, lab workstation): <code>docker compose up -d</code>
+brings up the router. Profile-gated sidecars (<code>--profile defacing</code>,
+<code>--profile phi</code>, etc.) opt in to additional capabilities.</li>
+<li><strong>Production spoke</strong>: <code>aegis-router-init --site-token=&lt;TOKEN&gt;</code> provisioned
+by the cloud admin, then the same <code>docker compose up</code>. Onboarding takes
+~5 minutes.</li>
+</ul>
+<p><strong>Capabilities:</strong></p>
+<ul>
+<li>DICOM C-STORE SCP on port 11112 (the PACS pushes to it)</li>
+<li>HTTPS upload endpoints on port 8080 (same contract as the cloud upload-portal)</li>
+<li>mTLS forwarding to the cloud receiver</li>
+<li>Local quarantine (SQLite) for studies that fail de-id</li>
+<li>Prometheus metrics for throughput benchmarking</li>
+<li>Operator API for retry / clear / inspect</li>
+</ul>
+<p><strong>When to use it:</strong></p>
+<ul>
+<li>Hospitals with a PACS that should auto-route everything to a project</li>
+<li>High-throughput sites (&gt;100 studies/day) where browser uploads aren't
+scalable</li>
+<li>IRB protocols that mandate on-prem de-id</li>
+<li>Air-gapped sites (the router can run fully locally with cloud forwarding
+off)</li>
+</ul>
+<p><strong>Performance:</strong> Limited by PACS push throughput. Tested at 500+ studies/day
+on a 2-vCPU VM.</p>
+<hr>
+<h2 id="5-cloud-side-dimse-pull">5. Cloud-side DIMSE pull</h2>
+<p>For sites that can't or won't install the router but <strong>can</strong> open a firewall
+port. The cloud's <code>dimse-receiver</code> service supports DICOM C-MOVE — an admin
+configures the remote PACS as a known DIMSE peer, and the cloud reaches out
+to pull specific studies on demand.</p>
+<p><strong>Setup:</strong></p>
+<ol>
+<li>Site IT opens an inbound rule on their PACS for the cloud's egress IP
+range on TCP/11112.</li>
+<li>Cloud admin adds the peer to the AEGIS DIMSE peer table:
+<code>POST /api/dimse-peers { ae_title, host, port, ... }</code>.</li>
+<li>Admin or scripted client triggers a pull:
+<code>POST /api/dimse/retrieve { peer_id, study_instance_uid, ... }</code>.</li>
+</ol>
+<p><strong>When to use it:</strong></p>
+<ul>
+<li>Sites that say "we can't run software, but we can open a firewall hole"</li>
+<li>Pulling specific studies on demand rather than every study</li>
+<li>Filling in historical data that's still on the PACS</li>
+</ul>
+<p><strong>Privacy posture caveat:</strong> This is the weakest of the six. The DICOM bytes
+traverse the link from the PACS to the cloud unprocessed; de-id only happens
+<em>after</em> arrival. If on-prem de-id is required, use the router (#4).</p>
+<hr>
+<h2 id="6-direct-api-upload">6. Direct API upload</h2>
+<p>The same <code>/api/upload/init</code> → <code>PUT /api/upload/file/...</code> →
+<code>/api/upload/complete</code> flow that the upload portal uses, but driven from a
+script with an API key.</p>
+<p><strong>Typical use:</strong></p>
+<pre><code class="hljs bash">TOKEN=$(curl -s https://aegisimaging.ai/api/auth/api-key/... | jq -r .key)
+<span class="hljs-comment"># Use @aegis/client's uploadStudy() from Node, or shell out the three calls</span>
+</code></pre>
+<p><strong>Authentication:</strong></p>
+<ul>
+<li>API key in <code>Authorization: Bearer &lt;key&gt;</code> header</li>
+<li>Keys are minted from the admin dashboard (Settings → API Keys)</li>
+<li>Scoped to a project, optionally expiring</li>
+</ul>
+<p><strong>When to use it:</strong></p>
+<ul>
+<li>CI/CD that uploads QA studies (e.g. synthetic data for regression tests)</li>
+<li>Migration scripts pulling from an existing archive</li>
+<li>MCP server / agent-driven workflows</li>
+<li>Headless lab pipelines</li>
+</ul>
+<p><strong>De-id responsibility:</strong> Whichever side runs the script is responsible. For
+unprocessed PHI-bearing studies, run the de-id pipeline locally first (the
+<code>@aegis/client</code> library exposes <code>deidentify()</code>, <code>scrubInstance()</code>, and
+<code>defaceStudy()</code> for this).</p>
+<hr>
+<h2 id="picking-the-right-tier--flowchart">Picking the right tier — flowchart</h2>
+<pre><code>                  ┌─ How many studies/day? ─┐
+                  │                          │
+              &lt;10 │                          │ 10+
+                  │                          │
+        ┌─────────▼──────────┐    ┌──────────▼─────────────┐
+        │ Need strongest      │    │ Hospital with a PACS?  │
+        │ privacy posture?    │    │                         │
+        └─────────┬──────────┘    └──────────┬─────────────┘
+              No  │  Yes                   Yes │  No
+                  │   │                        │  │
+          ┌───────▼───▼──────┐          ┌──────▼──▼────────┐
+          │ #1 light web     │          │ #4 AEGIS Router  │
+          │ (or #5 if no     │          │ (#5 if no install│
+          │  install option) │          │  possible)       │
+          └──────────────────┘          └──────────────────┘
+                      │
+                 Heavy mode?
+                  │
+            ┌─────┴──────┐
+            │            │
+       In browser    Native app
+            │            │
+      ┌─────▼─────┐ ┌────▼──────┐
+      │ #2 heavy  │ │ #3 desktop│
+      │  web      │ │  app      │
+      └───────────┘ └───────────┘
+
+Doesn't fit any of the above?
+       │
+       └── Scripted/automated → #6 direct API
+</code></pre>
+<hr>
+<h2 id="bulk-upload-cross-cutting">Bulk upload (cross-cutting)</h2>
+<p>All six entry points support bulk upload via the same <code>@aegis/client.bulkUpload()</code>
+primitive:</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>How bulk works</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>#1 Light web</td>
+<td>Drag parent folder → multi-study table → sequential upload (configurable concurrency up to 4)</td>
+</tr>
+<tr>
+<td>#2 Heavy web</td>
+<td>Same as #1 + heavy mode runs per study</td>
+</tr>
+<tr>
+<td>#3 Desktop</td>
+<td>Same as #2 + watch-folder support so dropping new folders triggers upload automatically</td>
+</tr>
+<tr>
+<td>#4 Router</td>
+<td>PACS pushes whatever it pushes — bulk is implicit</td>
+</tr>
+<tr>
+<td>#5 DIMSE pull</td>
+<td>One C-MOVE per study, scripted</td>
+</tr>
+<tr>
+<td>#6 API</td>
+<td>Loop over studies in your script; per-study upload reuses the same flow</td>
+</tr>
+</tbody></table>
+<p>The library:</p>
+<pre><code class="hljs ts"><span class="hljs-keyword">import</span> { bulkUpload } <span class="hljs-keyword">from</span> <span class="hljs-string">'@aegis/client'</span>
+
+<span class="hljs-keyword">await</span> <span class="hljs-title function_">bulkUpload</span>(files, {
+  <span class="hljs-attr">projectSlug</span>: <span class="hljs-string">'my-project'</span>,
+  <span class="hljs-attr">concurrency</span>: <span class="hljs-number">3</span>,
+  <span class="hljs-attr">pixelScrub</span>: { <span class="hljs-attr">enabled</span>: <span class="hljs-literal">true</span> },
+  <span class="hljs-attr">faceDeid</span>: { <span class="hljs-attr">enabled</span>: <span class="hljs-literal">true</span> },
+  <span class="hljs-attr">onProgress</span>: <span class="hljs-function"><span class="hljs-params">p</span> =&gt;</span> <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`<span class="hljs-subst">${p.studiesCompleted}</span> / <span class="hljs-subst">${p.totalStudies}</span>`</span>),
+  <span class="hljs-attr">onStudyDone</span>: <span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">`done: <span class="hljs-subst">${s.studyInstanceUid}</span> → <span class="hljs-subst">${s.status}</span>`</span>),
+})
+</code></pre>
+<hr>
+<h2 id="side-by-side-privacy-posture-vs-throughput">Side-by-side: privacy posture vs throughput</h2>
+<pre><code>   high │                              ★ #4 Router (high-throughput, on-prem)
+        │
+   thru-│
+   put  │                ★ #3 Desktop (native bulk + watch folder)
+        │
+        │   ★ #2 Heavy   ★ #5 Cloud DIMSE pull
+        │   ★ #1 Light
+   low  │                ★ #6 API (depends on script throughput)
+        └─────────────────────────────────────────────────────────────
+           low                                                  high
+                            on-device PHI protection
+</code></pre>
+<p>★ Lower-left = casual/quick. Upper-right = serious deployment.</p>
+<hr>
+<h2 id="configuration-matrix">Configuration matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Light (#1)</th>
+<th>Heavy (#2)</th>
+<th>Desktop (#3)</th>
+<th>Router (#4)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>salt</code> (pseudonym hash)</td>
+<td>Project-scoped</td>
+<td>Same</td>
+<td>Same</td>
+<td><code>MIDI_B_SALT</code> env var per site</td>
+</tr>
+<tr>
+<td><code>retainedTags</code> (keep through de-id)</td>
+<td>Anon profile</td>
+<td>Same</td>
+<td>Same</td>
+<td><code>MIDI_B_RETAINED_TAGS</code> env var</td>
+</tr>
+<tr>
+<td><code>dateShift</code></td>
+<td>Optional per-upload</td>
+<td>Same</td>
+<td>Same</td>
+<td>Always-on per site</td>
+</tr>
+<tr>
+<td><code>pixelScrub</code></td>
+<td>Server-side</td>
+<td>In-browser</td>
+<td>Native</td>
+<td>Server-side via phi-detection sidecar</td>
+</tr>
+<tr>
+<td><code>faceDeid</code></td>
+<td>Server-side</td>
+<td>In-browser</td>
+<td>Native</td>
+<td>Server-side via defacing sidecar</td>
+</tr>
+<tr>
+<td>mTLS auth</td>
+<td>n/a (browser session)</td>
+<td>n/a</td>
+<td>n/a</td>
+<td>Per-spoke cert from cloud</td>
+</tr>
+<tr>
+<td>API key auth</td>
+<td>n/a</td>
+<td>n/a</td>
+<td>n/a</td>
+<td>n/a (uses mTLS)</td>
+</tr>
+<tr>
+<td>Quarantine on failure</td>
+<td>Server-side review</td>
+<td>Same</td>
+<td>Same</td>
+<td>Local SQLite at the site</td>
+</tr>
+</tbody></table>
+<hr>
+<p><em>Built with <a href="https://claude.com/claude-code">Claude Code</a>. For questions, see
+the <a href="DEMO_SETUP.md">demo setup guide</a> or open an issue on GitHub.</em></p>
+
+	
+
+</body></html>
