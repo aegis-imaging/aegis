@@ -1,6 +1,7 @@
 import { parseDicomFile, serializeDataset } from '../dicom/parser'
 import { deidentify, type DeidOptions } from '../dicom/deid'
 import { scrubInstance, type PixelScrubOptions, type PixelScrubResult } from '../dicom/pixel_scrub'
+import { defaceStudy, type FaceDeidOptions, type FaceDeidResult } from '../dicom/face_deid'
 import type { ParsedDicomFile, StudySummary } from '../types'
 
 export interface UploadOptions {
@@ -26,6 +27,15 @@ export interface UploadOptions {
     /** Called after each file's scrub finishes, with the per-file result. */
     onResult?: (filename: string, index: number, result: PixelScrubResult) => void
   }
+  /**
+   * Heavy-mode: run in-browser face de-id on the whole study before upload.
+   * Default strategy is `'anterior-heuristic'` (pure-TS, no model). Set
+   * `strategy: 'tfjs-model'` once a DeepDefacer-class model is bundled.
+   */
+  faceDeid?: FaceDeidOptions & {
+    enabled?: boolean
+    onResult?: (result: FaceDeidResult) => void
+  }
 }
 
 export interface UploadResult {
@@ -39,6 +49,8 @@ export interface UploadResult {
    * pixelScrub.enabled is false/undefined. Index matches `files[]`.
    */
   pixelScrubResults?: PixelScrubResult[]
+  /** Face-deid result when face de-id was enabled. */
+  faceDeidResult?: FaceDeidResult
 }
 
 /** Retry a fetch PUT up to maxAttempts times with exponential backoff (1s/2s/4s). */
@@ -121,6 +133,15 @@ export async function uploadStudy(
     throw new Error('Upload init returned unexpected URL count')
   }
 
+  // 1b. Face de-id (study-level) runs BEFORE per-file pixel scrub because it
+  // composes a 3D volume and mutates pixel data across every slice; doing it
+  // after per-file scrub would leave the pixel-scrub findings stale.
+  let faceDeidResult: FaceDeidResult | undefined
+  if (options.faceDeid?.enabled === true) {
+    faceDeidResult = await defaceStudy(summary.studyInstanceUid, files, options.faceDeid)
+    options.faceDeid.onResult?.(faceDeidResult)
+  }
+
   // 2. De-identify, optionally pixel-scrub, serialize, and upload each file
   const pixelScrubEnabled = options.pixelScrub?.enabled === true
   const pixelScrubResults: PixelScrubResult[] = []
@@ -180,5 +201,6 @@ export async function uploadStudy(
       ? { studyInstanceUid: completeData.study.study_instance_uid }
       : undefined,
     pixelScrubResults: pixelScrubEnabled ? pixelScrubResults : undefined,
+    faceDeidResult,
   }
 }

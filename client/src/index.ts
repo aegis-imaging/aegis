@@ -62,10 +62,17 @@ export type {
   StudyScrubSummary,
 } from './dicom/pixel_scrub'
 
-// Heavy-mode de-identification: face de-id (stub for now)
+// Heavy-mode de-identification: face de-id (anterior-heuristic baseline; tfjs-model is the next iteration)
 export { defaceStudy, studyLooksLikeHeadScan } from './dicom/face_deid'
 export type {
   FaceDeidResult,
   FaceDeidStatus,
+  FaceDeidStrategy,
   FaceDeidOptions,
+  FaceDeidProgress,
 } from './dicom/face_deid'
+
+// Volume composition (used internally by face de-id; exported so power users
+// can build their own on-device analyses on top of the same primitive).
+export { composeVolume, writebackVolume, VolumeShapeMismatchError } from './dicom/volume'
+export type { Volume, VolumeSlice, ComposeOptions } from './dicom/volume'
