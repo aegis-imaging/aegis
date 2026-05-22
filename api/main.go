@@ -133,9 +133,12 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{slug}/active-anon-profile", srv.GetDefaultAnonProfile)
 
 	// Upload portal — public-facing, rate-limited.
-	mux.Handle("POST /api/upload/init", rateLimit(srv.UploadInit))
-	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(srv.UploadFile))
-	mux.Handle("POST /api/upload/complete", rateLimit(srv.UploadComplete))
+	// Wrapped with spoke-mTLS so AEGIS Routers presenting a known client cert
+	// get their SpokeIdentity attached to ctx (passive — never rejects).
+	spokeMTLS := middleware.WithSpokeMTLS(db)
+	mux.Handle("POST /api/upload/init", rateLimit(spokeMTLS(srv.UploadInit)))
+	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(spokeMTLS(srv.UploadFile)))
+	mux.Handle("POST /api/upload/complete", rateLimit(spokeMTLS(srv.UploadComplete)))
 
 	// Contact form — public, rate-limited.
 	mux.Handle("POST /api/contact", rateLimit(srv.ContactForm))
