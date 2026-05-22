@@ -612,6 +612,21 @@ func main() {
 	mux.HandleFunc("PUT /api/qc-ratings/{id}", adminOnly(srv.UpdateQCRating))
 	mux.HandleFunc("DELETE /api/qc-ratings/{id}", adminOnly(srv.DeleteQCRating))
 
+	// QC workflow — analyst triage queue, per-study assignment, discrete
+	// findings raised during review, and analyst throughput stats. Distinct
+	// from qc-ratings (numeric scores) — these are free-text observations.
+	mux.HandleFunc("GET /api/qc/triage", auth(srv.ListQCTriage))
+	mux.HandleFunc("GET /api/qc/throughput", auth(srv.GetAnalystThroughput))
+	mux.HandleFunc("POST /api/studies/{id}/qc/assign", adminOnly(srv.AssignQC))
+	mux.HandleFunc("DELETE /api/studies/{id}/qc/assign", adminOnly(srv.UnassignQC))
+	mux.HandleFunc("POST /api/studies/{id}/qc/start", adminOnly(srv.StartQC))
+	mux.HandleFunc("POST /api/studies/{id}/qc/complete", adminOnly(srv.CompleteQC))
+	mux.HandleFunc("GET /api/studies/{id}/qc-findings", auth(srv.ListQCFindings))
+	mux.HandleFunc("POST /api/studies/{id}/qc-findings", adminOnly(srv.CreateQCFinding))
+	mux.HandleFunc("POST /api/qc-findings/{findingID}/resolve", adminOnly(srv.ResolveQCFinding))
+	mux.HandleFunc("POST /api/qc-findings/{findingID}/reopen", adminOnly(srv.ReopenQCFinding))
+	mux.HandleFunc("DELETE /api/qc-findings/{findingID}", adminOnly(srv.DeleteQCFinding))
+
 	// Subject demographics — de-identified research metadata.
 	mux.HandleFunc("GET /api/subjects/{subjectID}/demographics", auth(srv.GetSubjectDemographics))
 	mux.HandleFunc("PUT /api/subjects/{subjectID}/demographics", adminOnly(srv.UpsertSubjectDemographics))

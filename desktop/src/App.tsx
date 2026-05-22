@@ -16,20 +16,26 @@
 import { useEffect, useState } from 'react'
 import { bridge, type BridgeAvailable } from './desktop-bridge'
 import { WatchFolderPanel } from './WatchFolderPanel'
+import { QCDesktopPanel } from './QCDesktopPanel'
 import { bulkUpload, type BulkProgress } from '@aegis/client'
 
 interface BootstrapState {
   apiBaseUrl: string
   projectSlug: string
   uploaderEmail: string
+  apiKey: string
 }
+
+type Tab = 'upload' | 'qc'
 
 export function App() {
   const [available, setAvailable] = useState<BridgeAvailable>({ available: false, reason: 'init' })
+  const [tab, setTab] = useState<Tab>('upload')
   const [config, setConfig] = useState<BootstrapState>({
     apiBaseUrl: 'https://api.aegisimaging.ai',
     projectSlug: 'default',
     uploaderEmail: '',
+    apiKey: '',
   })
   const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null)
 
@@ -44,11 +50,15 @@ export function App() {
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       maxWidth: 900, margin: '0 auto', padding: '32px 24px',
     }}>
-      <header style={{ marginBottom: 32 }}>
+      <header style={{ marginBottom: 24 }}>
         <h1 style={{ margin: '0 0 4px', fontSize: 28, fontWeight: 700 }}>AEGIS Desktop</h1>
         <p style={{ margin: 0, color: '#6b7280' }}>
           Anonymization &amp; Exchange Gateway for Imaging Studies — native edition
         </p>
+        <nav style={{ display: 'flex', gap: 4, marginTop: 16, borderBottom: '1px solid #e5e7eb' }}>
+          <TabButton active={tab === 'upload'} onClick={() => setTab('upload')}>Upload</TabButton>
+          <TabButton active={tab === 'qc'} onClick={() => setTab('qc')}>QC review</TabButton>
+        </nav>
         {!available.available && (
           <div style={{
             marginTop: 12, padding: '8px 12px', background: '#fef3c7',
@@ -63,22 +73,59 @@ export function App() {
 
       <ConfigPanel value={config} onChange={setConfig} />
 
-      <DropZone
-        bridgeAvailable={available.available}
-        onFilesSelected={files => runBulkUpload(files, config, setBulkProgress)}
-      />
+      {tab === 'upload' && (
+        <>
+          <DropZone
+            bridgeAvailable={available.available}
+            onFilesSelected={files => runBulkUpload(files, config, setBulkProgress)}
+          />
 
-      {available.available && (
-        <WatchFolderPanel
-          config={config}
-          onProgress={setBulkProgress}
+          {available.available && (
+            <WatchFolderPanel
+              config={config}
+              onProgress={setBulkProgress}
+            />
+          )}
+
+          {bulkProgress && (
+            <ProgressView progress={bulkProgress} />
+          )}
+        </>
+      )}
+
+      {tab === 'qc' && (
+        <QCDesktopPanel
+          apiBaseUrl={config.apiBaseUrl}
+          apiKey={config.apiKey}
         />
       )}
-
-      {bulkProgress && (
-        <ProgressView progress={bulkProgress} />
-      )}
     </div>
+  )
+}
+
+function TabButton({ active, onClick, children }: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '8px 16px',
+        border: 0,
+        background: 'transparent',
+        cursor: 'pointer',
+        fontSize: 14,
+        fontWeight: active ? 600 : 400,
+        color: active ? '#2563eb' : '#374151',
+        borderBottom: active ? '2px solid #2563eb' : '2px solid transparent',
+        marginBottom: -1,
+      }}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -112,7 +159,7 @@ function ConfigPanel({ value, onChange }: {
             style={inputStyle()}
           />
         </label>
-        <label style={{ gridColumn: '1 / span 2' }}>
+        <label>
           <div style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>
             Your email (for upload-confirmation messages)
           </div>
@@ -121,6 +168,18 @@ function ConfigPanel({ value, onChange }: {
             placeholder="you@institution.edu"
             value={value.uploaderEmail}
             onChange={e => onChange({ ...value, uploaderEmail: e.target.value })}
+            style={inputStyle()}
+          />
+        </label>
+        <label>
+          <div style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>
+            API key (required for QC review)
+          </div>
+          <input
+            type="password"
+            placeholder="aegis_…"
+            value={value.apiKey}
+            onChange={e => onChange({ ...value, apiKey: e.target.value })}
             style={inputStyle()}
           />
         </label>

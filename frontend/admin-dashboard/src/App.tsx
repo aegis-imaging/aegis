@@ -14,6 +14,7 @@ import { ViewerPanel } from './components/ViewerPanel'
 import { NiivueViewer } from './components/NiivueViewer'
 import { TCIAPanel } from './components/TCIAPanel'
 import { SpokesPanel } from './components/SpokesPanel'
+import { QCDashboardPanel } from './components/QCDashboardPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
@@ -22,7 +23,7 @@ import { useStudyEvents } from './hooks/useStudyEvents'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'spokes' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'system'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'spokes' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'qc' | 'users' | 'api_keys' | 'invite_codes' | 'system'
 
 type APIKey = {
   id: string
@@ -9890,6 +9891,7 @@ export function App() {
     { kind: 'nav', label: 'Notifications',         tab: 'notifications',      icon: '🔔' },
     { kind: 'nav', label: 'Projects',              tab: 'projects',           icon: '📁' },
     { kind: 'nav', label: 'Federation Peers',      tab: 'federation',         icon: '🌐' },
+    { kind: 'nav', label: 'QC Review',             tab: 'qc',                 icon: '🔍' },
     { kind: 'nav', label: 'TCIA Import',           tab: 'tcia_import',        icon: '🔬' },
     { kind: 'nav', label: 'System Health',         tab: 'system',             icon: '⚙️' },
     ...(isAdmin ? [
@@ -10355,6 +10357,7 @@ export function App() {
           <div className="sidenav-group">
             {sidebarOpen && <div className="sidenav-group-label">Advanced</div>}
             {navItem('Federation', 'federation', '\u{1F310}')}
+            {navItem('QC Review', 'qc', '\u{1F50D}')}
             {navItem('TCIA Import', 'tcia_import', '\u{1F4E5}')}
             {navItem('System', 'system', '\u{2699}')}
           </div>
@@ -11655,6 +11658,9 @@ export function App() {
 
       {/* Federation tab */}
       {tab === 'federation' && <FederationPanel isAdmin={isAdmin} />}
+
+      {/* QC Review tab — analyst triage queue + per-study review + throughput */}
+      {tab === 'qc' && <QCDashboardPanel isAdmin={isAdmin} />}
 
       {/* TCIA Import tab */}
       {tab === 'tcia_import' && <TCIAPanel isAdmin={isAdmin} />}

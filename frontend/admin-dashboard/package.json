@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@aegis/client": "*",
+    "@aegis/qc-components": "*",
     "@niivue/niivue": "^0.68.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
