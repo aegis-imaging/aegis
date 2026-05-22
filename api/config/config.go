@@ -136,6 +136,17 @@ type Config struct {
 	// Idempotent: has no effect once any admin user exists.
 	FirstAdminEmail string // FIRST_ADMIN_EMAIL
 	FirstAdminName  string // FIRST_ADMIN_NAME (optional; defaults to email address)
+
+	// Spoke router enrollment (POST /api/spokes/enroll).
+	// SpokeCAEnabled gates the endpoint entirely. When the cert/key paths are
+	// empty and SpokeCAEphemeral=true the API mints a self-signed CA in
+	// memory at startup — useful for dev/test, not durable across restarts.
+	SpokeCAEnabled       bool   // SPOKE_CA_ENABLED — default true
+	SpokeCACertPath      string // SPOKE_CA_CERT_PATH
+	SpokeCAKeyPath       string // SPOKE_CA_KEY_PATH
+	SpokeCAEphemeral     bool   // SPOKE_CA_EPHEMERAL — when paths unset, generate in-memory CA (default true)
+	SpokeCertValidityDays int   // SPOKE_CERT_VALIDITY_DAYS — default 365
+	SpokeEnrollmentTokenTTLHours int // SPOKE_ENROLLMENT_TOKEN_TTL_HOURS — default 72
 }
 
 func Load() *Config {
@@ -233,6 +244,13 @@ func Load() *Config {
 
 		FirstAdminEmail: os.Getenv("FIRST_ADMIN_EMAIL"),
 		FirstAdminName:  envOr("FIRST_ADMIN_NAME", os.Getenv("FIRST_ADMIN_EMAIL")),
+
+		SpokeCAEnabled:               os.Getenv("SPOKE_CA_ENABLED") != "false",
+		SpokeCACertPath:              os.Getenv("SPOKE_CA_CERT_PATH"),
+		SpokeCAKeyPath:               os.Getenv("SPOKE_CA_KEY_PATH"),
+		SpokeCAEphemeral:             os.Getenv("SPOKE_CA_EPHEMERAL") != "false",
+		SpokeCertValidityDays:        envInt("SPOKE_CERT_VALIDITY_DAYS", 365),
+		SpokeEnrollmentTokenTTLHours: envInt("SPOKE_ENROLLMENT_TOKEN_TTL_HOURS", 72),
 	}
 }
 
