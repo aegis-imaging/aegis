@@ -1,21 +1,30 @@
 """Storage backend for DICOM files: local filesystem or S3.
 
+Local writes go through `dimse_core.storage.StudyLayout` so the receiver and
+the spoke router share the same on-disk layout helpers (and pick up
+StudyLayout's atomic-write-tmp-swap behavior for free).
+
 On GCP the data directory is gcsfuse-mounted at DIMSE_DATA_DIR so local
 writes go straight to GCS — no code change needed there.
 
 On AWS (STORAGE_MODE=s3) we write directly to S3 via boto3 so the same
 S3 bucket that the Go API reads from is always the authoritative store.
+S3 has no equivalent in dimse-core yet, so that path stays receiver-local.
 """
 
 from __future__ import annotations
 
-import io
 import logging
-from pathlib import Path
+
+from dimse_core.storage import StudyLayout
 
 from app import config
 
 log = logging.getLogger(__name__)
+
+
+def _layout(study_uid: str) -> StudyLayout:
+    return StudyLayout(data_dir=config.DIMSE_DATA_DIR, study_instance_uid=study_uid)
 
 
 def write_dicom(study_uid: str, file_index: int, dicom_bytes: bytes) -> str:
@@ -32,11 +41,8 @@ def write_dicom(study_uid: str, file_index: int, dicom_bytes: bytes) -> str:
         s3.put_object(Bucket=config.S3_BUCKET, Key=key, Body=dicom_bytes)
         log.debug("Wrote file %d for study %s to s3://%s/%s", file_index, study_uid, config.S3_BUCKET, key)
     else:
-        # Local filesystem — works for dev (local path) and GCP (gcsfuse mount).
-        path = Path(config.DIMSE_DATA_DIR) / key
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(dicom_bytes)
-        log.debug("Wrote file %d for study %s to %s", file_index, study_uid, path)
+        target = _layout(study_uid).write_raw(file_index, dicom_bytes)
+        log.debug("Wrote file %d for study %s to %s", file_index, study_uid, target)
 
     return key
 
@@ -50,8 +56,5 @@ def next_file_index(study_uid: str) -> int:
         prefix = f"dicom/raw/{study_uid}/"
         resp = s3.list_objects_v2(Bucket=config.S3_BUCKET, Prefix=prefix)
         return len(resp.get("Contents", []))
-    else:
-        study_dir = Path(config.DIMSE_DATA_DIR) / "dicom" / "raw" / study_uid
-        if not study_dir.exists():
-            return 0
-        return len(list(study_dir.glob("*.dcm")))
+
+    return _layout(study_uid).next_raw_index()
