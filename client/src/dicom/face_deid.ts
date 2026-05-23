@@ -30,6 +30,8 @@ import { Volume, composeVolume, writebackVolume, VolumeShapeMismatchError } from
 import { parseDicomFile, serializeDataset } from './parser'
 import type { NaturalizedDataset } from './parser'
 import type { ParsedDicomFile } from '../types'
+import { defaceVolumeWithTFJS, TFJSUnavailableError } from './tfjs_deface'
+import type { TFBackend } from './tfjs_deface'
 
 export type FaceDeidStatus =
   | 'completed'                  // ran successfully (mask burned into datasets)
@@ -124,18 +126,21 @@ export async function defaceStudy(
     strategy === 'auto' ? 'anterior-heuristic' : strategy
 
   if (pickedStrategy === 'tfjs-model') {
-    return {
-      status: 'not_implemented',
-      studyInstanceUid,
-      strategyUsed: 'tfjs-model',
-      modifiedFiles: [],
-      voxelsModified: 0,
-      reason:
-        'TF.js model strategy selected but no model is bundled yet. Falling back ' +
-        'requires either bundling DeepDefacer weights via `modelUrl` or selecting ' +
-        "`strategy: 'anterior-heuristic'` for the pure-TS baseline.",
-      durationMs: performance.now() - started,
+    if (!options.modelUrl) {
+      return {
+        status: 'not_implemented',
+        studyInstanceUid,
+        strategyUsed: 'tfjs-model',
+        modifiedFiles: [],
+        voxelsModified: 0,
+        reason:
+          "TF.js model strategy requires `modelUrl` pointing at a hosted " +
+          "tensorflowjs_converter output (model.json). Either provide it or use " +
+          "`strategy: 'anterior-heuristic'`.",
+        durationMs: performance.now() - started,
+      }
     }
+    return runTFJSModelStrategy(studyInstanceUid, files, options, started)
   }
 
   // 3. Run anterior-heuristic.
@@ -269,6 +274,58 @@ function datasetWasModified(
   // Anterior-heuristic touches every slice in the active z range. The UI shows
   // counts but doesn't gate on this; "yes if there were any slices" is fine.
   return slices.length > 0
+}
+
+// ── TF.js model strategy ──────────────────────────────────────────────────
+
+async function runTFJSModelStrategy(
+  studyInstanceUid: string,
+  files: ParsedDicomFile[],
+  options: FaceDeidOptions,
+  started: number,
+): Promise<FaceDeidResult> {
+  const datasets = files.map(f => parseDicomFile(f.arrayBuffer, f.filename))
+  try {
+    const volume = await composeVolume(datasets.map(d => d.dataset))
+    const tfBackendPref = (options.backendPreference ?? []) as TFBackend[]
+    const result = await defaceVolumeWithTFJS(volume, {
+      modelUrl: options.modelUrl!,
+      backendPreference: tfBackendPref.length > 0 ? tfBackendPref : undefined,
+    })
+    for (let i = 0; i < datasets.length; i++) {
+      const next = serializeDataset(datasets[i].rawMeta, datasets[i].dataset)
+      ;(files[i] as { arrayBuffer: ArrayBuffer }).arrayBuffer = sliceToArrayBuffer(next)
+    }
+    return {
+      status: 'completed',
+      studyInstanceUid,
+      strategyUsed: 'tfjs-model',
+      modifiedFiles: files.map(f => f.filename),
+      voxelsModified: result.voxelsModified,
+      reason: `TF.js model (${result.backendUsed}); inference ${Math.round(result.modelInferenceMs)} ms, total ${Math.round(result.totalMs)} ms`,
+      durationMs: performance.now() - started,
+    }
+  } catch (e) {
+    if (e instanceof VolumeShapeMismatchError) {
+      return {
+        status: 'shape_mismatch', studyInstanceUid, strategyUsed: 'tfjs-model',
+        modifiedFiles: [], voxelsModified: 0,
+        reason: e.message, durationMs: performance.now() - started,
+      }
+    }
+    if (e instanceof TFJSUnavailableError) {
+      return {
+        status: 'not_implemented', studyInstanceUid, strategyUsed: 'tfjs-model',
+        modifiedFiles: [], voxelsModified: 0,
+        reason: e.message, durationMs: performance.now() - started,
+      }
+    }
+    return {
+      status: 'failed', studyInstanceUid, strategyUsed: 'tfjs-model',
+      modifiedFiles: [], voxelsModified: 0,
+      reason: (e as Error).message, durationMs: performance.now() - started,
+    }
+  }
 }
 
 // Re-export NaturalizedDataset reference type for downstream consumers that

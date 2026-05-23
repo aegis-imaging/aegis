@@ -89,3 +89,8 @@ export type {
 // can build their own on-device analyses on top of the same primitive).
 export { composeVolume, writebackVolume, VolumeShapeMismatchError } from './dicom/volume'
 export type { Volume, VolumeSlice, ComposeOptions } from './dicom/volume'
+
+// TF.js face de-id (separate so hosts can probe availability independently of
+// invoking the full study pipeline).
+export { defaceVolumeWithTFJS, TFJSUnavailableError } from './dicom/tfjs_deface'
+export type { TFBackend, TFJSDefaceOptions, TFJSDefaceResult, TFJSPhase } from './dicom/tfjs_deface'
