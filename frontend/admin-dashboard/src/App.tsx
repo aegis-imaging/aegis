@@ -13,6 +13,7 @@ import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
 import { NiivueViewer } from './components/NiivueViewer'
 import { TCIAPanel } from './components/TCIAPanel'
+import { SpokesPanel } from './components/SpokesPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
@@ -21,7 +22,7 @@ import { useStudyEvents } from './hooks/useStudyEvents'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'system'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'spokes' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'system'
 
 type APIKey = {
   id: string
@@ -9883,6 +9884,7 @@ export function App() {
     { kind: 'nav', label: 'Routing Rules',         tab: 'routing',            icon: '🔀' },
     { kind: 'nav', label: 'DIMSE Operations',      tab: 'dimse_ops',          icon: '📡' },
     { kind: 'nav', label: 'Institutions',          tab: 'institutions',       icon: '🏥' },
+    { kind: 'nav', label: 'Spoke Routers',         tab: 'spokes',             icon: '📶' },
     { kind: 'nav', label: 'Anonymization Profiles',tab: 'profiles',           icon: '🔒' },
     { kind: 'nav', label: 'Protocol Templates',    tab: 'protocol_templates', icon: '📐' },
     { kind: 'nav', label: 'Notifications',         tab: 'notifications',      icon: '🔔' },
@@ -10344,6 +10346,7 @@ export function App() {
             {sidebarOpen && <div className="sidenav-group-label">Config</div>}
             {navItem('Projects', 'projects', '\u{1F4C1}')}
             {navItem('Institutions', 'institutions', '\u{1F3E5}')}
+            {navItem('Spokes', 'spokes', '\u{1F4F6}')}
             {navItem('Profiles', 'profiles', '\u{1F6E1}')}
             {navItem('Protocol', 'protocol_templates', '\u{1F4CF}')}
             {navItem('Notifications', 'notifications', '\u{1F514}')}
@@ -11634,6 +11637,9 @@ export function App() {
 
       {/* Institutions tab */}
       {tab === 'institutions' && <InstitutionsPanel isAdmin={isAdmin} />}
+
+      {/* Spoke Routers tab — enrolled on-prem AEGIS Routers */}
+      {tab === 'spokes' && <SpokesPanel isAdmin={isAdmin} />}
 
       {/* Profiles tab */}
       {tab === 'profiles' && <ProfilesPanel isAdmin={isAdmin} />}

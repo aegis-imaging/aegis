@@ -20,6 +20,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/retention"
 	"github.com/aegis-imaging/aegis/api/sla"
+	"github.com/aegis-imaging/aegis/api/spoke_ca"
 	"github.com/aegis-imaging/aegis/api/storage"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -102,6 +103,28 @@ func main() {
 	}
 
 	srv := handler.NewServer(db, store, cfg)
+
+	// Spoke router CSR signer (issues mTLS client certs to enrolled spokes).
+	// Configured CA wins; otherwise mint an ephemeral CA in memory for dev.
+	// SPOKE_CA_ENABLED=false disables the endpoint entirely.
+	if cfg.SpokeCAEnabled {
+		signer, err := spoke_ca.Load(cfg.SpokeCACertPath, cfg.SpokeCAKeyPath, cfg.SpokeCertValidityDays)
+		if err != nil {
+			log.Fatalf("load spoke CA: %v", err)
+		}
+		if signer == nil && cfg.SpokeCAEphemeral {
+			signer, err = spoke_ca.NewEphemeral(cfg.SpokeCertValidityDays)
+			if err != nil {
+				log.Fatalf("ephemeral spoke CA: %v", err)
+			}
+			log.Printf("spoke CA: using EPHEMERAL in-memory CA (set SPOKE_CA_CERT_PATH+SPOKE_CA_KEY_PATH for production)")
+		}
+		if signer != nil {
+			log.Printf("spoke enrollment enabled (CA source=%s, cert validity=%d days)", signer.Source(), cfg.SpokeCertValidityDays)
+			srv.SetSpokeCA(signer)
+		}
+	}
+
 	auth := middleware.RequireAuth(db, cfg)
 	adminOnly := middleware.RequireRole("admin", db, cfg)
 	optionalAuth := middleware.OptionalAuth(db, cfg)
@@ -131,6 +154,14 @@ func main() {
 	// still get the non-restricted project list while researchers get their scoped list.
 	mux.HandleFunc("GET /api/projects", optionalAuth(srv.ListProjects))
 	mux.HandleFunc("GET /api/projects/{slug}/active-anon-profile", srv.GetDefaultAnonProfile)
+
+	// Spoke router enrollment — PUBLIC: the enrollment token IS the credential.
+	// Rate-limited to slow down brute-force token guessing.
+	mux.Handle("POST /api/spokes/enroll", rateLimit(srv.EnrollSpoke))
+
+	// Spokes overview — list institutions enrolled or with active enrollment
+	// tokens, with activity stats. Powers the admin-dashboard Spokes tab.
+	mux.HandleFunc("GET /api/spokes", auth(srv.ListSpokes))
 
 	// Upload portal — public-facing, rate-limited.
 	// Wrapped with spoke-mTLS so AEGIS Routers presenting a known client cert
@@ -356,6 +387,12 @@ func main() {
 	// AEGIS Router at that spoke can authenticate without an API key.
 	mux.HandleFunc("PUT /api/institutions/{id}/client-cert", adminOnly(srv.SetInstitutionClientCert))
 	mux.HandleFunc("DELETE /api/institutions/{id}/client-cert", adminOnly(srv.RevokeInstitutionClientCert))
+
+	// Spoke enrollment tokens — short-lived one-time secrets that a spoke
+	// router exchanges for a signed client cert via POST /api/spokes/enroll.
+	mux.HandleFunc("GET /api/institutions/{id}/enrollment-tokens", auth(srv.ListInstitutionEnrollmentTokens))
+	mux.HandleFunc("POST /api/institutions/{id}/enrollment-tokens", adminOnly(srv.CreateInstitutionEnrollmentToken))
+	mux.HandleFunc("DELETE /api/institutions/{id}/enrollment-tokens/{tokenID}", adminOnly(srv.RevokeInstitutionEnrollmentToken))
 
 	// Destinations — external DICOM endpoints studies can be forwarded to.
 	mux.HandleFunc("GET /api/destinations", auth(srv.ListDestinations))
