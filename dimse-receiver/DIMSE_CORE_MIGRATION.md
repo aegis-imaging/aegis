@@ -13,7 +13,7 @@ behavior takes care.
 | `app/storage_backend.py` | ✅ migrated | Local-filesystem path now goes through `dimse_core.storage.StudyLayout`. S3 path stays receiver-local (no S3 backend in dimse-core yet). Public API (`write_dicom`, `next_file_index`) unchanged. |
 | `app/scp.py` | not migrated | ~200 lines. Same shape as `dimse_core.scp` but wired to the receiver's local `submit_ingest` / `StudyAccumulator`. Migration is a structural refactor — possible but not urgent. |
 | `app/ingest.py` | deferred | **854 lines, deeply test-coupled.** See [Why ingest.py is deferred](#why-ingestpy-is-deferred) below. |
-| `app/retry_alerts.py` | not migrated | 152 lines. Maps to `dimse_core.alerts.AlertEngine` except the receiver's alert messages are built with dynamic strings that depend on both snapshot fields and config-derived thresholds — `AlertEngine.message_fmt` is .format()-on-snapshot only. Needs a small extension on `AlertEngine` or per-condition message_fn. |
+| `app/retry_alerts.py` | ✅ migrated | Thin shim over `dimse_core.alerts.AlertEngine` using the new `add_condition_fn` path for dynamic threshold messages. Public API (`evaluate_retry_alerts`, `get_alerts`, `reset_alerts`) and the 4-key webhook snapshot projection unchanged. |
 | `app/sender.py` | stays receiver-only | 341 lines of outbound C-STORE / C-FIND / C-MOVE. Cloud-specific — doesn't belong in dimse-core. |
 
 ## Why migrate at all
@@ -33,19 +33,15 @@ Once each module is on `dimse-core`, the lock-step is automatic.
 - `app/storage_backend.py` → local path now goes through
   `dimse_core.storage.StudyLayout` (S3 path unchanged). Gains atomic
   `.tmp`-swap writes from the library for free.
+- `app/retry_alerts.py` → shim around `dimse_core.alerts.AlertEngine`.
+  Required a small dimse-core extension (`add_condition_fn`,
+  `clear_conditions`) so per-condition `message_fn` callbacks can
+  include values that aren't in the snapshot — the receiver's alert
+  messages reference the configured threshold which lives in env vars.
 - `dimse-receiver/Dockerfile` installs `dimse-core` via editable pip install
-- Tests in `tests/test_operator_audit.py`, `tests/test_main.py`, and
-  `tests/test_scp.py` (including the S3-mode test) still pass unchanged
+- Existing tests (`tests/test_operator_audit.py`, `tests/test_main.py`,
+  `tests/test_scp.py`, `tests/test_retry_alerts.py`) still pass unchanged
   because the shims preserve the public API exactly.
-
-### Subsequent PR (medium risk)
-
-- `app/retry_alerts.py` → either
-  - (a) extend `dimse_core.alerts.AlertEngine` with a per-condition
-    `message_fn(snapshot, now) -> str` callback so dynamic threshold-in-message
-    formatting is supported, then shim, or
-  - (b) keep `retry_alerts.py` as-is but document that the dimse-core path is
-    available for new alert engines.
 
 ### Largest PR (highest risk) — `app/scp.py`
 
