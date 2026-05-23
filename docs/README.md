@@ -33,3 +33,6 @@ When given a research task, save your findings to `docs/research/<topic>.md` bef
 | Directory | Contents |
 |-----------|----------|
 | `research/` | Peer-reviewed papers, policy documents, market reports, competitive analysis |
+| `deployment/` | Deployment guides — currently `on-premises.md` for airgapped / data-residency installs |
+| `runbooks/` | Operational runbooks — alert response, incident response, secret rotation, cross-cloud routing |
+| `planning/` | Planning docs and sprint backlogs |
