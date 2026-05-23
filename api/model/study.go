@@ -162,6 +162,7 @@ func GetStudyByUID(ctx context.Context, db *sql.DB, uid string) (*Study, error) 
 // StudyFilters holds optional filter values for ListStudies / CountStudies.
 type StudyFilters struct {
 	ProjectID     string
+	TenantID      string    // when non-empty, restrict to studies whose project belongs to this tenant (via JOIN through projects.tenant_id)
 	Status        string    // received|defacing|clean|defaced|approved|rejected
 	Modality      string    // MRI|CT|PET|… (case-insensitive exact match)
 	BodyPart      string    // HEAD|CHEST|… (case-insensitive exact match)
@@ -261,6 +262,15 @@ func studyWhere(f StudyFilters) (string, []any) {
 	if f.AssignedTo != "" {
 		clauses = append(clauses, fmt.Sprintf(`assigned_to = $%d`, n))
 		args = append(args, f.AssignedTo)
+		n++
+	}
+	if f.TenantID != "" {
+		// Studies inherit their tenant from the parent project; we filter via
+		// a sub-select rather than a JOIN so the rest of the query (sort, count,
+		// pagination) keeps using the simple `FROM studies` form.
+		clauses = append(clauses, fmt.Sprintf(
+			`project_id IN (SELECT id FROM projects WHERE tenant_id = $%d)`, n))
+		args = append(args, f.TenantID)
 		n++
 	}
 	_ = n
