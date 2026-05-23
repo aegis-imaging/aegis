@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/routing"
 	"github.com/aegis-imaging/aegis/api/webhook"
@@ -78,7 +79,11 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var institutionID *string
-	if strings.TrimSpace(req.InstitutionID) != "" || strings.TrimSpace(req.InstitutionSlug) != "" || strings.TrimSpace(req.InstitutionAETitle) != "" {
+	// Spoke-mTLS attribution wins over body selectors and IP allowlist — the
+	// cert is the strongest identity signal we have.
+	if spoke := middleware.SpokeFromContext(r.Context()); spoke != nil && spoke.Institution != nil {
+		institutionID = &spoke.Institution.ID
+	} else if strings.TrimSpace(req.InstitutionID) != "" || strings.TrimSpace(req.InstitutionSlug) != "" || strings.TrimSpace(req.InstitutionAETitle) != "" {
 		inst, err := s.resolveIngestInstitution(r.Context(), project.ID, req.InstitutionID, req.InstitutionSlug, req.InstitutionAETitle)
 		if err != nil {
 			s.writeError(w, http.StatusBadRequest, err.Error())
@@ -233,8 +238,22 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default source for web uploads is "external"; spoke-mTLS overrides it
+	// so studies are attributed to spoke-sourced traffic in routing/analytics.
+	source := "external"
+	if spoke := middleware.SpokeFromContext(r.Context()); spoke != nil && spoke.Institution != nil {
+		source = "spoke"
+		// Spoke wins over a stale institution selector on the session row too.
+		instID := spoke.Institution.ID
+		if session.InstitutionID == nil || *session.InstitutionID != instID {
+			if err := model.UpdateUploadSessionInstitution(r.Context(), s.db, session.ID, &instID); err == nil {
+				session.InstitutionID = &instID
+			}
+		}
+	}
+
 	// "Ingest" — move files from staging to DICOM store directory
-	study, err := s.ingestFiles(r.Context(), session, files)
+	study, err := s.ingestFiles(r.Context(), session, files, source)
 	if err != nil {
 		model.UpdateUploadSessionFailed(r.Context(), s.db, session.ID, err.Error())
 		s.writeError(w, http.StatusInternalServerError, "ingest failed: "+err.Error())
@@ -274,7 +293,7 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, files []string) (*model.Study, error) {
+func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, files []string, source string) (*model.Study, error) {
 	// Generate a study UID from session ID for local dev
 	// In production, this would come from parsing DICOM headers
 	studyUID := fmt.Sprintf("2.25.%s", strings.ReplaceAll(session.ID, "-", ""))
@@ -313,7 +332,7 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 		Status:           "received",
 		DefacingRequired: defacingRequired,
 		DicomStore:       "raw",
-		Source:           "external",
+		Source:           source,
 	}
 	if err := model.CreateStudy(ctx, s.db, study); err != nil {
 		return nil, fmt.Errorf("create study: %w", err)
