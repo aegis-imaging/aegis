@@ -16,6 +16,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install dimse-core (shared SCP / retry / audit / alerts / storage primitives).
+# Mounted into the build context from the monorepo root so the receiver and
+# the router run the same library version. Built from `aegis/` root:
+#   docker build -f dimse-receiver/Dockerfile -t aegis-dimse-receiver .
+COPY dimse-core /app/dimse-core
+RUN pip install -e /app/dimse-core
+
 COPY app/ app/
 
 ENV DIMSE_AE_TITLE=AEGIS
