@@ -234,3 +234,95 @@ func TestListAllDeliveries_Empty(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
 	assert.Equal(t, float64(0), resp["total"])
 }
+
+func TestCreateWebhook_DefaultsToAegisFormat(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	body, _ := json.Marshal(map[string]any{
+		"url":    "https://example.com/hook",
+		"events": []string{"study.approved"},
+	})
+	req := httptest.NewRequest("POST", "/api/webhook-subscriptions", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.CreateWebhook(rr, req)
+	require.Equal(t, http.StatusCreated, rr.Code)
+
+	var sub model.WebhookSubscription
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&sub))
+	assert.Equal(t, model.PayloadFormatAegis, sub.PayloadFormat,
+		"subscriptions without payload_format must default to 'aegis' (back-compat)")
+}
+
+func TestCreateWebhook_AcceptsFHIRFormat(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	body, _ := json.Marshal(map[string]any{
+		"url":            "https://emr.example.com/fhir-receiver",
+		"events":         []string{"study.approved"},
+		"payload_format": "fhir",
+	})
+	req := httptest.NewRequest("POST", "/api/webhook-subscriptions", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.CreateWebhook(rr, req)
+	require.Equal(t, http.StatusCreated, rr.Code)
+
+	var sub model.WebhookSubscription
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&sub))
+	assert.Equal(t, model.PayloadFormatFHIR, sub.PayloadFormat)
+}
+
+func TestCreateWebhook_RejectsUnknownPayloadFormat(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	body, _ := json.Marshal(map[string]any{
+		"url":            "https://example.com/hook",
+		"events":         []string{"study.approved"},
+		"payload_format": "hl7v2", // not supported
+	})
+	req := httptest.NewRequest("POST", "/api/webhook-subscriptions", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.CreateWebhook(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestUpdateWebhook_SwitchesPayloadFormat(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	// Create with default (aegis).
+	createBody, _ := json.Marshal(map[string]any{
+		"url":    "https://example.com/hook",
+		"events": []string{"study.approved"},
+	})
+	createReq := httptest.NewRequest("POST", "/api/webhook-subscriptions", bytes.NewBuffer(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRR := httptest.NewRecorder()
+	srv.CreateWebhook(createRR, createReq)
+	require.Equal(t, http.StatusCreated, createRR.Code)
+	var created model.WebhookSubscription
+	require.NoError(t, json.NewDecoder(createRR.Body).Decode(&created))
+	require.Equal(t, model.PayloadFormatAegis, created.PayloadFormat)
+
+	// Update — switch to FHIR.
+	updateBody, _ := json.Marshal(map[string]any{
+		"url":            created.URL,
+		"events":         created.Events,
+		"payload_format": "fhir",
+	})
+	updateReq := httptest.NewRequest("PUT", "/api/webhook-subscriptions/"+created.ID, bytes.NewBuffer(updateBody))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.SetPathValue("id", created.ID)
+	updateRR := httptest.NewRecorder()
+	srv.UpdateWebhook(updateRR, updateReq)
+	require.Equal(t, http.StatusOK, updateRR.Code)
+
+	var updated model.WebhookSubscription
+	require.NoError(t, json.NewDecoder(updateRR.Body).Decode(&updated))
+	assert.Equal(t, model.PayloadFormatFHIR, updated.PayloadFormat)
+}
