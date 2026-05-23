@@ -37,6 +37,11 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/stats/institution-attribution` | `GetInstitutionAttributionStats` | `project_member_any` |
 | `auth` | `GET /api/storage/stats` | `GetStorageStats` | `project_member_any` |
 | `auth` | `GET /api/system/health-summary` | `GetSystemHealthSummary` | `project_member_any` |
+| `adminOnly` | `GET /api/tenants` | `ListTenants` | `platform_admin` |
+| `adminOnly` | `POST /api/tenants` | `CreateTenant` | `platform_admin` |
+| `adminOnly` | `GET /api/tenants/{id}` | `GetTenant` | `platform_admin` |
+| `adminOnly` | `PUT /api/tenants/{id}` | `UpdateTenant` | `platform_admin` |
+| `adminOnly` | `DELETE /api/tenants/{id}` | `DeleteTenant` | `platform_admin` |
 | `adminOnly` | `POST /api/projects` | `CreateProject` | `platform_admin` |
 | `auth` | `GET /api/projects/{id}` | `GetProject` | `project_member_any` |
 | `adminOnly` | `PUT /api/projects/{id}` | `UpdateProject` | `platform_admin` |

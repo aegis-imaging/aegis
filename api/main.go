@@ -223,6 +223,14 @@ func main() {
 	// System health summary — aggregated operational status panel.
 	mux.HandleFunc("GET /api/system/health-summary", auth(srv.GetSystemHealthSummary))
 
+	// Tenants — multi-tenant SaaS scaffolding (chunk 1). Platform admin only.
+	// Resolution + enforcement on downstream queries arrives in subsequent PRs.
+	mux.HandleFunc("GET /api/tenants", adminOnly(srv.ListTenants))
+	mux.HandleFunc("POST /api/tenants", adminOnly(srv.CreateTenant))
+	mux.HandleFunc("GET /api/tenants/{id}", adminOnly(srv.GetTenant))
+	mux.HandleFunc("PUT /api/tenants/{id}", adminOnly(srv.UpdateTenant))
+	mux.HandleFunc("DELETE /api/tenants/{id}", adminOnly(srv.DeleteTenant))
+
 	// Projects — create/update require admin; list is public (upload portal).
 	mux.HandleFunc("POST /api/projects", adminOnly(srv.CreateProject))
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
