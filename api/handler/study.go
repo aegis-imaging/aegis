@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -70,6 +71,13 @@ func (s *Server) ListStudies(w http.ResponseWriter, r *http.Request) {
 	}
 	if access != nil && access.IsSiteScoped() {
 		f.InstitutionID = *access.InstitutionID
+	}
+	// Tenant scoping: when the request resolved a tenant, restrict the
+	// query to studies whose parent project belongs to that tenant.
+	// Legacy requests (no tenant context) skip this clause and see
+	// everything they would have seen pre-multitenant.
+	if t := middleware.TenantFromContext(r.Context()); t != nil {
+		f.TenantID = t.ID
 	}
 
 	total, err := model.CountStudies(r.Context(), s.db, f)
