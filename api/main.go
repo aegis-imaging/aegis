@@ -133,9 +133,12 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{slug}/active-anon-profile", srv.GetDefaultAnonProfile)
 
 	// Upload portal — public-facing, rate-limited.
-	mux.Handle("POST /api/upload/init", rateLimit(srv.UploadInit))
-	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(srv.UploadFile))
-	mux.Handle("POST /api/upload/complete", rateLimit(srv.UploadComplete))
+	// Wrapped with spoke-mTLS so AEGIS Routers presenting a known client cert
+	// get their SpokeIdentity attached to ctx (passive — never rejects).
+	spokeMTLS := middleware.WithSpokeMTLS(db)
+	mux.Handle("POST /api/upload/init", rateLimit(spokeMTLS(srv.UploadInit)))
+	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(spokeMTLS(srv.UploadFile)))
+	mux.Handle("POST /api/upload/complete", rateLimit(spokeMTLS(srv.UploadComplete)))
 
 	// Contact form — public, rate-limited.
 	mux.Handle("POST /api/contact", rateLimit(srv.ContactForm))
@@ -348,6 +351,11 @@ func main() {
 	mux.HandleFunc("GET /api/institutions/{id}/contacts", auth(srv.ListInstitutionContacts))
 	mux.HandleFunc("POST /api/institutions/{id}/contacts", adminOnly(srv.CreateInstitutionContact))
 	mux.HandleFunc("DELETE /api/institutions/{id}/contacts/{contactID}", adminOnly(srv.DeleteInstitutionContact))
+
+	// Spoke mTLS — enroll/revoke a client cert for a sender institution so an
+	// AEGIS Router at that spoke can authenticate without an API key.
+	mux.HandleFunc("PUT /api/institutions/{id}/client-cert", adminOnly(srv.SetInstitutionClientCert))
+	mux.HandleFunc("DELETE /api/institutions/{id}/client-cert", adminOnly(srv.RevokeInstitutionClientCert))
 
 	// Destinations — external DICOM endpoints studies can be forwarded to.
 	mux.HandleFunc("GET /api/destinations", auth(srv.ListDestinations))

@@ -1,0 +1,129 @@
+# AEGIS Router — spoke-site deployment.
+#
+# Quick start at a spoke site:
+#
+#   1. cp .env.example .env  # then edit
+#   2. mkdir -p ./certs && drop client.crt / client.key / ca.crt (from `aegis-router-init`)
+#   3. docker compose up -d                              # router only
+#      docker compose --profile full up -d               # router + every sidecar
+#      docker compose --profile defacing --profile phi up -d   # cherry-pick
+#
+# Profiles map 1:1 to the cloud-side sidecars; each is optional.
+
+services:
+  router:
+    build:
+      context: ..
+      dockerfile: router/Dockerfile
+    image: aegis-router:local
+    container_name: aegis-router
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DEFACING_SERVICE_URL: ${DEFACING_SERVICE_URL:-}
+      PHI_DETECTION_SERVICE_URL: ${PHI_DETECTION_SERVICE_URL:-}
+      QC_SERVICE_URL: ${QC_SERVICE_URL:-}
+      CLASSIFICATION_SERVICE_URL: ${CLASSIFICATION_SERVICE_URL:-}
+      PROTOCOL_SERVICE_URL: ${PROTOCOL_SERVICE_URL:-}
+      BIDS_SERVICE_URL: ${BIDS_SERVICE_URL:-}
+      ANALYTICS_SERVICE_URL: ${ANALYTICS_SERVICE_URL:-}
+      SCT_SERVICE_URL: ${SCT_SERVICE_URL:-}
+      SYNTH_SERVICE_URL: ${SYNTH_SERVICE_URL:-}
+    ports:
+      - "${HTTP_PORT:-8080}:8080"          # web UI / operator API
+      - "${DIMSE_PORT:-11112}:11112"        # DICOM SCP (C-STORE from PACS)
+    volumes:
+      - router-data:/var/lib/aegis-router
+      - ./certs:/certs:ro                  # client.crt / client.key / ca.crt
+
+  # ── Optional sidecars ────────────────────────────────────────────────────
+  # Each is gated by a docker-compose profile so a small spoke can run with
+  # nothing more than the router itself.
+
+  defacing:
+    profiles: ["defacing", "full"]
+    build:
+      context: ../defacing
+      dockerfile: Dockerfile
+    image: aegis-defacing:local
+    container_name: aegis-defacing
+    restart: unless-stopped
+    expose: ["8080"]
+    environment:
+      - PORT=8080
+
+  phi-detection:
+    profiles: ["phi", "full"]
+    build:
+      context: ../phi-detection
+      dockerfile: Dockerfile
+    image: aegis-phi-detection:local
+    container_name: aegis-phi-detection
+    restart: unless-stopped
+    expose: ["8080"]
+    environment:
+      - PORT=8080
+      - PHI_TOOL=tesseract   # offline-only; cloud OCR backends not appropriate at the spoke
+
+  qc:
+    profiles: ["qc", "full"]
+    build:
+      context: ../qc-service
+      dockerfile: Dockerfile
+    image: aegis-qc:local
+    container_name: aegis-qc
+    restart: unless-stopped
+    expose: ["8080"]
+
+  classification:
+    profiles: ["classification", "full"]
+    build:
+      context: ../classification-service
+      dockerfile: Dockerfile
+    image: aegis-classification:local
+    container_name: aegis-classification
+    restart: unless-stopped
+    expose: ["8080"]
+
+  protocol:
+    profiles: ["protocol", "full"]
+    build:
+      context: ../protocol-service
+      dockerfile: Dockerfile
+    image: aegis-protocol:local
+    container_name: aegis-protocol
+    restart: unless-stopped
+    expose: ["8080"]
+
+  bids:
+    profiles: ["bids", "full"]
+    build:
+      context: ../bids-service
+      dockerfile: Dockerfile
+    image: aegis-bids:local
+    container_name: aegis-bids
+    restart: unless-stopped
+    expose: ["8080"]
+
+  analytics:
+    profiles: ["analytics", "full"]
+    build:
+      context: ../analytics-service
+      dockerfile: Dockerfile
+    image: aegis-analytics:local
+    container_name: aegis-analytics
+    restart: unless-stopped
+    expose: ["8080"]
+
+  sct:
+    profiles: ["sct", "full"]
+    build:
+      context: ../sct-service
+      dockerfile: Dockerfile
+    image: aegis-sct:local
+    container_name: aegis-sct
+    restart: unless-stopped
+    expose: ["8080"]
+
+volumes:
+  router-data:

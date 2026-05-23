@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""Bootstrap a new spoke router from an enrollment token.
+
+This is intentionally a thin shim — it shells out for `openssl` and `curl`
+(both essentially universal on a Linux server) rather than depending on
+Python crypto libraries, so an IT admin can read and audit it line-by-line.
+
+Flow:
+  1. Decode the enrollment token to learn the cloud URL + bootstrap endpoint.
+  2. Generate a private key + CSR locally.
+  3. POST the CSR + token to the cloud's `/api/spokes/enroll`.
+  4. Save the returned signed cert + CA bundle.
+  5. Write a starter `.env` with the cloud URL and a fresh per-site MIDI-B salt.
+
+The cloud-side `/api/spokes/enroll` handler is part of issue #N (cert mint
+service) — once that's wired up, this script becomes the one-touch installer.
+Until then, the script also supports `--manual-certs` mode where an admin
+hands over cert files out-of-band.
+"""
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import secrets
+import subprocess
+import sys
+from pathlib import Path
+
+DEFAULT_CERT_DIR = Path("certs")
+DEFAULT_ENV_PATH = Path(".env")
+DEFAULT_KEY_BITS = 2048
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Bootstrap an AEGIS spoke router.")
+    parser.add_argument("--site-token", help="Enrollment token from cloud admin-dashboard.")
+    parser.add_argument("--site-name", default="", help="Human-readable site name (e.g. 'Example General Hospital').")
+    parser.add_argument("--site-id", default="", help="Override the generated site ID.")
+    parser.add_argument("--manual-certs", action="store_true",
+                        help="Skip the cloud cert exchange; assume client.crt/client.key/ca.crt are already in certs/.")
+    parser.add_argument("--cert-dir", default=str(DEFAULT_CERT_DIR), help="Where to write cert material.")
+    parser.add_argument("--env-path", default=str(DEFAULT_ENV_PATH), help="Where to write the .env file.")
+    parser.add_argument("--force", action="store_true", help="Overwrite an existing .env if present.")
+    args = parser.parse_args()
+
+    cert_dir = Path(args.cert_dir)
+    env_path = Path(args.env_path)
+
+    if env_path.exists() and not args.force:
+        print(f"refusing to overwrite existing {env_path}; pass --force to replace it.", file=sys.stderr)
+        return 2
+
+    cert_dir.mkdir(parents=True, exist_ok=True)
+    cert_dir.chmod(0o700)
+
+    if args.manual_certs:
+        for required in ("client.crt", "client.key", "ca.crt"):
+            if not (cert_dir / required).exists():
+                print(f"--manual-certs set but {cert_dir / required} is missing.", file=sys.stderr)
+                return 2
+        cloud_url = ""  # admin will fill this into .env
+        site_id = args.site_id or _random_site_id()
+    else:
+        if not args.site_token:
+            print("--site-token is required (or pass --manual-certs).", file=sys.stderr)
+            return 2
+        token = _decode_token(args.site_token)
+        cloud_url = token["cloud_url"]
+        site_id = args.site_id or token.get("site_id") or _random_site_id()
+        _bootstrap_certs(cloud_url, args.site_token, site_id, cert_dir)
+
+    salt = secrets.token_urlsafe(32)
+    env_path.write_text(_render_env(
+        site_id=site_id,
+        site_name=args.site_name or site_id,
+        cloud_url=cloud_url,
+        midi_b_salt=salt,
+        cert_dir=cert_dir,
+    ))
+    env_path.chmod(0o600)
+
+    print()
+    print("✔ AEGIS Router bootstrap complete.")
+    print(f"  site_id:    {site_id}")
+    print(f"  cert dir:   {cert_dir.resolve()}")
+    print(f"  env file:   {env_path.resolve()}")
+    print()
+    print("Next steps:")
+    print("  1. Review .env (especially MIDI_B_SALT and any sidecar URLs you want).")
+    print("  2. `docker compose up -d` (or add `--profile defacing --profile phi`, etc.)")
+    print("  3. Point your PACS at this host on port 11112.")
+    return 0
+
+
+def _decode_token(token: str) -> dict:
+    """Tokens are JWT-ish — base64url-encoded JSON, but unsigned (the cloud
+    validates the embedded one-time secret on POST). Forward-compatible: if
+    the format becomes a real JWT we just need to strip signature parts."""
+    raw = token.split(".")[0] if "." in token else token
+    padding = "=" * (-len(raw) % 4)
+    try:
+        return json.loads(base64.urlsafe_b64decode(raw + padding))
+    except Exception as e:
+        print(f"could not decode --site-token: {e}", file=sys.stderr)
+        sys.exit(2)
+
+
+def _bootstrap_certs(cloud_url: str, token: str, site_id: str, cert_dir: Path) -> None:
+    key_path = cert_dir / "client.key"
+    csr_path = cert_dir / "client.csr"
+    cert_path = cert_dir / "client.crt"
+    ca_path = cert_dir / "ca.crt"
+
+    # Generate private key (RSA 2048; could move to ECDSA P-256 if cloud supports it).
+    _run(["openssl", "genrsa", "-out", str(key_path), str(DEFAULT_KEY_BITS)])
+    key_path.chmod(0o600)
+
+    # CSR with CN = site_id; SAN extensions are optional for client auth.
+    _run([
+        "openssl", "req", "-new", "-key", str(key_path),
+        "-out", str(csr_path),
+        "-subj", f"/CN={site_id}/O=AEGIS Spoke",
+    ])
+
+    # Exchange CSR for signed cert.
+    csr_pem = csr_path.read_text()
+    payload = {"token": token, "csr_pem": csr_pem, "site_id": site_id}
+    body = json.dumps(payload).encode()
+
+    out = _run(
+        ["curl", "-fsS", "-X", "POST",
+         "-H", "content-type: application/json",
+         "--data-binary", "@-",
+         cloud_url.rstrip("/") + "/api/spokes/enroll"],
+        input=body, capture=True,
+    )
+    resp = json.loads(out)
+    cert_path.write_text(resp["client_cert_pem"])
+    ca_path.write_text(resp["ca_pem"])
+    cert_path.chmod(0o600)
+    ca_path.chmod(0o644)
+
+
+def _render_env(site_id: str, site_name: str, cloud_url: str, midi_b_salt: str, cert_dir: Path) -> str:
+    cert_dir_in_container = "/certs"
+    return f"""# Auto-generated by aegis-router-init. Review and edit as needed.
+
+ROUTER_SITE_ID={site_id}
+ROUTER_SITE_NAME={site_name}
+
+DIMSE_AE_TITLE=AEGIS_ROUTER
+DIMSE_PORT=11112
+HTTP_PORT=8080
+
+ROUTER_DATA_DIR=/var/lib/aegis-router
+ROUTER_QUARANTINE_DIR=/var/lib/aegis-router/quarantine
+
+MIDI_B_SALT={midi_b_salt}
+MIDI_B_DATE_SHIFT=true
+MIDI_B_DATE_SHIFT_MAX_DAYS=365
+MIDI_B_KEEP_PRIVATE_TAGS=false
+MIDI_B_RETAINED_TAGS=
+
+# Uncomment whichever sidecars you've enabled via compose profiles.
+# DEFACING_SERVICE_URL=http://defacing:8080
+# PHI_DETECTION_SERVICE_URL=http://phi-detection:8080
+# QC_SERVICE_URL=http://qc:8080
+
+CLOUD_RECEIVER_URL={cloud_url}
+CLOUD_PROJECT_SLUG=default
+CLOUD_INSTITUTION_SLUG=
+CLOUD_CLIENT_CERT={cert_dir_in_container}/client.crt
+CLOUD_CLIENT_KEY={cert_dir_in_container}/client.key
+CLOUD_CA_CERT=
+
+SHIP_RETRY_INITIAL_SECONDS=15
+SHIP_RETRY_MAX_SECONDS=600
+SHIP_RETRY_MAX_ATTEMPTS=8
+
+QUARANTINE_ALERT_URL=
+OPERATOR_API_KEY=
+"""
+
+
+def _random_site_id() -> str:
+    return "site-" + secrets.token_hex(4)
+
+
+def _run(cmd: list[str], input: bytes | None = None, capture: bool = False) -> str:
+    try:
+        res = subprocess.run(
+            cmd,
+            input=input,
+            capture_output=capture,
+            check=True,
+        )
+        return res.stdout.decode() if capture and res.stdout else ""
+    except subprocess.CalledProcessError as e:
+        print(f"command failed: {' '.join(cmd)}", file=sys.stderr)
+        if e.stderr:
+            print(e.stderr.decode(), file=sys.stderr)
+        sys.exit(e.returncode)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
