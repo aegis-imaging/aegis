@@ -23,11 +23,12 @@ var ValidWebhookEvents = map[string]bool{
 }
 
 type webhookRequest struct {
-	ProjectID *string  `json:"project_id"`
-	URL       string   `json:"url"`
-	Events    []string `json:"events"`
-	Secret    string   `json:"secret"`
-	Enabled   *bool    `json:"enabled"`
+	ProjectID     *string  `json:"project_id"`
+	URL           string   `json:"url"`
+	Events        []string `json:"events"`
+	Secret        string   `json:"secret"`
+	Enabled       *bool    `json:"enabled"`
+	PayloadFormat string   `json:"payload_format"`
 }
 
 // ListWebhooks GET /api/webhook-subscriptions
@@ -60,11 +61,12 @@ func (s *Server) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 		enabled = *req.Enabled
 	}
 	sub := &model.WebhookSubscription{
-		ProjectID: req.ProjectID,
-		URL:       strings.TrimSpace(req.URL),
-		Events:    req.Events,
-		Secret:    req.Secret,
-		Enabled:   enabled,
+		ProjectID:     req.ProjectID,
+		URL:           strings.TrimSpace(req.URL),
+		Events:        req.Events,
+		Secret:        req.Secret,
+		Enabled:       enabled,
+		PayloadFormat: model.NormalizePayloadFormat(req.PayloadFormat),
 	}
 	if err := model.CreateWebhookSubscription(r.Context(), s.db, sub); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "create failed")
@@ -108,6 +110,9 @@ func (s *Server) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 	sub.Secret = req.Secret
 	if req.Enabled != nil {
 		sub.Enabled = *req.Enabled
+	}
+	if req.PayloadFormat != "" {
+		sub.PayloadFormat = model.NormalizePayloadFormat(req.PayloadFormat)
 	}
 	if err := model.UpdateWebhookSubscription(r.Context(), s.db, sub); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "update failed")
@@ -331,6 +336,14 @@ func validateWebhookRequest(req webhookRequest) error {
 	for _, e := range req.Events {
 		if !ValidWebhookEvents[e] {
 			return errMsg("unknown event: " + e + "; valid events: study.created, study.processing_complete, study.approved, study.rejected, study.phi_flagged, study.export_complete, study.stuck")
+		}
+	}
+	if req.PayloadFormat != "" {
+		switch req.PayloadFormat {
+		case model.PayloadFormatAegis, model.PayloadFormatFHIR:
+			// OK
+		default:
+			return errMsg("payload_format must be 'aegis' or 'fhir'")
 		}
 	}
 	return nil
