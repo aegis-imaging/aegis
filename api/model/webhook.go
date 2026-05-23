@@ -12,21 +12,41 @@ import (
 // when study events occur. Events are delivered with an HMAC-SHA256 signature
 // header so receivers can verify the payload origin.
 type WebhookSubscription struct {
-	ID        string    `json:"id"`
-	ProjectID *string   `json:"project_id,omitempty"`
-	URL       string    `json:"url"`
-	Events    []string  `json:"events"`
-	Secret    string    `json:"secret,omitempty"`
-	Enabled   bool      `json:"enabled"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	ProjectID     *string   `json:"project_id,omitempty"`
+	URL           string    `json:"url"`
+	Events        []string  `json:"events"`
+	Secret        string    `json:"secret,omitempty"`
+	Enabled       bool      `json:"enabled"`
+	PayloadFormat string    `json:"payload_format"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// Valid payload_format values stored in the database.
+const (
+	PayloadFormatAegis = "aegis"
+	PayloadFormatFHIR  = "fhir"
+)
+
+// NormalizePayloadFormat returns the canonical value for the given format
+// string. Unknown values fall back to "aegis" so subscriptions created
+// before this column existed (or with bad input) keep their historical
+// behavior.
+func NormalizePayloadFormat(s string) string {
+	switch s {
+	case PayloadFormatFHIR:
+		return PayloadFormatFHIR
+	default:
+		return PayloadFormatAegis
+	}
 }
 
 func scanWebhook(row scannable, w *WebhookSubscription) error {
 	var eventsJSON []byte
 	if err := row.Scan(
 		&w.ID, &w.ProjectID, &w.URL, &eventsJSON, &w.Secret, &w.Enabled,
-		&w.CreatedAt, &w.UpdatedAt,
+		&w.PayloadFormat, &w.CreatedAt, &w.UpdatedAt,
 	); err != nil {
 		return err
 	}
@@ -40,18 +60,19 @@ func eventsJSON(events []string) ([]byte, error) {
 	return json.Marshal(events)
 }
 
-const webhookColumns = `id, project_id, url, events, secret, enabled, created_at, updated_at`
+const webhookColumns = `id, project_id, url, events, secret, enabled, payload_format, created_at, updated_at`
 
 func CreateWebhookSubscription(ctx context.Context, db *sql.DB, w *WebhookSubscription) error {
 	ej, err := eventsJSON(w.Events)
 	if err != nil {
 		return err
 	}
+	w.PayloadFormat = NormalizePayloadFormat(w.PayloadFormat)
 	return db.QueryRowContext(ctx, `
-		INSERT INTO webhook_subscriptions (project_id, url, events, secret, enabled)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO webhook_subscriptions (project_id, url, events, secret, enabled, payload_format)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at, updated_at`,
-		w.ProjectID, w.URL, ej, w.Secret, w.Enabled,
+		w.ProjectID, w.URL, ej, w.Secret, w.Enabled, w.PayloadFormat,
 	).Scan(&w.ID, &w.CreatedAt, &w.UpdatedAt)
 }
 
@@ -91,11 +112,12 @@ func UpdateWebhookSubscription(ctx context.Context, db *sql.DB, w *WebhookSubscr
 	if err != nil {
 		return err
 	}
+	w.PayloadFormat = NormalizePayloadFormat(w.PayloadFormat)
 	_, err = db.ExecContext(ctx, `
 		UPDATE webhook_subscriptions
-		SET url=$1, events=$2, secret=$3, enabled=$4, updated_at=now()
-		WHERE id=$5`,
-		w.URL, ej, w.Secret, w.Enabled, w.ID)
+		SET url=$1, events=$2, secret=$3, enabled=$4, payload_format=$5, updated_at=now()
+		WHERE id=$6`,
+		w.URL, ej, w.Secret, w.Enabled, w.PayloadFormat, w.ID)
 	return err
 }
 
