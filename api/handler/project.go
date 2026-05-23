@@ -15,12 +15,19 @@ var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFromContext(r.Context())
+	tenant := middleware.TenantFromContext(r.Context())
 
 	var (
 		projects []model.Project
 		err      error
 	)
 	switch {
+	case tenant != nil:
+		// Tenant-scoped request — return only that tenant's projects.
+		// Tenant scoping takes precedence over the user-role split because
+		// a tenant boundary is the hard isolation wall; researcher-membership
+		// filtering inside a tenant is a future PR.
+		projects, err = model.ListProjectsForTenant(r.Context(), s.db, tenant.ID)
 	case user == nil:
 		// Unauthenticated (public call from upload portal etc.) — return non-restricted projects only.
 		projects, err = model.ListProjectsPublic(r.Context(), s.db)
@@ -40,6 +47,27 @@ func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
 		projects = []model.Project{}
 	}
 	s.writeJSON(w, http.StatusOK, projects)
+}
+
+// requireProjectTenantMatch returns true when the request's tenant context
+// is consistent with the project's tenant_id.
+//
+//   - No tenant in context (legacy single-tenant request) → always allowed.
+//   - Tenant in context + project.TenantID matches → allowed.
+//   - Tenant in context + project.TenantID nil or different → forbidden,
+//     responds with 404 (don't leak whether the resource exists).
+//
+// Returns false after writing a 404; callers should bail out.
+func (s *Server) requireProjectTenantMatch(w http.ResponseWriter, r *http.Request, project *model.Project) bool {
+	tenant := middleware.TenantFromContext(r.Context())
+	if tenant == nil {
+		return true
+	}
+	if project.TenantID == nil || *project.TenantID != tenant.ID {
+		s.writeError(w, http.StatusNotFound, "project not found")
+		return false
+	}
+	return true
 }
 
 type createProjectRequest struct {
@@ -63,13 +91,22 @@ func (s *Server) CreateProject(w http.ResponseWriter, r *http.Request) {
 		req.Slug = strings.Trim(req.Slug, "-")
 	}
 
-	project, err := model.CreateProject(r.Context(), s.db, req.Name, req.Slug, req.Description)
+	// If the request resolved a tenant, the new project inherits its
+	// tenant_id automatically. Legacy single-tenant requests (no tenant
+	// context) keep the existing nil-tenant_id behavior.
+	var tenantID *string
+	if t := middleware.TenantFromContext(r.Context()); t != nil {
+		id := t.ID
+		tenantID = &id
+	}
+
+	project, err := model.CreateProjectForTenant(r.Context(), s.db, req.Name, req.Slug, req.Description, tenantID)
 	if err != nil {
 		s.writeError(w, http.StatusConflict, "project slug already exists")
 		return
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "project.created", actorEmail(r),
-		"project", project.ID, clientIP(r), map[string]any{"name": project.Name, "slug": project.Slug})
+		"project", project.ID, clientIP(r), map[string]any{"name": project.Name, "slug": project.Slug, "tenant_id": tenantID})
 	s.writeJSON(w, http.StatusCreated, project)
 }
 
@@ -83,6 +120,9 @@ func (s *Server) GetProject(w http.ResponseWriter, r *http.Request) {
 	project, err := model.GetProjectByID(r.Context(), s.db, id)
 	if err != nil {
 		s.writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	if !s.requireProjectTenantMatch(w, r, project) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, project)
@@ -160,8 +200,12 @@ func (s *Server) SetProjectSLAThreshold(w http.ResponseWriter, r *http.Request) 
 // POST /api/projects/{id}/archive
 func (s *Server) ArchiveProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := model.GetProjectByID(r.Context(), s.db, id); err != nil {
+	existing, err := model.GetProjectByID(r.Context(), s.db, id)
+	if err != nil {
 		s.writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	if !s.requireProjectTenantMatch(w, r, existing) {
 		return
 	}
 	if err := model.ArchiveProject(r.Context(), s.db, id); err != nil {
@@ -177,8 +221,12 @@ func (s *Server) ArchiveProject(w http.ResponseWriter, r *http.Request) {
 // POST /api/projects/{id}/restore
 func (s *Server) RestoreProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := model.GetProjectByID(r.Context(), s.db, id); err != nil {
+	existing, err := model.GetProjectByID(r.Context(), s.db, id)
+	if err != nil {
 		s.writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	if !s.requireProjectTenantMatch(w, r, existing) {
 		return
 	}
 	if err := model.RestoreProject(r.Context(), s.db, id); err != nil {
@@ -201,6 +249,9 @@ func (s *Server) CloneProject(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusNotFound, "project not found")
 		return
 	}
+	if !s.requireProjectTenantMatch(w, r, src) {
+		return
+	}
 
 	var req struct {
 		Name string `json:"name"`
@@ -218,8 +269,10 @@ func (s *Server) CloneProject(w http.ResponseWriter, r *http.Request) {
 		req.Slug = strings.Trim(req.Slug, "-")
 	}
 
-	// Create the new project.
-	dst, err := model.CreateProject(r.Context(), s.db, req.Name, req.Slug, src.Description)
+	// Create the new project — inherit the source's tenant_id so the
+	// clone lives in the same isolation boundary. If the source is
+	// untenanted (legacy), the clone is too.
+	dst, err := model.CreateProjectForTenant(r.Context(), s.db, req.Name, req.Slug, src.Description, src.TenantID)
 	if err != nil {
 		log.Printf("clone project %s create: %v", id, err)
 		s.writeError(w, http.StatusConflict, "slug already exists or create failed")
@@ -314,8 +367,12 @@ func (s *Server) CloneProject(w http.ResponseWriter, r *http.Request) {
 // PUT /api/projects/{id}
 func (s *Server) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := model.GetProjectByID(r.Context(), s.db, id); err != nil {
+	existing, err := model.GetProjectByID(r.Context(), s.db, id)
+	if err != nil {
 		s.writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	if !s.requireProjectTenantMatch(w, r, existing) {
 		return
 	}
 
