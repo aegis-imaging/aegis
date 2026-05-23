@@ -221,6 +221,11 @@ func main() {
 	mux.HandleFunc("PUT /api/projects/{id}/members/{memberID}", auth(srv.UpdateProjectMember))
 	mux.HandleFunc("DELETE /api/projects/{id}/members/{memberID}", auth(srv.RemoveProjectMember))
 
+	// Project ACL — explicit per-user permissions on a project (read/write/admin).
+	mux.HandleFunc("GET /api/projects/{id}/acl", auth(srv.ListProjectACL))
+	mux.HandleFunc("POST /api/projects/{id}/acl", adminOnly(srv.SetProjectACL))
+	mux.HandleFunc("DELETE /api/projects/{id}/acl/{aclID}", adminOnly(srv.DeleteProjectACL))
+
 	// Project dashboard summary — compact KPI snapshot.
 	mux.HandleFunc("GET /api/projects/{id}/summary", auth(srv.GetProjectDashboardSummary))
 
@@ -277,12 +282,14 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{id}/audit.csv", auth(srv.ExportStudyAuditCSV))
 	mux.HandleFunc("POST /api/studies/{id}/viewed", auth(srv.RecordStudyView))
 	mux.HandleFunc("GET /api/studies/{id}/series", auth(srv.ListStudySeries))
+	mux.HandleFunc("GET /api/studies/{id}/files", auth(srv.GetStudyFileManifest))
 	mux.HandleFunc("GET /api/studies/{id}/diagnostics", auth(srv.GetStudyDiagnostics))
 	mux.HandleFunc("GET /api/studies/{id}/processing-summary", auth(srv.GetStudyProcessingSummary))
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-tags", auth(srv.InspectDicomTags))
 	mux.HandleFunc("GET /api/studies/{studyUID}/anonymization-diff", auth(srv.GetAnonDiff))
 	mux.HandleFunc("POST /api/studies/bulk", adminOnly(srv.BulkStudyAction))
 	mux.HandleFunc("POST /api/studies/bulk-pipeline-trigger", adminOnly(srv.BulkPipelineTrigger))
+	mux.HandleFunc("POST /api/studies/bulk-status", adminOnly(srv.BulkStatusUpdate))
 	mux.HandleFunc("GET /api/studies/{id}/notes", auth(srv.ListStudyNotes))
 	mux.HandleFunc("POST /api/studies/{id}/notes", auth(srv.AddStudyNote))
 	mux.HandleFunc("PATCH /api/studies/{id}/flag", auth(srv.PatchStudyFlag))
@@ -327,6 +334,7 @@ func main() {
 	mux.HandleFunc("POST /api/institutions", adminOnly(srv.CreateInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}", auth(srv.GetInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}/stats", auth(srv.GetInstitutionStats))
+	mux.HandleFunc("GET /api/institutions/{id}/sla", auth(srv.GetInstitutionSLA))
 	mux.HandleFunc("PUT /api/institutions/{id}", adminOnly(srv.UpdateInstitution))
 	mux.HandleFunc("DELETE /api/institutions/{id}", adminOnly(srv.DeleteInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}/projects", auth(srv.ListInstitutionProjects))
@@ -350,6 +358,11 @@ func main() {
 	mux.HandleFunc("POST /api/destinations/{id}/test", adminOnly(srv.TestDestination))
 	mux.HandleFunc("GET /api/destinations/{id}/stats", auth(srv.GetDestinationStats))
 	mux.HandleFunc("GET /api/destinations/{id}/health", auth(srv.GetDestinationHealth))
+
+	// Destination maintenance — planned downtime windows during which a destination is paused.
+	mux.HandleFunc("GET /api/destinations/{id}/maintenance", auth(srv.ListDestinationMaintenance))
+	mux.HandleFunc("POST /api/destinations/{id}/maintenance", adminOnly(srv.CreateDestinationMaintenance))
+	mux.HandleFunc("DELETE /api/destinations/{id}/maintenance/{windowID}", adminOnly(srv.DeleteDestinationMaintenance))
 
 	// Routing rules — condition → action mappings evaluated on study ingest.
 	mux.HandleFunc("GET /api/routing-rules", auth(srv.ListRoutingRules))
@@ -399,6 +412,8 @@ func main() {
 	// Study comments — threaded discussion on studies.
 	mux.HandleFunc("GET /api/studies/{id}/comments", auth(srv.ListStudyComments))
 	mux.HandleFunc("POST /api/studies/{id}/comments", adminOnly(srv.CreateStudyComment))
+	mux.HandleFunc("PUT /api/comments/{id}", adminOnly(srv.EditStudyComment))
+	mux.HandleFunc("GET /api/comments/{id}/history", auth(srv.ListCommentEditHistory))
 	mux.HandleFunc("DELETE /api/studies/{id}/comments/{commentID}", adminOnly(srv.DeleteStudyComment))
 
 	// Study approval signatures — sign-off history.
@@ -413,6 +428,12 @@ func main() {
 
 	// Study activity timeline — unified feed of audit + comments.
 	mux.HandleFunc("GET /api/studies/{id}/activity", auth(srv.GetStudyActivity))
+
+	// Study tags — short labels for grouping/filtering studies within a project.
+	mux.HandleFunc("GET /api/studies/{id}/tags", auth(srv.ListStudyTags))
+	mux.HandleFunc("POST /api/studies/{id}/tags", adminOnly(srv.AddStudyTag))
+	mux.HandleFunc("DELETE /api/studies/{id}/tags/{tagID}", adminOnly(srv.DeleteStudyTag))
+	mux.HandleFunc("GET /api/projects/{id}/tag-taxonomy", auth(srv.GetProjectTagTaxonomy))
 
 	// Study transfer log — provenance tracking for project moves.
 	mux.HandleFunc("GET /api/studies/{id}/transfers", auth(srv.ListStudyTransfers))
@@ -481,6 +502,11 @@ func main() {
 	mux.HandleFunc("GET /api/audit-bookmarks", auth(srv.ListAuditBookmarks))
 	mux.HandleFunc("POST /api/audit-bookmarks", auth(srv.CreateAuditBookmark))
 	mux.HandleFunc("DELETE /api/audit-bookmarks/{id}", auth(srv.DeleteAuditBookmark))
+
+	// Audit annotations — operator notes attached to specific audit entries.
+	mux.HandleFunc("GET /api/audit/{id}/annotations", auth(srv.ListAuditAnnotations))
+	mux.HandleFunc("POST /api/audit/{id}/annotations", auth(srv.CreateAuditAnnotation))
+	mux.HandleFunc("DELETE /api/audit/{id}/annotations/{annotationID}", auth(srv.DeleteAuditAnnotation))
 
 	// Admin users — authorised dashboard users and their roles.
 	mux.HandleFunc("GET /api/admin-users/activity", auth(srv.GetAdminUserActivity))
