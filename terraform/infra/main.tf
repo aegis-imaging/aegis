@@ -1210,7 +1210,7 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
     service_account = google_service_account.admin.email
 
     scaling {
-      min_instance_count = 0  # Scale-to-zero for dev cost savings (was 1)
+      min_instance_count = 0 # Scale-to-zero for dev cost savings (was 1)
       max_instance_count = 5
     }
 
