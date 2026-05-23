@@ -68,7 +68,11 @@ class AlertEvent:
 class _Condition:
     name: str
     predicate: Callable[[dict[str, Any]], bool]
-    message_fmt: str  # str.format-compatible against the snapshot
+    # Exactly one of these is used. message_fn takes precedence when set —
+    # use it when the message needs values that aren't in the snapshot
+    # (e.g., the threshold the predicate was comparing against).
+    message_fmt: str = ""  # str.format-compatible against the snapshot
+    message_fn: Callable[[dict[str, Any]], str] | None = None
 
 
 class AlertEngine:
@@ -83,7 +87,33 @@ class AlertEngine:
 
     def add_condition(self, name: str, predicate: Callable[[dict[str, Any]], bool], message_fmt: str) -> None:
         with self._lock:
-            self._conditions.append(_Condition(name, predicate, message_fmt))
+            self._conditions.append(_Condition(name=name, predicate=predicate, message_fmt=message_fmt))
+
+    def add_condition_fn(
+        self,
+        name: str,
+        predicate: Callable[[dict[str, Any]], bool],
+        message_fn: Callable[[dict[str, Any]], str],
+    ) -> None:
+        """Like add_condition, but the message comes from a callback.
+
+        Use when the message needs values that aren't in the snapshot dict —
+        for example, the threshold the predicate was comparing against — so
+        `message_fmt.format(**snapshot)` can't express it.
+        """
+        with self._lock:
+            self._conditions.append(_Condition(name=name, predicate=predicate, message_fn=message_fn))
+
+    def clear_conditions(self) -> None:
+        """Remove all registered conditions.
+
+        Cooldown state (`_last_emitted_at`) and stored events are *not*
+        cleared — re-adding a condition by the same name keeps its cooldown
+        history. Use this when the set of active conditions is driven by
+        live config that may change between evaluations.
+        """
+        with self._lock:
+            self._conditions.clear()
 
     def evaluate(self, snapshot: dict[str, Any], now: float | None = None) -> list[AlertEvent]:
         """Run all conditions; emit events for newly-firing ones (respects cooldown).
@@ -105,10 +135,17 @@ class AlertEngine:
                 last = self._last_emitted_at.get(cond.name, 0)
                 if cooldown > 0 and last > 0 and (current - last) < cooldown:
                     continue
-                try:
-                    message = cond.message_fmt.format(**snapshot)
-                except Exception:
-                    message = cond.message_fmt
+                if cond.message_fn is not None:
+                    try:
+                        message = cond.message_fn(snapshot)
+                    except Exception:
+                        log.exception("alert message_fn for %s failed", cond.name)
+                        message = cond.name
+                else:
+                    try:
+                        message = cond.message_fmt.format(**snapshot)
+                    except Exception:
+                        message = cond.message_fmt
                 event = AlertEvent(
                     timestamp=current,
                     condition=cond.name,

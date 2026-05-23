@@ -75,3 +75,68 @@ def test_predicate_exception_skipped():
     eng.add_condition("ok", lambda s: True, "ok")
     events = eng.evaluate({})
     assert [e.condition for e in events] == ["ok"]
+
+
+def test_message_fn_builds_dynamic_message_with_external_values():
+    """message_fn closes over values that aren't in the snapshot.
+
+    The receiver's retry alerts use this to include the configured
+    threshold in the alert message (the threshold lives in env vars, not
+    the snapshot dict).
+    """
+    threshold = 600
+    eng = AlertEngine(AlertConfig(cooldown_seconds=0))
+    eng.add_condition_fn(
+        "pending_age",
+        lambda s: s.get("pending_oldest_age_seconds", 0) >= threshold,
+        lambda s: f"Oldest pending {s['pending_oldest_age_seconds']}s exceeds threshold {threshold}s",
+    )
+    events = eng.evaluate({"pending_oldest_age_seconds": 800})
+    assert len(events) == 1
+    assert events[0].message == "Oldest pending 800s exceeds threshold 600s"
+
+
+def test_message_fn_takes_precedence_over_message_fmt():
+    """If a condition somehow has both, message_fn wins (its presence is the signal)."""
+    eng = AlertEngine(AlertConfig(cooldown_seconds=0))
+    eng.add_condition_fn(
+        "x",
+        lambda s: True,
+        lambda s: "from fn",
+    )
+    events = eng.evaluate({})
+    assert events[0].message == "from fn"
+
+
+def test_message_fn_exception_falls_back_to_condition_name():
+    def boom(s):
+        raise RuntimeError("explode")
+
+    eng = AlertEngine(AlertConfig(cooldown_seconds=0))
+    eng.add_condition_fn("flaky", lambda s: True, boom)
+    events = eng.evaluate({})
+    assert len(events) == 1
+    assert events[0].message == "flaky"  # falls back to condition name
+
+
+def test_clear_conditions_preserves_cooldown_state():
+    """Re-adding a condition by the same name keeps its cooldown history."""
+    eng = AlertEngine(AlertConfig(cooldown_seconds=60))
+    eng.add_condition("dl", lambda s: True, "x")
+    first = eng.evaluate({}, now=1000)
+    assert len(first) == 1
+
+    # Wipe and re-add the same-named condition (e.g., config-driven rebuild).
+    eng.clear_conditions()
+    eng.add_condition("dl", lambda s: True, "x")
+    blocked = eng.evaluate({}, now=1030)  # within cooldown of first
+    assert len(blocked) == 0
+
+
+def test_clear_conditions_does_not_clear_events():
+    """Stored alert history survives a conditions rebuild."""
+    eng = AlertEngine(AlertConfig(cooldown_seconds=0))
+    eng.add_condition("a", lambda s: True, "a")
+    eng.evaluate({}, now=1)
+    eng.clear_conditions()
+    assert len(eng.recent()) == 1
