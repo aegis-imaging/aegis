@@ -118,6 +118,7 @@ jobs:
           - scripts/check-runbook-readiness.sh
           - scripts/check-terraform-security-baseline.sh
           - scripts/gcp_setup_cloudbuild.sh
+          - scripts/onprem_install.sh
     steps:
       - uses: actions/checkout@v4
       - name: Syntax check
