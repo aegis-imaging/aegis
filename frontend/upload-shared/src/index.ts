@@ -21,3 +21,7 @@ export type { PixelScrubProgressProps, PixelScrubProgressState } from './compone
 
 export { BulkStudyTable } from './components/BulkStudyTable'
 export type { BulkStudyTableProps } from './components/BulkStudyTable'
+
+// High-level composable: the whole upload flow as one component.
+export { UploadFlow } from './UploadFlow'
+export type { UploadFlowProps, UploadFlowStage } from './UploadFlow'

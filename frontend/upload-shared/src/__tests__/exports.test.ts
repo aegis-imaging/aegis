@@ -14,4 +14,5 @@ describe('@aegis/upload-shared public exports', () => {
   it('exports HeavyModeToggle', () => expect(typeof shared.HeavyModeToggle).toBe('function'))
   it('exports PixelScrubProgress', () => expect(typeof shared.PixelScrubProgress).toBe('function'))
   it('exports BulkStudyTable', () => expect(typeof shared.BulkStudyTable).toBe('function'))
+  it('exports UploadFlow', () => expect(typeof shared.UploadFlow).toBe('function'))
 })

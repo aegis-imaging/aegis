@@ -18,7 +18,7 @@ import { bridge, type BridgeAvailable } from './desktop-bridge'
 import { WatchFolderPanel } from './WatchFolderPanel'
 import { QCDesktopPanel } from './QCDesktopPanel'
 import { bulkUpload, type BulkProgress } from '@aegis/client'
-import { FileDropZone, BulkStudyTable } from '@aegis/upload-shared'
+import { UploadFlow, BulkStudyTable } from '@aegis/upload-shared'
 
 interface BootstrapState {
   apiBaseUrl: string
@@ -76,9 +76,11 @@ export function App() {
 
       {tab === 'upload' && (
         <>
-          <DropZone
-            bridgeAvailable={available.available}
-            onFilesSelected={files => runBulkUpload(files, config, setBulkProgress)}
+          <UploadFlow
+            projectSlug={config.projectSlug}
+            apiBaseUrl={config.apiBaseUrl}
+            initialUploaderEmail={config.uploaderEmail}
+            pickFolderOverride={available.available ? bridge.pickFolderAsFiles : undefined}
           />
 
           {available.available && (
