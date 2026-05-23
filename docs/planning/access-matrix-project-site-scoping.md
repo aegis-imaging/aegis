@@ -316,6 +316,30 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/studies/{id}/analytics-download` | `ServeAnalyticsDownload` | `project_member_site_scoped` |
 | `auth` | `GET /api/studies/{id}/analytics-files` | `ListAnalyticsFiles` | `project_member_site_scoped` |
 | `auth` | `GET /api/studies/{id}/analytics-files/{path...}` | `ServeAnalyticsFile` | `project_member_site_scoped` |
+| `auth` | `GET /api/spokes` | `ListSpokes` | `project_member_any` |
+| `auth` | `GET /api/projects/{id}/acl` | `ListProjectACL` | `project_member_any` |
+| `adminOnly` | `POST /api/projects/{id}/acl` | `SetProjectACL` | `platform_admin` |
+| `adminOnly` | `DELETE /api/projects/{id}/acl/{aclID}` | `DeleteProjectACL` | `platform_admin` |
+| `auth` | `GET /api/studies/{id}/files` | `GetStudyFileManifest` | `project_member_site_scoped` |
+| `adminOnly` | `POST /api/studies/bulk-status` | `BulkStatusUpdate` | `platform_admin` |
+| `auth` | `GET /api/institutions/{id}/sla` | `GetInstitutionSLA` | `project_member_any` |
+| `adminOnly` | `PUT /api/institutions/{id}/client-cert` | `SetInstitutionClientCert` | `platform_admin` |
+| `adminOnly` | `DELETE /api/institutions/{id}/client-cert` | `RevokeInstitutionClientCert` | `platform_admin` |
+| `auth` | `GET /api/institutions/{id}/enrollment-tokens` | `ListInstitutionEnrollmentTokens` | `project_member_any` |
+| `adminOnly` | `POST /api/institutions/{id}/enrollment-tokens` | `CreateInstitutionEnrollmentToken` | `platform_admin` |
+| `adminOnly` | `DELETE /api/institutions/{id}/enrollment-tokens/{tokenID}` | `RevokeInstitutionEnrollmentToken` | `platform_admin` |
+| `auth` | `GET /api/destinations/{id}/maintenance` | `ListDestinationMaintenance` | `project_member_any` |
+| `adminOnly` | `POST /api/destinations/{id}/maintenance` | `CreateDestinationMaintenance` | `platform_admin` |
+| `adminOnly` | `DELETE /api/destinations/{id}/maintenance/{windowID}` | `DeleteDestinationMaintenance` | `platform_admin` |
+| `adminOnly` | `PUT /api/comments/{id}` | `EditStudyComment` | `platform_admin` |
+| `auth` | `GET /api/comments/{id}/history` | `ListCommentEditHistory` | `project_member_any` |
+| `auth` | `GET /api/studies/{id}/tags` | `ListStudyTags` | `project_member_site_scoped` |
+| `adminOnly` | `POST /api/studies/{id}/tags` | `AddStudyTag` | `platform_admin` |
+| `adminOnly` | `DELETE /api/studies/{id}/tags/{tagID}` | `DeleteStudyTag` | `platform_admin` |
+| `auth` | `GET /api/projects/{id}/tag-taxonomy` | `GetProjectTagTaxonomy` | `project_member_any` |
+| `auth` | `GET /api/audit/{id}/annotations` | `ListAuditAnnotations` | `project_member_any` |
+| `auth` | `POST /api/audit/{id}/annotations` | `CreateAuditAnnotation` | `project_member_any` |
+| `auth` | `DELETE /api/audit/{id}/annotations/{annotationID}` | `DeleteAuditAnnotation` | `project_member_any` |
 
 ## Coverage
 - Total mapped authenticated/admin routes: **296**
