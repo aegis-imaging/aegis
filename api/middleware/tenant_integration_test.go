@@ -77,8 +77,11 @@ func TestResolveTenant_UnknownSlugReturns404(t *testing.T) {
 func TestResolveTenant_DisabledSlugReturns404(t *testing.T) {
 	db := testutil.TestDB(t)
 
-	tenant := &model.Tenant{Slug: "old-tenant", Name: "Old Tenant", Enabled: false}
+	// Create enabled (model.CreateTenant always creates enabled), then disable.
+	tenant := &model.Tenant{Slug: "old-tenant", Name: "Old Tenant"}
 	require.NoError(t, model.CreateTenant(context.Background(), db, tenant))
+	tenant.Enabled = false
+	require.NoError(t, model.UpdateTenant(context.Background(), db, tenant))
 
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

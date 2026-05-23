@@ -49,6 +49,13 @@ func scanTenant(row scannable, t *Tenant) error {
 
 // CreateTenant inserts a new tenant. `slug` is lower-cased + trimmed and
 // validated; `settings` may be nil (defaults to `{}`).
+//
+// A new tenant is always *enabled* — we leave the `enabled` column out
+// of the INSERT and let the table's `DEFAULT TRUE` populate it. This
+// avoids a footgun where a caller building a `Tenant{Slug, Name}`
+// struct literal and forgetting `Enabled: true` would silently get a
+// disabled tenant (Go's bool zero value is false). To disable a
+// tenant, use UpdateTenant after creation.
 func CreateTenant(ctx context.Context, db *sql.DB, t *Tenant) error {
 	t.Slug = strings.ToLower(strings.TrimSpace(t.Slug))
 	if err := ValidateTenantSlug(t.Slug); err != nil {
@@ -61,11 +68,11 @@ func CreateTenant(ctx context.Context, db *sql.DB, t *Tenant) error {
 		t.Settings = json.RawMessage(`{}`)
 	}
 	return db.QueryRowContext(ctx, `
-		INSERT INTO tenants (slug, name, settings, enabled)
-		VALUES ($1, $2, $3, COALESCE($4, TRUE))
-		RETURNING id, created_at, updated_at`,
-		t.Slug, t.Name, []byte(t.Settings), t.Enabled,
-	).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
+		INSERT INTO tenants (slug, name, settings)
+		VALUES ($1, $2, $3)
+		RETURNING id, enabled, created_at, updated_at`,
+		t.Slug, t.Name, []byte(t.Settings),
+	).Scan(&t.ID, &t.Enabled, &t.CreatedAt, &t.UpdatedAt)
 }
 
 // GetTenant fetches one tenant by UUID. Returns ErrTenantNotFound when

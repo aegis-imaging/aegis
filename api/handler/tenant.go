@@ -42,21 +42,26 @@ func (s *Server) CreateTenant(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	enabled := true
-	if req.Enabled != nil {
-		enabled = *req.Enabled
-	}
 	t := &model.Tenant{
 		Slug:     req.Slug,
 		Name:     req.Name,
 		Settings: req.Settings,
-		Enabled:  enabled,
 	}
+	// model.CreateTenant always creates an enabled tenant (uses the DB column
+	// default) — see the doc comment there. If the API caller explicitly
+	// asked for `enabled: false`, we honor it via a follow-up update.
 	if err := model.CreateTenant(r.Context(), s.db, t); err != nil {
 		// Slug-validation / name-required errors come back as plain errors;
 		// surface them to the client so they know what to fix.
 		s.writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	if req.Enabled != nil && !*req.Enabled {
+		t.Enabled = false
+		if err := model.UpdateTenant(r.Context(), s.db, t); err != nil {
+			s.writeError(w, http.StatusInternalServerError, "failed to apply enabled=false")
+			return
+		}
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "tenant.created", actorEmail(r), "tenant", t.ID, clientIP(r), map[string]any{
 		"slug": t.Slug, "name": t.Name,
