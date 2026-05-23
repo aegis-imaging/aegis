@@ -683,6 +683,13 @@ func main() {
 	mux.HandleFunc("POST /api/invite/requests/{id}/deny", adminOnly(srv.DenyInviteRequestAdmin))
 
 	var h http.Handler = mux
+	// Tenant resolution runs *inside* CORS and logging so any 404 it emits
+	// for an unknown/disabled tenant slug is still logged. It runs *before*
+	// the per-route auth middleware so handler code can read the resolved
+	// tenant alongside the authenticated user. Legacy single-tenant
+	// requests (no X-AEGIS-Tenant header, no matching subdomain) pass
+	// through with no tenant in context — same behavior as before.
+	h = middleware.ResolveTenant(db)(h)
 	h = middleware.Recover(h)
 	h = middleware.Logging(h)
 	h = middleware.CORS(h, cfg.AllowedOrigins)

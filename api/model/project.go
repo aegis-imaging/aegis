@@ -16,16 +16,17 @@ type Project struct {
 	StuckThresholdMinutes *int      `json:"stuck_threshold_minutes,omitempty"`  // nil = use request default (60)
 	StorageQuotaBytes     *int64    `json:"storage_quota_bytes,omitempty"`      // nil = unlimited
 	Archived              bool      `json:"archived"`
-	Restricted            bool      `json:"restricted"` // true = only project_members + platform admin can see
-	MemberCount           int       `json:"member_count,omitempty"` // populated by ListProjects when available
+	Restricted            bool      `json:"restricted"`                         // true = only project_members + platform admin can see
+	TenantID              *string   `json:"tenant_id,omitempty"`                // nil = legacy single-tenant project
+	MemberCount           int       `json:"member_count,omitempty"`             // populated by ListProjects when available
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }
 
-const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, stuck_threshold_minutes, storage_quota_bytes, archived, restricted, created_at, updated_at`
+const projectColumns = `id, name, slug, description, default_anon_profile_id, retention_days, stuck_threshold_minutes, storage_quota_bytes, archived, restricted, tenant_id, created_at, updated_at`
 
 func scanProject(row scannable, p *Project) error {
-	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.StuckThresholdMinutes, &p.StorageQuotaBytes, &p.Archived, &p.Restricted, &p.CreatedAt, &p.UpdatedAt)
+	return row.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &p.DefaultAnonProfileID, &p.RetentionDays, &p.StuckThresholdMinutes, &p.StorageQuotaBytes, &p.Archived, &p.Restricted, &p.TenantID, &p.CreatedAt, &p.UpdatedAt)
 }
 
 // ListProjects returns all projects (used by platform admin/viewer and internal callers).
@@ -55,7 +56,7 @@ func ListProjectsForResearcher(ctx context.Context, db *sql.DB, adminUserID stri
 		SELECT
 			p.id, p.name, p.slug, p.description, p.default_anon_profile_id,
 			p.retention_days, p.stuck_threshold_minutes, p.storage_quota_bytes,
-			p.archived, p.restricted, p.created_at, p.updated_at
+			p.archived, p.restricted, p.tenant_id, p.created_at, p.updated_at
 		FROM projects p
 		JOIN project_members pm ON pm.project_id = p.id
 		WHERE pm.admin_user_id = $1
@@ -177,16 +178,45 @@ func UpdateProjectRetentionDays(ctx context.Context, db *sql.DB, projectID strin
 }
 
 func CreateProject(ctx context.Context, db *sql.DB, name, slug, description string) (*Project, error) {
+	return CreateProjectForTenant(ctx, db, name, slug, description, nil)
+}
+
+// CreateProjectForTenant inserts a project owned by the given tenant.
+// Passing nil for tenantID creates a legacy untenanted project (same row
+// shape CreateProject has always produced) — same on-disk default.
+func CreateProjectForTenant(ctx context.Context, db *sql.DB, name, slug, description string, tenantID *string) (*Project, error) {
 	var p Project
 	err := scanProject(db.QueryRowContext(ctx, `
-		INSERT INTO projects (name, slug, description)
-		VALUES ($1, $2, $3)
+		INSERT INTO projects (name, slug, description, tenant_id)
+		VALUES ($1, $2, $3, $4)
 		RETURNING `+projectColumns,
-		name, slug, description), &p)
+		name, slug, description, tenantID), &p)
 	if err != nil {
 		return nil, err
 	}
 	return &p, nil
+}
+
+// ListProjectsForTenant returns every project belonging to a tenant. Used
+// by ListProjects when a tenant is in the request context.
+func ListProjectsForTenant(ctx context.Context, db *sql.DB, tenantID string) ([]Project, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT `+projectColumns+` FROM projects WHERE tenant_id = $1 ORDER BY created_at`,
+		tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []Project
+	for rows.Next() {
+		var p Project
+		if err := scanProject(rows, &p); err != nil {
+			return nil, err
+		}
+		projects = append(projects, p)
+	}
+	return projects, rows.Err()
 }
 
 // ProjectsWithRetentionPolicy returns all projects that have a non-null retention_days.
