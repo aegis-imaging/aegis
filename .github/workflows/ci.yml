@@ -201,7 +201,7 @@ jobs:
       - name: Install dependencies
         run: cd ${{ matrix.service }} && pip install -r requirements.txt -r requirements-test.txt
       - name: Install dimse-core (shared library)
-        if: matrix.service == 'router'
+        if: matrix.service == 'router' || matrix.service == 'dimse-receiver'
         run: pip install -e ./dimse-core
       - name: Run tests
         run: cd ${{ matrix.service }} && pytest -v --tb=short
