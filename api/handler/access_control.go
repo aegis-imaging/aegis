@@ -41,6 +41,30 @@ func (s *Server) requireProjectReadAccess(w http.ResponseWriter, r *http.Request
 	return access, true
 }
 
+// enforceStudyTenant checks that the study's parent project belongs to the
+// tenant resolved for this request. Legacy requests (no tenant context)
+// always pass. Cross-tenant access responds with 404 to avoid leaking
+// resource existence. Returns false after writing a response; callers
+// should bail out.
+func (s *Server) enforceStudyTenant(w http.ResponseWriter, r *http.Request, study *model.Study) bool {
+	tenant := middleware.TenantFromContext(r.Context())
+	if tenant == nil {
+		return true
+	}
+	project, err := model.GetProjectByID(r.Context(), s.db, study.ProjectID)
+	if err != nil {
+		// Study exists but parent project is gone — treat as not found
+		// so we don't return data the tenant shouldn't see.
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return false
+	}
+	if project.TenantID == nil || *project.TenantID != tenant.ID {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return false
+	}
+	return true
+}
+
 func (s *Server) requireStudyReadAccessByID(w http.ResponseWriter, r *http.Request, studyID string) (*model.Study, *model.UserProjectAccess, bool) {
 	study, err := model.GetStudyByID(r.Context(), s.db, studyID)
 	if err != nil {
@@ -49,6 +73,10 @@ func (s *Server) requireStudyReadAccessByID(w http.ResponseWriter, r *http.Reque
 			return nil, nil, false
 		}
 		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		return nil, nil, false
+	}
+
+	if !s.enforceStudyTenant(w, r, study) {
 		return nil, nil, false
 	}
 
@@ -75,6 +103,10 @@ func (s *Server) requireStudyReadAccessByUID(w http.ResponseWriter, r *http.Requ
 			return nil, nil, false
 		}
 		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		return nil, nil, false
+	}
+
+	if !s.enforceStudyTenant(w, r, study) {
 		return nil, nil, false
 	}
 
@@ -181,6 +213,10 @@ func (s *Server) requireStudyWriteAccessByID(w http.ResponseWriter, r *http.Requ
 		return nil, nil, false
 	}
 
+	if !s.enforceStudyTenant(w, r, study) {
+		return nil, nil, false
+	}
+
 	access, ok := s.requireProjectWriteAccess(w, r, study.ProjectID, intent)
 	if !ok {
 		return nil, nil, false
@@ -204,6 +240,10 @@ func (s *Server) requireStudyWriteAccessByUID(w http.ResponseWriter, r *http.Req
 			return nil, nil, false
 		}
 		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+		return nil, nil, false
+	}
+
+	if !s.enforceStudyTenant(w, r, study) {
 		return nil, nil, false
 	}
 
