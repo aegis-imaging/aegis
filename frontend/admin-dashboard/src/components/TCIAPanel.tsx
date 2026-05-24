@@ -183,7 +183,7 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
         <div className="tcia-field">
           <label className="tcia-label">Collection</label>
           <select
-            className="form-select"
+            className=""
             value={collection}
             onChange={e => setCollection(e.target.value)}
             disabled={searching || importing}
@@ -198,7 +198,7 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
           <label className="tcia-label">Min slices</label>
           <input
             type="number"
-            className="form-input"
+            className="xn-filter"
             value={minSlices}
             min={1}
             max={1000}
@@ -211,7 +211,7 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
           <div className="tcia-field">
             <label className="tcia-label">Project</label>
             <select
-              className="form-select"
+              className=""
               value={projectSlug}
               onChange={e => setProjectSlug(e.target.value)}
               disabled={searching || importing}
@@ -226,7 +226,7 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
         <div className="tcia-field tcia-field--action">
           <button
             type="button"
-            className="btn-primary"
+            className="xn-btn-primary"
             onClick={searchSeries}
             disabled={searching || importing}
           >
@@ -249,7 +249,7 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
             {isAdmin && (
               <button
                 type="button"
-                className="btn-primary"
+                className="xn-btn-primary"
                 onClick={importSelected}
                 disabled={!someChecked || importing}
               >
