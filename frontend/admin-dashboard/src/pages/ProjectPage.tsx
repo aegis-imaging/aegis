@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   apiGetProject,
@@ -8,15 +8,23 @@ import {
   type SubjectAggregate,
 } from '../api/subjects'
 
-// ProjectPage shows the Subjects table for a project. XNAT's project report
-// page has multiple tabs (Subjects / Sessions / Resources / Pipelines); v1
-// of AEGIS lands on Subjects since that's the primary drill-down for image
-// analysts. Other tabs can be added incrementally without re-architecting.
+type SortKey = 'subject_id' | 'study_count' | 'latest_study_date'
+
+// ProjectPage shows the Subjects table for a project. v1 lands on
+// Subjects since that's the primary drill-down for image analysts. The
+// filter bar (modality chips, sort selector, free-text filter) is
+// modeled on the rich Studies-tab filters in App.tsx so analysts coming
+// from the admin view see familiar controls — though scoped to the
+// fields that actually vary at the subject level (modalities, study
+// count, latest date), not the per-study pipeline fields.
 export function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [project, setProject] = useState<Project | null>(null)
   const [subjects, setSubjects] = useState<SubjectAggregate[] | null>(null)
-  const [filter, setFilter] = useState('')
+  const [textFilter, setTextFilter] = useState('')
+  const [selectedModalities, setSelectedModalities] = useState<Set<string>>(new Set())
+  const [sortKey, setSortKey] = useState<SortKey>('subject_id')
+  const [sortDesc, setSortDesc] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -36,13 +44,50 @@ export function ProjectPage() {
     }
   }, [projectId])
 
-  const filtered = subjects
-    ? subjects.filter((s) =>
-        filter.trim() === ''
-          ? true
-          : s.subject_id.toLowerCase().includes(filter.toLowerCase()),
-      )
-    : null
+  // Distinct modalities across the loaded subjects — used to render the
+  // chip filter row only with values actually present in this project.
+  const availableModalities = useMemo(() => {
+    if (!subjects) return []
+    const set = new Set<string>()
+    for (const s of subjects) for (const m of s.modalities ?? []) set.add(m)
+    return Array.from(set).sort()
+  }, [subjects])
+
+  const filteredSorted = useMemo(() => {
+    if (!subjects) return null
+    const lc = textFilter.trim().toLowerCase()
+    const modFilter = selectedModalities
+    const filtered = subjects.filter((s) => {
+      if (lc && !s.subject_id.toLowerCase().includes(lc)) return false
+      if (modFilter.size > 0) {
+        const mods = s.modalities ?? []
+        const overlap = mods.some((m) => modFilter.has(m))
+        if (!overlap) return false
+      }
+      return true
+    })
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0
+      if (sortKey === 'subject_id') {
+        cmp = a.subject_id.localeCompare(b.subject_id)
+      } else if (sortKey === 'study_count') {
+        cmp = a.study_count - b.study_count
+      } else if (sortKey === 'latest_study_date') {
+        cmp = (a.latest_study_date ?? '').localeCompare(b.latest_study_date ?? '')
+      }
+      return sortDesc ? -cmp : cmp
+    })
+    return sorted
+  }, [subjects, textFilter, selectedModalities, sortKey, sortDesc])
+
+  function toggleModality(m: string) {
+    setSelectedModalities((prev) => {
+      const next = new Set(prev)
+      if (next.has(m)) next.delete(m)
+      else next.add(m)
+      return next
+    })
+  }
 
   return (
     <div className="xn-project">
@@ -56,21 +101,75 @@ export function ProjectPage() {
       <section className="xn-section">
         <div className="xn-section-bar">
           <h2>Subjects</h2>
-          <input
-            className="xn-filter"
-            type="search"
-            placeholder="Filter by subject ID…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            aria-label="Filter subjects"
-          />
+          <div className="xn-section-controls">
+            <label className="xn-control">
+              <span className="xn-control-label">Sort by</span>
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+              >
+                <option value="subject_id">Subject ID</option>
+                <option value="study_count">Study count</option>
+                <option value="latest_study_date">Latest study</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="xn-icon-btn"
+              onClick={() => setSortDesc((d) => !d)}
+              aria-label={sortDesc ? 'Sort ascending' : 'Sort descending'}
+              title={sortDesc ? 'Switch to ascending' : 'Switch to descending'}
+            >
+              {sortDesc ? '↓' : '↑'}
+            </button>
+            <input
+              className="xn-filter"
+              type="search"
+              placeholder="Filter by subject ID…"
+              value={textFilter}
+              onChange={(e) => setTextFilter(e.target.value)}
+              aria-label="Filter subjects"
+            />
+          </div>
         </div>
+
+        {availableModalities.length > 0 && (
+          <div className="xn-chip-row" role="group" aria-label="Modality filter">
+            <span className="xn-chip-row-label">Modality:</span>
+            {availableModalities.map((m) => {
+              const active = selectedModalities.has(m)
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  className={`xn-chip ${active ? 'xn-chip-active' : ''}`}
+                  onClick={() => toggleModality(m)}
+                  aria-pressed={active}
+                >
+                  {m}
+                </button>
+              )
+            })}
+            {selectedModalities.size > 0 && (
+              <button
+                type="button"
+                className="xn-chip-clear"
+                onClick={() => setSelectedModalities(new Set())}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
 
         {!subjects && !error && <div className="xn-muted">Loading…</div>}
         {subjects && subjects.length === 0 && (
           <div className="xn-muted">No subjects in this project yet.</div>
         )}
-        {filtered && filtered.length > 0 && (
+        {filteredSorted && subjects && subjects.length > 0 && filteredSorted.length === 0 && (
+          <div className="xn-muted">No subjects match the current filters.</div>
+        )}
+        {filteredSorted && filteredSorted.length > 0 && (
           <table className="xn-table">
             <thead>
               <tr>
@@ -84,7 +183,7 @@ export function ProjectPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((s) => (
+              {filteredSorted.map((s) => (
                 <tr key={s.subject_id}>
                   <td>
                     <Link to={`/projects/${projectId}/subjects/${s.subject_id}`}>

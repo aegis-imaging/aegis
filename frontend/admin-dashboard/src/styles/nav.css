@@ -369,3 +369,212 @@
   margin: 0;
   font-size: 14px;
 }
+
+/* ── Section controls (filters, sort selectors) ──────────────────────── */
+
+.xn-section-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.xn-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.xn-control-label {
+  font-size: 12px;
+  color: var(--xn-muted);
+}
+
+.xn-control select {
+  padding: 5px 8px;
+  font-size: 13px;
+  border: 1px solid var(--xn-border);
+  border-radius: 6px;
+  background: var(--xn-surface);
+  color: var(--xn-text);
+}
+
+.xn-icon-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--xn-surface);
+  border: 1px solid var(--xn-border);
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--xn-text);
+}
+
+.xn-icon-btn:hover {
+  background: var(--xn-active-bg);
+  color: var(--xn-link-hover);
+}
+
+/* ── Filter chips (modality, etc.) ───────────────────────────────────── */
+
+.xn-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--xn-border);
+}
+
+.xn-chip-row-label {
+  font-size: 12px;
+  color: var(--xn-muted);
+  margin-right: 4px;
+}
+
+.xn-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--xn-bg);
+  border: 1px solid var(--xn-border);
+  color: var(--xn-text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.xn-chip:hover {
+  border-color: var(--xn-link);
+}
+
+.xn-chip-active {
+  background: var(--xn-active-bg);
+  color: var(--xn-link-hover);
+  border-color: var(--xn-link);
+}
+
+.xn-chip-clear {
+  padding: 4px 8px;
+  background: none;
+  border: 0;
+  font-size: 12px;
+  color: var(--xn-muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.xn-chip-clear:hover {
+  color: var(--xn-link-hover);
+}
+
+/* ── Pipeline stage indicators ───────────────────────────────────────── */
+/*
+ * Glyph + color combo gives both color-vision-typical users a visual cue
+ * and colorblind users a recognizable shape. Palette stays on the
+ * project's teal/orange axis — never red/green.
+ */
+
+.xn-stage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.xn-stage-na {
+  color: var(--xn-border);
+  font-weight: 400;
+}
+
+.xn-stage-pending {
+  background: var(--xn-bg);
+  color: var(--xn-muted);
+  border: 1px solid var(--xn-border);
+}
+
+.xn-stage-running {
+  background: #fef3c7;
+  color: #a16207;
+  border: 1px solid #fde68a;
+}
+
+.xn-stage-complete {
+  background: var(--xn-active-bg);
+  color: var(--xn-link-hover);
+  border: 1px solid var(--xn-link);
+}
+
+.xn-stage-partial {
+  background: #fef3c7;
+  color: #a16207;
+  border: 1px solid #d97706;
+}
+
+.xn-stage-failed {
+  background: var(--xn-error-bg);
+  color: var(--xn-error-text);
+  border: 1px solid #ea580c;
+}
+
+/* ── Study status pill ───────────────────────────────────────────────── */
+
+.xn-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.xn-status-default {
+  background: var(--xn-bg);
+  color: var(--xn-muted);
+  border: 1px solid var(--xn-border);
+}
+
+.xn-status-active {
+  background: #fef3c7;
+  color: #a16207;
+}
+
+.xn-status-approved {
+  background: var(--xn-active-bg);
+  color: var(--xn-link-hover);
+}
+
+.xn-status-rejected {
+  background: var(--xn-error-bg);
+  color: var(--xn-error-text);
+}
+
+/* ── Table tweaks for dense subject pages ────────────────────────────── */
+
+.xn-table-wrap {
+  overflow-x: auto;
+}
+
+.xn-cell-truncate {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xn-code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  background: var(--xn-bg);
+  border-radius: 4px;
+}

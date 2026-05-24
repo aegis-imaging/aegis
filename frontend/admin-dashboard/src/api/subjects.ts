@@ -39,6 +39,12 @@ export type SubjectAggregate = {
   demographics?: SubjectDemographics | null
 }
 
+// Per-pipeline-stage status string. AEGIS uses the same shape across all
+// stages: '' (not yet required), 'pending', 'running' / 'scanning' /
+// 'analyzing' (stage-specific in-flight verbs), 'complete', 'partial',
+// 'failed'. The status display chooses an icon + color from this string.
+export type PipelineStatus = string
+
 export type StudyStub = {
   id: string
   project_id: string
@@ -53,6 +59,23 @@ export type StudyStub = {
   instance_count: number
   created_at: string
   updated_at: string
+
+  // Pipeline stages. Each has a `*_required` boolean and a `*_status`
+  // string. Routing rules decide which stages run on each study.
+  phi_scan_required?: boolean
+  phi_scan_status?: PipelineStatus
+  qc_required?: boolean
+  qc_status?: PipelineStatus
+  bids_required?: boolean
+  bids_status?: PipelineStatus
+  classification_required?: boolean
+  classification_status?: PipelineStatus
+  protocol_required?: boolean
+  protocol_status?: PipelineStatus
+  export_required?: boolean
+  export_status?: PipelineStatus
+  analytics_required?: boolean
+  analytics_status?: PipelineStatus
 }
 
 export type ProjectSubjectsResponse = {

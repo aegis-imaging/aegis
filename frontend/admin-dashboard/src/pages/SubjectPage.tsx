@@ -1,16 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { apiGetProjectSubject, type ProjectSubjectResponse } from '../api/subjects'
+import {
+  apiGetProjectSubject,
+  type PipelineStatus,
+  type ProjectSubjectResponse,
+  type StudyStub,
+} from '../api/subjects'
+
+type StudySortKey = 'study_date' | 'modality' | 'status' | 'instance_count'
 
 // SubjectPage shows demographics for a subject and the list of imaging
-// sessions (studies) belonging to them, sorted newest-first. XNAT's subject
-// report has additional sections (custom variable groups, assessors) that we
-// can layer on as features are added — the current shape covers the primary
-// drill-down that image analysts use day-to-day.
+// sessions (studies) belonging to them. Per-pipeline-stage status icons
+// (PHI / QC / BIDS / Classification / Protocol / Analytics) mirror the
+// admin Studies tab so analysts can see at a glance which sessions still
+// need review without leaving the subject view.
 export function SubjectPage() {
   const { projectId, subjectId } = useParams<{ projectId: string; subjectId: string }>()
   const [data, setData] = useState<ProjectSubjectResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<StudySortKey>('study_date')
+  const [sortDesc, setSortDesc] = useState(true)
 
   useEffect(() => {
     if (!projectId || !subjectId) return
@@ -25,10 +34,33 @@ export function SubjectPage() {
     }
   }, [projectId, subjectId])
 
+  const sortedStudies = useMemo(() => {
+    if (!data) return []
+    return [...data.studies].sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case 'study_date':
+          cmp = (a.study_date ?? '').localeCompare(b.study_date ?? '')
+          break
+        case 'modality':
+          cmp = (a.modality ?? '').localeCompare(b.modality ?? '')
+          break
+        case 'status':
+          cmp = a.status.localeCompare(b.status)
+          break
+        case 'instance_count':
+          cmp = a.instance_count - b.instance_count
+          break
+      }
+      return sortDesc ? -cmp : cmp
+    })
+  }, [data, sortKey, sortDesc])
+
   if (error) return <div className="xn-error">{error}</div>
   if (!data) return <div className="xn-muted">Loading…</div>
 
   const d = data.demographics
+
   return (
     <div className="xn-subject">
       <header className="xn-page-header">
@@ -36,6 +68,9 @@ export function SubjectPage() {
         <p className="xn-muted">
           {data.study_count} study{data.study_count === 1 ? '' : 's'}
           {(data.modalities ?? []).length > 0 && ` · ${(data.modalities ?? []).join(', ')}`}
+          {data.anon_patient_id && data.anon_patient_id !== data.subject_id && (
+            <> · ingest ID: <code className="xn-code">{data.anon_patient_id}</code></>
+          )}
         </p>
       </header>
 
@@ -64,41 +99,185 @@ export function SubjectPage() {
       </section>
 
       <section className="xn-section">
-        <h2>Imaging sessions</h2>
+        <div className="xn-section-bar">
+          <h2>Imaging sessions</h2>
+          <div className="xn-section-controls">
+            <label className="xn-control">
+              <span className="xn-control-label">Sort by</span>
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as StudySortKey)}
+              >
+                <option value="study_date">Study date</option>
+                <option value="modality">Modality</option>
+                <option value="status">Status</option>
+                <option value="instance_count">Instances</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="xn-icon-btn"
+              onClick={() => setSortDesc((s) => !s)}
+              aria-label={sortDesc ? 'Sort ascending' : 'Sort descending'}
+              title={sortDesc ? 'Switch to ascending' : 'Switch to descending'}
+            >
+              {sortDesc ? '↓' : '↑'}
+            </button>
+          </div>
+        </div>
         {data.studies.length === 0 && <div className="xn-muted">No studies for this subject.</div>}
         {data.studies.length > 0 && (
-          <table className="xn-table">
-            <thead>
-              <tr>
-                <th>Study date</th>
-                <th>Modality</th>
-                <th>Body part</th>
-                <th>Description</th>
-                <th>Status</th>
-                <th>Instances</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.studies.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <Link to={`/projects/${projectId}/subjects/${subjectId}/studies/${s.id}`}>
-                      {formatStudyDate(s.study_date)}
-                    </Link>
-                  </td>
-                  <td>{s.modality ?? ''}</td>
-                  <td>{s.body_part ?? ''}</td>
-                  <td>{s.study_description ?? ''}</td>
-                  <td>{s.status}</td>
-                  <td>{s.instance_count}</td>
+          <div className="xn-table-wrap">
+            <table className="xn-table">
+              <thead>
+                <tr>
+                  <th>Study date</th>
+                  <th>Modality</th>
+                  <th>Body part</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th title="PHI Scan">PHI</th>
+                  <th title="Quality control">QC</th>
+                  <th title="BIDS conversion">BIDS</th>
+                  <th title="Classification">Class</th>
+                  <th title="Protocol check">Proto</th>
+                  <th title="Analytics">Anlx</th>
+                  <th>Instances</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sortedStudies.map((s) => (
+                  <StudyRow
+                    key={s.id}
+                    study={s}
+                    projectId={projectId!}
+                    subjectId={subjectId!}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>
   )
+}
+
+function StudyRow({
+  study,
+  projectId,
+  subjectId,
+}: {
+  study: StudyStub
+  projectId: string
+  subjectId: string
+}) {
+  return (
+    <tr>
+      <td>
+        <Link to={`/projects/${projectId}/subjects/${subjectId}/studies/${study.id}`}>
+          {formatStudyDate(study.study_date)}
+        </Link>
+      </td>
+      <td>{study.modality ?? ''}</td>
+      <td>{study.body_part ?? ''}</td>
+      <td className="xn-cell-truncate" title={study.study_description ?? ''}>
+        {study.study_description ?? ''}
+      </td>
+      <td>
+        <StatusPill status={study.status} />
+      </td>
+      <td><StagePill required={study.phi_scan_required} status={study.phi_scan_status} /></td>
+      <td><StagePill required={study.qc_required} status={study.qc_status} /></td>
+      <td><StagePill required={study.bids_required} status={study.bids_status} /></td>
+      <td><StagePill required={study.classification_required} status={study.classification_status} /></td>
+      <td><StagePill required={study.protocol_required} status={study.protocol_status} /></td>
+      <td><StagePill required={study.analytics_required} status={study.analytics_status} /></td>
+      <td>{study.instance_count}</td>
+    </tr>
+  )
+}
+
+// StagePill renders a one-glance indicator of a single pipeline stage's
+// state for a study. Empty pill when the stage isn't required for this
+// study (routing rules decided not to run it). Color is keyed off the
+// project's colorblind-friendly palette (teal for positive, orange for
+// negative; never red/green).
+function StagePill({
+  required,
+  status,
+}: {
+  required?: boolean
+  status?: PipelineStatus
+}) {
+  if (!required) return <span className="xn-stage xn-stage-na" aria-label="not required">—</span>
+  const cls = stageClass(status)
+  const label = status || 'pending'
+  return (
+    <span className={`xn-stage ${cls}`} title={label} aria-label={`Status: ${label}`}>
+      {stageGlyph(status)}
+    </span>
+  )
+}
+
+function StatusPill({ status }: { status: string }) {
+  const cls = studyStatusClass(status)
+  return <span className={`xn-status ${cls}`}>{status}</span>
+}
+
+function stageClass(status?: PipelineStatus): string {
+  switch (status) {
+    case 'complete':
+      return 'xn-stage-complete'
+    case 'partial':
+      return 'xn-stage-partial'
+    case 'failed':
+      return 'xn-stage-failed'
+    case 'running':
+    case 'scanning':
+    case 'analyzing':
+    case 'converting':
+      return 'xn-stage-running'
+    case 'pending':
+    case '':
+    case undefined:
+      return 'xn-stage-pending'
+    default:
+      return 'xn-stage-pending'
+  }
+}
+
+function stageGlyph(status?: PipelineStatus): string {
+  switch (status) {
+    case 'complete':
+      return '●'
+    case 'partial':
+      return '◐'
+    case 'failed':
+      return '✕'
+    case 'running':
+    case 'scanning':
+    case 'analyzing':
+    case 'converting':
+      return '◌'
+    default:
+      return '○'
+  }
+}
+
+function studyStatusClass(status: string): string {
+  switch (status) {
+    case 'approved':
+      return 'xn-status-approved'
+    case 'rejected':
+    case 'expired':
+      return 'xn-status-rejected'
+    case 'defacing':
+    case 'defaced':
+      return 'xn-status-active'
+    default:
+      return 'xn-status-default'
+  }
 }
 
 function formatStudyDate(d?: string | null): string {
