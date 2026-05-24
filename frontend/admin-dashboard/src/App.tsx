@@ -129,6 +129,7 @@ type Study = {
   body_part: string
   study_description: string
   study_date?: string
+  anon_patient_id?: string | null
   series_count: number
   source: string
   status: string
@@ -3322,12 +3323,12 @@ function StudyRow({
           </button>
         </td>
         <td className="td-uid">
-          <button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button>
+          <button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{study.anon_patient_id || uidShort(study.study_instance_uid)}</button>
           <button
             type="button"
             className={`btn-copy-uid${uidCopied ? ' btn-copy-uid--copied' : ''}`}
             onClick={copyUid}
-            title={uidCopied ? 'Copied!' : 'Copy full UID to clipboard'}
+            title={uidCopied ? 'Copied!' : 'Copy full Study UID to clipboard'}
           >
             {uidCopied ? '✓' : '⎘'}
           </button>
@@ -11608,7 +11609,7 @@ export function App() {
                       />
                     </th>
                     <th className="th-flag" title="Priority flag">★</th>
-                    <th>Study UID</th>
+                    <th className="th-sortable" onClick={() => setSortF('anon_patient_id')} title="Sort by anonymized patient ID (falls back to study UID when missing)">Patient{sortIcon('anon_patient_id')}</th>
                     {showDescCol && <th>Description</th>}
                     <th className="th-sortable" onClick={() => setSortF('modality')} title="Sort by modality">Modality{sortIcon('modality')}</th>
                     <th className="th-sortable" onClick={() => setSortF('body_part')} title="Sort by body part">Body Part{sortIcon('body_part')}</th>
