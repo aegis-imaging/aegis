@@ -23,6 +23,17 @@ type Tenant struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
+// TenantID satisfies the (unexported) idGetter interface in api/tenantctx
+// so the model layer can read the tenant id off the context without
+// api/tenantctx having to import api/model (which would create a cycle —
+// api/model/audit.go reads api/tenantctx).
+func (t *Tenant) TenantID() string {
+	if t == nil {
+		return ""
+	}
+	return t.ID
+}
+
 // ErrTenantNotFound is returned when a tenant lookup misses.
 var ErrTenantNotFound = errors.New("tenant not found")
 

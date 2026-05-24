@@ -117,7 +117,8 @@ func ResolveTenant(db *sql.DB) func(http.Handler) http.Handler {
 // callers in non-middleware-importing packages (like the model layer)
 // should call tenantctx.From / tenantctx.ID directly.
 func TenantFromContext(ctx context.Context) *model.Tenant {
-	return tenantctx.From(ctx)
+	t, _ := tenantctx.From(ctx).(*model.Tenant)
+	return t
 }
 
 // tenantSlugFromRequest pulls the slug out of either the explicit header
