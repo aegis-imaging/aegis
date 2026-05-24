@@ -113,16 +113,24 @@ func scanStudy(row scannable, s *Study) error {
 // Pass nil to leave a field unchanged. subject_id only overwrites a
 // NULL/empty value — researcher-edited subject_ids are never clobbered.
 //
-// Distinct from UpdateStudyMetadata, which the classification service uses
-// to update modality/body_part after model inference.
+// The $1::text / $2::text casts are required because under Postgres's
+// extended query protocol parameters are type-inferred at PREPARE time
+// (before any value is bound). When the orphan-seed path passes a nil
+// study_date, $2 has no anchor (the empty-string literal `''` it would
+// otherwise compare against is type `unknown`), so Postgres bails out
+// with SQLSTATE 42P08 "cannot determine data type of parameter". The
+// explicit casts give every reference a concrete type up front.
+//
+// Distinct from UpdateStudyMetadata, which the classification service
+// uses to update modality/body_part after model inference.
 func UpdateStudyDicomMetadata(ctx context.Context, db *sql.DB, studyID string, subjectID, studyDate *string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies
-		SET study_date = COALESCE($2, study_date),
+		SET study_date = COALESCE($2::text, study_date),
 		    subject_id = CASE
 		                     WHEN (subject_id IS NULL OR subject_id = '')
-		                          AND $1 IS NOT NULL AND $1 <> ''
-		                     THEN $1
+		                          AND $1::text IS NOT NULL AND $1::text <> ''
+		                     THEN $1::text
 		                     ELSE subject_id
 		                 END,
 		    updated_at = now()
