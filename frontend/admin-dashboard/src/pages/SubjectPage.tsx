@@ -68,9 +68,6 @@ export function SubjectPage() {
         <p className="xn-muted">
           {data.study_count} study{data.study_count === 1 ? '' : 's'}
           {(data.modalities ?? []).length > 0 && ` · ${(data.modalities ?? []).join(', ')}`}
-          {data.anon_patient_id && data.anon_patient_id !== data.subject_id && (
-            <> · ingest ID: <code className="xn-code">{data.anon_patient_id}</code></>
-          )}
         </p>
       </header>
 

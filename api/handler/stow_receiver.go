@@ -82,7 +82,7 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		modality      string
 		bodyPart      string
 		studyDesc     string
-		anonPatientID string
+		subjectID string
 		studyDate     string
 	}
 
@@ -99,7 +99,7 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		modality      string
 		bodyPart      string
 		studyDesc     string
-		anonPatientID string
+		subjectID string
 		studyDate     string
 		// seriesOrder preserves the order series were first seen so we
 		// produce deterministic upserts.
@@ -162,7 +162,7 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			modality:      stowGetStringTag(dataset, tag.Modality),
 			bodyPart:      stowGetStringTag(dataset, tag.BodyPartExamined),
 			studyDesc:     stowGetStringTag(dataset, tag.StudyDescription),
-			anonPatientID: stowGetStringTag(dataset, tag.PatientID),
+			subjectID: stowGetStringTag(dataset, tag.PatientID),
 			studyDate:     stowGetStringTag(dataset, tag.StudyDate),
 		}
 		if p.studyUID == "" {
@@ -176,7 +176,7 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 				modality:      p.modality,
 				bodyPart:      p.bodyPart,
 				studyDesc:     p.studyDesc,
-				anonPatientID: p.anonPatientID,
+				subjectID: p.subjectID,
 				studyDate:     p.studyDate,
 				series:        make(map[string]*seriesAcc),
 			}
@@ -184,8 +184,8 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			orderedUIDs = append(orderedUIDs, p.studyUID)
 		} else {
 			// First non-empty wins per study (in case later parts have the tag but the first didn't).
-			if g.anonPatientID == "" && p.anonPatientID != "" {
-				g.anonPatientID = p.anonPatientID
+			if g.subjectID == "" && p.subjectID != "" {
+				g.subjectID = p.subjectID
 			}
 			if g.studyDate == "" && p.studyDate != "" {
 				g.studyDate = p.studyDate
@@ -253,17 +253,17 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		// Create study record.
 		bodyPartUpper := strings.ToUpper(g.bodyPart)
 		defacingRequired := bodyPartUpper == "HEAD" || bodyPartUpper == "BRAIN"
-		var anonPatientIDPtr, studyDatePtr *string
-		if g.anonPatientID != "" {
-			v := g.anonPatientID
-			anonPatientIDPtr = &v
+		var subjectIDPtr, studyDatePtr *string
+		if g.subjectID != "" {
+			v := g.subjectID
+			subjectIDPtr = &v
 		}
 		if g.studyDate != "" {
 			v := g.studyDate
 			studyDatePtr = &v
 		}
-		// SubjectID is the canonical, editable subject identifier; initialize
-		// it to the DICOM-derived anonymized PatientID so the study appears
+		// SubjectID is the canonical subject identifier; initialize it to
+		// the DICOM-derived pseudonymized PatientID so the study appears
 		// in the XNAT-style subject listing immediately.
 		study := &model.Study{
 			ProjectID:        project.ID,
@@ -272,8 +272,7 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			BodyPart:         g.bodyPart,
 			StudyDescription: g.studyDesc,
 			StudyDate:        studyDatePtr,
-			AnonPatientID:    anonPatientIDPtr,
-			SubjectID:        anonPatientIDPtr,
+			SubjectID:        subjectIDPtr,
 			InstanceCount:    len(g.parts),
 			Status:           "received",
 			DefacingRequired: defacingRequired,

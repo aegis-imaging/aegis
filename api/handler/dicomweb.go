@@ -40,8 +40,8 @@ func dicomTagPN(name string) map[string]any {
 }
 
 // derefOr returns *p when non-nil, otherwise fallback. Helper for emitting
-// optional string columns (anon_patient_id, study_date, etc.) into DICOMweb
-// tag payloads where a missing value should serialize as an empty tag.
+// optional string columns (subject_id, study_date, etc.) into DICOMweb tag
+// payloads where a missing value should serialize as an empty tag.
 func derefOr(p *string, fallback string) string {
 	if p == nil {
 		return fallback
@@ -61,7 +61,7 @@ func studyQIDO(s model.Study) map[string]any {
 		"00080030": dicomTag("TM", ""),                               // StudyTime — anonymized
 		"00080050": dicomTag("SH", ""),                               // AccessionNumber — anonymized
 		"00100010": dicomTagPN(""),                                   // PatientName — anonymized
-		"00100020": dicomTag("LO", derefOr(s.AnonPatientID, "")),     // PatientID — anonymized subject ID
+		"00100020": dicomTag("LO", derefOr(s.SubjectID, "")),         // PatientID — subject identifier (pseudonymized)
 		"00080060": dicomTag("CS", s.Modality),                       // Modality
 		"00080061": dicomTag("CS", s.Modality),                       // ModalitiesInStudy
 		"00081030": dicomTag("LO", s.StudyDescription),               // StudyDescription

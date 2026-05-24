@@ -322,27 +322,27 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 	bodyPart := strings.ToUpper(deref(session.BodyPart))
 	defacingRequired := bodyPart == "HEAD" || bodyPart == "BRAIN"
 
-	// Best-effort extraction of anonymized PatientID + StudyDate from the
-	// first uploaded .dcm. The client-side anonymizer writes the new
-	// SUBJ-<hex> PatientID into tag 0010,0020 before upload, so reading it
-	// here is the canonical source of truth. StudyDate from the file header
-	// only overrides the session metadata when the client didn't provide it.
-	anonPatientID, dicomStudyDate := s.extractIngestMetadata(ctx, fmt.Sprintf("%s/0.dcm", dstPrefix))
+	// Best-effort extraction of pseudonymized PatientID + StudyDate from
+	// the first uploaded .dcm. The client-side anonymizer writes the new
+	// SUBJ-<hex> PatientID into tag 0010,0020 before upload, so reading
+	// it here is the canonical source of truth for the subject identifier.
+	// StudyDate from the file header only overrides the session metadata
+	// when the client didn't provide it.
+	dicomSubjectID, dicomStudyDate := s.extractIngestMetadata(ctx, fmt.Sprintf("%s/0.dcm", dstPrefix))
 	studyDate := session.StudyDate
 	if studyDate == nil && dicomStudyDate != "" {
 		sd := dicomStudyDate
 		studyDate = &sd
 	}
-	var anonPatientIDPtr *string
-	if anonPatientID != "" {
-		anonPatientIDPtr = &anonPatientID
+	var subjectIDPtr *string
+	if dicomSubjectID != "" {
+		subjectIDPtr = &dicomSubjectID
 	}
 
-	// Create study record
-	// SubjectID is the canonical, editable subject identifier. At ingest
-	// we initialize it to the DICOM-derived anonymized PatientID so the
-	// study lands in the XNAT-style subject listing immediately; a
-	// researcher can later re-key it to merge patients across studies.
+	// Create study record. subject_id is the canonical subject identifier;
+	// initializing it from the DICOM-derived value at ingest puts the
+	// study into the XNAT-style subject listing immediately. Researchers
+	// can later re-key it to merge patients across studies.
 	study := &model.Study{
 		ProjectID:        session.ProjectID,
 		UploadSessionID:  &session.ID,
@@ -352,8 +352,7 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 		BodyPart:         deref(session.BodyPart),
 		StudyDescription: "",
 		StudyDate:        studyDate,
-		AnonPatientID:    anonPatientIDPtr,
-		SubjectID:        anonPatientIDPtr,
+		SubjectID:        subjectIDPtr,
 		SeriesCount:      0,
 		InstanceCount:    len(files),
 		Status:           "received",
@@ -517,9 +516,11 @@ func (s *Server) serveDicomFile(w http.ResponseWriter, path string) {
 }
 
 // extractIngestMetadata best-effort reads the first stored .dcm and returns
-// (anonPatientID, studyDate) from its DICOM header. Errors are logged and
-// swallowed — extraction is opportunistic; missing tags simply yield "" and
-// leave the corresponding column NULL.
+// (subjectID, studyDate) from its DICOM header. The subjectID value is the
+// pseudonymized PatientID that the client-side anonymizer wrote into tag
+// 0010,0020 before upload. Errors are logged and swallowed — extraction is
+// opportunistic; missing tags simply yield "" and leave the corresponding
+// column NULL.
 func (s *Server) extractIngestMetadata(ctx context.Context, key string) (string, string) {
 	rc, err := s.store.Retrieve(ctx, key)
 	if err != nil {
