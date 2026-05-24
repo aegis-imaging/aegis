@@ -886,12 +886,20 @@
   transition: background 120ms ease, color 120ms ease;
 }
 
+/*
+ * Hover and active states need to look distinct so the user can tell which
+ * tab they're ON versus which they're about to click. Hover gets a paler
+ * neutral wash; active gets the saturated teal tint + bold label + the
+ * left accent stripe rendered by the ::before below.
+ */
+
 .xn-sidenav-item:hover {
-  background: var(--xn-active-bg);
-  color: var(--xn-link-hover);
+  background: var(--xn-bg);
+  color: var(--xn-text);
 }
 
-.xn-sidenav-item--active {
+.xn-sidenav-item--active,
+.xn-sidenav-item--active:hover {
   background: var(--xn-active-bg);
   color: var(--xn-link-hover);
   font-weight: 600;
