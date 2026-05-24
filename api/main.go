@@ -586,6 +586,9 @@ func main() {
 	mux.HandleFunc("PUT /api/admin-users/{id}/preferences", auth(srv.UpdateUserPreferences))
 	mux.HandleFunc("GET /api/admin-users/{id}/sessions", auth(srv.ListSessions))
 
+	// Admin maintenance — one-shot backfills + data fixers; admin-only.
+	mux.HandleFunc("POST /api/admin/backfill-study-metadata", adminOnly(srv.BackfillStudyMetadata))
+
 	// Auth session tracking.
 	mux.HandleFunc("POST /api/auth/session", auth(srv.RecordSession))
 

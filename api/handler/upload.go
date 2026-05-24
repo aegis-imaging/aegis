@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	dicomlib "github.com/suyashkumar/dicom"
+	"github.com/suyashkumar/dicom/pkg/tag"
 
 	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/middleware"
@@ -317,6 +321,22 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 	bodyPart := strings.ToUpper(deref(session.BodyPart))
 	defacingRequired := bodyPart == "HEAD" || bodyPart == "BRAIN"
 
+	// Best-effort extraction of anonymized PatientID + StudyDate from the
+	// first uploaded .dcm. The client-side anonymizer writes the new
+	// SUBJ-<hex> PatientID into tag 0010,0020 before upload, so reading it
+	// here is the canonical source of truth. StudyDate from the file header
+	// only overrides the session metadata when the client didn't provide it.
+	anonPatientID, dicomStudyDate := s.extractIngestMetadata(ctx, fmt.Sprintf("%s/0.dcm", dstPrefix))
+	studyDate := session.StudyDate
+	if studyDate == nil && dicomStudyDate != "" {
+		sd := dicomStudyDate
+		studyDate = &sd
+	}
+	var anonPatientIDPtr *string
+	if anonPatientID != "" {
+		anonPatientIDPtr = &anonPatientID
+	}
+
 	// Create study record
 	study := &model.Study{
 		ProjectID:        session.ProjectID,
@@ -326,7 +346,8 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 		Modality:         deref(session.Modality),
 		BodyPart:         deref(session.BodyPart),
 		StudyDescription: "",
-		StudyDate:        session.StudyDate,
+		StudyDate:        studyDate,
+		AnonPatientID:    anonPatientIDPtr,
 		SeriesCount:      0,
 		InstanceCount:    len(files),
 		Status:           "received",
@@ -399,4 +420,35 @@ func (s *Server) serveDicomFile(w http.ResponseWriter, path string) {
 	defer f.Close()
 	w.Header().Set("Content-Type", "application/dicom")
 	io.Copy(w, f)
+}
+
+// extractIngestMetadata best-effort reads the first stored .dcm and returns
+// (anonPatientID, studyDate) from its DICOM header. Errors are logged and
+// swallowed — extraction is opportunistic; missing tags simply yield "" and
+// leave the corresponding column NULL.
+func (s *Server) extractIngestMetadata(ctx context.Context, key string) (string, string) {
+	rc, err := s.store.Retrieve(ctx, key)
+	if err != nil {
+		log.Printf("extract ingest metadata: retrieve %s: %v", key, err)
+		return "", ""
+	}
+	defer rc.Close()
+
+	// 1 MB is generous — PatientID + StudyDate sit in the metadata before
+	// pixel data, which starts much later in any reasonable DICOM file.
+	data, err := io.ReadAll(io.LimitReader(rc, 1<<20))
+	if err != nil {
+		log.Printf("extract ingest metadata: read %s: %v", key, err)
+		return "", ""
+	}
+	dataset, err := dicomlib.Parse(
+		bytes.NewReader(data), int64(len(data)), nil,
+		dicomlib.SkipPixelData(),
+		dicomlib.AllowMissingMetaElementGroupLength(),
+	)
+	if err != nil {
+		log.Printf("extract ingest metadata: parse %s: %v", key, err)
+		return "", ""
+	}
+	return stowGetStringTag(dataset, tag.PatientID), stowGetStringTag(dataset, tag.StudyDate)
 }
