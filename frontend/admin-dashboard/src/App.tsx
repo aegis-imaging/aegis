@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Fragment, DragEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment, DragEvent } from 'react'
 import {
   isDicomFile, parseDicomFile, buildStudySummary, deidentify, uploadStudy, groupByStudy,
 } from '@aegis/client'
@@ -22,7 +22,7 @@ import { useStudyEvents } from './hooks/useStudyEvents'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'spokes' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'system'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'spokes' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'downloads' | 'system'
 
 type APIKey = {
   id: string
@@ -34,6 +34,42 @@ type APIKey = {
   expires_at: string | null
   created_at: string
   updated_at: string
+}
+
+type DesktopInstaller = {
+  id: string
+  product: 'uploader' | 'dimse-bridge'
+  platform: string
+  version: string
+  storage_key?: string
+  external_url?: string
+  filename: string
+  size_bytes: number
+  sha256: string
+  changelog?: string
+  is_current: boolean
+  released_at: string
+  created_by: string
+  created_at: string
+}
+
+type DesktopInstallerInvite = {
+  id: string
+  installer_id: string
+  recipient_email: string
+  recipient_name?: string
+  token: string
+  expires_at: string
+  sent_at: string
+  sent_by: string
+  first_clicked_at: string | null
+  last_clicked_at: string | null
+  click_count: number
+  paired_at: string | null
+  paired_api_key_id: string | null
+  product?: string
+  platform?: string
+  version?: string
 }
 
 type StudyLabel = {
@@ -9057,6 +9093,470 @@ function APIKeysPanel() {
   )
 }
 
+// ── DownloadsPanel ────────────────────────────────────────────────────────────
+
+const INSTALLER_PRODUCTS: Array<{ value: 'uploader' | 'dimse-bridge'; label: string }> = [
+  { value: 'uploader',     label: 'AEGIS Desktop Uploader' },
+  { value: 'dimse-bridge', label: 'AEGIS DIMSE Bridge' },
+]
+
+const INSTALLER_PLATFORMS: Array<{ value: string; label: string }> = [
+  { value: 'macos-arm64',    label: 'macOS (Apple Silicon)' },
+  { value: 'macos-x64',      label: 'macOS (Intel)' },
+  { value: 'windows-x64',    label: 'Windows (64-bit)' },
+  { value: 'linux-deb',      label: 'Linux (.deb)' },
+  { value: 'linux-appimage', label: 'Linux (AppImage)' },
+  { value: 'linux-rpm',      label: 'Linux (.rpm)' },
+]
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+function platformLabel(value: string): string {
+  return INSTALLER_PLATFORMS.find(p => p.value === value)?.label ?? value
+}
+
+function productLabel(value: string): string {
+  return INSTALLER_PRODUCTS.find(p => p.value === value)?.label ?? value
+}
+
+function DownloadsPanel() {
+  const [installers, setInstallers] = useState<DesktopInstaller[]>([])
+  const [invites, setInvites]       = useState<DesktopInstallerInvite[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
+
+  const [showUpload, setShowUpload]   = useState(false)
+  const [showSendFor, setShowSendFor] = useState<DesktopInstaller | null>(null)
+  const [toast, setToast]             = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const [iRes, vRes] = await Promise.all([
+        fetch('/api/desktop-installers'),
+        fetch('/api/desktop-installers/invites'),
+      ])
+      if (!iRes.ok) throw new Error('Failed to load installers')
+      if (!vRes.ok) throw new Error('Failed to load invite history')
+      const iData = await iRes.json()
+      const vData = await vRes.json()
+      setInstallers(iData.installers ?? [])
+      setInvites(vData.invites ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // Auto-dismiss toast after 3s.
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  async function markCurrent(inst: DesktopInstaller) {
+    const res = await fetch(`/api/desktop-installers/${inst.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mark_current: true }),
+    })
+    if (!res.ok) { setToast('Failed to mark current'); return }
+    setToast(`Marked ${inst.version} current for ${platformLabel(inst.platform)}`)
+    load()
+  }
+
+  async function del(inst: DesktopInstaller) {
+    if (!confirm(`Delete ${productLabel(inst.product)} ${inst.version} (${platformLabel(inst.platform)})? This removes the installer binary.`)) return
+    const res = await fetch(`/api/desktop-installers/${inst.id}`, { method: 'DELETE' })
+    if (!res.ok && res.status !== 204) { setToast('Delete failed'); return }
+    setToast('Installer deleted')
+    load()
+  }
+
+  function downloadHref(inst: DesktopInstaller): string {
+    return `/api/desktop-installers/${inst.id}/download`
+  }
+
+  // Build a matrix: product → platform → newest installer + history (others).
+  const matrix = useMemo(() => {
+    const byKey = new Map<string, DesktopInstaller[]>()
+    for (const i of installers) {
+      const k = `${i.product}::${i.platform}`
+      const arr = byKey.get(k) ?? []
+      arr.push(i)
+      byKey.set(k, arr)
+    }
+    // Already sorted released_at DESC per (product, platform) by the server.
+    return byKey
+  }, [installers])
+
+  return (
+    <div className="routing-panel">
+      <div className="routing-section">
+        <div className="routing-section-header">
+          <div>
+            <div className="routing-section-title">Desktop client installers</div>
+            <div className="routing-section-sub">
+              Manage and distribute installable AEGIS desktop apps. Upload new versions, mark which version is current per platform, and email install links to specific users.
+            </div>
+          </div>
+          <button type="button" className="btn-primary" onClick={() => setShowUpload(true)}>
+            + Upload version
+          </button>
+        </div>
+
+        {toast && (
+          <div className="routing-form" style={{ background: '#ccfbf1', border: '1px solid #5eead4', color: '#0f766e' }}>
+            {toast}
+          </div>
+        )}
+        {loading && <div className="state-loading">Loading…</div>}
+        {error   && <div className="state-error">{error}</div>}
+
+        {!loading && !error && installers.length === 0 && (
+          <div className="state-empty">
+            No installers uploaded yet. Click <strong>Upload version</strong> to register the first one — or use the JSON API to register an external download URL (e.g. GitHub Releases).
+          </div>
+        )}
+
+        {!loading && !error && installers.length > 0 && INSTALLER_PRODUCTS.map(prod => {
+          // Only render product blocks that actually have installers.
+          const platformsWithRows = INSTALLER_PLATFORMS.filter(plat =>
+            (matrix.get(`${prod.value}::${plat.value}`) ?? []).length > 0
+          )
+          if (platformsWithRows.length === 0) return null
+          return (
+            <div key={prod.value} style={{ marginTop: '24px' }}>
+              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#334155' }}>{prod.label}</h3>
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {platformsWithRows.map(plat => {
+                  const versions = matrix.get(`${prod.value}::${plat.value}`) ?? []
+                  const current  = versions.find(v => v.is_current) ?? versions[0]
+                  const history  = versions.filter(v => v.id !== current.id)
+                  return (
+                    <div key={plat.value} style={{
+                      border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px',
+                      background: '#fff',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>{plat.label}</div>
+                          <div style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
+                            v{current.version} {current.is_current && (
+                              <span style={{
+                                background: '#ccfbf1', color: '#0f766e',
+                                padding: '1px 8px', borderRadius: '10px',
+                                fontSize: '11px', marginLeft: '6px', fontWeight: 600,
+                              }}>CURRENT</span>
+                            )}
+                            {current.external_url && (
+                              <span style={{
+                                background: '#fef3c7', color: '#92400e',
+                                padding: '1px 8px', borderRadius: '10px',
+                                fontSize: '11px', marginLeft: '6px', fontWeight: 600,
+                              }}>EXTERNAL</span>
+                            )}
+                            <span style={{ marginLeft: '8px' }}>·</span> {fmtBytes(current.size_bytes)}
+                            <span style={{ marginLeft: '8px' }}>·</span> released {fmtDate(current.released_at)}
+                          </div>
+                          {current.sha256 && (
+                            <div style={{ color: '#94a3b8', fontSize: '11px', fontFamily: 'monospace', marginTop: '4px', wordBreak: 'break-all' }}>
+                              sha256: {current.sha256}
+                            </div>
+                          )}
+                          {current.changelog && (
+                            <div style={{
+                              marginTop: '8px', padding: '8px 12px',
+                              background: '#f8fafc', borderRadius: '6px',
+                              fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap',
+                            }}>{current.changelog}</div>
+                          )}
+                        </div>
+                        <div className="actions-cell" style={{ flexShrink: 0 }}>
+                          <a className="btn btn--action" href={downloadHref(current)} target="_blank" rel="noreferrer">
+                            Download
+                          </a>
+                          <button type="button" className="btn btn--action" onClick={() => setShowSendFor(current)}>
+                            Send link
+                          </button>
+                          <button type="button" className="btn btn--revoke" onClick={() => del(current)}>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      {history.length > 0 && (
+                        <details style={{ marginTop: '12px' }}>
+                          <summary style={{ cursor: 'pointer', color: '#64748b', fontSize: '13px' }}>
+                            {history.length} older version{history.length === 1 ? '' : 's'}
+                          </summary>
+                          <table className="routing-table" style={{ marginTop: '8px' }}>
+                            <thead>
+                              <tr>
+                                <th>Version</th><th>Size</th><th>Released</th><th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {history.map(h => (
+                                <tr key={h.id}>
+                                  <td>v{h.version}</td>
+                                  <td>{fmtBytes(h.size_bytes)}</td>
+                                  <td>{fmtDate(h.released_at)}</td>
+                                  <td>
+                                    <div className="actions-cell">
+                                      <a className="btn btn--action" href={downloadHref(h)} target="_blank" rel="noreferrer">Download</a>
+                                      <button type="button" className="btn btn--action" onClick={() => markCurrent(h)}>Mark current</button>
+                                      <button type="button" className="btn btn--revoke" onClick={() => del(h)}>Delete</button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </details>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Invite send history */}
+        {!loading && !error && invites.length > 0 && (
+          <div style={{ marginTop: '32px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#334155' }}>Recent install link sends</h3>
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>Recipient</th>
+                  <th>Product</th>
+                  <th>Platform</th>
+                  <th>Version</th>
+                  <th>Sent</th>
+                  <th>Clicks</th>
+                  <th>Paired</th>
+                  <th>Expires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invites.map(inv => (
+                  <tr key={inv.id}>
+                    <td>
+                      <div>{inv.recipient_email}</div>
+                      {inv.recipient_name && <div style={{ color: '#94a3b8', fontSize: '12px' }}>{inv.recipient_name}</div>}
+                    </td>
+                    <td>{productLabel(inv.product ?? '')}</td>
+                    <td>{platformLabel(inv.platform ?? '')}</td>
+                    <td>v{inv.version}</td>
+                    <td>{fmtDate(inv.sent_at)}</td>
+                    <td>
+                      {inv.click_count > 0
+                        ? <span title={`first: ${fmtDate(inv.first_clicked_at!)}, last: ${fmtDate(inv.last_clicked_at!)}`}>
+                            {inv.click_count}
+                          </span>
+                        : <span style={{ color: '#94a3b8' }}>—</span>}
+                    </td>
+                    <td>
+                      {inv.paired_at
+                        ? <span style={{ color: '#0f766e' }}>{fmtDate(inv.paired_at)}</span>
+                        : <span style={{ color: '#94a3b8' }}>—</span>}
+                    </td>
+                    <td>{fmtDate(inv.expires_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showUpload && (
+        <UploadInstallerModal onClose={() => setShowUpload(false)} onUploaded={() => { setShowUpload(false); load() }} />
+      )}
+      {showSendFor && (
+        <SendInstallLinkModal
+          installer={showSendFor}
+          onClose={() => setShowSendFor(null)}
+          onSent={() => { setShowSendFor(null); setToast('Install link sent'); load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function UploadInstallerModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
+  const [product, setProduct]     = useState<'uploader' | 'dimse-bridge'>('uploader')
+  const [platform, setPlatform]   = useState<string>('macos-arm64')
+  const [version, setVersion]     = useState('')
+  const [changelog, setChangelog] = useState('')
+  const [markCurrent, setMarkCurrent] = useState(true)
+  const [file, setFile]           = useState<File | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+
+  async function submit() {
+    setError(null)
+    if (!version.trim()) { setError('Version is required'); return }
+    if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/.test(version.trim())) {
+      setError('Version must be semver (e.g. 1.0.0)'); return
+    }
+    if (!file) { setError('Choose an installer file to upload'); return }
+
+    setSubmitting(true)
+    try {
+      const fd = new FormData()
+      fd.append('product', product)
+      fd.append('platform', platform)
+      fd.append('version', version.trim())
+      fd.append('changelog', changelog)
+      fd.append('mark_current', markCurrent ? 'true' : 'false')
+      fd.append('file', file)
+      const res = await fetch('/api/desktop-installers', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `Upload failed (${res.status})`)
+      }
+      onUploaded()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+        <h2>Upload installer</h2>
+        {error && <div className="form-error">{error}</div>}
+        <div className="form-grid">
+          <label>
+            Product
+            <select className="form-input" value={product} onChange={e => setProduct(e.target.value as 'uploader' | 'dimse-bridge')}>
+              {INSTALLER_PRODUCTS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Platform
+            <select className="form-input" value={platform} onChange={e => setPlatform(e.target.value)}>
+              {INSTALLER_PLATFORMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Version (semver)
+            <input className="form-input" type="text" placeholder="1.0.0" value={version} onChange={e => setVersion(e.target.value)} />
+          </label>
+          <label>
+            Installer file
+            <input className="form-input" type="file" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+          </label>
+        </div>
+        <label style={{ display: 'block', marginTop: '12px' }}>
+          Changelog (optional)
+          <textarea className="form-input" rows={4} value={changelog} onChange={e => setChangelog(e.target.value)}
+            placeholder="What's new in this version?" />
+        </label>
+        <label style={{ display: 'block', marginTop: '8px' }}>
+          <input type="checkbox" checked={markCurrent} onChange={e => setMarkCurrent(e.target.checked)} />
+          {' '}Mark as current for this platform
+        </label>
+        <div className="form-row form-row--actions">
+          <button type="button" className="btn-primary" onClick={submit} disabled={submitting}>
+            {submitting ? 'Uploading…' : 'Upload'}
+          </button>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SendInstallLinkModal({ installer, onClose, onSent }: {
+  installer: DesktopInstaller
+  onClose: () => void
+  onSent: () => void
+}) {
+  const [email, setEmail]   = useState('')
+  const [name, setName]     = useState('')
+  const [days, setDays]     = useState(7)
+  const [sending, setSending] = useState(false)
+  const [error, setError]   = useState<string | null>(null)
+
+  async function send() {
+    setError(null)
+    if (!email.includes('@')) { setError('Valid email required'); return }
+    setSending(true)
+    try {
+      const res = await fetch(`/api/desktop-installers/${installer.id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient_email: email.trim(),
+          recipient_name: name.trim() || undefined,
+          expiry_days: days,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `Send failed (${res.status})`)
+      }
+      onSent()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Send failed')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+        <h2>Send install link</h2>
+        <p style={{ color: '#64748b', fontSize: '14px', marginTop: '-8px' }}>
+          {productLabel(installer.product)} · {platformLabel(installer.platform)} · v{installer.version}
+        </p>
+        {error && <div className="form-error">{error}</div>}
+        <label style={{ display: 'block', marginTop: '12px' }}>
+          Recipient email
+          <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="user@hospital.org" />
+        </label>
+        <label style={{ display: 'block', marginTop: '12px' }}>
+          Recipient name (optional)
+          <input className="form-input" type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="Dr. Smith" />
+        </label>
+        <label style={{ display: 'block', marginTop: '12px' }}>
+          Link expires in
+          <select className="form-input" value={days} onChange={e => setDays(parseInt(e.target.value, 10))}>
+            <option value={1}>1 day</option>
+            <option value={7}>7 days</option>
+            <option value={14}>14 days</option>
+            <option value={30}>30 days</option>
+            <option value={90}>90 days</option>
+          </select>
+        </label>
+        <div className="form-row form-row--actions">
+          <button type="button" className="btn-primary" onClick={send} disabled={sending}>
+            {sending ? 'Sending…' : 'Send install link'}
+          </button>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={sending}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 type StudiesState = 'loading' | 'loaded' | 'error'
@@ -9896,6 +10396,7 @@ export function App() {
       { kind: 'nav' as const, label: 'Users',        tab: 'users' as AppTab,         icon: '👤' },
       { kind: 'nav' as const, label: 'API Keys',     tab: 'api_keys' as AppTab,      icon: '🔑' },
       { kind: 'nav' as const, label: 'Invite Codes', tab: 'invite_codes' as AppTab,  icon: '🎟️' },
+      { kind: 'nav' as const, label: 'Downloads',    tab: 'downloads' as AppTab,     icon: '💾' },
     ] : []),
   ]
 
@@ -10365,6 +10866,7 @@ export function App() {
               {navItem('Users', 'users', '\u{1F464}')}
               {navItem('API Keys', 'api_keys', '\u{1F511}')}
               {navItem('Invite Codes', 'invite_codes', '\u{1F3AB}')}
+              {navItem('Downloads', 'downloads', '\u{1F4BE}')}
             </div>
           )}
 
@@ -11667,6 +12169,9 @@ export function App() {
 
       {/* Invite Codes tab — admin only */}
       {tab === 'invite_codes' && isAdmin && <InviteCodesPanel />}
+
+      {/* Downloads tab — admin only */}
+      {tab === 'downloads' && isAdmin && <DownloadsPanel />}
 
       {/* System Health tab */}
       {tab === 'system' && <SystemHealthPanel />}

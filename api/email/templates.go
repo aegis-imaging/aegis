@@ -319,6 +319,45 @@ func truncate(s string, n int) string {
 	return s[:n] + "..."
 }
 
+var desktopInstallerInviteTmpl = template.Must(template.New("desktop_installer_invite").Parse(
+	`Hi {{ .Name }},
+
+You have been sent a download link for {{ .ProductLabel }} ({{ .PlatformLabel }}).
+
+Download:
+
+  {{ .InstallURL }}
+
+This link expires on {{ .ExpiresAt }}. If it expires before you install, contact
+your AEGIS administrator and they can resend the link.
+
+After installing, the app will pair with your AEGIS account automatically the
+first time you launch it.
+
+--
+This is an automated message from AEGIS. Do not reply to this email.
+`))
+
+// DesktopInstallerInvite renders the email sent to a recipient when an admin
+// dispatches a desktop client install link from the admin dashboard. The body
+// includes the time-limited install URL — never the raw pairing token.
+func DesktopInstallerInvite(name, productLabel, platformLabel, installURL string, expiresAt time.Time) (subject, body string) {
+	if name == "" {
+		name = "there"
+	}
+	subject = "[AEGIS] Your " + productLabel + " download link"
+	var buf bytes.Buffer
+	desktopInstallerInviteTmpl.Execute(&buf, struct {
+		Name          string
+		ProductLabel  string
+		PlatformLabel string
+		InstallURL    string
+		ExpiresAt     string
+	}{name, productLabel, platformLabel, installURL,
+		expiresAt.UTC().Format("2006-01-02 15:04 UTC")})
+	return subject, buf.String()
+}
+
 // DigestSummary renders a periodic digest email for a project.
 func DigestSummary(projectName, frequency, periodLabel string, received, approved, rejected, pending, sharesCreated int) (subject, body string) {
 	freqTitle := strings.ToUpper(frequency[:1]) + frequency[1:]
