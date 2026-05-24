@@ -17,19 +17,19 @@ export function TopBar() {
   const inAdmin = location.pathname.startsWith('/admin')
 
   return (
-    <header className="xn-topbar">
-      <a href="/" className="xn-brand" aria-label="AEGIS home">
+    <header className="aegis-topbar">
+      <a href="/" className="aegis-brand" aria-label="AEGIS home">
         AEGIS
       </a>
-      <nav className="xn-topnav" aria-label="Primary">
-        <a href="/" className={isHome ? 'xn-active' : ''}>
+      <nav className="aegis-topnav" aria-label="Primary">
+        <a href="/" className={isHome ? 'aegis-active' : ''}>
           Home
         </a>
-        <a href="/admin/studies" className={inAdmin ? 'xn-active' : ''}>
+        <a href="/admin/studies" className={inAdmin ? 'aegis-active' : ''}>
           Admin
         </a>
       </nav>
-      <div className="xn-search-slot">
+      <div className="aegis-search-slot">
         <TopBarSearch />
       </div>
     </header>

@@ -31,7 +31,7 @@ export function RootRedirect() {
   if (state === 'checking') {
     // Brief spinner-like neutral state. Avoids flashing the About page
     // for the millisecond it takes /api/auth/me to resolve.
-    return <div className="xn-muted" style={{ padding: 24 }}>Loading…</div>
+    return <div className="aegis-muted" style={{ padding: 24 }}>Loading…</div>
   }
 
   if (state === 'unauthed') {

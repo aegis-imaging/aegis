@@ -59,10 +59,10 @@ export function TopBarSearch() {
   }
 
   return (
-    <div className="xn-search" ref={containerRef}>
+    <div className="aegis-search" ref={containerRef}>
       <input
         type="search"
-        className="xn-search-input"
+        className="aegis-search-input"
         placeholder="Search projects, subjects, studies…"
         value={q}
         onChange={(e) => {
@@ -73,21 +73,21 @@ export function TopBarSearch() {
         aria-label="Search projects, subjects, and studies"
       />
       {open && q.trim().length >= 2 && (
-        <div className="xn-search-dropdown" role="listbox">
-          {loading && <div className="xn-search-status">Searching…</div>}
+        <div className="aegis-search-dropdown" role="listbox">
+          {loading && <div className="aegis-search-status">Searching…</div>}
           {!loading && totalHits === 0 && (
-            <div className="xn-search-status">No matches</div>
+            <div className="aegis-search-status">No matches</div>
           )}
           {results && results.projects.length > 0 && (
             <Section title="Projects">
               {results.projects.map((p) => (
                 <button
                   key={`p-${p.project_id}`}
-                  className="xn-search-hit"
+                  className="aegis-search-hit"
                   onClick={() => goTo(`/projects/${p.project_id}`)}
                 >
-                  <div className="xn-search-label">{p.label}</div>
-                  {p.secondary && <div className="xn-search-secondary">{p.secondary}</div>}
+                  <div className="aegis-search-label">{p.label}</div>
+                  {p.secondary && <div className="aegis-search-secondary">{p.secondary}</div>}
                 </button>
               ))}
             </Section>
@@ -97,11 +97,11 @@ export function TopBarSearch() {
               {results.subjects.map((s) => (
                 <button
                   key={`s-${s.project_id}-${s.subject_id}`}
-                  className="xn-search-hit"
+                  className="aegis-search-hit"
                   onClick={() => goTo(`/projects/${s.project_id}/subjects/${s.subject_id}`)}
                 >
-                  <div className="xn-search-label">{s.label}</div>
-                  {s.secondary && <div className="xn-search-secondary">{s.secondary}</div>}
+                  <div className="aegis-search-label">{s.label}</div>
+                  {s.secondary && <div className="aegis-search-secondary">{s.secondary}</div>}
                 </button>
               ))}
             </Section>
@@ -111,7 +111,7 @@ export function TopBarSearch() {
               {results.studies.map((st) => (
                 <button
                   key={`st-${st.study_id}`}
-                  className="xn-search-hit"
+                  className="aegis-search-hit"
                   onClick={() => {
                     const path = st.subject_id
                       ? `/projects/${st.project_id}/subjects/${st.subject_id}/studies/${st.study_id}`
@@ -119,8 +119,8 @@ export function TopBarSearch() {
                     goTo(path)
                   }}
                 >
-                  <div className="xn-search-label">{st.label}</div>
-                  {st.secondary && <div className="xn-search-secondary">{st.secondary}</div>}
+                  <div className="aegis-search-label">{st.label}</div>
+                  {st.secondary && <div className="aegis-search-secondary">{st.secondary}</div>}
                 </button>
               ))}
             </Section>
@@ -133,9 +133,9 @@ export function TopBarSearch() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="xn-search-section">
-      <div className="xn-search-section-title">{title}</div>
-      <div className="xn-search-section-body">{children}</div>
+    <div className="aegis-search-section">
+      <div className="aegis-search-section-title">{title}</div>
+      <div className="aegis-search-section-body">{children}</div>
     </div>
   )
 }

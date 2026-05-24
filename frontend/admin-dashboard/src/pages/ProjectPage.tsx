@@ -90,20 +90,20 @@ export function ProjectPage() {
   }
 
   return (
-    <div className="xn-project">
-      <header className="xn-page-header">
+    <div className="aegis-project">
+      <header className="aegis-page-header">
         <h1>{project?.name ?? 'Project'}</h1>
-        {project?.description && <p className="xn-muted">{project.description}</p>}
+        {project?.description && <p className="aegis-muted">{project.description}</p>}
       </header>
 
-      {error && <div className="xn-error">{error}</div>}
+      {error && <div className="aegis-error">{error}</div>}
 
-      <section className="xn-section">
-        <div className="xn-section-bar">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Subjects</h2>
-          <div className="xn-section-controls">
-            <label className="xn-control">
-              <span className="xn-control-label">Sort by</span>
+          <div className="aegis-section-controls">
+            <label className="aegis-control">
+              <span className="aegis-control-label">Sort by</span>
               <select
                 value={sortKey}
                 onChange={(e) => setSortKey(e.target.value as SortKey)}
@@ -115,7 +115,7 @@ export function ProjectPage() {
             </label>
             <button
               type="button"
-              className="xn-icon-btn"
+              className="aegis-icon-btn"
               onClick={() => setSortDesc((d) => !d)}
               aria-label={sortDesc ? 'Sort ascending' : 'Sort descending'}
               title={sortDesc ? 'Switch to ascending' : 'Switch to descending'}
@@ -123,7 +123,7 @@ export function ProjectPage() {
               {sortDesc ? '↓' : '↑'}
             </button>
             <input
-              className="xn-filter"
+              className="aegis-filter"
               type="search"
               placeholder="Filter by subject ID…"
               value={textFilter}
@@ -134,15 +134,15 @@ export function ProjectPage() {
         </div>
 
         {availableModalities.length > 0 && (
-          <div className="xn-chip-row" role="group" aria-label="Modality filter">
-            <span className="xn-chip-row-label">Modality:</span>
+          <div className="aegis-chip-row" role="group" aria-label="Modality filter">
+            <span className="aegis-chip-row-label">Modality:</span>
             {availableModalities.map((m) => {
               const active = selectedModalities.has(m)
               return (
                 <button
                   key={m}
                   type="button"
-                  className={`xn-chip ${active ? 'xn-chip-active' : ''}`}
+                  className={`aegis-chip ${active ? 'aegis-chip-active' : ''}`}
                   onClick={() => toggleModality(m)}
                   aria-pressed={active}
                 >
@@ -153,7 +153,7 @@ export function ProjectPage() {
             {selectedModalities.size > 0 && (
               <button
                 type="button"
-                className="xn-chip-clear"
+                className="aegis-chip-clear"
                 onClick={() => setSelectedModalities(new Set())}
               >
                 Clear
@@ -162,15 +162,15 @@ export function ProjectPage() {
           </div>
         )}
 
-        {!subjects && !error && <div className="xn-muted">Loading…</div>}
+        {!subjects && !error && <div className="aegis-muted">Loading…</div>}
         {subjects && subjects.length === 0 && (
-          <div className="xn-muted">No subjects in this project yet.</div>
+          <div className="aegis-muted">No subjects in this project yet.</div>
         )}
         {filteredSorted && subjects && subjects.length > 0 && filteredSorted.length === 0 && (
-          <div className="xn-muted">No subjects match the current filters.</div>
+          <div className="aegis-muted">No subjects match the current filters.</div>
         )}
         {filteredSorted && filteredSorted.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th scope="col">Subject ID</th>

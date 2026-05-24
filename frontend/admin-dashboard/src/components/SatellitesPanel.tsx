@@ -79,11 +79,11 @@ export function SatellitesPanel({ isAdmin }: { isAdmin: boolean }) {
             {pendingCount} pending
           </span>
         )}
-        <button type="button" className="xn-icon-btn" onClick={() => setRefreshTick(t => t + 1)}>
+        <button type="button" className="aegis-icon-btn" onClick={() => setRefreshTick(t => t + 1)}>
           Refresh
         </button>
         {isAdmin && (
-          <button type="button" className="xn-btn-primary" onClick={() => setShowAdd(true)}>
+          <button type="button" className="aegis-btn-primary" onClick={() => setShowAdd(true)}>
             + Add satellite
           </button>
         )}
@@ -96,16 +96,16 @@ export function SatellitesPanel({ isAdmin }: { isAdmin: boolean }) {
         the router auto-enrolls.
       </p>
 
-      {loading && <div className="xn-muted">Loading satellites…</div>}
-      {error && <div className="xn-error">{error}</div>}
+      {loading && <div className="aegis-muted">Loading satellites…</div>}
+      {error && <div className="aegis-error">{error}</div>}
 
       {!loading && !error && satellites.length === 0 && (
-        <div className="xn-muted" style={{ padding: '32px 16px', textAlign: 'center', color: '#666' }}>
+        <div className="aegis-muted" style={{ padding: '32px 16px', textAlign: 'center', color: '#666' }}>
           No satellites enrolled yet.
           {isAdmin && (
             <>
               <br />
-              <button type="button" className="xn-btn-primary" style={{ marginTop: 12 }} onClick={() => setShowAdd(true)}>
+              <button type="button" className="aegis-btn-primary" style={{ marginTop: 12 }} onClick={() => setShowAdd(true)}>
                 + Add your first satellite
               </button>
             </>
@@ -307,7 +307,7 @@ function AddSpokeModal({
             </label>
 
             {eligible.length === 0 && (
-              <div className="xn-muted" style={{ fontSize: 12, color: '#888' }}>
+              <div className="aegis-muted" style={{ fontSize: 12, color: '#888' }}>
                 All sender/both institutions already have an enrolled satellite. Create a new
                 institution in the Institutions tab to add another.
               </div>
@@ -329,11 +329,11 @@ function AddSpokeModal({
               </select>
             </label>
 
-            {error && <div className="xn-error" style={{ marginTop: 8 }}>{error}</div>}
+            {error && <div className="aegis-error" style={{ marginTop: 8 }}>{error}</div>}
 
             <div className="modal-actions">
               <button type="button" className="btn" onClick={onClose}>Cancel</button>
-              <button type="button" className="xn-btn-primary" disabled={submitting || !selectedID} onClick={mint}>
+              <button type="button" className="aegis-btn-primary" disabled={submitting || !selectedID} onClick={mint}>
                 {submitting ? 'Minting…' : 'Mint token'}
               </button>
             </div>
@@ -375,7 +375,7 @@ function AddSpokeModal({
             </div>
 
             <div className="modal-actions">
-              <button type="button" className="xn-btn-primary" onClick={onMinted}>Done</button>
+              <button type="button" className="aegis-btn-primary" onClick={onMinted}>Done</button>
             </div>
           </>
         )}
@@ -448,9 +448,9 @@ function SpokeDrawer({
         <section style={{ marginTop: 16 }}>
           <h4 style={{ margin: '0 0 8px 0' }}>Enrollment tokens</h4>
           {loading ? (
-            <div className="xn-muted">Loading…</div>
+            <div className="aegis-muted">Loading…</div>
           ) : tokens.length === 0 ? (
-            <div className="xn-muted" style={{ fontSize: 13, color: '#888' }}>No tokens ever minted.</div>
+            <div className="aegis-muted" style={{ fontSize: 13, color: '#888' }}>No tokens ever minted.</div>
           ) : (
             <table className="data-table" style={{ width: '100%', fontSize: 13 }}>
               <thead>
