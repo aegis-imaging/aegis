@@ -19,6 +19,58 @@ import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
 import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { useStudyEvents } from './hooks/useStudyEvents'
+import { TopBar } from './layout/TopBar'
+import { Breadcrumbs } from './layout/Breadcrumbs'
+
+// PageHeader renders the title/description strip at the top of each admin
+// tab body. Keeps every tab visually consistent without forcing each block
+// to repeat the same markup.
+function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string
+  description?: string
+  actions?: React.ReactNode
+}) {
+  return (
+    <header className="xn-page-header">
+      <div className="xn-page-header-row">
+        <div>
+          <h1>{title}</h1>
+          {description && <p className="xn-page-description">{description}</p>}
+        </div>
+        {actions && <div className="xn-page-header-actions">{actions}</div>}
+      </div>
+    </header>
+  )
+}
+
+// Per-tab title + description rendered into the PageHeader. Wording matches
+// the operator-facing intent of each tab so a first-time visitor understands
+// what the screen is for without reading the body.
+const TAB_META: Record<string, { title: string; description: string }> = {
+  studies: { title: 'Studies', description: 'Global pipeline triage. Browse, approve, and act on incoming studies across every project.' },
+  audit: { title: 'Audit Log', description: 'Append-only record of every mutation across the platform.' },
+  agent: { title: 'AI Agent', description: 'Ask questions about studies, pipeline state, and routing in natural language.' },
+  shares: { title: 'Shares', description: 'Outgoing share links and per-share download statistics.' },
+  routing: { title: 'Routing Rules', description: 'Priority-ordered rules that decide which actions fire on each new study.' },
+  dimse_ops: { title: 'DIMSE Operations', description: 'Receiver health, retry queues, and dead-letter inspection for DICOM C-STORE.' },
+  projects: { title: 'Projects', description: 'Global project registry, PHI configuration, retention, and storage quotas.' },
+  institutions: { title: 'Institutions', description: 'Hospitals, research sites, and other organizational scopes.' },
+  spokes: { title: 'Spokes', description: 'On-prem AEGIS Router enrollment and pairing tokens.' },
+  profiles: { title: 'Anonymization Profiles', description: 'Tag-level de-identification rules per profile.' },
+  protocol_templates: { title: 'Protocol Templates', description: 'Expected MRI/CT acquisition parameters used for protocol compliance checks.' },
+  notifications: { title: 'Notifications', description: 'Digest email subscriptions and webhook delivery configuration.' },
+  federation: { title: 'Federation', description: 'Peer AEGIS instance registry for cross-site exchange.' },
+  tcia_import: { title: 'TCIA Import', description: 'Bulk import from the Cancer Imaging Archive.' },
+  system: { title: 'System', description: 'Infrastructure health, service status, and pipeline configuration.' },
+  users: { title: 'Users', description: 'Global user registry, roles, and access.' },
+  api_keys: { title: 'API Keys', description: 'Programmatic access tokens for the AEGIS API.' },
+  invite_codes: { title: 'Invite Codes', description: 'Self-service registration tokens and pending requests.' },
+  downloads: { title: 'Downloads', description: 'Bulk study export, archive packaging, and desktop installers.' },
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -10797,18 +10849,18 @@ export function App() {
   const navItem = (label: string, target: AppTab, icon: string, badge?: React.ReactNode) => (
     <button
       type="button"
-      className={`sidenav-item${tab === target ? ' sidenav-item--active' : ''}`}
+      className={`xn-sidenav-item${tab === target ? ' xn-sidenav-item--active' : ''}`}
       onClick={() => { setTab(target); if (window.innerWidth < 900) setSidebarOpen(false) }}
       title={!sidebarOpen ? label : undefined}
     >
-      <span className="sidenav-icon">{icon}</span>
-      {sidebarOpen && <span className="sidenav-label">{label}</span>}
-      {sidebarOpen && badge}
+      <span className="xn-sidenav-icon">{icon}</span>
+      <span className="xn-sidenav-label">{label}</span>
+      {badge}
     </button>
   )
 
   return (
-    <div className={`admin-root${sidebarOpen ? ' sidebar-open' : ' sidebar-collapsed'}`}>
+    <div className="xn-shell">
       {/* Cmd/Ctrl+K quick-search palette */}
       {paletteOpen && (
         <div className="palette-overlay" onClick={() => setPaletteOpen(false)}>
@@ -10880,76 +10932,70 @@ export function App() {
         </div>
       )}
 
-      {/* Top bar — minimal: hamburger + title only */}
-      <header className="topbar">
-        <div className="topbar-left">
-          <button type="button" className="hamburger-btn" onClick={toggleSidebar} title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}>
-            <span className="hamburger-icon">{sidebarOpen ? '\u2715' : '\u2630'}</span>
-          </button>
-          <h1 className="topbar-title">AEGIS</h1>
-        </div>
-      </header>
+      <TopBar />
+      <Breadcrumbs />
 
-      <div className="layout-body">
+      <div className={`xn-admin-body${sidebarOpen ? '' : ' xn-admin-body--collapsed'}`}>
         {/* Sidebar nav */}
-        <nav className={`sidenav${sidebarOpen ? '' : ' sidenav--collapsed'}`}>
-          {/* Sidebar toolbar: search, theme toggle, refresh */}
-          {sidebarOpen && (
-            <div className="sidenav-toolbar">
+        <aside className="xn-sidenav">
+          {/* Sidebar toolbar: search palette + theme toggle + refresh + collapse */}
+          <div className="xn-sidenav-toolbar">
+            <button
+              type="button"
+              className="xn-sidenav-search"
+              onClick={() => { setPaletteOpen(true); setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }}
+              title="Quick search (⌘K)"
+            >
+              <span>Search…</span>
+              <kbd>⌘K</kbd>
+            </button>
+            <button
+              type="button"
+              className="xn-sidenav-iconbtn"
+              onClick={() => setDarkMode(d => !d)}
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {darkMode ? '\u2600' : '\u263E'}
+            </button>
+            {tab === 'studies' && (
               <button
                 type="button"
-                className="btn-palette-trigger sidenav-toolbar__search"
-                onClick={() => { setPaletteOpen(true); setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }}
-                title="Quick search (⌘K)"
+                className="xn-sidenav-iconbtn"
+                onClick={() => setRefreshTick(t => t + 1)}
+                title="Refresh studies"
+                aria-label="Refresh studies"
               >
-                <span>Search…</span>
-                <kbd>⌘K</kbd>
+                {'\u21BB'}
               </button>
-              <button
-                type="button"
-                className="theme-toggle"
-                onClick={() => setDarkMode(d => !d)}
-                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                <span className="theme-toggle__icon">{darkMode ? '\u2600' : '\u263E'}</span>
-              </button>
-              {tab === 'studies' && (
-                <button type="button" className="btn-refresh sidenav-toolbar__refresh" onClick={() => setRefreshTick(t => t + 1)} title="Refresh studies">&#x21BB;</button>
-              )}
-            </div>
-          )}
-          {/* Collapsed: just show theme toggle icon */}
-          {!sidebarOpen && (
-            <div className="sidenav-toolbar sidenav-toolbar--collapsed">
-              <button
-                type="button"
-                className="theme-toggle"
-                onClick={() => setDarkMode(d => !d)}
-                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                <span className="theme-toggle__icon">{darkMode ? '\u2600' : '\u263E'}</span>
-              </button>
-            </div>
-          )}
+            )}
+            <button
+              type="button"
+              className="xn-sidenav-iconbtn"
+              onClick={toggleSidebar}
+              title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
+              aria-label={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
+            >
+              {sidebarOpen ? '\u00AB' : '\u00BB'}
+            </button>
+          </div>
 
-          <div className="sidenav-group">
-            {sidebarOpen && <div className="sidenav-group-label">Overview</div>}
-            {navItem('Studies', 'studies', '\u{1F4CB}', stuckCount > 0 ? <span className="sidenav-badge">{stuckCount}</span> : undefined)}
+          <div className="xn-sidenav-group">
+            <div className="xn-sidenav-group-label">Overview</div>
+            {navItem('Studies', 'studies', '\u{1F4CB}', stuckCount > 0 ? <span className="xn-sidenav-badge">{stuckCount}</span> : undefined)}
             {navItem('Audit Log', 'audit', '\u{1F4DC}')}
             {navItem('Agent', 'agent', '\u{1F916}')}
           </div>
 
-          <div className="sidenav-group">
-            {sidebarOpen && <div className="sidenav-group-label">Data</div>}
+          <div className="xn-sidenav-group">
+            <div className="xn-sidenav-group-label">Data</div>
             {navItem('Shares', 'shares', '\u{1F517}')}
             {navItem('Routing', 'routing', '\u{1F6E4}')}
             {isAdmin && navItem('DIMSE Ops', 'dimse_ops', '\u{1F4E1}')}
           </div>
 
-          <div className="sidenav-group">
-            {sidebarOpen && <div className="sidenav-group-label">Config</div>}
+          <div className="xn-sidenav-group">
+            <div className="xn-sidenav-group-label">Config</div>
             {navItem('Projects', 'projects', '\u{1F4C1}')}
             {navItem('Institutions', 'institutions', '\u{1F3E5}')}
             {navItem('Spokes', 'spokes', '\u{1F4F6}')}
@@ -10958,16 +11004,16 @@ export function App() {
             {navItem('Notifications', 'notifications', '\u{1F514}')}
           </div>
 
-          <div className="sidenav-group">
-            {sidebarOpen && <div className="sidenav-group-label">Advanced</div>}
+          <div className="xn-sidenav-group">
+            <div className="xn-sidenav-group-label">Advanced</div>
             {navItem('Federation', 'federation', '\u{1F310}')}
             {navItem('TCIA Import', 'tcia_import', '\u{1F4E5}')}
             {navItem('System', 'system', '\u{2699}')}
           </div>
 
           {isAdmin && (
-            <div className="sidenav-group">
-              {sidebarOpen && <div className="sidenav-group-label">Admin</div>}
+            <div className="xn-sidenav-group">
+              <div className="xn-sidenav-group-label">Admin</div>
               {navItem('Users', 'users', '\u{1F464}')}
               {navItem('API Keys', 'api_keys', '\u{1F511}')}
               {navItem('Invite Codes', 'invite_codes', '\u{1F3AB}')}
@@ -10975,74 +11021,75 @@ export function App() {
             </div>
           )}
 
-          {sidebarOpen && (
-            <div className="sidenav-footer">
-              {projects.length > 1 && (
-                <div className="sidenav-footer__control">
-                  <label className="tz-label" htmlFor="global-project-select">Project</label>
-                  <select
-                    id="global-project-select"
-                    className="tz-select sidenav-footer__select"
-                    value={globalProjectId}
-                    onChange={e => {
-                      const next = e.target.value
-                      if (!canUseAllProjectsMode && !next) return
-                      setGlobalProjectId(next)
-                    }}
-                  >
-                    {canUseAllProjectsMode ? (
-                      <option value="">All projects</option>
-                    ) : !globalProjectId ? (
-                      <option value="">Select project…</option>
-                    ) : null}
-                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div className="sidenav-footer__control">
-                <label className="tz-label" htmlFor="display-timezone-mode">TZ</label>
+          <div className="xn-sidenav-footer">
+            {projects.length > 1 && (
+              <div className="xn-sidenav-footer-row">
+                <label className="xn-sidenav-footer-label" htmlFor="global-project-select">Project</label>
                 <select
-                  id="display-timezone-mode"
-                  className="tz-select sidenav-footer__select"
-                  value={displayTimezoneMode}
-                  onChange={(e) => setDisplayTimezoneMode(e.target.value as DisplayTimezoneMode)}
+                  id="global-project-select"
+                  value={globalProjectId}
+                  onChange={e => {
+                    const next = e.target.value
+                    if (!canUseAllProjectsMode && !next) return
+                    setGlobalProjectId(next)
+                  }}
                 >
-                  <option value="utc">UTC</option>
-                  <option value="local">Local ({localTimeZone})</option>
-                  <option value="custom">Custom</option>
+                  {canUseAllProjectsMode ? (
+                    <option value="">All projects</option>
+                  ) : !globalProjectId ? (
+                    <option value="">Select project…</option>
+                  ) : null}
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                {displayTimezoneMode === 'custom' && (
-                  <>
-                    <input
-                      className="tz-input sidenav-footer__select"
-                      type="text"
-                      placeholder="America/Chicago"
-                      value={displayTimezoneCustom}
-                      onChange={(e) => setDisplayTimezoneCustom(e.target.value)}
-                    />
-                    {!validCustomTimeZone && displayTimezoneCustom.trim() && (
-                      <span className="tz-warning">Invalid IANA time zone</span>
-                    )}
-                  </>
-                )}
               </div>
-              <span className="auth-user-badge sidenav-footer__scope" title="Active project/scope">
-                {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
-              </span>
-              {currentUser && (
-                <span className="auth-user-badge sidenav-footer__user">
-                  {currentUser.name || currentUser.email} ({currentUser.role})
-                </span>
+            )}
+            <div className="xn-sidenav-footer-row">
+              <label className="xn-sidenav-footer-label" htmlFor="display-timezone-mode">Timezone</label>
+              <select
+                id="display-timezone-mode"
+                value={displayTimezoneMode}
+                onChange={(e) => setDisplayTimezoneMode(e.target.value as DisplayTimezoneMode)}
+              >
+                <option value="utc">UTC</option>
+                <option value="local">Local ({localTimeZone})</option>
+                <option value="custom">Custom</option>
+              </select>
+              {displayTimezoneMode === 'custom' && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="America/Chicago"
+                    value={displayTimezoneCustom}
+                    onChange={(e) => setDisplayTimezoneCustom(e.target.value)}
+                  />
+                  {!validCustomTimeZone && displayTimezoneCustom.trim() && (
+                    <span className="tz-warning">Invalid IANA time zone</span>
+                  )}
+                </>
               )}
             </div>
-          )}
-        </nav>
+            <span className="xn-sidenav-footer-badge" title="Active project/scope">
+              {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
+            </span>
+            {currentUser && (
+              <span className="xn-sidenav-footer-badge">
+                {currentUser.name || currentUser.email} ({currentUser.role})
+              </span>
+            )}
+          </div>
+        </aside>
 
         {/* Mobile overlay */}
-        {sidebarOpen && <div className="sidenav-overlay" onClick={() => setSidebarOpen(false)} />}
+        {sidebarOpen && <div className="xn-sidenav-overlay" onClick={() => setSidebarOpen(false)} />}
 
         {/* Main content */}
-        <main className="main-content">
+        <section className="xn-admin-content">
+          {!(tab === 'studies' && selectedStudyId) && (
+            <PageHeader
+              title={TAB_META[tab].title}
+              description={TAB_META[tab].description}
+            />
+          )}
 
       {/* Studies tab */}
       {tab === 'studies' && selectedStudyId && (
@@ -12410,8 +12457,8 @@ export function App() {
 
       {/* System Health tab */}
       {tab === 'system' && <SystemHealthPanel />}
-        </main>
-      </div>{/* end layout-body */}
+        </section>
+      </div>{/* end xn-admin-body */}
 
       {/* Upload Study Modal */}
       {showUploadModal && (
