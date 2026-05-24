@@ -39,9 +39,33 @@ const TenantHeader = "X-AEGIS-Tenant"
 // when looking for a subdomain slug. Configurable so on-prem deployments
 // can register their own. Mutating from anywhere other than process
 // startup is not supported.
+//
+// Note: `aegisimaging.ai` is deliberately NOT in the default list. It would
+// match `api.aegisimaging.ai`, `admin.aegisimaging.ai`, `aws.api...`, etc.
+// and treat the service name as a tenant slug — breaking every request to
+// the canonical service hosts. Tenant subdomains live under
+// `*.api.aegisimaging.ai` (e.g. `acme.api.aegisimaging.ai`).
 var TenantHostSuffixes = []string{
 	"api.aegisimaging.ai",
-	"aegisimaging.ai",
+}
+
+// ReservedTenantSlugs are labels that look like valid tenant slugs but are
+// actually reserved service hostnames or infrastructure prefixes. The
+// middleware always treats a request whose extracted candidate matches one
+// of these as "no tenant" — even if the operator misconfigures
+// TenantHostSuffixes to be too broad.
+var ReservedTenantSlugs = map[string]bool{
+	"api":    true,
+	"admin":  true,
+	"upload": true,
+	"export": true,
+	"landing": true,
+	"www":    true,
+	"aws":    true, // aws.api.aegisimaging.ai — AWS region of the service
+	"gcp":    true,
+	"azure":  true,
+	"eu":     true, // future per-region prefixes
+	"us":     true,
 }
 
 // ErrTenantDisabled is returned when a request resolves a tenant slug
@@ -115,9 +139,19 @@ func tenantSlugFromRequest(r *http.Request) string {
 			candidate := strings.TrimSuffix(host, dotSuffix)
 			// Reject candidates with internal dots — `foo.bar.api.aegisimaging.ai`
 			// is two levels deep and shouldn't resolve to a tenant.
-			if candidate != "" && !strings.ContainsRune(candidate, '.') {
-				return candidate
+			if candidate == "" || strings.ContainsRune(candidate, '.') {
+				continue
 			}
+			// Reject reserved service / region labels. Without this, a
+			// request to `aws.api.aegisimaging.ai/healthz` would be
+			// interpreted as tenant slug "aws", and unless a real
+			// "aws"-named tenant exists the middleware 404s the request —
+			// breaking infra-level smoke checks and any inter-region
+			// routing.
+			if ReservedTenantSlugs[candidate] {
+				continue
+			}
+			return candidate
 		}
 	}
 	return ""
