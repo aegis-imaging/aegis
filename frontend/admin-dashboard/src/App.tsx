@@ -13,7 +13,7 @@ import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
 import { NiivueViewer } from './components/NiivueViewer'
 import { TCIAPanel } from './components/TCIAPanel'
-import { SpokesPanel } from './components/SpokesPanel'
+import { SatellitesPanel } from './components/SatellitesPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
@@ -60,7 +60,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   dimse_ops: { title: 'DIMSE Operations', description: 'Receiver health, retry queues, and dead-letter inspection for DICOM C-STORE.' },
   projects: { title: 'Projects', description: 'Global project registry, PHI configuration, retention, and storage quotas.' },
   institutions: { title: 'Institutions', description: 'Hospitals, research sites, and other organizational scopes.' },
-  spokes: { title: 'Spokes', description: 'On-prem AEGIS Router enrollment and pairing tokens.' },
+  satellites: { title: 'Satellites', description: 'On-prem AEGIS Satellite enrollment and pairing tokens.' },
   profiles: { title: 'Anonymization Profiles', description: 'Tag-level de-identification rules per profile.' },
   protocol_templates: { title: 'Protocol Templates', description: 'Expected MRI/CT acquisition parameters used for protocol compliance checks.' },
   notifications: { title: 'Notifications', description: 'Digest email subscriptions and webhook delivery configuration.' },
@@ -75,11 +75,11 @@ const TAB_META: Record<string, { title: string; description: string }> = {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'spokes' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'downloads' | 'system'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'satellites' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'downloads' | 'system'
 
 const ADMIN_TABS: AppTab[] = [
   'studies', 'agent', 'audit', 'shares', 'routing', 'dimse_ops',
-  'institutions', 'spokes', 'profiles', 'protocol_templates', 'notifications',
+  'institutions', 'satellites', 'profiles', 'protocol_templates', 'notifications',
   'projects', 'federation', 'tcia_import', 'users', 'api_keys', 'invite_codes',
   'downloads', 'system',
 ]
@@ -10612,7 +10612,7 @@ export function App() {
     { kind: 'nav', label: 'Routing Rules',         tab: 'routing',            icon: '🔀' },
     { kind: 'nav', label: 'DIMSE Operations',      tab: 'dimse_ops',          icon: '📡' },
     { kind: 'nav', label: 'Institutions',          tab: 'institutions',       icon: '🏥' },
-    { kind: 'nav', label: 'Spoke Routers',         tab: 'spokes',             icon: '📶' },
+    { kind: 'nav', label: 'Satellites',         tab: 'satellites',             icon: '📶' },
     { kind: 'nav', label: 'Anonymization Profiles',tab: 'profiles',           icon: '🔒' },
     { kind: 'nav', label: 'Protocol Templates',    tab: 'protocol_templates', icon: '📐' },
     { kind: 'nav', label: 'Notifications',         tab: 'notifications',      icon: '🔔' },
@@ -11069,7 +11069,7 @@ export function App() {
             <div className="xn-sidenav-group-label">Config</div>
             {navItem('Projects', 'projects', '\u{1F4C1}')}
             {navItem('Institutions', 'institutions', '\u{1F3E5}')}
-            {navItem('Spokes', 'spokes', '\u{1F4F6}')}
+            {navItem('Satellites', 'satellites', '\u{1F4F6}')}
             {navItem('Profiles', 'profiles', '\u{1F6E1}')}
             {navItem('Protocol', 'protocol_templates', '\u{1F4CF}')}
             {navItem('Notifications', 'notifications', '\u{1F514}')}
@@ -12493,8 +12493,8 @@ export function App() {
       {/* Institutions tab */}
       {tab === 'institutions' && <InstitutionsPanel isAdmin={isAdmin} />}
 
-      {/* Spoke Routers tab — enrolled on-prem AEGIS Routers */}
-      {tab === 'spokes' && <SpokesPanel isAdmin={isAdmin} />}
+      {/* Satellites tab — enrolled on-prem AEGIS Satellites */}
+      {tab === 'satellites' && <SatellitesPanel isAdmin={isAdmin} />}
 
       {/* Profiles tab */}
       {tab === 'profiles' && <ProfilesPanel isAdmin={isAdmin} />}
