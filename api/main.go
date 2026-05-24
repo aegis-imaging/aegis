@@ -450,6 +450,20 @@ func main() {
 	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", adminOnly(srv.CreateDigestSubscription))
 	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", adminOnly(srv.DeleteDigestSubscription))
 
+	// Desktop installer registry + email distribution.
+	// Public endpoints (no auth) handle the recipient-facing install landing
+	// page and the one-time pairing exchange that bootstraps an API key onto
+	// the freshly-installed desktop app.
+	mux.HandleFunc("GET /api/desktop-installers", auth(srv.ListDesktopInstallers))
+	mux.HandleFunc("POST /api/desktop-installers", adminOnly(srv.CreateDesktopInstaller))
+	mux.HandleFunc("PATCH /api/desktop-installers/{id}", adminOnly(srv.UpdateDesktopInstaller))
+	mux.HandleFunc("DELETE /api/desktop-installers/{id}", adminOnly(srv.DeleteDesktopInstaller))
+	mux.HandleFunc("GET /api/desktop-installers/{id}/download", auth(srv.DownloadDesktopInstaller))
+	mux.HandleFunc("POST /api/desktop-installers/{id}/email", adminOnly(srv.EmailDesktopInstallerInvite))
+	mux.HandleFunc("GET /api/desktop-installers/invites", auth(srv.ListDesktopInstallerInvites))
+	mux.HandleFunc("GET /install/{token}", srv.InstallLandingPage)
+	mux.HandleFunc("POST /api/install/pair", srv.PairDesktopInstaller)
+
 	// API keys — long-lived machine-to-machine credentials.
 	mux.HandleFunc("GET /api/api-keys", auth(srv.ListAPIKeys))
 	mux.HandleFunc("POST /api/api-keys", adminOnly(srv.CreateAPIKey))
