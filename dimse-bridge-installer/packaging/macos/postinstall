@@ -1,0 +1,65 @@
+#!/bin/bash
+# AEGIS DIMSE Bridge — postinstall script (run by Installer.app as root).
+#
+# Responsibilities:
+#   1. Create the _aegis system user/group if missing.
+#   2. Create /Library/Application Support/AEGIS and /Library/Logs/AEGIS.
+#   3. Move the launchd plist to /Library/LaunchDaemons and bootstrap it.
+#
+# Exits non-zero on any failure so Installer surfaces the error.
+
+set -euo pipefail
+
+LAUNCH_DAEMON_SRC="/usr/local/aegis-bridge/com.aegis.dimse-bridge.plist"
+LAUNCH_DAEMON_DST="/Library/LaunchDaemons/com.aegis.dimse-bridge.plist"
+SUPPORT_DIR="/Library/Application Support/AEGIS"
+LOG_DIR="/Library/Logs/AEGIS"
+
+create_user() {
+    if dscl . -read /Users/_aegis >/dev/null 2>&1; then
+        echo "user _aegis already exists"
+        return 0
+    fi
+
+    # Find a free UID/GID in the system reserved range (200-400).
+    local uid=242
+    while dscl . -read "/Users/_uid${uid}" >/dev/null 2>&1 || \
+          dscl . -list /Users UniqueID | awk '{print $2}' | grep -qx "${uid}"; do
+        uid=$((uid + 1))
+    done
+
+    sysadminctl -addUser _aegis \
+        -fullName "AEGIS DIMSE Bridge" \
+        -UID "${uid}" \
+        -GID "${uid}" \
+        -shell /usr/bin/false \
+        -home /var/empty \
+        -roleAccount 2>/dev/null || {
+            # sysadminctl on older macOS doesn't support -roleAccount;
+            # fall back to dscl.
+            dscl . -create "/Users/_aegis"
+            dscl . -create "/Users/_aegis" UserShell /usr/bin/false
+            dscl . -create "/Users/_aegis" RealName "AEGIS DIMSE Bridge"
+            dscl . -create "/Users/_aegis" UniqueID "${uid}"
+            dscl . -create "/Users/_aegis" PrimaryGroupID "${uid}"
+            dscl . -create "/Users/_aegis" NFSHomeDirectory /var/empty
+        }
+    dscl . -create "/Groups/_aegis" PrimaryGroupID "${uid}" 2>/dev/null || true
+}
+
+create_user
+mkdir -p "${SUPPORT_DIR}" "${LOG_DIR}"
+chown -R _aegis:_aegis "${SUPPORT_DIR}" "${LOG_DIR}"
+chmod 750 "${SUPPORT_DIR}" "${LOG_DIR}"
+
+if [ -f "${LAUNCH_DAEMON_SRC}" ]; then
+    install -m 0644 -o root -g wheel "${LAUNCH_DAEMON_SRC}" "${LAUNCH_DAEMON_DST}"
+fi
+
+# Bootstrap (idempotent — bootout first if already loaded).
+launchctl bootout system "${LAUNCH_DAEMON_DST}" 2>/dev/null || true
+launchctl bootstrap system "${LAUNCH_DAEMON_DST}"
+launchctl enable system/com.aegis.dimse-bridge
+launchctl kickstart -k system/com.aegis.dimse-bridge
+
+exit 0

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aegis.dimse-bridge</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/aegis-bridge/aegis-bridge</string>
+        <string>run</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>UserName</key>
+    <string>_aegis</string>
+
+    <key>GroupName</key>
+    <string>_aegis</string>
+
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/AEGIS/bridge.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/AEGIS/bridge.err.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>/usr/local/aegis-bridge</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>AEGIS_BRIDGE_CONFIG</key>
+        <string>/Library/Application Support/AEGIS/bridge.yml</string>
+    </dict>
+</dict>
+</plist>
