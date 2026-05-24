@@ -1,8 +1,11 @@
 project_id   = "aegis-prod"
 region       = "us-central1"
 environment  = "dev"
-api_domain   = "api-dev.aegisimaging.ai"
-admin_domain = "admin-dev.aegisimaging.ai"
+api_domain     = "api-dev.aegisimaging.ai"
+# Apex domain serving the unified React app — XNAT routes at /, admin tabs
+# at /admin/*, public about pages at /about. The former admin.* subdomain
+# has been retired.
+landing_domain = "aegisimaging.ai"
 
 # IAP OAuth credentials for the admin dashboard backend.
 iap_oauth_client_id     = "YOUR_IAP_OAUTH_CLIENT_ID"
