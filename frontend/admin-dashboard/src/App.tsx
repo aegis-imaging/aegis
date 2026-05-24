@@ -19,7 +19,7 @@ import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
 import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { useStudyEvents } from './hooks/useStudyEvents'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useDarkMode } from './hooks/useDarkMode'
 import { TopBar } from './layout/TopBar'
 import { Breadcrumbs } from './layout/Breadcrumbs'
@@ -5848,7 +5848,203 @@ const EMPTY_INSTITUTION: Omit<Institution, 'id' | 'created_at'> = {
   contact_name: '', contact_email: '', ip_ranges: '', ae_title: '', enabled: true,
 }
 
-function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
+// InstitutionDetailPanel is the per-institution view at /admin/institutions/:id.
+// Step 1 of the Institutions/Satellites hierarchy restructure: an Institution
+// owns deployment methods (Satellites + browser upload allowlist + desktop
+// installer in future). This view is intentionally narrower than the global
+// admin Satellites list — it shows just what's scoped to one institution.
+function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: string; isAdmin: boolean }) {
+  type SatelliteRow = {
+    id: string
+    institution_id: string
+    institution_name: string
+    institution_slug: string
+    site_id: string
+    cert_thumbprint: string | null
+    cert_expires_at: string | null
+    last_seen_at: string | null
+    active_token_count: number
+    cert_subject_dn: string | null
+  }
+
+  const [inst, setInst]         = useState<Institution | null>(null)
+  const [satellites, setSats]   = useState<SatelliteRow[]>([])
+  const [projects, setProjects] = useState<InstitutionProject[]>([])
+  const [stats, setStats]       = useState<{ total_studies: number; last_study_at?: string } | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [instRes, satRes, projRes, statsRes] = await Promise.all([
+        fetch(`/api/institutions`),
+        fetch(`/api/satellites`),
+        fetch(`/api/institutions/${institutionId}/projects`),
+        fetch(`/api/institutions/${institutionId}/stats`),
+      ])
+      if (!instRes.ok) throw new Error(`institutions: HTTP ${instRes.status}`)
+
+      const allInsts: Institution[] = await instRes.json()
+      const target = allInsts.find(i => i.id === institutionId) ?? null
+      if (!target) throw new Error('Institution not found')
+      setInst(target)
+
+      if (satRes.ok) {
+        const body = await satRes.json()
+        const rows: SatelliteRow[] = body.satellites ?? body.spokes ?? []
+        setSats(rows.filter(s => s.institution_id === institutionId))
+      }
+      if (projRes.ok) setProjects(await projRes.json())
+      if (statsRes.ok) setStats(await statsRes.json())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [institutionId])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  if (loading) return <div className="aegis-muted">Loading institution…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
+  if (!inst)   return <div className="aegis-muted">Institution not found.</div>
+
+  return (
+    <>
+      {/* Back link + heading */}
+      <div style={{ marginBottom: 16 }}>
+        <Link
+          to="/admin/institutions"
+          style={{ color: 'var(--aegis-link)', fontSize: 13, textDecoration: 'none' }}
+        >
+          ← All institutions
+        </Link>
+      </div>
+
+      {/* Overview section */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <div>
+            <h2 style={{ margin: 0 }}>{inst.name}</h2>
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <code className="aegis-code">{inst.slug}</code>
+              <span className="aegis-pill">{inst.institution_type}</span>
+              {!inst.enabled && <span className="aegis-muted" style={{ fontSize: 12 }}>disabled</span>}
+            </div>
+          </div>
+          {isAdmin && (
+            <Link
+              to="/admin/institutions"
+              className="aegis-btn-secondary"
+              style={{ textDecoration: 'none' }}
+            >
+              Manage in list
+            </Link>
+          )}
+        </div>
+        {inst.description && <p className="aegis-muted" style={{ marginTop: 12 }}>{inst.description}</p>}
+        <dl className="aegis-defs" style={{ marginTop: 12 }}>
+          {inst.contact_name && <><dt>Contact</dt><dd>{inst.contact_name}</dd></>}
+          {inst.contact_email && <><dt>Email</dt><dd>{inst.contact_email}</dd></>}
+          {inst.ip_ranges && <><dt>IP ranges</dt><dd><code className="aegis-code">{inst.ip_ranges}</code></dd></>}
+          {inst.ae_title && <><dt>DICOM AE title</dt><dd><code className="aegis-code">{inst.ae_title}</code></dd></>}
+          <dt>Status</dt><dd>{inst.enabled ? 'Enabled' : 'Disabled'}</dd>
+        </dl>
+      </section>
+
+      {/* Satellites scoped to this institution */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>Satellites ({satellites.length})</h2>
+          <Link to="/admin/satellites" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
+            Manage all
+          </Link>
+        </div>
+        {satellites.length === 0 ? (
+          <div className="aegis-muted">
+            No satellites enrolled at this institution yet.{' '}
+            <Link to="/admin/satellites" style={{ color: 'var(--aegis-link)' }}>Add one →</Link>
+          </div>
+        ) : (
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
+              <thead>
+                <tr><th>Site ID</th><th>Cert</th><th>Last seen</th><th>Pending tokens</th></tr>
+              </thead>
+              <tbody>
+                {satellites.map(s => (
+                  <tr key={s.id}>
+                    <td><code className="aegis-code">{s.site_id || s.id.slice(0, 8)}</code></td>
+                    <td>
+                      {s.cert_thumbprint
+                        ? <span className="aegis-pill">enrolled</span>
+                        : <span className="aegis-muted">pending</span>}
+                    </td>
+                    <td className="aegis-muted">
+                      {s.last_seen_at ? new Date(s.last_seen_at).toLocaleString() : '—'}
+                    </td>
+                    <td>{s.active_token_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Linked projects */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>Linked projects ({projects.length})</h2>
+          {stats && stats.total_studies > 0 && (
+            <span className="aegis-muted" style={{ fontSize: 12 }}>
+              {stats.total_studies} total studies
+              {stats.last_study_at && ` · last ${new Date(stats.last_study_at).toLocaleDateString()}`}
+            </span>
+          )}
+        </div>
+        {projects.length === 0 ? (
+          <div className="aegis-muted">No projects linked to this institution yet.</div>
+        ) : (
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
+              <thead>
+                <tr><th>Project</th><th>Role</th><th>Linked</th></tr>
+              </thead>
+              <tbody>
+                {projects.map(p => (
+                  <tr key={`${p.project_id}-${p.role}`}>
+                    <td>
+                      <Link
+                        to={`/projects/${p.project_id}`}
+                        style={{ color: 'var(--aegis-link)', textDecoration: 'none' }}
+                      >
+                        {p.project_name || p.project_id.slice(0, 8)}
+                      </Link>
+                    </td>
+                    <td><span className="aegis-pill">{p.role}</span></td>
+                    <td className="aegis-muted">{new Date(p.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  )
+}
+
+function InstitutionsPanel({ isAdmin, detailInstitutionId }: { isAdmin: boolean; detailInstitutionId?: string | null }) {
+  // When a specific institution is selected via the URL, render the
+  // detail page instead of the list. This is step 1 of the Institutions-
+  // as-parent hierarchy restructure — see docs/followups.
+  if (detailInstitutionId) {
+    return <InstitutionDetailPanel institutionId={detailInstitutionId} isAdmin={isAdmin} />
+  }
+
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState<string | null>(null)
@@ -6078,7 +6274,14 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                 ].join(' ')}
               >
                 <td>
-                  <div className="">{inst.name}</div>
+                  <div>
+                    <Link
+                      to={`/admin/institutions/${inst.id}`}
+                      style={{ color: 'var(--aegis-link)', textDecoration: 'none', fontWeight: 500 }}
+                    >
+                      {inst.name}
+                    </Link>
+                  </div>
                   {inst.description && <div className="aegis-muted">{inst.description}</div>}
                   <code className="aegis-code">{inst.slug}</code>
                 </td>
@@ -10054,6 +10257,12 @@ export function App() {
     navigate(`/admin/${next}`)
   }, [navigate])
 
+  // Sub-tab routing: /admin/institutions/:id renders InstitutionsPanel in
+  // detail mode. Other tabs can follow this pattern as the
+  // Institution-as-parent UX restructure rolls out.
+  const detailMatch = location.pathname.match(/^\/admin\/(institutions|projects)\/([^/]+)/)
+  const institutionId = detailMatch?.[1] === 'institutions' ? (detailMatch[2] ?? null) : null
+
   useEffect(() => {
     if (location.pathname === '/admin' || location.pathname === '/admin/') {
       navigate('/admin/studies', { replace: true })
@@ -12502,7 +12711,9 @@ export function App() {
       {tab === 'dimse_ops' && isAdmin && <DimseOpsPanel />}
 
       {/* Institutions tab */}
-      {tab === 'institutions' && <InstitutionsPanel isAdmin={isAdmin} />}
+      {tab === 'institutions' && (
+        <InstitutionsPanel isAdmin={isAdmin} detailInstitutionId={institutionId} />
+      )}
 
       {/* Satellites tab — enrolled on-prem AEGIS Satellites */}
       {tab === 'satellites' && <SatellitesPanel isAdmin={isAdmin} />}
