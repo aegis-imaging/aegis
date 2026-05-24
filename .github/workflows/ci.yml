@@ -106,15 +106,8 @@ jobs:
           - scripts/gcp_build_push_images.sh
           - scripts/gcp_apply_infra.sh
           - scripts/gcp_install_poc.sh
-          - scripts/aws_build_push_images.sh
-          - scripts/aws_apply_infra.sh
-          - scripts/aws_install_poc.sh
-          - scripts/check-aws-deploy-parity.sh
           - scripts/check-auth-guardrails.sh
-          - scripts/check-cross-cloud-conformance.sh
-          - scripts/check-edge-security-parity.sh
           - scripts/check-hipaa-day1-controls.sh
-          - scripts/check-monitoring-alert-parity.sh
           - scripts/check-runbook-readiness.sh
           - scripts/check-terraform-security-baseline.sh
           - scripts/gcp_setup_cloudbuild.sh
@@ -124,21 +117,9 @@ jobs:
       - name: Syntax check
         run: bash -n ${{ matrix.script }}
 
-  aws-deploy-parity:
-    name: AWS deploy parity check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate deploy workflow coverage
-        run: ./scripts/check-aws-deploy-parity.sh
-
-  edge-security-parity:
-    name: Edge security parity check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate cross-cloud edge security resources
-        run: ./scripts/check-edge-security-parity.sh
+  # Multi-cloud parity / conformance checks have been retired with the
+  # GCP-only consolidation. Re-introduce only if AWS/Azure deploys come
+  # back as supported targets.
 
   auth-guardrails:
     name: Authentication guardrails check
@@ -148,14 +129,6 @@ jobs:
       - name: Validate non-dev auth invariants
         run: ./scripts/check-auth-guardrails.sh
 
-  monitoring-alert-parity:
-    name: Monitoring alert parity check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate critical cross-cloud alert coverage
-        run: ./scripts/check-monitoring-alert-parity.sh
-
   hipaa-day1-controls:
     name: HIPAA day-1 baseline check
     runs-on: ubuntu-latest
@@ -163,14 +136,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate HIPAA day-1 control baseline
         run: ./scripts/check-hipaa-day1-controls.sh
-
-  cross-cloud-conformance:
-    name: Cross-cloud conformance check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate deployment/control conformance
-        run: ./scripts/check-cross-cloud-conformance.sh
 
   runbook-readiness:
     name: Runbook readiness check
@@ -213,7 +178,6 @@ jobs:
           - { dir: client, name: "@aegis/client", needs_client: false }
           - { dir: frontend/upload-portal, name: upload-portal, needs_client: true }
           - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: true }
-          - { dir: frontend/landing, name: landing, needs_client: false }
           - { dir: frontend/export-portal, name: export-portal, needs_client: false }
           - { dir: mcp-server, name: mcp-server, needs_client: false }
     steps:
@@ -251,8 +215,6 @@ jobs:
           - { context: api, name: api }
           # admin-dashboard uses @aegis/client (workspace dep) so it builds from repo root
           - { context: ".", dockerfile: frontend/admin-dashboard/Dockerfile, name: admin-dashboard }
-          # landing uses @aegis/client (workspace dep) so it builds from repo root
-          - { context: ".", dockerfile: frontend/landing/Dockerfile, name: landing }
           - { context: defacing, name: defacing }
           - { context: phi-detection, name: phi-detection }
           - { context: qc-service, name: qc-service }
