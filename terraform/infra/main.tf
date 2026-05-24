@@ -1482,7 +1482,12 @@ resource "google_compute_global_address" "lb_ip" {
 }
 
 resource "google_compute_managed_ssl_certificate" "lb_cert" {
-  name = "${local.name_prefix}-lb-cert-v4"
+  # Bump the version suffix whenever local.lb_domains changes — managed
+  # certs in GCP are immutable, so terraform must create a fresh resource
+  # alongside the old one (create_before_destroy), switch the LB to the
+  # new cert, then garbage-collect the old. Using the same name on a
+  # domain change yields a 409 "already exists" and aborts the apply.
+  name = "${local.name_prefix}-lb-cert-v5"
   managed {
     domains = local.lb_domains
   }
