@@ -50,7 +50,12 @@ export function ResearcherSidebar() {
         {item('Home',     '/',              '\u{1F3E0}')}
         {item('Studies',  '/admin/studies', '\u{1F4CB}')}
         {item('Shares',   '/admin/shares',  '\u{1F517}')}
-        {item('Activity', '/admin/audit',   '\u{1F4DC}')}
+      </div>
+
+      <div className="aegis-sidenav-group">
+        <div className="aegis-sidenav-group-label">You</div>
+        {item('Your activity', '/profile/activity',      '\u{1F4DC}')}
+        {item('Notifications', '/profile/notifications', '\u{1F514}')}
       </div>
 
       {isAdmin && (
@@ -66,6 +71,7 @@ export function ResearcherSidebar() {
           <div className="aegis-sidenav-group">
             <div className="aegis-sidenav-group-label">Admin</div>
             {item('Users',         '/admin/users',         '\u{1F464}')}
+            {item('Audit log',     '/admin/audit',         '\u{1F4DC}')}
             {item('Notifications', '/admin/notifications', '\u{1F514}')}
             {item('System',        '/admin/system',        '\u{2699}')}
           </div>
