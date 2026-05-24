@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    AEGIS DIMSE Bridge — WiX 4 installer.
+
+    Code-signing flow (NOT performed by this manifest — done by CI):
+      1. EV code-signing certificate (DigiCert / Sectigo) is provisioned in
+         Azure Key Vault; AzureSignTool (https://github.com/vcsjones/AzureSignTool)
+         signs each .exe and .dll inside dist/aegis-bridge/_internal/ BEFORE
+         the .msi is built (so SmartScreen reputation aggregates per-file).
+      2. After candle/light produce the .msi, AzureSignTool signs the .msi
+         itself with SHA-256 + RFC 3161 timestamp via DigiCert's TSA.
+      3. The signed .msi is what ships to hospital workstations; no separate
+         "publisher unknown" SmartScreen prompt after EV reputation builds.
+
+    Build:
+        wix build installer.wxs \
+          -d Version=1.0.0 \
+          -d SourceDir=..\..\dist\aegis-bridge \
+          -ext WixToolset.Firewall.wixext \
+          -o aegis-dimse-bridge-1.0.0.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
+
+  <Package Name="AEGIS DIMSE Bridge"
+           Manufacturer="AEGIS Imaging"
+           Version="$(var.Version)"
+           UpgradeCode="A1F9C8B2-0E51-4F62-9C7D-2E5A1B7D9F30"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of AEGIS DIMSE Bridge is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="Main" Title="AEGIS DIMSE Bridge" Level="1">
+      <ComponentGroupRef Id="BridgeFiles" />
+      <ComponentRef Id="BridgeService" />
+      <ComponentRef Id="FirewallRule" />
+      <ComponentRef Id="ConfigTemplate" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="AEGIS">
+        <Directory Id="BRIDGEDIR" Name="dimse-bridge" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATA_AEGIS" Name="AEGIS" />
+    </StandardDirectory>
+
+    <!--
+        Harvested file set. In CI, `heat dir ..\..\dist\aegis-bridge -gg
+        -sfrag -srd -cg BridgeFiles -dr BRIDGEDIR -out BridgeFiles.wxs`
+        produces this ComponentGroup. Placeholder here keeps the manifest
+        compilable in isolation.
+    -->
+    <ComponentGroup Id="BridgeFiles" Directory="BRIDGEDIR">
+      <Component Id="MainExe" Guid="*">
+        <File Id="AegisBridgeExe"
+              Source="$(var.SourceDir)\aegis-bridge.exe"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Component Id="BridgeService" Directory="BRIDGEDIR" Guid="2B5A7D8E-1F62-4A93-B0C4-91D2E73F4A1B">
+      <File Id="ServiceWrapper"
+            Source="$(var.SourceDir)\service_wrapper.exe"
+            KeyPath="yes" />
+      <ServiceInstall Id="AEGISDimseBridgeServiceInstall"
+                      Name="AEGISDimseBridge"
+                      DisplayName="AEGIS DIMSE Bridge"
+                      Description="Receives DICOM C-STORE associations and uploads to AEGIS."
+                      Type="ownProcess"
+                      Start="auto"
+                      ErrorControl="normal"
+                      Account="NT AUTHORITY\LocalService"
+                      Vital="yes">
+        <ServiceDependency Id="Tcpip" />
+      </ServiceInstall>
+      <ServiceControl Id="AEGISDimseBridgeServiceControl"
+                      Name="AEGISDimseBridge"
+                      Start="install"
+                      Stop="both"
+                      Remove="uninstall"
+                      Wait="yes" />
+    </Component>
+
+    <Component Id="FirewallRule" Directory="BRIDGEDIR" Guid="4C8E9B10-2D73-4B81-9F62-5A1C3D74E0F2">
+      <File Id="FirewallMarker" Source="$(var.SourceDir)\aegis-bridge.exe"
+            Name="firewall_marker.txt" KeyPath="yes" />
+      <!--
+          DICOM C-STORE SCP listens on TCP 11112 (IANA-registered). Rule
+          is scoped to the service binary so it can't be reused by other
+          local apps.
+      -->
+      <fw:FirewallException Id="DicomInbound"
+                            Name="AEGIS DIMSE Bridge (DICOM 11112)"
+                            Description="Inbound DICOM C-STORE for AEGIS bridge"
+                            Port="11112"
+                            Protocol="tcp"
+                            Profile="all"
+                            Scope="any"
+                            Action="allow" />
+    </Component>
+
+    <Component Id="ConfigTemplate" Directory="DATA_AEGIS" Guid="6D4F1A92-8B73-4C61-A8D9-0F12E7B53C4A">
+      <File Id="ConfigTemplateFile"
+            Source="config.toml.template"
+            Name="bridge.yml"
+            KeyPath="yes">
+        <!-- Never overwrite existing config on upgrade. -->
+      </File>
+    </Component>
+
+  </Package>
+</Wix>

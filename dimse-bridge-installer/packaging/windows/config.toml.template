@@ -1,0 +1,15 @@
+# AEGIS DIMSE Bridge — initial configuration.
+#
+# This file is installed at: %ProgramData%\AEGIS\bridge.yml
+#
+# Edit values below, then restart the AEGISDimseBridge service:
+#     sc.exe stop  AEGISDimseBridge
+#     sc.exe start AEGISDimseBridge
+#
+# The API key is NOT stored here — it lives in the Windows Credential Manager
+# under service "aegis-dimse-bridge" / account "api-key" and is written by:
+#     aegis-bridge.exe pair --server https://api.aegisimaging.ai --token <TOKEN>
+
+server_url: "https://api.aegisimaging.ai"
+listen_port: 11112
+aet: "AEGISBRIDGE"

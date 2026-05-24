@@ -1,0 +1,33 @@
+[Unit]
+Description=AEGIS DIMSE Bridge (DICOM C-STORE receiver)
+Documentation=https://aegisimaging.ai/docs/dimse-bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=_aegis
+Group=_aegis
+ExecStart=/opt/aegis-bridge/aegis-bridge run
+Restart=on-failure
+RestartSec=5s
+StandardOutput=append:/var/log/aegis/bridge.out.log
+StandardError=append:/var/log/aegis/bridge.err.log
+Environment=AEGIS_BRIDGE_CONFIG=/etc/aegis/bridge.yml
+
+# Hardening — the bridge only needs network + its own data dirs.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/log/aegis /var/lib/aegis /etc/aegis
+AmbientCapabilities=
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
