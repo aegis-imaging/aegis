@@ -70,16 +70,18 @@ func (s *Server) Search(w http.ResponseWriter, r *http.Request) {
 }
 
 // accessibleProjectIDs returns the project IDs the caller can read.
-//   - nil for unauthenticated callers (search disabled).
-//   - all project IDs in the active tenant when a tenant is resolved.
-//   - member-only project IDs for researchers.
-//   - all project IDs for platform admins / viewers.
+//
+//   - tenant-scoped request: all project IDs in the active tenant.
+//   - researcher: member-only project IDs.
+//   - platform admin / viewer / unauthenticated (dev with AUTH_ENABLED=false,
+//     or tests calling the handler directly): all project IDs.
+//
+// The route is registered behind `auth(...)` so in production with auth
+// enabled the unauthenticated path is unreachable. Treating `user == nil`
+// as admin-equivalent matches the convention used by ListStudies and
+// requireResearcherProjectScope elsewhere in the codebase.
 func (s *Server) accessibleProjectIDs(r *http.Request) ([]string, error) {
 	user := middleware.UserFromContext(r.Context())
-	if user == nil {
-		return nil, nil
-	}
-
 	tenant := middleware.TenantFromContext(r.Context())
 
 	var projects []model.Project
@@ -87,7 +89,7 @@ func (s *Server) accessibleProjectIDs(r *http.Request) ([]string, error) {
 	switch {
 	case tenant != nil:
 		projects, err = model.ListProjectsForTenant(r.Context(), s.db, tenant.ID)
-	case user.Role == "researcher":
+	case user != nil && user.Role == "researcher":
 		projects, err = model.ListProjectsForResearcher(r.Context(), s.db, user.ID)
 	default:
 		projects, err = model.ListProjects(r.Context(), s.db)
