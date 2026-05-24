@@ -114,10 +114,10 @@ jobs:
       # build-pkg.sh skips codesign/productsign/notarytool and emits an
       # unsigned .pkg. This keeps PR builds and forks green.
       - name: Import Apple signing certs
-        if: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
         env:
           APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        if: env.APPLE_CERT_P12_BASE64 != ''
         run: |
           echo "$APPLE_CERT_P12_BASE64" | base64 -d > /tmp/cert.p12
           KEYCHAIN="$RUNNER_TEMP/build.keychain"
