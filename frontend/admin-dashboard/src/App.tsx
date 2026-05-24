@@ -91,6 +91,46 @@ type SeriesRow = {
   created_at: string
 }
 
+// SeriesMetadata mirrors api/model.SeriesMetadata — the per-series DICOM
+// acquisition / device / geometry parameters captured at ingest time.
+// Every nullable field on the server is rendered as `null` in JSON; any
+// "string" fields without a `?: string | null` are server-required.
+type SeriesMetadata = {
+  id: string
+  study_id: string
+  series_instance_uid: string
+  series_number?: number | null
+  series_description?: string | null
+  protocol_name?: string | null
+  modality?: string | null
+  body_part_examined?: string | null
+  repetition_time?: number | null
+  echo_time?: number | null
+  inversion_time?: number | null
+  flip_angle?: number | null
+  slice_thickness?: number | null
+  spacing_between_slices?: number | null
+  pixel_bandwidth?: number | null
+  magnetic_field_strength?: number | null
+  echo_train_length?: number | null
+  number_of_averages?: number | null
+  rows?: number | null
+  columns?: number | null
+  pixel_spacing_row?: number | null
+  pixel_spacing_col?: number | null
+  scanning_sequence?: string | null
+  sequence_variant?: string | null
+  mr_acquisition_type?: string | null
+  sequence_name?: string | null
+  manufacturer?: string | null
+  manufacturer_model_name?: string | null
+  software_versions?: string | null
+  imaging_frequency?: number | null
+  instance_count: number
+  created_at: string
+  updated_at: string
+}
+
 type RelatedStudySummary = {
   id: string
   study_instance_uid: string
@@ -125,15 +165,14 @@ type Study = {
   id: string
   project_id: string
   study_instance_uid: string
-  // Anonymized PatientID (e.g. "SUBJ-abc123"). May be undefined/null until PR-A
-  // (which populates studies.anon_patient_id) lands; in that case the group-by-patient
-  // view falls back to a single "(no patient ID)" bucket.
+  // Anonymized PatientID (e.g. "SUBJ-abc123"). Populated by the ingest path
+  // when the DICOM PatientID tag carries the SUBJ-<hex> value the client-side
+  // anonymizer writes; may be undefined/null for legacy rows.
   anon_patient_id?: string | null
   modality: string
   body_part: string
   study_description: string
   study_date?: string
-  anon_patient_id?: string | null
   series_count: number
   source: string
   status: string
@@ -1776,6 +1815,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
   const [diagnostics, setDiagnostics] = useState<StudyDiagnosticsResponse | null>(null)
   const [labels, setLabels] = useState<StudyLabel[]>([])
   const [seriesList, setSeriesList] = useState<SeriesRow[]>([])
+  const [seriesMeta, setSeriesMeta] = useState<SeriesMetadata[]>([])
+  const [seriesMetaOpen, setSeriesMetaOpen] = useState(true)
   const [relationships, setRelationships] = useState<RelationshipWithStudy[]>([])
   const [loading, setLoading] = useState(true)
   const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships' | 'notes' | 'analytics' | 'analytics_results'>('audit')
@@ -1910,9 +1951,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       fetch(`/api/studies/${studyId}/diagnostics`).then(r => r.ok ? r.json() : null),
       fetch(`/api/studies/${studyId}/labels`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/series`).then(r => r.ok ? r.json() : { series: [] }),
+      fetch(`/api/studies/${studyId}/series-metadata`).then(r => r.ok ? r.json() : { series: [] }),
       fetch(`/api/studies/${studyId}/relationships`).then(r => r.ok ? r.json() : { relationships: [] }),
       fetch(`/api/studies/${studyId}/notes`).then(r => r.ok ? r.json() : { notes: [] }),
-    ]).then(([s, a, rl, sh, diag, lbls, sr, relData, notesData]) => {
+    ]).then(([s, a, rl, sh, diag, lbls, sr, smRes, relData, notesData]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
@@ -1922,6 +1964,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       setDiagnostics(diag ?? null)
       setLabels(lbls ?? [])
       setSeriesList((sr?.series ?? []) as SeriesRow[])
+      setSeriesMeta((smRes?.series ?? []) as SeriesMetadata[])
       setRelationships((relData?.relationships ?? []) as RelationshipWithStudy[])
       setStudyNotes((notesData?.notes ?? []) as StudyNoteEntry[])
       setNowMs(now)
@@ -2152,6 +2195,63 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           ))}
         </div>
       </div>
+
+      {/* Per-series DICOM metadata (TR / TE / protocol / sequence) */}
+      {seriesMeta.length > 0 && (
+        <div className="study-detail__section">
+          <h3
+            className="study-detail__section-title"
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setSeriesMetaOpen(o => !o)}
+            title={seriesMetaOpen ? 'Hide series details' : 'Show series details'}
+          >
+            <span style={{ display: 'inline-block', width: '1em' }}>{seriesMetaOpen ? '▾' : '▸'}</span>
+            Series ({seriesMeta.length})
+          </h3>
+          {seriesMetaOpen && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="detail-table" style={{ fontSize: '0.85em' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '3em' }}>#</th>
+                    <th>Description</th>
+                    <th>Protocol</th>
+                    <th>Sequence</th>
+                    <th style={{ textAlign: 'right' }}>TR (ms)</th>
+                    <th style={{ textAlign: 'right' }}>TE (ms)</th>
+                    <th style={{ textAlign: 'right' }}>Slices</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {seriesMeta.map((sm, i) => {
+                    const seqLabel = sm.sequence_name
+                      || [sm.scanning_sequence, sm.sequence_variant].filter(Boolean).join(' / ')
+                      || sm.mr_acquisition_type
+                      || ''
+                    return (
+                      <tr key={sm.id}>
+                        <td style={{ color: 'var(--color-gray-500)' }}>{sm.series_number ?? i + 1}</td>
+                        <td title={sm.series_instance_uid}>{sm.series_description || '—'}</td>
+                        <td>{sm.protocol_name || '—'}</td>
+                        <td>{seqLabel || '—'}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {sm.repetition_time != null ? Number(sm.repetition_time).toFixed(1) : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {sm.echo_time != null ? Number(sm.echo_time).toFixed(1) : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {sm.instance_count}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="study-detail__section">
