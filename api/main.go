@@ -553,6 +553,14 @@ func main() {
 	mux.HandleFunc("PUT /api/studies/{id}/subject", adminOnly(srv.SetStudySubject))
 	mux.HandleFunc("PUT /api/studies/{id}/project", adminOnly(srv.ReassignStudy))
 
+	// XNAT-style nested resource paths for project → subject drill-down.
+	// XNAT inspires the URL shape; handler code is original.
+	mux.HandleFunc("GET /api/projects/{id}/subjects", auth(srv.ListProjectSubjects))
+	mux.HandleFunc("GET /api/projects/{id}/subjects/{subjectID}", auth(srv.GetProjectSubject))
+
+	// Cross-entity top-bar search (projects + subjects + studies).
+	mux.HandleFunc("GET /api/search", auth(srv.Search))
+
 	// Federation peers — trusted remote AEGIS instances (stub for future cross-tenant federation).
 	mux.HandleFunc("GET /api/federation-peers", auth(srv.ListFederationPeers))
 	mux.HandleFunc("POST /api/federation-peers", adminOnly(srv.CreateFederationPeer))

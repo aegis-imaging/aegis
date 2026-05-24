@@ -1,0 +1,371 @@
+/* XNAT-style nav chrome: top bar, breadcrumbs, page shells.
+ *
+ * Colors follow the project's colorblind-friendly palette (teal/orange) and
+ * stay neutral so this file can be themed via the existing dark-theme.css
+ * variables. Class prefix `xn-` (eXperience nav) keeps this isolated from
+ * the existing admin dashboard classes.
+ */
+
+:root {
+  --xn-bg: #f8f9fb;
+  --xn-surface: #ffffff;
+  --xn-border: #e2e8f0;
+  --xn-text: #0f172a;
+  --xn-muted: #64748b;
+  --xn-link: #0d9488;
+  --xn-link-hover: #0f766e;
+  --xn-active-bg: #ccfbf1;
+  --xn-error-bg: #ffedd5;
+  --xn-error-text: #9a3412;
+}
+
+.xn-shell {
+  min-height: 100vh;
+  background: var(--xn-bg);
+  color: var(--xn-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+
+.xn-topbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 24px;
+  background: var(--xn-surface);
+  border-bottom: 1px solid var(--xn-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.xn-brand {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 16px;
+  color: var(--xn-text);
+  text-decoration: none;
+}
+
+.xn-topnav {
+  display: flex;
+  gap: 12px;
+}
+
+.xn-topnav a {
+  color: var(--xn-muted);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.xn-topnav a:hover,
+.xn-topnav a.xn-active {
+  color: var(--xn-text);
+  background: var(--xn-active-bg);
+}
+
+.xn-search-slot {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── Search ──────────────────────────────────────────────────────────── */
+
+.xn-search {
+  position: relative;
+  width: 360px;
+  max-width: 100%;
+}
+
+.xn-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--xn-border);
+  border-radius: 8px;
+  background: var(--xn-bg);
+  color: var(--xn-text);
+}
+
+.xn-search-input:focus {
+  outline: 2px solid var(--xn-link);
+  outline-offset: -1px;
+}
+
+.xn-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--xn-surface);
+  border: 1px solid var(--xn-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  max-height: 480px;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.xn-search-status {
+  padding: 12px;
+  color: var(--xn-muted);
+  font-size: 13px;
+}
+
+.xn-search-section {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--xn-border);
+}
+
+.xn-search-section:last-child {
+  border-bottom: none;
+}
+
+.xn-search-section-title {
+  padding: 6px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--xn-muted);
+}
+
+.xn-search-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--xn-text);
+}
+
+.xn-search-hit:hover {
+  background: var(--xn-active-bg);
+}
+
+.xn-search-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.xn-search-secondary {
+  font-size: 12px;
+  color: var(--xn-muted);
+  margin-top: 2px;
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────── */
+
+.xn-breadcrumbs {
+  padding: 8px 24px;
+  background: var(--xn-bg);
+  border-bottom: 1px solid var(--xn-border);
+  font-size: 13px;
+  color: var(--xn-muted);
+}
+
+.xn-crumb a {
+  color: var(--xn-link);
+  text-decoration: none;
+}
+
+.xn-crumb a:hover {
+  color: var(--xn-link-hover);
+  text-decoration: underline;
+}
+
+.xn-crumb-sep {
+  margin: 0 8px;
+  color: var(--xn-border);
+}
+
+/* ── Main content ────────────────────────────────────────────────────── */
+
+.xn-main {
+  padding: 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.xn-page-header h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.xn-muted {
+  color: var(--xn-muted);
+}
+
+.xn-error {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--xn-error-bg);
+  color: var(--xn-error-text);
+  margin: 12px 0;
+  font-size: 14px;
+}
+
+/* ── Home page cards ─────────────────────────────────────────────────── */
+
+.xn-home-greeting h1 {
+  font-size: 28px;
+  margin: 0 0 4px;
+}
+
+.xn-home-projects {
+  margin-top: 24px;
+}
+
+.xn-home-projects h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.xn-card-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.xn-card {
+  background: var(--xn-surface);
+  border: 1px solid var(--xn-border);
+  border-radius: 12px;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.xn-card:hover {
+  border-color: var(--xn-link);
+  transform: translateY(-1px);
+}
+
+.xn-card-link {
+  display: block;
+  padding: 16px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.xn-card-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.xn-card-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--xn-muted);
+}
+
+.xn-card-desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--xn-muted);
+}
+
+.xn-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--xn-active-bg);
+  color: var(--xn-link-hover);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Section / table / defs ──────────────────────────────────────────── */
+
+.xn-section {
+  background: var(--xn-surface);
+  border: 1px solid var(--xn-border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.xn-section h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.xn-section-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.xn-filter {
+  padding: 6px 10px;
+  border: 1px solid var(--xn-border);
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 220px;
+}
+
+.xn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.xn-table thead th {
+  text-align: left;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--xn-border);
+  color: var(--xn-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.xn-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--xn-border);
+}
+
+.xn-table tbody tr:hover {
+  background: var(--xn-bg);
+}
+
+.xn-table a {
+  color: var(--xn-link);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.xn-table a:hover {
+  color: var(--xn-link-hover);
+  text-decoration: underline;
+}
+
+.xn-defs {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.xn-defs dt {
+  color: var(--xn-muted);
+  font-size: 13px;
+}
+
+.xn-defs dd {
+  margin: 0;
+  font-size: 14px;
+}
