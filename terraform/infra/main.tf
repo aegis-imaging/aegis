@@ -140,29 +140,43 @@ variable "defacing_image" {
   type        = string
 }
 
-variable "phi_detection_image" {
-  description = "Container image URI for the PHI detection sidecar"
+variable "dicom_tools_image" {
+  description = "Container image URI for the consolidated dicom-tools sidecar (hosts phi-detection, qc, bids, classification, protocol, synth under one Cloud Run service)"
   type        = string
+}
+
+# The per-sidecar image variables below are retained as inputs to preserve
+# tfvars compatibility during the consolidation rollout — Cloud Build still
+# tries to set them from the previous secret. They are no longer used by
+# the resource graph; only var.dicom_tools_image drives the merged service.
+variable "phi_detection_image" {
+  description = "(deprecated) was the PHI detection sidecar image; consolidated into dicom_tools_image."
+  type        = string
+  default     = ""
 }
 
 variable "qc_service_image" {
-  description = "Container image URI for the QC sidecar"
+  description = "(deprecated) was the QC sidecar image; consolidated into dicom_tools_image."
   type        = string
+  default     = ""
 }
 
 variable "bids_service_image" {
-  description = "Container image URI for the BIDS sidecar"
+  description = "(deprecated) was the BIDS sidecar image; consolidated into dicom_tools_image."
   type        = string
+  default     = ""
 }
 
 variable "classification_service_image" {
-  description = "Container image URI for the classification sidecar"
+  description = "(deprecated) was the classification sidecar image; consolidated into dicom_tools_image."
   type        = string
+  default     = ""
 }
 
 variable "protocol_service_image" {
-  description = "Container image URI for the protocol sidecar"
+  description = "(deprecated) was the protocol sidecar image; consolidated into dicom_tools_image."
   type        = string
+  default     = ""
 }
 
 variable "upload_portal_image" {
@@ -454,17 +468,15 @@ locals {
 
   sidecar_services = merge(
     {
-      defacing               = var.defacing_image
-      phi-detection          = var.phi_detection_image
-      qc-service             = var.qc_service_image
-      bids-service           = var.bids_service_image
-      classification-service = var.classification_service_image
-      protocol-service       = var.protocol_service_image
+      # dicom-tools consolidates six former sidecars (phi-detection, qc-service,
+      # bids-service, classification-service, protocol-service, synth-service)
+      # into one Cloud Run service. The Go API reaches each former endpoint via
+      # DICOM_TOOLS_URL + sub-module prefix; see api/config/config.go sidecarURL().
+      dicom-tools = var.dicom_tools_image
+      # Heavy sidecars stay separate because their system-level toolchains
+      # (FreeSurfer, FSL, ANTs, scikit-image with native deps) don't share an image.
+      defacing    = var.defacing_image
     },
-    # synth-service: optional sidecar for synthetic brain MRI generation.
-    # Omit from the map when the image is not provided so the for_each loop
-    # does not attempt to create a Cloud Run service with an empty image URI.
-    var.synth_service_image != "" ? { synth-service = var.synth_service_image } : {},
     var.sct_service_image != "" ? { sct-service = var.sct_service_image } : {},
     var.analytics_service_image != "" ? { analytics-service = var.analytics_service_image } : {}
   )
@@ -1078,36 +1090,14 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "DEFACING_SERVICE_URL"
         value = google_cloud_run_v2_service.sidecars["defacing"].uri
       }
+      # Six former sidecars (phi-detection, qc, bids, classification, protocol,
+      # synth) are consolidated into the single dicom-tools service. The Go API
+      # config helper sidecarURL() derives per-sidecar URLs by appending the
+      # sub-module prefix (e.g. DICOM_TOOLS_URL + "/phi") so handler call sites
+      # don't need to change.
       env {
-        name  = "PHI_DETECTION_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["phi-detection"].uri
-      }
-      env {
-        name  = "QC_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["qc-service"].uri
-      }
-      env {
-        name  = "BIDS_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["bids-service"].uri
-      }
-      env {
-        name  = "CLASSIFICATION_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["classification-service"].uri
-      }
-      env {
-        name  = "PROTOCOL_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["protocol-service"].uri
-      }
-      dynamic "env" {
-        # Prefer an explicit URL override; fall back to the Terraform-managed
-        # synth-service Cloud Run URI when synth_service_image is set.
-        for_each = var.synth_service_url != "" ? [var.synth_service_url] : (
-          var.synth_service_image != "" ? [google_cloud_run_v2_service.sidecars["synth-service"].uri] : []
-        )
-        content {
-          name  = "SYNTH_SERVICE_URL"
-          value = env.value
-        }
+        name  = "DICOM_TOOLS_URL"
+        value = google_cloud_run_v2_service.sidecars["dicom-tools"].uri
       }
       dynamic "env" {
         for_each = var.sct_service_image != "" ? [google_cloud_run_v2_service.sidecars["sct-service"].uri] : []
