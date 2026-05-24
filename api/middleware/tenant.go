@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/tenantctx"
 )
 
 // Tenant-resolution middleware. SCAFFOLDING ONLY.
@@ -29,8 +30,6 @@ import (
 //
 // A resolved tenant is stored in the request context and retrievable via
 // TenantFromContext. Handlers that need tenant scoping read it from there.
-
-const tenantContextKey contextKey = "tenant"
 
 // TenantHeader is the explicit header callers set to choose a tenant.
 const TenantHeader = "X-AEGIS-Tenant"
@@ -105,19 +104,20 @@ func ResolveTenant(db *sql.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), tenantContextKey, tenant)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(tenantctx.With(r.Context(), tenant)))
 		})
 	}
 }
 
 // TenantFromContext returns the resolved tenant for a request, or nil
 // when the request is in legacy single-tenant mode (no slug at all).
-// Handlers that need tenant scoping use this to decide what filter to
-// apply.
+//
+// Thin re-export of tenantctx.From — handlers were already importing
+// middleware, so this keeps the existing call sites compiling. New
+// callers in non-middleware-importing packages (like the model layer)
+// should call tenantctx.From / tenantctx.ID directly.
 func TenantFromContext(ctx context.Context) *model.Tenant {
-	t, _ := ctx.Value(tenantContextKey).(*model.Tenant)
-	return t
+	return tenantctx.From(ctx)
 }
 
 // tenantSlugFromRequest pulls the slug out of either the explicit header

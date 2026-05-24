@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/aegis-imaging/aegis/api/tenantctx"
 )
 
 type AuditEntry struct {
@@ -17,8 +19,23 @@ type AuditEntry struct {
 	Detail       json.RawMessage `json:"detail,omitempty"`
 	IPAddress    string          `json:"ip_address"`
 	CreatedAt    time.Time       `json:"created_at"`
+	TenantID     *string         `json:"tenant_id,omitempty"` // nil = pre-tenant-rollout entry
 }
 
+// auditColumns is the canonical SELECT list for full AuditEntry rows.
+// scanAudit reads in the same order — keep them in sync.
+const auditColumns = `id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at, tenant_id`
+
+func scanAudit(rs interface{ Scan(...any) error }, e *AuditEntry) error {
+	return rs.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
+		&e.Detail, &e.IPAddress, &e.CreatedAt, &e.TenantID)
+}
+
+// CreateAuditEntry inserts an audit row. The `tenant_id` column is auto-
+// populated from `tenantctx.From(ctx)` so handlers don't have to thread
+// the tenant ID through to every audit call. Legacy single-tenant
+// requests (no tenant in context) write NULL — still visible to legacy
+// callers via ListAuditEntries with no TenantID filter.
 func CreateAuditEntry(ctx context.Context, db *sql.DB, action, actor, resourceType, resourceID, ipAddress string, detail any) error {
 	var detailJSON []byte
 	if detail != nil {
@@ -28,10 +45,14 @@ func CreateAuditEntry(ctx context.Context, db *sql.DB, action, actor, resourceTy
 			return err
 		}
 	}
+	var tenantID *string
+	if id := tenantctx.ID(ctx); id != "" {
+		tenantID = &id
+	}
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO audit_trail (action, actor, resource_type, resource_id, detail, ip_address)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		action, actor, resourceType, resourceID, detailJSON, ipAddress)
+		INSERT INTO audit_trail (action, actor, resource_type, resource_id, detail, ip_address, tenant_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		action, actor, resourceType, resourceID, detailJSON, ipAddress, tenantID)
 	return err
 }
 
@@ -43,6 +64,7 @@ type AuditFilters struct {
 	Search       string    // free-text substring search across actor, action, resource_id
 	DateFrom     time.Time // inclusive lower bound on created_at (zero = no bound)
 	DateTo       time.Time // inclusive upper bound on created_at (zero = no bound)
+	TenantID     string    // when non-empty, restrict to rows whose tenant_id matches. Legacy rows (tenant_id IS NULL) are excluded.
 }
 
 func auditWhere(f AuditFilters) (string, []any) {
@@ -81,6 +103,11 @@ func auditWhere(f AuditFilters) (string, []any) {
 	if !f.DateTo.IsZero() {
 		clauses = append(clauses, fmt.Sprintf("created_at <= $%d", n))
 		args = append(args, f.DateTo.UTC())
+		n++
+	}
+	if f.TenantID != "" {
+		clauses = append(clauses, fmt.Sprintf("tenant_id = $%d", n))
+		args = append(args, f.TenantID)
 		n++
 	}
 	_ = n
@@ -147,6 +174,12 @@ func auditWhereStudyScope(f AuditFilters, projectID, institutionID string, argSt
 		args = append(args, f.DateTo.UTC())
 		n++
 	}
+	if f.TenantID != "" {
+		clauses = append(clauses, fmt.Sprintf("tenant_id = $%d", n))
+		args = append(args, f.TenantID)
+		n++
+	}
+	_ = n
 
 	where := " WHERE " + clauses[0]
 	for _, c := range clauses[1:] {
@@ -166,7 +199,7 @@ func ListAuditEntries(ctx context.Context, db *sql.DB, f AuditFilters, limit, of
 	where, args := auditWhere(f)
 	argN := len(args) + 1
 
-	query := `SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at FROM audit_trail` + where + ` ORDER BY created_at DESC`
+	query := `SELECT `+auditColumns+` FROM audit_trail` + where + ` ORDER BY created_at DESC`
 
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argN)
@@ -187,8 +220,7 @@ func ListAuditEntries(ctx context.Context, db *sql.DB, f AuditFilters, limit, of
 	var entries []AuditEntry
 	for rows.Next() {
 		var e AuditEntry
-		if err := rows.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
-			&e.Detail, &e.IPAddress, &e.CreatedAt); err != nil {
+		if err := scanAudit(rows, &e); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -200,7 +232,7 @@ func ListAuditEntriesForStudyScope(ctx context.Context, db *sql.DB, f AuditFilte
 	where, args := auditWhereStudyScope(f, projectID, institutionID, 1)
 	argN := len(args) + 1
 
-	query := `SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at FROM audit_trail` + where + ` ORDER BY created_at DESC`
+	query := `SELECT `+auditColumns+` FROM audit_trail` + where + ` ORDER BY created_at DESC`
 
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argN)
@@ -221,8 +253,7 @@ func ListAuditEntriesForStudyScope(ctx context.Context, db *sql.DB, f AuditFilte
 	var entries []AuditEntry
 	for rows.Next() {
 		var e AuditEntry
-		if err := rows.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
-			&e.Detail, &e.IPAddress, &e.CreatedAt); err != nil {
+		if err := scanAudit(rows, &e); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -231,13 +262,23 @@ func ListAuditEntriesForStudyScope(ctx context.Context, db *sql.DB, f AuditFilte
 }
 
 // ListAuditEntriesByActor returns the most recent audit entries for a specific actor (email).
+//
+// Tenant-aware: when ctx carries a tenant, the listing is scoped to that
+// tenant's rows. Legacy single-tenant callers (no tenant in ctx) see
+// everything for the actor as before.
 func ListAuditEntriesByActor(ctx context.Context, db *sql.DB, actor string, limit int) ([]AuditEntry, error) {
+	args := []any{actor, limit}
+	tenantClause := ""
+	if id := tenantctx.ID(ctx); id != "" {
+		tenantClause = " AND tenant_id = $3"
+		args = append(args, id)
+	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at
+		SELECT `+auditColumns+`
 		  FROM audit_trail
-		 WHERE actor = $1
+		 WHERE actor = $1`+tenantClause+`
 		 ORDER BY created_at DESC
-		 LIMIT $2`, actor, limit)
+		 LIMIT $2`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -245,8 +286,7 @@ func ListAuditEntriesByActor(ctx context.Context, db *sql.DB, actor string, limi
 	var entries []AuditEntry
 	for rows.Next() {
 		var e AuditEntry
-		if err := rows.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
-			&e.Detail, &e.IPAddress, &e.CreatedAt); err != nil {
+		if err := scanAudit(rows, &e); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -258,7 +298,7 @@ func ListAuditEntriesByActor(ctx context.Context, db *sql.DB, actor string, limi
 // ordered newest-first. Notes are stored as audit_trail rows with action='study.note'.
 func ListStudyNoteAuditEntries(ctx context.Context, db *sql.DB, studyID string) ([]AuditEntry, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at
+		SELECT `+auditColumns+`
 		FROM audit_trail
 		WHERE resource_id = $1
 		  AND action = 'study.note'
@@ -271,8 +311,7 @@ func ListStudyNoteAuditEntries(ctx context.Context, db *sql.DB, studyID string) 
 	var entries []AuditEntry
 	for rows.Next() {
 		var e AuditEntry
-		if err := rows.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
-			&e.Detail, &e.IPAddress, &e.CreatedAt); err != nil {
+		if err := scanAudit(rows, &e); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -283,7 +322,7 @@ func ListStudyNoteAuditEntries(ctx context.Context, db *sql.DB, studyID string) 
 // ListAuditEntriesForStudy returns all audit entries for a specific study (by resource_id).
 func ListAuditEntriesForStudy(ctx context.Context, db *sql.DB, studyID string) ([]AuditEntry, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, action, actor, resource_type, resource_id, COALESCE(detail, 'null'), ip_address, created_at
+		SELECT `+auditColumns+`
 		FROM audit_trail
 		WHERE resource_id = $1
 		ORDER BY created_at DESC`, studyID)
@@ -295,8 +334,7 @@ func ListAuditEntriesForStudy(ctx context.Context, db *sql.DB, studyID string) (
 	var entries []AuditEntry
 	for rows.Next() {
 		var e AuditEntry
-		if err := rows.Scan(&e.ID, &e.Action, &e.Actor, &e.ResourceType, &e.ResourceID,
-			&e.Detail, &e.IPAddress, &e.CreatedAt); err != nil {
+		if err := scanAudit(rows, &e); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
