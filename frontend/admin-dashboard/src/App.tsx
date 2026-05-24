@@ -4123,64 +4123,64 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className="state-loading">Loading routing configuration…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="xn-muted">Loading routing configuration…</div>
+  if (error)   return <div className="xn-error">{error}</div>
 
   return (
-    <div className="routing-panel">
+    <div >
 
       {/* ── Destinations ── */}
-      <section className="routing-section">
-        <div className="routing-section-header">
+      <section className="xn-section">
+        <div className="xn-section-bar">
           <h2>Destinations</h2>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openNewDest}>+ Add destination</button>}
+          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNewDest}>+ Add destination</button>}
         </div>
         <p className="routing-hint">External DICOM endpoints that studies can be forwarded to via <code>route_to</code> rules.</p>
 
         {isAdmin && showDestForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>{editingDestId ? 'Edit destination' : 'New destination'}</h3>
-            {destError && <div className="form-error">{destError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Name *" value={destForm.name}
+            {destError && <div className="xn-error">{destError}</div>}
+            <div className="">
+              <input className="xn-filter" placeholder="Name *" value={destForm.name}
                 onChange={e => setDestForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="form-input" placeholder="Slug (auto-generated if blank)" value={destForm.slug}
+              <input className="xn-filter" placeholder="Slug (auto-generated if blank)" value={destForm.slug}
                 onChange={e => setDestForm(f => ({ ...f, slug: e.target.value }))} />
-              <select className="form-select" aria-label="Type" value={destForm.type}
+              <select className="" aria-label="Type" value={destForm.type}
                 onChange={e => setDestForm(f => ({ ...f, type: e.target.value as 'dicomweb' | 'dimse' }))}>
                 <option value="dicomweb">DICOMweb (STOW-RS)</option>
                 <option value="dimse">DIMSE (C-STORE)</option>
               </select>
-              <input className="form-input" placeholder="Description" value={destForm.description}
+              <input className="xn-filter" placeholder="Description" value={destForm.description}
                 onChange={e => setDestForm(f => ({ ...f, description: e.target.value }))} />
               {destForm.type === 'dicomweb' && (
-                <input className="form-input form-input--wide" placeholder="DICOMweb base URL *" value={destForm.dicomweb_url}
+                <input className="xn-filter" placeholder="DICOMweb base URL *" value={destForm.dicomweb_url}
                   onChange={e => setDestForm(f => ({ ...f, dicomweb_url: e.target.value }))} />
               )}
               {destForm.type === 'dimse' && (
                 <>
-                  <input className="form-input" placeholder="AE Title" value={destForm.ae_title}
+                  <input className="xn-filter" placeholder="AE Title" value={destForm.ae_title}
                     onChange={e => setDestForm(f => ({ ...f, ae_title: e.target.value }))} />
-                  <input className="form-input" placeholder="Host" value={destForm.host}
+                  <input className="xn-filter" placeholder="Host" value={destForm.host}
                     onChange={e => setDestForm(f => ({ ...f, host: e.target.value }))} />
-                  <input className="form-input" placeholder="Port" type="number" value={destForm.port || ''}
+                  <input className="xn-filter" placeholder="Port" type="number" value={destForm.port || ''}
                     onChange={e => setDestForm(f => ({ ...f, port: Number(e.target.value) }))} />
                 </>
               )}
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveDest} disabled={destSaving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={saveDest} disabled={destSaving}>
                 {destSaving ? 'Saving…' : editingDestId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowDestForm(false)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowDestForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {destinations.length === 0 && !showDestForm ? (
-          <div className="state-empty">No destinations yet.</div>
+          <div className="xn-muted">No destinations yet.</div>
         ) : destinations.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -4204,8 +4204,8 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 return (
                   <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
                     <td>
-                      <div className="routing-name">{d.name}</div>
-                      {d.description && <div className="routing-desc">{d.description}</div>}
+                      <div className="">{d.name}</div>
+                      {d.description && <div className="xn-muted">{d.description}</div>}
                       {healthSummary && healthSummary.test_count > 0 && (
                         <div style={{
                           marginTop: 4, fontSize: 11, padding: '2px 6px', borderRadius: 4,
@@ -4246,14 +4246,14 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                       </span>
                     </td>
                     <td>
-                      <div className="actions-cell">
+                      <div className="xn-section-controls">
                         <button type="button" className="btn btn--secondary" onClick={() => testDest(d.id)} disabled={testing}>
                           {testing ? 'Testing…' : 'Test'}
                         </button>
                         {isAdmin && (
                           <>
-                            <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
-                            <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                            <button type="button" className="xn-btn-secondary" onClick={() => openEditDest(d)}>Edit</button>
+                            <button type="button" className="xn-btn-secondary" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
                           </>
                         )}
                       </div>
@@ -4267,8 +4267,8 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
       </section>
 
       {/* ── Routing Rules ── */}
-      <section className="routing-section">
-        <div className="routing-section-header">
+      <section className="xn-section">
+        <div className="xn-section-bar">
           <h2>Routing Rules</h2>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {projectId && (
@@ -4301,7 +4301,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 </button>
               </>
             )}
-            {isAdmin && <button type="button" className="btn-primary" onClick={openNewRule}>+ Add rule</button>}
+            {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNewRule}>+ Add rule</button>}
           </div>
         </div>
         {rulesImportMsg && (
@@ -4315,24 +4315,24 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
         </p>
 
         {isAdmin && showRuleForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>{editingRuleId ? 'Edit rule' : 'New rule'}</h3>
-            {ruleError && <div className="form-error">{ruleError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Rule name *" value={ruleForm.name}
+            {ruleError && <div className="xn-error">{ruleError}</div>}
+            <div className="">
+              <input className="xn-filter" placeholder="Rule name *" value={ruleForm.name}
                 onChange={e => setRuleForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="form-input" placeholder="Description" value={ruleForm.description}
+              <input className="xn-filter" placeholder="Description" value={ruleForm.description}
                 onChange={e => setRuleForm(f => ({ ...f, description: e.target.value }))} />
-              <input className="form-input" placeholder="Priority (default 100)" type="number" value={ruleForm.priority}
+              <input className="xn-filter" placeholder="Priority (default 100)" type="number" value={ruleForm.priority}
                 onChange={e => setRuleForm(f => ({ ...f, priority: Number(e.target.value) }))} />
             </div>
             <div className="routing-form-section-label">Conditions (leave blank = match any)</div>
-            <div className="form-grid">
-              <input className="form-input" placeholder="Modality (e.g. MRI, CT, PET)" value={ruleForm.modality ?? ''}
+            <div className="">
+              <input className="xn-filter" placeholder="Modality (e.g. MRI, CT, PET)" value={ruleForm.modality ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, modality: e.target.value || null }))} />
-              <input className="form-input" placeholder="Body part (e.g. HEAD, CHEST)" value={ruleForm.body_part ?? ''}
+              <input className="xn-filter" placeholder="Body part (e.g. HEAD, CHEST)" value={ruleForm.body_part ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, body_part: e.target.value || null }))} />
-              <select className="form-select" aria-label="Source filter" value={ruleForm.source ?? ''}
+              <select className="" aria-label="Source filter" value={ruleForm.source ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, source: e.target.value || null }))}>
                 <option value="">Any source</option>
                 <option value="external">external</option>
@@ -4340,8 +4340,8 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               </select>
             </div>
             <div className="routing-form-section-label">Action</div>
-            <div className="form-grid">
-              <select className="form-select" aria-label="Action" value={ruleForm.action}
+            <div className="">
+              <select className="" aria-label="Action" value={ruleForm.action}
                 onChange={e => setRuleForm(f => ({ ...f, action: e.target.value, destination_id: null }))}>
                 <option value="require_qa">require_qa — hold for manual review (default)</option>
                 <option value="require_defacing">require_defacing — force defacing even if not head</option>
@@ -4356,7 +4356,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 <option value="route_to">route_to — forward to external destination</option>
               </select>
               {ruleForm.action === 'route_to' && (
-                <select className="form-select" aria-label="Destination" value={ruleForm.destination_id ?? ''}
+                <select className="" aria-label="Destination" value={ruleForm.destination_id ?? ''}
                   onChange={e => setRuleForm(f => ({ ...f, destination_id: e.target.value || null }))}>
                   <option value="">Select destination…</option>
                   {destinations.map(d => (
@@ -4365,17 +4365,17 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 </select>
               )}
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveRule} disabled={ruleSaving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={saveRule} disabled={ruleSaving}>
                 {ruleSaving ? 'Saving…' : editingRuleId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowRuleForm(false)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowRuleForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {rules.length === 0 && !showRuleForm ? (
-          <div className="state-empty">No routing rules yet. Studies follow the default pipeline.</div>
+          <div className="xn-muted">No routing rules yet. Studies follow the default pipeline.</div>
         ) : rules.length > 0 && (
           <>
           {isAdmin && selectedRuleIds.size > 0 && (
@@ -4387,7 +4387,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               {bulkToggleMsg && <span style={{ fontSize: '0.8rem', color: bulkToggleMsg.startsWith('HTTP') || bulkToggleMsg.includes('failed') ? '#ea580c' : '#0d9488' }}>{bulkToggleMsg}</span>}
             </div>
           )}
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th style={{ width: 32 }}>
@@ -4451,8 +4451,8 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                       )}
                     </td>
                     <td>
-                      <div className="routing-name">{r.name}</div>
-                      {r.description && <div className="routing-desc">{r.description}</div>}
+                      <div className="">{r.name}</div>
+                      {r.description && <div className="xn-muted">{r.description}</div>}
                     </td>
                     <td className="routing-conditions">
                       {conditions.length > 0
@@ -4461,7 +4461,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                     </td>
                     <td>
                       <code className={`routing-action routing-action--${r.action}`}>{r.action}</code>
-                      {destName && <div className="routing-desc">→ {destName}</div>}
+                      {destName && <div className="xn-muted">→ {destName}</div>}
                     </td>
                     <td>
                       <span className={`badge badge--${r.enabled ? 'enabled' : 'disabled'}`}>
@@ -4470,12 +4470,12 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                     </td>
                     <td>
                       {isAdmin && (
-                        <div className="actions-cell">
-                          <button type="button" className="btn btn--edit" onClick={() => openEditRule(r)}>Edit</button>
+                        <div className="xn-section-controls">
+                          <button type="button" className="xn-btn-secondary" onClick={() => openEditRule(r)}>Edit</button>
                           <button type="button" className="btn btn--secondary" onClick={() => toggleRule(r)}>
                             {r.enabled ? 'Disable' : 'Enable'}
                           </button>
-                          <button type="button" className="btn btn--revoke" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
+                          <button type="button" className="xn-btn-secondary" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
                         </div>
                       )}
                     </td>
@@ -4489,11 +4489,11 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
       </section>
 
       {/* ── Rule Analytics ── */}
-      <section className="routing-section">
-        <div className="routing-section-header" style={{ cursor: 'pointer' }} onClick={() => setRuleStatsOpen(o => !o)}>
+      <section className="xn-section">
+        <div className="xn-section-bar" style={{ cursor: 'pointer' }} onClick={() => setRuleStatsOpen(o => !o)}>
           <h2>Rule Analytics {ruleStatsOpen ? '▲' : '▼'}</h2>
           <select
-            className="form-select"
+            className=""
             aria-label="Period"
             style={{ width: 'auto', marginLeft: 'auto' }}
             value={ruleStatsDays}
@@ -4507,7 +4507,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
         </div>
         {ruleStatsOpen && (
           <div>
-            {ruleStatsLoading && <div className="state-loading">Loading rule analytics…</div>}
+            {ruleStatsLoading && <div className="xn-muted">Loading rule analytics…</div>}
             {!ruleStatsLoading && ruleStats && (
               <>
                 <div style={{ display: 'flex', gap: '16px', margin: '12px 0', flexWrap: 'wrap' }}>
@@ -4528,7 +4528,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                   : (
                     <>
                       <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '16px 0 8px', color: '#374151' }}>Rules by hit count</h3>
-                      <table className="routing-table">
+                      <table className="xn-table">
                         <thead>
                           <tr>
                             <th>Rule</th>
@@ -4542,7 +4542,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                         <tbody>
                           {ruleStats.by_rule.map(r => (
                             <tr key={r.rule_id}>
-                              <td><span className="routing-name">{r.rule_name}</span></td>
+                              <td><span className="">{r.rule_name}</span></td>
                               <td><code style={{ fontSize: '0.8rem' }}>{r.rule_action}</code></td>
                               <td className="td-subtle">{r.destination_name ?? '—'}</td>
                               <td style={{ fontWeight: 600 }}>{r.hit_count}</td>
@@ -4559,7 +4559,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 {ruleStats.unused_rules.length > 0 && (
                   <>
                     <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '16px 0 8px', color: '#b45309' }}>Unused rules (no hits in period)</h3>
-                    <table className="routing-table">
+                    <table className="xn-table">
                       <thead>
                         <tr>
                           <th>Rule</th>
@@ -4570,7 +4570,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                       <tbody>
                         {ruleStats.unused_rules.map(r => (
                           <tr key={r.rule_id}>
-                            <td><span className="routing-name">{r.rule_name}</span></td>
+                            <td><span className="">{r.rule_name}</span></td>
                             <td><code style={{ fontSize: '0.8rem' }}>{r.rule_action}</code></td>
                             <td><span className={`badge badge--${r.rule_enabled ? 'enabled' : 'disabled'}`}>{r.rule_enabled ? 'enabled' : 'disabled'}</span></td>
                           </tr>
@@ -4586,11 +4586,11 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
       </section>
 
       {/* ── Routing Health ── */}
-      <section className="routing-section">
-        <div className="routing-section-header" style={{ cursor: 'pointer' }} onClick={() => setHealthOpen(o => !o)}>
+      <section className="xn-section">
+        <div className="xn-section-bar" style={{ cursor: 'pointer' }} onClick={() => setHealthOpen(o => !o)}>
           <h2>Routing Health {healthOpen ? '▲' : '▼'}</h2>
           <select
-            className="form-select"
+            className=""
             aria-label="Period"
             style={{ width: 'auto', marginLeft: 'auto' }}
             value={healthDays}
@@ -4604,7 +4604,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
         </div>
         {healthOpen && (
           <div>
-            {healthLoading && <div className="state-loading">Loading routing health…</div>}
+            {healthLoading && <div className="xn-muted">Loading routing health…</div>}
             {!healthLoading && routingHealth && (
               <>
                 <div style={{ display: 'flex', gap: '24px', margin: '12px 0', flexWrap: 'wrap' }}>
@@ -4623,9 +4623,9 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                   ))}
                 </div>
                 {routingHealth.by_destination.length === 0
-                  ? <div className="state-empty">No routing attempts recorded in this period.</div>
+                  ? <div className="xn-muted">No routing attempts recorded in this period.</div>
                   : (
-                    <table className="routing-table">
+                    <table className="xn-table">
                       <thead>
                         <tr>
                           <th>Destination</th>
@@ -4643,7 +4643,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                           const rateColor = rate === null ? 'inherit' : rate >= 95 ? '#0f766e' : rate >= 80 ? '#b45309' : '#9a3412'
                           return (
                             <tr key={d.destination_id}>
-                              <td><span className="routing-name">{d.destination_name}</span></td>
+                              <td><span className="">{d.destination_name}</span></td>
                               <td><span className={`badge badge--${d.destination_type}`}>{d.destination_type}</span></td>
                               <td>{d.attempts}</td>
                               <td style={{ color: '#0f766e' }}>{d.successful}</td>
@@ -6521,106 +6521,106 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  if (loading) return <div className="state-loading">Loading projects…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="xn-muted">Loading projects…</div>
+  if (error)   return <div className="xn-error">{error}</div>
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">Projects</div>
-            <div className="routing-section-sub">
+            <div className="">Projects</div>
+            <div className="xn-muted">
               Projects group studies and control anonymization profiles. Each upload is associated with one project.
             </div>
           </div>
-          <div className="actions-cell">
-            <button type="button" className="btn-refresh" onClick={fetchProjects}>Refresh</button>
-            {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ New project</button>}
+          <div className="xn-section-controls">
+            <button type="button" className="xn-icon-btn" onClick={fetchProjects}>Refresh</button>
+            {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNew}>+ New project</button>}
           </div>
         </div>
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>{editingId ? 'Edit project' : 'New project'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Name *"
+            {formError && <div className="xn-error">{formError}</div>}
+            <div className="">
+              <input className="xn-filter" placeholder="Name *"
                 value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="form-input" placeholder="Slug (auto-generated if blank)"
+              <input className="xn-filter" placeholder="Slug (auto-generated if blank)"
                 value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-              <input className="form-input form-input--wide" placeholder="Description"
+              <input className="xn-filter" placeholder="Description"
                 value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             {editingId && (
               <div className="routing-hint">Note: changing the slug will break existing upload portal URLs for this project.</div>
             )}
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline PHI config editor */}
         {phiProjectId && phiConfig && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
+          <div className="xn-section" style={{ marginTop: '16px' }}>
             <h3>PHI Scan Config — {projects.find(p => p.id === phiProjectId)?.name}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+            <div className="xn-muted" style={{ marginBottom: '12px' }}>
               Override the PHI detection sensitivity thresholds for this project.
               These values are read by the PHI detection service at scan time.
             </div>
-            {phiError && <div className="form-error">{phiError}</div>}
-            <div className="form-grid">
+            {phiError && <div className="xn-error">{phiError}</div>}
+            <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Confidence threshold (0–1, default 0.4)
-                <input className="form-input" type="number" min="0" max="1" step="0.05"
+                <input className="xn-filter" type="number" min="0" max="1" step="0.05"
                   value={phiConfig.confidence_threshold}
                   onChange={e => setPhiConfig(c => c ? { ...c, confidence_threshold: parseFloat(e.target.value) } : c)} />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Min text length (chars, default 3)
-                <input className="form-input" type="number" min="1" step="1"
+                <input className="xn-filter" type="number" min="1" step="1"
                   value={phiConfig.min_text_length}
                   onChange={e => setPhiConfig(c => c ? { ...c, min_text_length: parseInt(e.target.value, 10) } : c)} />
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={savePhiConfig} disabled={phiSaving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={savePhiConfig} disabled={phiSaving}>
                 {phiSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setPhiProjectId(null)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setPhiProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline retention policy editor */}
         {retentionProjectId && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
+          <div className="xn-section" style={{ marginTop: '16px' }}>
             <h3>Retention Policy — {projects.find(p => p.id === retentionProjectId)?.name}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+            <div className="xn-muted" style={{ marginBottom: '12px' }}>
               Approved studies older than this threshold are automatically marked as expired.
               Leave blank to keep studies indefinitely. Use "Preview" to see impact before saving.
             </div>
-            {retentionError && <div className="form-error">{retentionError}</div>}
-            <div className="form-grid">
+            {retentionError && <div className="xn-error">{retentionError}</div>}
+            <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Retention period (days, blank = unlimited)
-                <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 90"
+                <input className="xn-filter" type="number" min="1" step="1" placeholder="e.g. 90"
                   value={retentionDraft}
                   onChange={e => { setRetentionDraft(e.target.value); setRetentionPreview(null) }} />
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveRetention} disabled={retentionSaving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={saveRetention} disabled={retentionSaving}>
                 {retentionSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={previewRetention} disabled={retentionPreviewing || !retentionDraft}>
+              <button type="button" className="xn-btn-secondary" onClick={previewRetention} disabled={retentionPreviewing || !retentionDraft}>
                 {retentionPreviewing ? 'Checking…' : 'Preview impact'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => { setRetentionProjectId(null); setRetentionPreview(null) }}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => { setRetentionProjectId(null); setRetentionPreview(null) }}>Cancel</button>
             </div>
             {retentionPreview && (
               <div style={{ marginTop: 12, padding: '10px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6 }}>
@@ -6657,38 +6657,38 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
 
         {/* Inline SLA threshold editor */}
         {slaProjectId && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
+          <div className="xn-section" style={{ marginTop: '16px' }}>
             <h3>SLA Threshold — {projects.find(p => p.id === slaProjectId)?.name}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+            <div className="xn-muted" style={{ marginBottom: '12px' }}>
               Studies idle beyond this threshold are surfaced as "stuck". Leave blank to use the global default (60 min).
             </div>
-            {slaError && <div className="form-error">{slaError}</div>}
-            <div className="form-grid">
+            {slaError && <div className="xn-error">{slaError}</div>}
+            <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Stuck threshold (minutes, blank = global default)
-                <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 120"
+                <input className="xn-filter" type="number" min="1" step="1" placeholder="e.g. 120"
                   value={slaDraft}
                   onChange={e => setSlaDraft(e.target.value)} />
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveSla} disabled={slaSaving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={saveSla} disabled={slaSaving}>
                 {slaSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setSlaProjectId(null)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setSlaProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline storage quota editor */}
         {quotaProjectId && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
+          <div className="xn-section" style={{ marginTop: '16px' }}>
             <h3>Storage Quota — {projects.find(p => p.id === quotaProjectId)?.name}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+            <div className="xn-muted" style={{ marginBottom: '12px' }}>
               Maximum total storage for this project. Uploads are rejected when the quota is reached.
               Leave blank to allow unlimited storage.
             </div>
-            {quotaError && <div className="form-error">{quotaError}</div>}
+            {quotaError && <div className="xn-error">{quotaError}</div>}
             {quotaUsage && (
               <div style={{ marginBottom: '12px' }}>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
@@ -6709,27 +6709,27 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 )}
               </div>
             )}
-            <div className="form-grid">
+            <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Storage limit (GB, blank = unlimited)
-                <input className="form-input" type="number" min="0.1" step="0.1" placeholder="e.g. 10"
+                <input className="xn-filter" type="number" min="0.1" step="0.1" placeholder="e.g. 10"
                   value={quotaDraft}
                   onChange={e => setQuotaDraft(e.target.value)} />
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveQuota} disabled={quotaSaving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={saveQuota} disabled={quotaSaving}>
                 {quotaSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setQuotaProjectId(null)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setQuotaProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {projects.length === 0 && !showForm ? (
-          <div className="state-empty">No projects yet.</div>
+          <div className="xn-muted">No projects yet.</div>
         ) : projects.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>Project</th>
@@ -6748,49 +6748,49 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
               {projects.map(p => (
                 <tr key={p.id}>
                   <td>
-                    <div className="routing-name">
+                    <div className="">
                       {p.name}
                       {p.archived && <span className="badge badge--neutral" style={{marginLeft:'6px'}}>archived</span>}
                     </div>
-                    {p.description && <div className="routing-desc">{p.description}</div>}
+                    {p.description && <div className="xn-muted">{p.description}</div>}
                   </td>
-                  <td><code className="inst-slug">{p.slug}</code></td>
+                  <td><code className="xn-code">{p.slug}</code></td>
                   <td>
                     {p.default_anon_profile_id
-                      ? <span className="badge badge--enabled">profile set</span>
-                      : <span className="routing-desc">none</span>}
+                      ? <span className="xn-pill">profile set</span>
+                      : <span className="xn-muted">none</span>}
                   </td>
                   <td>
                     {p.retention_days != null
                       ? <span className="badge badge--status">{p.retention_days}d</span>
-                      : <span className="routing-desc">unlimited</span>}
+                      : <span className="xn-muted">unlimited</span>}
                   </td>
                   <td>
                     {p.stuck_threshold_minutes != null
                       ? <span className="badge badge--status">{p.stuck_threshold_minutes}m</span>
-                      : <span className="routing-desc">60m</span>}
+                      : <span className="xn-muted">60m</span>}
                   </td>
                   <td>
                     {p.storage_quota_bytes != null
                       ? <span className="badge badge--status">{formatBytes(p.storage_quota_bytes)}</span>
-                      : <span className="routing-desc">unlimited</span>}
+                      : <span className="xn-muted">unlimited</span>}
                   </td>
                   <td>
                     {p.restricted
                       ? <span className="badge badge--warn" title="Only project members can see this project">Restricted</span>
-                      : <span className="routing-desc">Open</span>}
+                      : <span className="xn-muted">Open</span>}
                   </td>
                   <td>
                     {p.member_count != null
                       ? <span className="badge badge--neutral">{p.member_count}</span>
-                      : <span className="routing-desc">—</span>}
+                      : <span className="xn-muted">—</span>}
                   </td>
-                  <td className="td-date">{fmtDate(p.created_at)}</td>
+                  <td className="">{fmtDate(p.created_at)}</td>
                   <td>
                     {isAdmin && (
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
-                        <button type="button" className="btn btn--action"
+                      <div className="xn-section-controls">
+                        <button type="button" className="xn-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="xn-btn-secondary"
                           title="Dispatch export forwarding for all approved studies in this project"
                           onClick={async () => {
                             const res = await fetch(`/api/projects/${p.id}/export-batch`, { method: 'POST' })
@@ -6801,22 +6801,22 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           }}>
                           Export Batch
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="xn-btn-secondary"
                           title="Configure PHI scan sensitivity for this project"
                           onClick={() => openPhiConfig(p.id)}>
                           PHI Config
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="xn-btn-secondary"
                           title="Set study retention period for this project"
                           onClick={() => openRetention(p)}>
                           Retention
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="xn-btn-secondary"
                           title="Set per-project SLA threshold for stuck studies"
                           onClick={() => openSla(p)}>
                           SLA
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="xn-btn-secondary"
                           title="Set per-project storage quota"
                           onClick={() => openQuota(p)}>
                           Quota
@@ -6828,12 +6828,12 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => toggleArchive(p)}>
                           {archiving === p.id ? '…' : p.archived ? 'Restore' : 'Archive'}
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="xn-btn-secondary"
                           title="Duplicate this project with all settings (routing rules, profiles, templates)"
                           onClick={() => cloneProject(p)}>
                           Clone
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="xn-btn-secondary"
                           title="Manage project members and their access levels"
                           onClick={() => setMembersProject({ id: p.id, name: p.name })}>
                           Members
@@ -6846,7 +6846,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => toggleRestricted(p)}>
                           {restrictedToggling === p.id ? '…' : p.restricted ? 'Restricted' : 'Restrict'}
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="xn-btn-secondary"
                           title="View compliance metrics for this project"
                           onClick={() => setComplianceProjectId(p.id)}>
                           Compliance
@@ -6860,7 +6860,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                             ↓ CSV
                           </a>
                         )}
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="xn-btn-secondary"
                           title="View pipeline health snapshot for this project"
                           onClick={() => setHealthProject({ id: p.id, name: p.name })}>
                           Health
@@ -8775,16 +8775,16 @@ function DimseOpsPanel() {
   const snapshot = summary?.snapshot
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">DIMSE Retry Operations</div>
-            <div className="routing-section-sub">
+            <div className="">DIMSE Retry Operations</div>
+            <div className="xn-muted">
               Monitor and control DIMSE ingest pending/dead-letter queues.
             </div>
           </div>
-          <button type="button" className="btn-refresh" onClick={load} disabled={loading || disableBulk}>
+          <button type="button" className="xn-icon-btn" onClick={load} disabled={loading || disableBulk}>
             Refresh
           </button>
         </div>
@@ -8793,8 +8793,8 @@ function DimseOpsPanel() {
           This panel proxies <code>/ingest/retry*</code> controls from the DIMSE sidecar through the API.
         </p>
 
-        {error && <div className="state-error">{error}</div>}
-        {loading && <div className="state-loading">Loading DIMSE operations…</div>}
+        {error && <div className="xn-error">{error}</div>}
+        {loading && <div className="xn-muted">Loading DIMSE operations…</div>}
 
         {!loading && summary && (
           <>
@@ -8825,18 +8825,18 @@ function DimseOpsPanel() {
               </div>
             </div>
 
-            <div className="routing-form">
+            <div className="xn-section">
               <h3>Bulk Controls</h3>
-              <div className="form-grid">
+              <div className="">
                 <input
-                  className="form-input"
+                  className="xn-filter"
                   type="text"
                   placeholder="Filter by StudyInstanceUID (optional)"
                   value={studyFilter}
                   onChange={(e) => setStudyFilter(e.target.value)}
                 />
                 <input
-                  className="form-input"
+                  className="xn-filter"
                   type="number"
                   min={1}
                   max={50000}
@@ -8844,7 +8844,7 @@ function DimseOpsPanel() {
                   onChange={(e) => setBulkLimit(Number(e.target.value) || 1)}
                 />
               </div>
-              <div className="form-row form-row--actions">
+              <div className="xn-form-actions">
                 <button
                   type="button"
                   className="btn btn--secondary"
@@ -8883,7 +8883,7 @@ function DimseOpsPanel() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn--revoke"
+                  className="xn-btn-secondary"
                   disabled={disableBulk}
                   onClick={() => runAction(
                     'Clear dead-letter',
@@ -8904,17 +8904,17 @@ function DimseOpsPanel() {
       </div>
 
       {!loading && details && (
-        <div className="routing-section">
-          <div className="routing-section-header">
+        <div className="xn-section">
+          <div className="xn-section-bar">
             <div>
-              <div className="routing-section-title">Pending Queue ({details.pending_total})</div>
+              <div className="">Pending Queue ({details.pending_total})</div>
             </div>
           </div>
 
           {details.pending_items.length === 0 ? (
-            <div className="state-empty">No pending retry items.</div>
+            <div className="xn-muted">No pending retry items.</div>
           ) : (
-            <table className="routing-table">
+            <table className="xn-table">
               <thead>
                 <tr>
                   <th>Study UID</th>
@@ -8934,14 +8934,14 @@ function DimseOpsPanel() {
                     <td>
                       {item.next_attempt_at > 0 ? `${item.seconds_until_next_attempt}s` : 'n/a'}
                       {item.next_attempt_at > 0 && (
-                        <div className="routing-desc">{fmtDate(new Date(item.next_attempt_at * 1000).toISOString())}</div>
+                        <div className="xn-muted">{fmtDate(new Date(item.next_attempt_at * 1000).toISOString())}</div>
                       )}
                     </td>
                     <td>{item.age_seconds}s</td>
                     <td>{item.file_count} files / {item.series_count} series</td>
                     <td><code>{item.last_error || '—'}</code></td>
                     <td>
-                      <div className="actions-cell">
+                      <div className="xn-section-controls">
                         <button
                           type="button"
                           className="btn btn--secondary"
@@ -8955,7 +8955,7 @@ function DimseOpsPanel() {
                         </button>
                         <button
                           type="button"
-                          className="btn btn--revoke"
+                          className="xn-btn-secondary"
                           disabled={disableBulk}
                           onClick={() => runAction(
                             'Clear pending study',
@@ -8976,17 +8976,17 @@ function DimseOpsPanel() {
       )}
 
       {!loading && details && (
-        <div className="routing-section">
-          <div className="routing-section-header">
+        <div className="xn-section">
+          <div className="xn-section-bar">
             <div>
-              <div className="routing-section-title">Dead-letter Queue ({details.dead_letter_total})</div>
+              <div className="">Dead-letter Queue ({details.dead_letter_total})</div>
             </div>
           </div>
 
           {details.dead_letter_items.length === 0 ? (
-            <div className="state-empty">No dead-letter items.</div>
+            <div className="xn-muted">No dead-letter items.</div>
           ) : (
-            <table className="routing-table">
+            <table className="xn-table">
               <thead>
                 <tr>
                   <th>Study UID</th>
@@ -9006,7 +9006,7 @@ function DimseOpsPanel() {
                     <td>{item.file_count} files / {item.series_count} series</td>
                     <td><code>{item.last_error || '—'}</code></td>
                     <td>
-                      <div className="actions-cell">
+                      <div className="xn-section-controls">
                         <button
                           type="button"
                           className="btn btn--secondary"
@@ -9020,7 +9020,7 @@ function DimseOpsPanel() {
                         </button>
                         <button
                           type="button"
-                          className="btn btn--revoke"
+                          className="xn-btn-secondary"
                           disabled={disableBulk}
                           onClick={() => runAction(
                             'Clear dead-letter study',
@@ -9041,14 +9041,14 @@ function DimseOpsPanel() {
       )}
 
       {!loading && (
-        <div className="routing-section">
-          <div className="routing-section-header">
-            <div className="routing-section-title">Recent Retry Alerts</div>
+        <div className="xn-section">
+          <div className="xn-section-bar">
+            <div className="">Recent Retry Alerts</div>
           </div>
           {alerts.length === 0 ? (
-            <div className="state-empty">No recent retry threshold alerts.</div>
+            <div className="xn-muted">No recent retry threshold alerts.</div>
           ) : (
-            <table className="routing-table">
+            <table className="xn-table">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -9060,7 +9060,7 @@ function DimseOpsPanel() {
               <tbody>
                 {alerts.map((alert, idx) => (
                   <tr key={`${alert.condition}-${alert.timestamp}-${idx}`}>
-                    <td className="td-date">{fmtDate(new Date(alert.timestamp * 1000).toISOString())}</td>
+                    <td className="">{fmtDate(new Date(alert.timestamp * 1000).toISOString())}</td>
                     <td><code>{alert.condition}</code></td>
                     <td>{alert.message}</td>
                     <td>
@@ -9075,14 +9075,14 @@ function DimseOpsPanel() {
       )}
 
       {!loading && (
-        <div className="routing-section">
-          <div className="routing-section-header">
-            <div className="routing-section-title">Recent Operator Actions</div>
+        <div className="xn-section">
+          <div className="xn-section-bar">
+            <div className="">Recent Operator Actions</div>
           </div>
           {actions.length === 0 ? (
-            <div className="state-empty">No recent retry-control actions.</div>
+            <div className="xn-muted">No recent retry-control actions.</div>
           ) : (
-            <table className="routing-table">
+            <table className="xn-table">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -9093,7 +9093,7 @@ function DimseOpsPanel() {
               <tbody>
                 {actions.map((action, idx) => (
                   <tr key={`${action.action}-${action.created_at}-${idx}`}>
-                    <td className="td-date">{fmtDate(action.created_at)}</td>
+                    <td className="">{fmtDate(action.created_at)}</td>
                     <td><code className={`routing-action routing-action--${action.action}`}>{action.action}</code></td>
                     <td>
                       <pre className="detail-json">{JSON.stringify(action.detail ?? {}, null, 2)}</pre>
