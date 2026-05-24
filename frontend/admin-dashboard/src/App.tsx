@@ -20,6 +20,7 @@ import { ComplianceReportPanel } from './components/ComplianceReportPanel'
 import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { useStudyEvents } from './hooks/useStudyEvents'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useDarkMode } from './hooks/useDarkMode'
 import { TopBar } from './layout/TopBar'
 import { Breadcrumbs } from './layout/Breadcrumbs'
 
@@ -10062,11 +10063,9 @@ export function App() {
     const saved = localStorage.getItem('aegis_sidebar_open')
     return saved !== null ? saved === 'true' : true
   })
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('aegis_theme')
-    if (saved !== null) return saved === 'dark'
-    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
-  })
+  // Theme — shared with TopBar via the useDarkMode hook so toggling from
+  // anywhere (admin sidebar button OR the topbar button) updates everywhere.
+  const [darkMode, toggleDarkMode] = useDarkMode()
   const [state, setState] = useState<StudiesState>('loading')
   const [studies, setStudies] = useState<Study[]>([])
   const [studiesTotal, setStudiesTotal] = useState(0)
@@ -10694,11 +10693,8 @@ export function App() {
   useEffect(() => { setPaletteHighlight(0) }, [paletteItems.length])
   // ── end palette ─────────────────────────────────────────────────────────────
 
-  // Dark mode — sync data-theme attribute on <html>
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
-    localStorage.setItem('aegis_theme', darkMode ? 'dark' : 'light')
-  }, [darkMode])
+  // (Dark mode side-effects — setting data-theme + saving to localStorage —
+  // are owned by the useDarkMode hook now; see src/hooks/useDarkMode.ts.)
 
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
@@ -10917,20 +10913,33 @@ export function App() {
     })
   }
 
-  const navItem = (label: string, target: AppTab, icon: string, badge?: React.ReactNode) => (
-    <NavLink
-      to={`/admin/${target}`}
-      className={({ isActive }) =>
-        `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
-      }
-      onClick={() => { if (window.innerWidth < 900) setSidebarOpen(false) }}
-      title={!sidebarOpen ? label : undefined}
-    >
-      <span className="aegis-sidenav-icon">{icon}</span>
-      <span className="aegis-sidenav-label">{label}</span>
-      {badge}
-    </NavLink>
-  )
+  const navItem = (label: string, target: AppTab, icon: string, badge?: React.ReactNode) => {
+    const path = `/admin/${target}`
+    const isActive = tab === target
+    return (
+      <NavLink
+        to={path}
+        end
+        className={`aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`}
+        onClick={(e) => {
+          // Defensive belt-and-suspenders: NavLink's intercept-and-navigate
+          // is flaky when the location update needs to traverse render
+          // boundaries that don't re-render their children (e.g. a memo'd
+          // parent). Calling navigate() ourselves guarantees the URL flips
+          // AND React re-renders App with the new pathname, which in turn
+          // re-derives `tab` from the URL.
+          e.preventDefault()
+          navigate(path)
+          if (window.innerWidth < 900) setSidebarOpen(false)
+        }}
+        title={!sidebarOpen ? label : undefined}
+      >
+        <span className="aegis-sidenav-icon">{icon}</span>
+        <span className="aegis-sidenav-label">{label}</span>
+        {badge}
+      </NavLink>
+    )
+  }
 
   return (
     <div className="aegis-shell">
@@ -11025,7 +11034,7 @@ export function App() {
             <button
               type="button"
               className="aegis-sidenav-iconbtn"
-              onClick={() => setDarkMode(d => !d)}
+              onClick={toggleDarkMode}
               title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >

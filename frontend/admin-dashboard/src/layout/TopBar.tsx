@@ -1,20 +1,21 @@
 import { useLocation } from 'react-router-dom'
 import { TopBarSearch } from './TopBarSearch'
+import { useDarkMode } from '../hooks/useDarkMode'
 
-// TopBar is the shared global header. Rendered by DashboardLayout (the
-// XNAT-style researcher routes) and by AdminApp (under /admin/*), so the
-// brand + Home/Admin nav + global search appear the same everywhere.
+// TopBar is the shared global header. Rendered on every page (Home,
+// per-project, per-subject, per-study, every admin tab) so the brand,
+// primary nav, search, and theme toggle look identical everywhere.
 //
-// Implementation note: Home/Admin use plain <a href=""> rather than
-// react-router Link/NavLink. From /admin/*, NavLink-driven navigation to
-// "/" silently no-ops because AdminApp lives outside the DashboardLayout
-// route subtree — the router doesn't unmount AdminApp and the location
-// transition gets swallowed. A full-page navigation sidesteps that
-// entirely; this matches the approach the Sign-in button used in #508.
+// Home/Admin use plain <a href=""> rather than react-router Link/NavLink:
+// navigating between AdminApp and DashboardLayout crosses route subtree
+// boundaries, and NavLink-driven navigation through that boundary silently
+// no-ops because React Router doesn't unmount the previous element. A
+// full-page nav sidesteps that — same approach Sign-in used in #508.
 export function TopBar() {
   const location = useLocation()
   const isHome = location.pathname === '/'
   const inAdmin = location.pathname.startsWith('/admin')
+  const [darkMode, toggleDarkMode] = useDarkMode()
 
   return (
     <header className="aegis-topbar">
@@ -32,6 +33,15 @@ export function TopBar() {
       <div className="aegis-search-slot">
         <TopBarSearch />
       </div>
+      <button
+        type="button"
+        className="aegis-icon-btn"
+        onClick={toggleDarkMode}
+        title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+        aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {darkMode ? '☀' : '☾'}
+      </button>
     </header>
   )
 }
