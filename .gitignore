@@ -57,3 +57,4 @@ AEGIS_Imaging_LLC_Filing_Receipt.pdf
 PO_BOX_APPLICATION.pdf
 terraform/infra/terraform.tfstate.1771790261.backup
 scripts/azure_terraform_ci_permissions.env
+.claude/settings.json
