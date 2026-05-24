@@ -31,7 +31,7 @@ func makeTestCert(t *testing.T, cn string) (pemBytes []byte, thumb string, subje
 	require.NoError(t, err)
 	tpl := &x509.Certificate{
 		SerialNumber: big.NewInt(time.Now().UnixNano()),
-		Subject:      pkix.Name{CommonName: cn, Organization: []string{"AEGIS Spoke"}},
+		Subject:      pkix.Name{CommonName: cn, Organization: []string{"AEGIS Satellite"}},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
@@ -48,15 +48,15 @@ func makeTestCert(t *testing.T, cn string) (pemBytes []byte, thumb string, subje
 	return
 }
 
-func TestSpokeMTLS_NoCertHeaderPassesThrough(t *testing.T) {
+func TestSatelliteMTLS_NoCertHeaderPassesThrough(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 	db := testutil.TestDB(t)
 	called := false
-	h := middleware.WithSpokeMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
+	h := middleware.WithSatelliteMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		assert.Nil(t, middleware.SpokeFromContext(r.Context()), "no spoke identity when no cert")
+		assert.Nil(t, middleware.SatelliteFromContext(r.Context()), "no satellite identity when no cert")
 		w.WriteHeader(http.StatusOK)
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", nil)
@@ -66,16 +66,16 @@ func TestSpokeMTLS_NoCertHeaderPassesThrough(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
 
-func TestSpokeMTLS_UnknownCertPassesThroughWithoutIdentity(t *testing.T) {
+func TestSatelliteMTLS_UnknownCertPassesThroughWithoutIdentity(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 	db := testutil.TestDB(t)
 	pemBytes, _, _ := makeTestCert(t, "site-stranger")
 	called := false
-	h := middleware.WithSpokeMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
+	h := middleware.WithSatelliteMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		assert.Nil(t, middleware.SpokeFromContext(r.Context()))
+		assert.Nil(t, middleware.SatelliteFromContext(r.Context()))
 		w.WriteHeader(http.StatusOK)
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", nil)
@@ -86,7 +86,7 @@ func TestSpokeMTLS_UnknownCertPassesThroughWithoutIdentity(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
 
-func TestSpokeMTLS_KnownCertAttachesIdentity(t *testing.T) {
+func TestSatelliteMTLS_KnownCertAttachesIdentity(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -96,25 +96,25 @@ func TestSpokeMTLS_KnownCertAttachesIdentity(t *testing.T) {
 	pemBytes, thumb, subj := makeTestCert(t, "site-known")
 	require.NoError(t, model.SetInstitutionClientCert(context.Background(), db, inst.ID, thumb, subj))
 
-	var captured *middleware.SpokeIdentity
-	h := middleware.WithSpokeMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
-		captured = middleware.SpokeFromContext(r.Context())
+	var captured *middleware.SatelliteIdentity
+	h := middleware.WithSatelliteMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
+		captured = middleware.SatelliteFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", nil)
 	req.Header.Set("X-Client-Cert", url.QueryEscape(string(pemBytes)))
-	req.Header.Set("X-Aegis-Spoke-Site", "site-known")
+	req.Header.Set("X-Aegis-Satellite-Site", "site-known")
 	rr := httptest.NewRecorder()
 	h(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
-	require.NotNil(t, captured, "expected spoke identity to be attached")
+	require.NotNil(t, captured, "expected satellite identity to be attached")
 	assert.Equal(t, inst.ID, captured.Institution.ID)
 	assert.Equal(t, thumb, captured.CertThumbprint)
 	assert.Contains(t, captured.CertSubjectDN, "site-known")
 	assert.Equal(t, "site-known", captured.SiteAdvisory)
 }
 
-func TestSpokeMTLS_FingerprintOnlyHeader(t *testing.T) {
+func TestSatelliteMTLS_FingerprintOnlyHeader(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -124,9 +124,9 @@ func TestSpokeMTLS_FingerprintOnlyHeader(t *testing.T) {
 	_, thumb, subj := makeTestCert(t, "site-fp")
 	require.NoError(t, model.SetInstitutionClientCert(context.Background(), db, inst.ID, thumb, subj))
 
-	var captured *middleware.SpokeIdentity
-	h := middleware.WithSpokeMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
-		captured = middleware.SpokeFromContext(r.Context())
+	var captured *middleware.SatelliteIdentity
+	h := middleware.WithSatelliteMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
+		captured = middleware.SatelliteFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", nil)
@@ -135,12 +135,12 @@ func TestSpokeMTLS_FingerprintOnlyHeader(t *testing.T) {
 	req.Header.Set("X-Client-Cert-Fingerprint", colons)
 	rr := httptest.NewRecorder()
 	h(rr, req)
-	require.NotNil(t, captured, "expected spoke identity from fingerprint header")
+	require.NotNil(t, captured, "expected satellite identity from fingerprint header")
 	assert.Equal(t, inst.ID, captured.Institution.ID)
 	assert.Equal(t, thumb, captured.CertThumbprint)
 }
 
-func TestSpokeMTLS_DisabledInstitutionRejected(t *testing.T) {
+func TestSatelliteMTLS_DisabledInstitutionRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -153,16 +153,16 @@ func TestSpokeMTLS_DisabledInstitutionRejected(t *testing.T) {
 	pemBytes, thumb, subj := makeTestCert(t, "site-disabled")
 	require.NoError(t, model.SetInstitutionClientCert(context.Background(), db, inst.ID, thumb, subj))
 
-	var captured *middleware.SpokeIdentity
-	h := middleware.WithSpokeMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
-		captured = middleware.SpokeFromContext(r.Context())
+	var captured *middleware.SatelliteIdentity
+	h := middleware.WithSatelliteMTLS(db)(func(w http.ResponseWriter, r *http.Request) {
+		captured = middleware.SatelliteFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", nil)
 	req.Header.Set("X-Client-Cert", url.QueryEscape(string(pemBytes)))
 	rr := httptest.NewRecorder()
 	h(rr, req)
-	assert.Nil(t, captured, "disabled institution should not produce a spoke identity")
+	assert.Nil(t, captured, "disabled institution should not produce a satellite identity")
 }
 
 func chunked(s string, n int) []string {

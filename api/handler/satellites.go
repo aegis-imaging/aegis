@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-// SpokeSummary is one row in the admin-dashboard Spokes list. It joins
+// SatelliteSummary is one row in the admin-dashboard Satellites list. It joins
 // institutions with the cert thumbprint metadata + study activity stats so
 // the UI can render the full status with a single fetch.
-type SpokeSummary struct {
+type SatelliteSummary struct {
 	InstitutionID    string     `json:"institution_id"`
 	InstitutionName  string     `json:"institution_name"`
 	InstitutionSlug  string     `json:"institution_slug"`
@@ -22,18 +22,18 @@ type SpokeSummary struct {
 	ActiveTokenCount int        `json:"active_token_count"`
 }
 
-// ListSpokes GET /api/spokes
+// ListSatellites GET /api/satellites
 // Returns every institution that has a cert thumbprint enrolled (i.e. is
-// reachable as a spoke), with summary activity stats. Lists tokens for
+// reachable as a satellite), with summary activity stats. Lists tokens for
 // in-progress enrollments too via active_token_count.
-func (s *Server) ListSpokes(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListSatellites(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.QueryContext(r.Context(), `
 		WITH activity AS (
 		    SELECT institution_id,
 		           count(*)         AS study_count,
 		           max(created_at)  AS last_study_at
 		    FROM studies
-		    WHERE source = 'spoke'
+		    WHERE source = 'satellite'
 		    GROUP BY institution_id
 		),
 		tokens AS (
@@ -43,7 +43,7 @@ func (s *Server) ListSpokes(w http.ResponseWriter, r *http.Request) {
 		                 AND revoked_at IS NULL
 		                 AND expires_at > now()
 		           ) AS active_token_count
-		    FROM spoke_enrollment_tokens
+		    FROM satellite_enrollment_tokens
 		    GROUP BY institution_id
 		)
 		SELECT i.id, i.name, i.slug, i.enabled,
@@ -65,9 +65,9 @@ func (s *Server) ListSpokes(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var out []SpokeSummary
+	var out []SatelliteSummary
 	for rows.Next() {
-		var row SpokeSummary
+		var row SatelliteSummary
 		var enrolledAt, lastStudyAt sql.NullTime
 		if err := rows.Scan(
 			&row.InstitutionID, &row.InstitutionName, &row.InstitutionSlug, &row.Enabled,
@@ -92,7 +92,7 @@ func (s *Server) ListSpokes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if out == nil {
-		out = []SpokeSummary{}
+		out = []SatelliteSummary{}
 	}
 	s.writeJSON(w, http.StatusOK, map[string]any{"spokes": out, "count": len(out)})
 }
