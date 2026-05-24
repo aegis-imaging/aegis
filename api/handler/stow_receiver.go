@@ -78,11 +78,20 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 	type dicomPart struct {
 		data          []byte
 		studyUID      string
+		seriesUID     string
 		modality      string
 		bodyPart      string
 		studyDesc     string
 		anonPatientID string
 		studyDate     string
+	}
+
+	// seriesAcc accumulates parts for one series within a study so we can
+	// emit one study_series_metadata row per (study, series) below.
+	type seriesAcc struct {
+		firstDataset  dicomlib.Dataset
+		hasFirst      bool
+		instanceCount int
 	}
 
 	type studyGroup struct {
@@ -92,6 +101,10 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		studyDesc     string
 		anonPatientID string
 		studyDate     string
+		// seriesOrder preserves the order series were first seen so we
+		// produce deterministic upserts.
+		seriesOrder []string
+		series      map[string]*seriesAcc
 	}
 
 	groups := make(map[string]*studyGroup)
@@ -145,6 +158,7 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		p := dicomPart{
 			data:          data,
 			studyUID:      stowGetStringTag(dataset, tag.StudyInstanceUID),
+			seriesUID:     stowGetStringTag(dataset, tag.SeriesInstanceUID),
 			modality:      stowGetStringTag(dataset, tag.Modality),
 			bodyPart:      stowGetStringTag(dataset, tag.BodyPartExamined),
 			studyDesc:     stowGetStringTag(dataset, tag.StudyDescription),
@@ -164,6 +178,7 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 				studyDesc:     p.studyDesc,
 				anonPatientID: p.anonPatientID,
 				studyDate:     p.studyDate,
+				series:        make(map[string]*seriesAcc),
 			}
 			groups[p.studyUID] = g
 			orderedUIDs = append(orderedUIDs, p.studyUID)
@@ -177,6 +192,19 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		g.parts = append(g.parts, p)
+
+		// Track per-series metadata if we have a SeriesInstanceUID. Files
+		// without one still get stored (legacy / non-MR) but won't show up
+		// in the series metadata table.
+		if p.seriesUID != "" {
+			sAcc, ok := g.series[p.seriesUID]
+			if !ok {
+				sAcc = &seriesAcc{firstDataset: dataset, hasFirst: true}
+				g.series[p.seriesUID] = sAcc
+				g.seriesOrder = append(g.seriesOrder, p.seriesUID)
+			}
+			sAcc.instanceCount++
+		}
 		partIndex++
 	}
 
@@ -252,6 +280,28 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			log.Printf("stow_receiver: create study %s: %v", studyUID, err)
 			s.writeError(w, http.StatusInternalServerError, "failed to create study record")
 			return
+		}
+
+		// Upsert per-series DICOM metadata so the dashboard, protocol checker,
+		// and analytics can read TR/TE/protocol/etc. without re-parsing files.
+		// Best-effort: a write failure here does not abort the receive.
+		for _, seriesUID := range g.seriesOrder {
+			sAcc := g.series[seriesUID]
+			if sAcc == nil || !sAcc.hasFirst {
+				continue
+			}
+			sm := extractSeriesMetadata(sAcc.firstDataset)
+			if sm == nil {
+				continue
+			}
+			sm.StudyID = study.ID
+			if sm.SeriesInstanceUID == "" {
+				sm.SeriesInstanceUID = seriesUID
+			}
+			sm.InstanceCount = sAcc.instanceCount
+			if err := model.UpsertSeriesMetadata(r.Context(), s.db, sm); err != nil {
+				log.Printf("stow_receiver: upsert series metadata %s/%s: %v", studyUID, seriesUID, err)
+			}
 		}
 
 		// Evaluate routing rules (may mutate study — auto_approve, require_defacing, etc.)

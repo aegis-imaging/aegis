@@ -324,6 +324,7 @@ func main() {
 	mux.HandleFunc("GET /api/studies/{id}/audit.csv", auth(srv.ExportStudyAuditCSV))
 	mux.HandleFunc("POST /api/studies/{id}/viewed", auth(srv.RecordStudyView))
 	mux.HandleFunc("GET /api/studies/{id}/series", auth(srv.ListStudySeries))
+	mux.HandleFunc("GET /api/studies/{id}/series-metadata", auth(srv.ListStudySeriesMetadata))
 	mux.HandleFunc("GET /api/studies/{id}/files", auth(srv.GetStudyFileManifest))
 	mux.HandleFunc("GET /api/studies/{id}/diagnostics", auth(srv.GetStudyDiagnostics))
 	mux.HandleFunc("GET /api/studies/{id}/processing-summary", auth(srv.GetStudyProcessingSummary))

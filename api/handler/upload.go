@@ -20,6 +20,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/routing"
+	"github.com/aegis-imaging/aegis/api/storage"
 	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
@@ -359,6 +360,13 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 		return nil, fmt.Errorf("create study: %w", err)
 	}
 
+	// Extract per-series DICOM metadata. Best-effort: a failure here does not
+	// fail the upload. Reads the moved files (at dicom/raw/{studyUID}/*.dcm)
+	// and groups them by SeriesInstanceUID, then upserts one row per series.
+	if err := s.upsertSeriesMetadataForStudy(ctx, study.ID, studyUID); err != nil {
+		log.Printf("upload ingest: extract series metadata for %s: %v", studyUID, err)
+	}
+
 	// Evaluate routing rules — may mutate study (e.g. auto_approve, require_defacing).
 	routing.EvaluateRules(ctx, s.db, s.store, study)
 
@@ -369,6 +377,87 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 	model.UpdateUploadSessionComplete(ctx, s.db, session.ID, studyUID, study.Modality, study.BodyPart)
 
 	return study, nil
+}
+
+// upsertSeriesMetadataForStudy walks every dicom/raw/{studyUID}/*.dcm file in
+// storage, groups them by SeriesInstanceUID, and upserts one
+// study_series_metadata row per series using the first dataset seen for each.
+// It is safe to call repeatedly (the upsert ON CONFLICT clause handles
+// re-ingest), and is best-effort — a single bad file does not abort the rest.
+func (s *Server) upsertSeriesMetadataForStudy(ctx context.Context, studyID, studyUID string) error {
+	keys, err := s.store.List(ctx, fmt.Sprintf("dicom/raw/%s/", studyUID))
+	if err != nil {
+		return fmt.Errorf("list dicom files: %w", err)
+	}
+
+	type seriesAgg struct {
+		first         dicomlib.Dataset
+		hasFirst      bool
+		instanceCount int
+	}
+	bySeries := make(map[string]*seriesAgg)
+	var order []string
+
+	for _, key := range keys {
+		if !strings.HasSuffix(key, ".dcm") {
+			continue
+		}
+		seriesUID, dataset, ok := readSeriesUIDAndDataset(ctx, s.store, key)
+		if !ok || seriesUID == "" {
+			continue
+		}
+		agg, exists := bySeries[seriesUID]
+		if !exists {
+			agg = &seriesAgg{first: dataset, hasFirst: true}
+			bySeries[seriesUID] = agg
+			order = append(order, seriesUID)
+		}
+		agg.instanceCount++
+	}
+
+	for _, seriesUID := range order {
+		agg := bySeries[seriesUID]
+		if agg == nil || !agg.hasFirst {
+			continue
+		}
+		sm := extractSeriesMetadata(agg.first)
+		if sm == nil {
+			continue
+		}
+		sm.StudyID = studyID
+		if sm.SeriesInstanceUID == "" {
+			sm.SeriesInstanceUID = seriesUID
+		}
+		sm.InstanceCount = agg.instanceCount
+		if err := model.UpsertSeriesMetadata(ctx, s.db, sm); err != nil {
+			log.Printf("upsert series metadata %s/%s: %v", studyUID, seriesUID, err)
+		}
+	}
+	return nil
+}
+
+// readSeriesUIDAndDataset retrieves and parses a single DICOM file's header
+// from storage. The dataset is returned without pixel data. Returns ok=false
+// when the file can't be read or parsed; callers should skip it and continue.
+func readSeriesUIDAndDataset(ctx context.Context, store storage.Storage, key string) (string, dicomlib.Dataset, bool) {
+	rc, err := store.Retrieve(ctx, key)
+	if err != nil {
+		return "", dicomlib.Dataset{}, false
+	}
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	if err != nil || len(data) == 0 {
+		return "", dicomlib.Dataset{}, false
+	}
+	dataset, err := dicomlib.Parse(
+		bytes.NewReader(data), int64(len(data)), nil,
+		dicomlib.SkipPixelData(),
+		dicomlib.AllowMissingMetaElementGroupLength(),
+	)
+	if err != nil {
+		return "", dicomlib.Dataset{}, false
+	}
+	return getStringTag(dataset, tag.SeriesInstanceUID), dataset, true
 }
 
 func clientIP(r *http.Request) string {

@@ -147,6 +147,12 @@ func (s *Server) DeleteStudy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Best-effort: remove per-series metadata first. The FK is ON DELETE
+	// CASCADE so this is redundant for the happy path, but doing it
+	// explicitly makes the handler safe even if the FK is dropped or the
+	// table is later renamed.
+	_ = model.DeleteSeriesMetadataForStudy(r.Context(), s.db, id)
+
 	if err := model.DeleteStudy(r.Context(), s.db, id); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to delete study")
 		return
