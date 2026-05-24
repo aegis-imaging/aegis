@@ -31,7 +31,6 @@ export type SubjectDemographics = {
 
 export type SubjectAggregate = {
   subject_id: string
-  anon_patient_id?: string | null
   project_id: string
   study_count: number
   latest_study_date?: string
