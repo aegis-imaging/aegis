@@ -141,9 +141,9 @@ steps:
         docker push ${_REPO}/defacing:${SHORT_SHA}
         docker push ${_REPO}/defacing:latest
 
-  # --- phi-detection ---
+  # --- dicom-tools (consolidates phi-detection, qc, bids, classification, protocol, synth) ---
   - name: gcr.io/cloud-builders/docker
-    id: build-push-phi-detection
+    id: build-push-dicom-tools
     waitFor: ["-"]
     entrypoint: /bin/bash
     args:
@@ -151,91 +151,11 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          -t ${_REPO}/phi-detection:${SHORT_SHA} \
-          -t ${_REPO}/phi-detection:latest \
-          phi-detection
-        docker push ${_REPO}/phi-detection:${SHORT_SHA}
-        docker push ${_REPO}/phi-detection:latest
-
-  # --- qc-service ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-qc-service
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -t ${_REPO}/qc-service:${SHORT_SHA} \
-          -t ${_REPO}/qc-service:latest \
-          qc-service
-        docker push ${_REPO}/qc-service:${SHORT_SHA}
-        docker push ${_REPO}/qc-service:latest
-
-  # --- bids-service ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-bids-service
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -t ${_REPO}/bids-service:${SHORT_SHA} \
-          -t ${_REPO}/bids-service:latest \
-          bids-service
-        docker push ${_REPO}/bids-service:${SHORT_SHA}
-        docker push ${_REPO}/bids-service:latest
-
-  # --- classification-service ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-classification-service
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -t ${_REPO}/classification-service:${SHORT_SHA} \
-          -t ${_REPO}/classification-service:latest \
-          classification-service
-        docker push ${_REPO}/classification-service:${SHORT_SHA}
-        docker push ${_REPO}/classification-service:latest
-
-  # --- protocol-service ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-protocol-service
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -t ${_REPO}/protocol-service:${SHORT_SHA} \
-          -t ${_REPO}/protocol-service:latest \
-          protocol-service
-        docker push ${_REPO}/protocol-service:${SHORT_SHA}
-        docker push ${_REPO}/protocol-service:latest
-
-  # --- synth-service ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-synth-service
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -t ${_REPO}/synth-service:${SHORT_SHA} \
-          -t ${_REPO}/synth-service:latest \
-          synth-service
-        docker push ${_REPO}/synth-service:${SHORT_SHA}
-        docker push ${_REPO}/synth-service:latest
+          -t ${_REPO}/dicom-tools:${SHORT_SHA} \
+          -t ${_REPO}/dicom-tools:latest \
+          dicom-tools
+        docker push ${_REPO}/dicom-tools:${SHORT_SHA}
+        docker push ${_REPO}/dicom-tools:latest
 
   # --- sct-service ---
   - name: gcr.io/cloud-builders/docker
@@ -406,86 +326,16 @@ steps:
       - --project=${_PROJECT_ID}
       - --quiet
 
-  # --- deploy phi-detection ---
+  # --- deploy dicom-tools (replaces deploy phi-detection / qc / bids / classification / protocol / synth) ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-phi-detection
-    waitFor: [build-push-phi-detection]
+    id: deploy-dicom-tools
+    waitFor: [build-push-dicom-tools]
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - phi-detection
-      - --image=${_REPO}/phi-detection:${SHORT_SHA}
-      - --region=${_REGION}
-      - --project=${_PROJECT_ID}
-      - --quiet
-
-  # --- deploy qc-service ---
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-qc-service
-    waitFor: [build-push-qc-service]
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - qc-service
-      - --image=${_REPO}/qc-service:${SHORT_SHA}
-      - --region=${_REGION}
-      - --project=${_PROJECT_ID}
-      - --quiet
-
-  # --- deploy bids-service ---
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-bids-service
-    waitFor: [build-push-bids-service]
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - bids-service
-      - --image=${_REPO}/bids-service:${SHORT_SHA}
-      - --region=${_REGION}
-      - --project=${_PROJECT_ID}
-      - --quiet
-
-  # --- deploy classification-service ---
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-classification-service
-    waitFor: [build-push-classification-service]
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - classification-service
-      - --image=${_REPO}/classification-service:${SHORT_SHA}
-      - --region=${_REGION}
-      - --project=${_PROJECT_ID}
-      - --quiet
-
-  # --- deploy protocol-service ---
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-protocol-service
-    waitFor: [build-push-protocol-service]
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - protocol-service
-      - --image=${_REPO}/protocol-service:${SHORT_SHA}
-      - --region=${_REGION}
-      - --project=${_PROJECT_ID}
-      - --quiet
-
-  # --- deploy synth-service ---
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-synth-service
-    waitFor: [build-push-synth-service]
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - synth-service
-      - --image=${_REPO}/synth-service:${SHORT_SHA}
+      - dicom-tools
+      - --image=${_REPO}/dicom-tools:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --quiet
