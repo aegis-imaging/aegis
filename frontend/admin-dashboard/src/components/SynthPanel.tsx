@@ -121,7 +121,7 @@ export function SynthPanel({
         <div className="tcia-field tcia-field--narrow">
           <label className="tcia-label">Size</label>
           <select
-            className="form-select"
+            className=""
             value={size}
             onChange={e => setSize(Number(e.target.value))}
             disabled={generating}
@@ -138,7 +138,7 @@ export function SynthPanel({
           <div style={{ display: 'flex', gap: 4 }}>
             <input
               type="number"
-              className="form-input"
+              className="xn-filter"
               value={seed}
               min={0}
               max={999999}
@@ -163,7 +163,7 @@ export function SynthPanel({
           <div className="tcia-field">
             <label className="tcia-label">Project</label>
             <select
-              className="form-select"
+              className=""
               value={projectSlug}
               onChange={e => setProjectSlug(e.target.value)}
               disabled={generating}
@@ -196,7 +196,7 @@ export function SynthPanel({
           <div className="tcia-field tcia-field--action">
             <button
               type="button"
-              className="btn-primary"
+              className="xn-btn-primary"
               onClick={generate}
               disabled={generating}
             >
