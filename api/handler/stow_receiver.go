@@ -262,6 +262,9 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			v := g.studyDate
 			studyDatePtr = &v
 		}
+		// SubjectID is the canonical, editable subject identifier; initialize
+		// it to the DICOM-derived anonymized PatientID so the study appears
+		// in the XNAT-style subject listing immediately.
 		study := &model.Study{
 			ProjectID:        project.ID,
 			StudyInstanceUID: studyUID,
@@ -270,6 +273,7 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			StudyDescription: g.studyDesc,
 			StudyDate:        studyDatePtr,
 			AnonPatientID:    anonPatientIDPtr,
+			SubjectID:        anonPatientIDPtr,
 			InstanceCount:    len(g.parts),
 			Status:           "received",
 			DefacingRequired: defacingRequired,
