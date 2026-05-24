@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-type Spoke = {
+type Satellite = {
   institution_id: string
   institution_name: string
   institution_slug: string
@@ -46,12 +46,12 @@ type MintedTokenResponse = {
   install_command: string
 }
 
-export function SpokesPanel({ isAdmin }: { isAdmin: boolean }) {
-  const [spokes, setSpokes] = useState<Spoke[]>([])
+export function SatellitesPanel({ isAdmin }: { isAdmin: boolean }) {
+  const [satellites, setSatellites] = useState<Satellite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showAdd, setShowAdd] = useState(false)
-  const [drawerSpoke, setDrawerSpoke] = useState<Spoke | null>(null)
+  const [drawerSatellite, setDrawerSatellite] = useState<Satellite | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
 
   useEffect(() => {
@@ -59,23 +59,23 @@ export function SpokesPanel({ isAdmin }: { isAdmin: boolean }) {
     setError('')
     fetch('/api/spokes')
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(d => setSpokes(d.spokes || []))
+      .then(d => setSatellites(d.spokes || []))
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [refreshTick])
 
-  const enrolledCount = useMemo(() => spokes.filter(s => s.cert_thumbprint).length, [spokes])
-  const pendingCount = useMemo(() => spokes.filter(s => !s.cert_thumbprint && s.active_token_count > 0).length, [spokes])
+  const enrolledCount = useMemo(() => satellites.filter(s => s.cert_thumbprint).length, [satellites])
+  const pendingCount = useMemo(() => satellites.filter(s => !s.cert_thumbprint && s.active_token_count > 0).length, [satellites])
 
   return (
-    <div className="spokes-panel" style={{ padding: '16px 24px' }}>
+    <div className="satellites-panel" style={{ padding: '16px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <h2 style={{ margin: 0, flex: 1 }}>Spoke Routers</h2>
-        <span className="badge" title="Spokes with a signed mTLS client cert">
+        <h2 style={{ margin: 0, flex: 1 }}>Satellites</h2>
+        <span className="badge" title="Satellites with a signed mTLS client cert">
           {enrolledCount} enrolled
         </span>
         {pendingCount > 0 && (
-          <span className="badge badge-amber" title="Spokes with an active enrollment token but no cert yet">
+          <span className="badge badge-amber" title="Satellites with an active enrollment token but no cert yet">
             {pendingCount} pending
           </span>
         )}
@@ -84,36 +84,36 @@ export function SpokesPanel({ isAdmin }: { isAdmin: boolean }) {
         </button>
         {isAdmin && (
           <button type="button" className="xn-btn-primary" onClick={() => setShowAdd(true)}>
-            + Add spoke
+            + Add satellite
           </button>
         )}
       </div>
 
       <p style={{ color: '#666', fontSize: 13, marginTop: 0 }}>
         On-prem AEGIS Routers that authenticate to this cloud via mTLS client cert. Add
-        a new spoke by minting an enrollment token below and handing it to the site IT
+        a new satellite by minting an enrollment token below and handing it to the site IT
         admin — they run <code>./bin/aegis-router-init --site-token=&lt;token&gt;</code> and
         the router auto-enrolls.
       </p>
 
-      {loading && <div className="xn-muted">Loading spokes…</div>}
+      {loading && <div className="xn-muted">Loading satellites…</div>}
       {error && <div className="xn-error">{error}</div>}
 
-      {!loading && !error && spokes.length === 0 && (
+      {!loading && !error && satellites.length === 0 && (
         <div className="xn-muted" style={{ padding: '32px 16px', textAlign: 'center', color: '#666' }}>
-          No spokes enrolled yet.
+          No satellites enrolled yet.
           {isAdmin && (
             <>
               <br />
               <button type="button" className="xn-btn-primary" style={{ marginTop: 12 }} onClick={() => setShowAdd(true)}>
-                + Add your first spoke
+                + Add your first satellite
               </button>
             </>
           )}
         </div>
       )}
 
-      {!loading && !error && spokes.length > 0 && (
+      {!loading && !error && satellites.length > 0 && (
         <table className="data-table" style={{ width: '100%' }}>
           <thead>
             <tr>
@@ -126,8 +126,8 @@ export function SpokesPanel({ isAdmin }: { isAdmin: boolean }) {
             </tr>
           </thead>
           <tbody>
-            {spokes.map(s => {
-              const status = spokeStatus(s)
+            {satellites.map(s => {
+              const status = satelliteStatus(s)
               return (
                 <tr key={s.institution_id}>
                   <td>
@@ -139,7 +139,7 @@ export function SpokesPanel({ isAdmin }: { isAdmin: boolean }) {
                   <td>{relTime(s.last_study_at)}</td>
                   <td>{relTime(s.cert_enrolled_at)}</td>
                   <td>
-                    <button type="button" className="btn-link" onClick={() => setDrawerSpoke(s)}>
+                    <button type="button" className="btn-link" onClick={() => setDrawerSatellite(s)}>
                       Manage →
                     </button>
                   </td>
@@ -152,17 +152,17 @@ export function SpokesPanel({ isAdmin }: { isAdmin: boolean }) {
 
       {showAdd && isAdmin && (
         <AddSpokeModal
-          existingSpokes={spokes}
+          existingSatellites={satellites}
           onClose={() => setShowAdd(false)}
           onMinted={() => { setShowAdd(false); setRefreshTick(t => t + 1) }}
         />
       )}
 
-      {drawerSpoke && (
+      {drawerSatellite && (
         <SpokeDrawer
-          spoke={drawerSpoke}
+          satellite={drawerSatellite}
           isAdmin={isAdmin}
-          onClose={() => setDrawerSpoke(null)}
+          onClose={() => setDrawerSatellite(null)}
           onChanged={() => { setRefreshTick(t => t + 1) }}
         />
       )}
@@ -172,9 +172,9 @@ export function SpokesPanel({ isAdmin }: { isAdmin: boolean }) {
 
 // ── Status helpers ────────────────────────────────────────────────────────
 
-type SpokeUIStatus = 'active' | 'pending' | 'idle' | 'disabled'
+type SatelliteUIStatus = 'active' | 'pending' | 'idle' | 'disabled'
 
-function spokeStatus(s: Spoke): SpokeUIStatus {
+function satelliteStatus(s: Satellite): SatelliteUIStatus {
   if (!s.enabled) return 'disabled'
   if (!s.cert_thumbprint) return 'pending'
   if (s.last_study_at) {
@@ -184,14 +184,14 @@ function spokeStatus(s: Spoke): SpokeUIStatus {
   return 'idle'
 }
 
-function StatusBadge({ status }: { status: SpokeUIStatus }) {
-  const colors: Record<SpokeUIStatus, string> = {
+function StatusBadge({ status }: { status: SatelliteUIStatus }) {
+  const colors: Record<SatelliteUIStatus, string> = {
     active: '#10b981',
     pending: '#f59e0b',
     idle: '#9ca3af',
     disabled: '#ef4444',
   }
-  const labels: Record<SpokeUIStatus, string> = {
+  const labels: Record<SatelliteUIStatus, string> = {
     active: '● active',
     pending: '◐ pending',
     idle: '○ idle',
@@ -221,11 +221,11 @@ function relTime(ts: string | null | undefined): string {
 // ── Add spoke modal ───────────────────────────────────────────────────────
 
 function AddSpokeModal({
-  existingSpokes,
+  existingSatellites,
   onClose,
   onMinted,
 }: {
-  existingSpokes: Spoke[]
+  existingSatellites: Satellite[]
   onClose: () => void
   onMinted: () => void
 }) {
@@ -246,11 +246,11 @@ function AddSpokeModal({
 
   const existingByID = useMemo(() => {
     const s = new Set<string>()
-    for (const sp of existingSpokes) {
+    for (const sp of existingSatellites) {
       if (sp.cert_thumbprint) s.add(sp.institution_id)
     }
     return s
-  }, [existingSpokes])
+  }, [existingSatellites])
 
   const eligible = useMemo(
     () => institutions.filter(i =>
@@ -287,7 +287,7 @@ function AddSpokeModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 640 }}>
-        <h3 style={{ marginTop: 0 }}>Add a spoke router</h3>
+        <h3 style={{ marginTop: 0 }}>Add a satellite</h3>
 
         {!minted && (
           <>
@@ -308,7 +308,7 @@ function AddSpokeModal({
 
             {eligible.length === 0 && (
               <div className="xn-muted" style={{ fontSize: 12, color: '#888' }}>
-                All sender/both institutions already have an enrolled spoke. Create a new
+                All sender/both institutions already have an enrolled satellite. Create a new
                 institution in the Institutions tab to add another.
               </div>
             )}
@@ -387,12 +387,12 @@ function AddSpokeModal({
 // ── Spoke management drawer ──────────────────────────────────────────────
 
 function SpokeDrawer({
-  spoke,
+  satellite,
   isAdmin,
   onClose,
   onChanged,
 }: {
-  spoke: Spoke
+  satellite: Satellite
   isAdmin: boolean
   onClose: () => void
   onChanged: () => void
@@ -402,21 +402,21 @@ function SpokeDrawer({
 
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/institutions/${spoke.institution_id}/enrollment-tokens`)
+    fetch(`/api/institutions/${satellite.institution_id}/enrollment-tokens`)
       .then(r => r.json())
       .then(d => setTokens(d.tokens || []))
       .finally(() => setLoading(false))
-  }, [spoke.institution_id])
+  }, [satellite.institution_id])
 
   async function revokeCert() {
-    if (!confirm(`Revoke the mTLS cert for ${spoke.institution_name}? The spoke will stop being able to push studies until re-enrolled.`)) return
-    const r = await fetch(`/api/institutions/${spoke.institution_id}/client-cert`, { method: 'DELETE' })
+    if (!confirm(`Revoke the mTLS cert for ${satellite.institution_name}? The spoke will stop being able to push studies until re-enrolled.`)) return
+    const r = await fetch(`/api/institutions/${satellite.institution_id}/client-cert`, { method: 'DELETE' })
     if (r.ok) { onChanged(); onClose() }
     else alert(`Revoke failed: HTTP ${r.status}`)
   }
 
   async function revokeToken(tokenID: string) {
-    const r = await fetch(`/api/institutions/${spoke.institution_id}/enrollment-tokens/${tokenID}`, { method: 'DELETE' })
+    const r = await fetch(`/api/institutions/${satellite.institution_id}/enrollment-tokens/${tokenID}`, { method: 'DELETE' })
     if (r.ok) {
       setTokens(tokens.map(t => t.id === tokenID ? { ...t, status: 'revoked' as const } : t))
     }
@@ -426,7 +426,7 @@ function SpokeDrawer({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h3 style={{ margin: 0, flex: 1 }}>{spoke.institution_name}</h3>
+          <h3 style={{ margin: 0, flex: 1 }}>{satellite.institution_name}</h3>
           <button type="button" className="btn" onClick={onClose}>Close</button>
         </div>
 
@@ -434,13 +434,13 @@ function SpokeDrawer({
           <h4 style={{ margin: '0 0 8px 0' }}>Identity</h4>
           <table className="kv-table">
             <tbody>
-              <tr><th>Slug</th><td>{spoke.institution_slug}</td></tr>
-              <tr><th>Status</th><td><StatusBadge status={spokeStatus(spoke)} /></td></tr>
-              <tr><th>Studies received (spoke source)</th><td>{spoke.study_count.toLocaleString()}</td></tr>
-              <tr><th>Last activity</th><td>{relTime(spoke.last_study_at)}</td></tr>
-              <tr><th>Cert thumbprint</th><td><code style={{ fontSize: 11 }}>{spoke.cert_thumbprint || '—'}</code></td></tr>
-              <tr><th>Cert subject DN</th><td><code style={{ fontSize: 11 }}>{spoke.cert_subject_dn || '—'}</code></td></tr>
-              <tr><th>Cert enrolled at</th><td>{spoke.cert_enrolled_at ? new Date(spoke.cert_enrolled_at).toLocaleString() : '—'}</td></tr>
+              <tr><th>Slug</th><td>{satellite.institution_slug}</td></tr>
+              <tr><th>Status</th><td><StatusBadge status={satelliteStatus(satellite)} /></td></tr>
+              <tr><th>Studies received (spoke source)</th><td>{satellite.study_count.toLocaleString()}</td></tr>
+              <tr><th>Last activity</th><td>{relTime(satellite.last_study_at)}</td></tr>
+              <tr><th>Cert thumbprint</th><td><code style={{ fontSize: 11 }}>{satellite.cert_thumbprint || '—'}</code></td></tr>
+              <tr><th>Cert subject DN</th><td><code style={{ fontSize: 11 }}>{satellite.cert_subject_dn || '—'}</code></td></tr>
+              <tr><th>Cert enrolled at</th><td>{satellite.cert_enrolled_at ? new Date(satellite.cert_enrolled_at).toLocaleString() : '—'}</td></tr>
             </tbody>
           </table>
         </section>
@@ -475,7 +475,7 @@ function SpokeDrawer({
           )}
         </section>
 
-        {isAdmin && spoke.cert_thumbprint && (
+        {isAdmin && satellite.cert_thumbprint && (
           <section style={{ marginTop: 16 }}>
             <h4 style={{ margin: '0 0 8px 0', color: '#b91c1c' }}>Danger zone</h4>
             <button type="button" className="btn-danger" onClick={revokeCert}>
