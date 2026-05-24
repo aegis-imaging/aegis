@@ -19,6 +19,7 @@ import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
 import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { useStudyEvents } from './hooks/useStudyEvents'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { TopBar } from './layout/TopBar'
 import { Breadcrumbs } from './layout/Breadcrumbs'
 
@@ -75,6 +76,22 @@ const TAB_META: Record<string, { title: string; description: string }> = {
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'spokes' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'downloads' | 'system'
+
+const ADMIN_TABS: AppTab[] = [
+  'studies', 'agent', 'audit', 'shares', 'routing', 'dimse_ops',
+  'institutions', 'spokes', 'profiles', 'protocol_templates', 'notifications',
+  'projects', 'federation', 'tcia_import', 'users', 'api_keys', 'invite_codes',
+  'downloads', 'system',
+]
+
+// parseAdminTab pulls the tab segment out of the pathname (e.g. /admin/audit
+// → 'audit'). Unknown or missing segments fall through to 'studies' so the
+// app always has a coherent active tab.
+function parseAdminTab(pathname: string): AppTab {
+  const match = pathname.match(/^\/admin\/([^/]+)/)
+  const candidate = match?.[1] as AppTab | undefined
+  return candidate && ADMIN_TABS.includes(candidate) ? candidate : 'studies'
+}
 
 type APIKey = {
   id: string
@@ -9986,7 +10003,22 @@ const STUDIES_GROUP_BY_PATIENT_KEY  = 'aegis_studies_group_by_patient'
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
   const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
-  const [tab, setTab] = useState<AppTab>('studies')
+
+  // The active tab is derived from the URL — /admin/<tab> — so deep-linking,
+  // back/forward, and bookmarking all work. setTab(next) navigates to the
+  // matching URL; useEffect below redirects /admin → /admin/studies.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const tab: AppTab = parseAdminTab(location.pathname)
+  const setTab = useCallback((next: AppTab) => {
+    navigate(`/admin/${next}`)
+  }, [navigate])
+
+  useEffect(() => {
+    if (location.pathname === '/admin' || location.pathname === '/admin/') {
+      navigate('/admin/studies', { replace: true })
+    }
+  }, [location.pathname, navigate])
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('aegis_sidebar_open')
     return saved !== null ? saved === 'true' : true
