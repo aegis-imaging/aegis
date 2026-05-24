@@ -2112,8 +2112,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
     return () => window.clearInterval(id)
   }, [hasLiveShareCountdown])
 
-  if (loading) return <div className="state-loading">Loading study details…</div>
-  if (!study) return <div className="state-error">Study not found. <button type="button" className="btn btn--secondary" onClick={onBack}>Back</button></div>
+  if (loading) return <div className="xn-muted">Loading study details…</div>
+  if (!study) return <div className="xn-error">Study not found. <button type="button" className="xn-btn-secondary" onClick={onBack}>Back</button></div>
 
   const stages: PipelineStage[] = [
     { label: 'Classification', required: study.classification_required, status: study.classification_status, step: 'classify' },
@@ -2364,9 +2364,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       <div className="study-detail__section">
         <h3 className="study-detail__section-title">Actions</h3>
         <div className="study-detail__actions">
-          {projectCaps.canApproveReject && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
-          {projectCaps.canApproveReject && canReject && <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>}
-          {projectCaps.canApproveReject && canReactivate && <button type="button" className="btn btn--approve" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
+          {projectCaps.canApproveReject && canApprove && <button type="button" className="xn-btn-primary" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
+          {projectCaps.canApproveReject && canReject && <button type="button" className="xn-btn-secondary" onClick={handleReject}>Reject</button>}
+          {projectCaps.canApproveReject && canReactivate && <button type="button" className="xn-btn-primary" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
           {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
           {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
           {isAdmin && canProtocolCheck && <button type="button" className="btn btn--protocol-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/protocol-check`)}>Check Protocol</button>}
@@ -2374,13 +2374,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           {isAdmin && canBidsConvert && <button type="button" className="btn btn--bids-convert" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/bids-convert`)}>Convert to BIDS</button>}
           {canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
           {isAdmin && study.bids_status === 'complete' && study.analytics_status !== 'analyzing' && (
-            <button type="button" className="btn btn--secondary" onClick={() => setLongAnalyticsOpen(o => !o)}>{longAnalyticsOpen ? 'Cancel' : 'Longitudinal Analytics'}</button>
+            <button type="button" className="xn-btn-secondary" onClick={() => setLongAnalyticsOpen(o => !o)}>{longAnalyticsOpen ? 'Cancel' : 'Longitudinal Analytics'}</button>
           )}
           {isAdmin && study.analytics_status !== 'analyzing' && (
             <div ref={analyticsDetailMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="xn-btn-secondary"
                 onClick={() => setAnalyticsDetailMenuOpen(o => !o)}
                 title="Run a neuroimaging analytics tool on this study"
               >
@@ -2448,9 +2448,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           )}
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
           <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View'}</button>
-          <button type="button" className="btn btn--secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
-          <button type="button" className="btn btn--secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
-          {isAdmin && <button type="button" className="btn btn--secondary" onClick={openReassign}>Move to Project</button>}
+          <button type="button" className="xn-btn-secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
+          <button type="button" className="xn-btn-secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
+          {isAdmin && <button type="button" className="xn-btn-secondary" onClick={openReassign}>Move to Project</button>}
         </div>
         {isAdmin && reassignOpen && (
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -2464,8 +2464,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <button type="button" className="btn btn--approve" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
-            <button type="button" className="btn btn--secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
+            <button type="button" className="xn-btn-primary" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
+            <button type="button" className="xn-btn-secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
           </div>
         )}
         {isAdmin && longAnalyticsOpen && (
@@ -2483,7 +2483,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               />
               <button
                 type="button"
-                className="btn btn--approve"
+                className="xn-btn-primary"
                 disabled={longWorking || !longBaselineId.trim()}
                 onClick={async () => {
                   setLongWorking(true)
@@ -2506,7 +2506,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                   }
                 }}
               >{longWorking ? 'Starting…' : 'Start Analysis'}</button>
-              <button type="button" className="btn btn--secondary" onClick={() => { setLongAnalyticsOpen(false); setLongBaselineId('') }}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => { setLongAnalyticsOpen(false); setLongBaselineId('') }}>Cancel</button>
             </div>
             {relationships.length > 0 && (
               <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
@@ -2532,8 +2532,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               onChange={e => setRejectReasonText(e.target.value)}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button type="button" className="btn btn--reject" onClick={confirmReject}>Confirm Reject</button>
-              <button type="button" className="btn btn--secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={confirmReject}>Confirm Reject</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
             </div>
           </div>
         )}
@@ -2542,8 +2542,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       {/* DICOM tag inspection panel */}
       {tagsOpen && (
         <div className="dicom-tags-panel">
-          {tagsLoading && <div className="state-loading">Loading tags…</div>}
-          {!tagsLoading && dicomTags && dicomTags.length === 0 && <div className="state-empty">No tags found.</div>}
+          {tagsLoading && <div className="xn-muted">Loading tags…</div>}
+          {!tagsLoading && dicomTags && dicomTags.length === 0 && <div className="xn-muted">No tags found.</div>}
           {!tagsLoading && dicomTags && dicomTags.length > 0 && (
             <table className="audit-table dicom-tags-table">
               <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Value</th></tr></thead>
@@ -2565,12 +2565,12 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       {/* Anonymization diff panel */}
       {anonDiffOpen && (
         <div className="dicom-tags-panel">
-          {anonDiffLoading && <div className="state-loading">Loading diff…</div>}
-          {!anonDiffLoading && anonDiffMsg && <div className="state-empty">{anonDiffMsg}</div>}
+          {anonDiffLoading && <div className="xn-muted">Loading diff…</div>}
+          {!anonDiffLoading && anonDiffMsg && <div className="xn-muted">{anonDiffMsg}</div>}
           {!anonDiffLoading && anonDiff && (() => {
             const { removed, modified, added } = anonDiff.diff
             const totalChanges = removed.length + modified.length + added.length
-            if (totalChanges === 0) return <div className="state-empty">No tag differences found — files appear identical.</div>
+            if (totalChanges === 0) return <div className="xn-muted">No tag differences found — files appear identical.</div>
             return (
               <div>
                 {removed.length > 0 && (
@@ -2661,7 +2661,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               style={{ width: 160 }}
               title="Leave blank for unlimited downloads"
             />
-            <button type="button" className="btn btn--approve" disabled={!shareEmail} onClick={handleShare}>Send</button>
+            <button type="button" className="xn-btn-primary" disabled={!shareEmail} onClick={handleShare}>Send</button>
           </div>
           {shareResult && (
             <div className="share-result">
@@ -2688,7 +2688,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               <span className="note-char-count">{noteText.length}/2000</span>
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="xn-btn-secondary"
                 disabled={!noteText.trim() || noteSaving}
                 onClick={async () => {
                   setNoteSaving(true)
@@ -2757,7 +2757,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
             <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>
               <a
                 href={`/api/studies/${studyId}/audit.csv`}
-                className="btn btn--secondary"
+                className="xn-btn-secondary"
                 download
                 title="Download audit trail as CSV"
                 style={{fontSize:'0.8rem'}}
@@ -2771,7 +2771,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                 {audit.length === 0 && <tr><td colSpan={4}>No audit entries.</td></tr>}
                 {audit.map(e => (
                   <tr key={e.id}>
-                    <td className="td-date">{fmtDate(e.created_at)}</td>
+                    <td className="">{fmtDate(e.created_at)}</td>
                     <td><code>{e.action}</code></td>
                     <td>{e.actor}</td>
                     <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
@@ -2791,7 +2791,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               {routingLog.length === 0 && <tr><td colSpan={4}>No routing log entries.</td></tr>}
               {routingLog.map(e => (
                 <tr key={e.id}>
-                  <td className="td-date">{fmtDate(e.created_at)}</td>
+                  <td className="">{fmtDate(e.created_at)}</td>
                   <td><code>{e.action}</code></td>
                   <td><Badge label={e.outcome} prefix="status" /></td>
                   <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
@@ -2819,7 +2819,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               <code style={{ fontSize: 11, color: '#0f766e', flex: 1, wordBreak: 'break-all' }}>{study.auto_share_url}</code>
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="xn-btn-secondary"
                 style={{ fontSize: 12, padding: '2px 10px', whiteSpace: 'nowrap' }}
                 onClick={() => navigator.clipboard.writeText(study.auto_share_url!)}
               >
@@ -2848,8 +2848,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                 return (
                   <tr key={s.id}>
                     <td>{s.recipient_email}</td>
-                    <td className="td-date">{fmtDate(s.created_at)}</td>
-                    <td className="td-date">
+                    <td className="">{fmtDate(s.created_at)}</td>
+                    <td className="">
                       {fmtDate(s.expires_at)}
                       {remainingLabel && <div className="td-subtle">({remainingLabel} remaining)</div>}
                     </td>
@@ -2912,7 +2912,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                   value={newLabel}
                   onChange={e => setNewLabel(e.target.value)}
                 />
-                <button type="submit" className="btn-primary" disabled={labelSaving || !newLabel.trim()}>
+                <button type="submit" className="xn-btn-primary" disabled={labelSaving || !newLabel.trim()}>
                   {labelSaving ? 'Adding…' : 'Add'}
                 </button>
               </form>
@@ -2973,7 +2973,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                     )}
                     {rel.notes && <span className="routing-desc" style={{ fontStyle: 'italic' }}>{rel.notes}</span>}
                     {isAdmin && (
-                      <button type="button" className="btn btn--revoke" style={{ marginLeft: 'auto' }}
+                      <button type="button" className="xn-btn-secondary" style={{ marginLeft: 'auto' }}
                         title="Remove this relationship link"
                         onClick={async () => {
                           await fetch(`/api/studies/${studyId}/relationships/${rel.id}`, { method: 'DELETE' })
@@ -2990,7 +2990,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
             {isAdmin && (
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
                 <div style={{ fontWeight: 500, fontSize: '0.875rem', marginBottom: '8px' }}>Link a study</div>
-                {linkError && <div className="form-error" style={{ marginBottom: '8px' }}>{linkError}</div>}
+                {linkError && <div className="xn-error" style={{ marginBottom: '8px' }}>{linkError}</div>}
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <input className="form-input" style={{ flex: '1 1 260px' }}
                     placeholder="Study UUID or DICOM UID"
@@ -3006,7 +3006,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                     placeholder="Notes (optional)"
                     value={linkNotes}
                     onChange={e => setLinkNotes(e.target.value)} />
-                  <button type="button" className="btn-primary" disabled={linkSaving || !linkStudyUID.trim()}
+                  <button type="button" className="xn-btn-primary" disabled={linkSaving || !linkStudyUID.trim()}
                     onClick={async () => {
                       setLinkSaving(true)
                       setLinkError(null)
@@ -3045,7 +3045,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
 
         {detailTab === 'diagnostics' && (
           <div className="diagnostics-panel">
-            {!diagnostics && <p className="state-empty">Diagnostics not available.</p>}
+            {!diagnostics && <p className="xn-muted">Diagnostics not available.</p>}
             {diagnostics && (
               <>
                 <div className={`diagnostics-summary diagnostics-summary--${diagnostics.summary.stuck ? 'stuck' : diagnostics.summary.terminal ? 'terminal' : 'ok'}`}>
@@ -3096,7 +3096,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                       {diagnostics.recent_audit.length === 0 && <tr><td colSpan={3}>No entries.</td></tr>}
                       {diagnostics.recent_audit.map(e => (
                         <tr key={e.id}>
-                          <td className="td-date">{fmtDate(e.created_at)}</td>
+                          <td className="">{fmtDate(e.created_at)}</td>
                           <td><code>{e.action}</code></td>
                           <td>{e.actor}</td>
                         </tr>
@@ -3121,7 +3121,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                 <tbody>
                   {studyNotes.map(n => (
                     <tr key={n.id}>
-                      <td className="td-date">{fmtDate(n.created_at)}</td>
+                      <td className="">{fmtDate(n.created_at)}</td>
                       <td>{n.actor}</td>
                       <td style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{n.note}</td>
                     </tr>
@@ -3143,7 +3143,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                 <div style={{display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end'}}>
                   <button
                     type="button"
-                    className="btn btn--secondary"
+                    className="xn-btn-secondary"
                     disabled={!noteText.trim() || noteSaving}
                     onClick={async () => {
                       setNoteSaving(true)
