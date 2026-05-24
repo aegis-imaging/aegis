@@ -1,0 +1,45 @@
+[package]
+name = "aegis-uploader"
+version = "0.1.0"
+description = "AEGIS Uploader — desktop client for anonymizing and uploading DICOM studies"
+authors = ["AEGIS <ops@aegisimaging.ai>"]
+edition = "2021"
+rust-version = "1.77"
+
+# Keep the library name stable for Tauri's mobile entrypoint convention.
+# The bin uses the default `src/main.rs`.
+[lib]
+name = "aegis_uploader_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-updater = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# HTTP client for the pairing exchange. Use rustls so we don't drag in
+# OpenSSL on every platform.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# OS-keychain wrapper. Uses Keychain on macOS, Credential Manager on Windows,
+# and Secret Service on Linux.
+keyring = "3"
+
+# Folder enumeration for the DICOM picker.
+walkdir = "2"
+
+# Pairing-token regex match against argv[0].
+regex = "1"
+
+[features]
+# This feature is used for production builds or when a dev server is not specified.
+# Disable when using `tauri dev` against a live Vite server.
+custom-protocol = ["tauri/custom-protocol"]
