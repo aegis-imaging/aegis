@@ -125,6 +125,10 @@ type Study = {
   id: string
   project_id: string
   study_instance_uid: string
+  // Anonymized PatientID (e.g. "SUBJ-abc123"). May be undefined/null until PR-A
+  // (which populates studies.anon_patient_id) lands; in that case the group-by-patient
+  // view falls back to a single "(no patient ID)" bucket.
+  anon_patient_id?: string | null
   modality: string
   body_part: string
   study_description: string
@@ -9824,10 +9828,11 @@ function UploadStudyModal({ projects, onClose, onUploaded }: {
 
 // ────────────────────────────────────────────────────────────────────────────
 
-const GLOBAL_PROJECT_KEY    = 'aegis_global_project_id'
-const SAVED_FILTERS_KEY     = 'aegis_saved_filters'
-const STUDIES_SORT_KEY      = 'aegis_studies_sort'
-const STUDIES_SHOW_DESC_KEY = 'aegis_studies_show_desc'
+const GLOBAL_PROJECT_KEY            = 'aegis_global_project_id'
+const SAVED_FILTERS_KEY             = 'aegis_saved_filters'
+const STUDIES_SORT_KEY              = 'aegis_studies_sort'
+const STUDIES_SHOW_DESC_KEY         = 'aegis_studies_show_desc'
+const STUDIES_GROUP_BY_PATIENT_KEY  = 'aegis_studies_group_by_patient'
 
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
@@ -10180,6 +10185,9 @@ export function App() {
   })
   const [showDescCol, setShowDescCol] = useState<boolean>(() => {
     try { return localStorage.getItem(STUDIES_SHOW_DESC_KEY) === 'true' } catch { return false }
+  })
+  const [groupByPatient, setGroupByPatient] = useState<boolean>(() => {
+    try { return localStorage.getItem(STUDIES_GROUP_BY_PATIENT_KEY) === 'true' } catch { return false }
   })
 
   // Real-time SSE updates — bump refreshTick on any study change so the list
@@ -11519,6 +11527,20 @@ export function App() {
             >
               {showDescCol ? 'Hide Desc' : 'Show Desc'}
             </button>
+            <button
+              type="button"
+              className={`btn btn--secondary btn--toggle-group${groupByPatient ? ' btn--toggle-group--on' : ''}`}
+              onClick={() => {
+                const next = !groupByPatient
+                setGroupByPatient(next)
+                localStorage.setItem(STUDIES_GROUP_BY_PATIENT_KEY, String(next))
+              }}
+              title={groupByPatient
+                ? 'Show studies as a flat list'
+                : 'Group studies by anonymized patient ID (overrides column sort while on)'}
+            >
+              {groupByPatient ? 'Ungroup' : 'Group by Patient'}
+            </button>
           </div>
 
           {state === 'loading' && <div className="state-loading">Loading studies…</div>}
@@ -11628,28 +11650,144 @@ export function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {studies.map(study => (
-                    <StudyRow
-                      key={study.id}
-                      study={study}
-                      onAction={() => setRefreshTick(t => t + 1)}
-                      onSelect={() => selectStudy(study.id)}
-                      onAskAgent={() => {
-                        setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
-                        setTab('agent')
-                      }}
-                      isAdmin={isAdmin}
-                      projectRole={projectRoleById[study.project_id] ?? null}
-                      checked={bulkSelected.has(study.id)}
-                      onToggle={() => setBulkSelected(prev => {
-                        const next = new Set(prev)
-                        if (next.has(study.id)) next.delete(study.id)
-                        else next.add(study.id)
-                        return next
-                      })}
-                      showDescCol={showDescCol}
-                    />
-                  ))}
+                  {(() => {
+                    // Total column count for group-header colSpan. Mirrors the <thead> above:
+                    // check, flag, Study UID, [Description?], Modality, Body Part, Study Date,
+                    // Source, Status, PHI Scan, QC, BIDS, Class., Protocol, Export, Analytics,
+                    // Files, Received, Actions = 18 base columns (+1 when Description is visible).
+                    const colSpan = 18 + (showDescCol ? 1 : 0)
+
+                    // When group mode is OFF, render the server-sorted list as a flat table.
+                    if (!groupByPatient) {
+                      return studies.map(study => (
+                        <StudyRow
+                          key={study.id}
+                          study={study}
+                          onAction={() => setRefreshTick(t => t + 1)}
+                          onSelect={() => selectStudy(study.id)}
+                          onAskAgent={() => {
+                            setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
+                            setTab('agent')
+                          }}
+                          isAdmin={isAdmin}
+                          projectRole={projectRoleById[study.project_id] ?? null}
+                          checked={bulkSelected.has(study.id)}
+                          onToggle={() => setBulkSelected(prev => {
+                            const next = new Set(prev)
+                            if (next.has(study.id)) next.delete(study.id)
+                            else next.add(study.id)
+                            return next
+                          })}
+                          showDescCol={showDescCol}
+                        />
+                      ))
+                    }
+
+                    // Group mode: client-side reorder by (anon_patient_id ASC nulls last,
+                    // study_date DESC) regardless of the current column sort. We keep the
+                    // sort indicator on whichever column the user clicked — only the visible
+                    // order changes.
+                    const norm = (v: string | null | undefined) =>
+                      v && v.trim() !== '' ? v : null
+                    const sortedForGroups = [...studies].sort((a, b) => {
+                      const pa = norm(a.anon_patient_id)
+                      const pb = norm(b.anon_patient_id)
+                      if (pa !== pb) {
+                        if (pa === null) return 1   // nulls last
+                        if (pb === null) return -1
+                        if (pa < pb) return -1
+                        if (pa > pb) return 1
+                      }
+                      // Same patient (or both null): latest study_date first.
+                      const da = a.study_date || ''
+                      const db = b.study_date || ''
+                      if (da === db) return 0
+                      return da < db ? 1 : -1
+                    })
+
+                    // Pre-compute per-group stats (study count + latest study_date) keyed by
+                    // patient ID. Use a sentinel string for the NULL group so we can also
+                    // store it in a normal Map.
+                    const NULL_KEY = ' __no_patient_id__'
+                    type GroupStat = { count: number; latestDate: string }
+                    const groupStats = new Map<string, GroupStat>()
+                    for (const s of sortedForGroups) {
+                      const key = norm(s.anon_patient_id) ?? NULL_KEY
+                      const existing = groupStats.get(key)
+                      const sd = s.study_date || ''
+                      if (existing) {
+                        existing.count += 1
+                        if (sd > existing.latestDate) existing.latestDate = sd
+                      } else {
+                        groupStats.set(key, { count: 1, latestDate: sd })
+                      }
+                    }
+
+                    // Walk the sorted list, emitting a sticky group header row before each
+                    // new patient bucket.
+                    const rows: React.ReactNode[] = []
+                    let prevKey: string | null = null
+                    for (const study of sortedForGroups) {
+                      const key = norm(study.anon_patient_id) ?? NULL_KEY
+                      if (key !== prevKey) {
+                        const stat = groupStats.get(key)!
+                        const isNullGroup = key === NULL_KEY
+                        const label = isNullGroup
+                          ? '(no patient ID)'
+                          : (norm(study.anon_patient_id) as string)
+                        const studyWord = stat.count === 1 ? 'study' : 'studies'
+                        const latestSuffix = !isNullGroup && stat.latestDate
+                          ? `, latest ${stat.latestDate}`
+                          : ''
+                        rows.push(
+                          <tr key={`group-${key}`} className="study-group-header">
+                            <td
+                              colSpan={colSpan}
+                              style={{
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 1,
+                                background: '#1f2937',
+                                color: '#a5b4fc',
+                                fontWeight: 600,
+                                fontSize: '12px',
+                                padding: '6px 12px',
+                                borderTop: '1px solid #374151',
+                                borderBottom: '1px solid #374151',
+                                letterSpacing: '0.02em',
+                              }}
+                            >
+                              {label} — {stat.count} {studyWord}{latestSuffix}
+                            </td>
+                          </tr>
+                        )
+                        prevKey = key
+                      }
+                      rows.push(
+                        <StudyRow
+                          key={study.id}
+                          study={study}
+                          onAction={() => setRefreshTick(t => t + 1)}
+                          onSelect={() => selectStudy(study.id)}
+                          onAskAgent={() => {
+                            setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
+                            setTab('agent')
+                          }}
+                          isAdmin={isAdmin}
+                          projectRole={projectRoleById[study.project_id] ?? null}
+                          checked={bulkSelected.has(study.id)}
+                          onToggle={() => setBulkSelected(prev => {
+                            const next = new Set(prev)
+                            if (next.has(study.id)) next.delete(study.id)
+                            else next.add(study.id)
+                            return next
+                          })}
+                          showDescCol={showDescCol}
+                        />
+                      )
+                    }
+                    return rows
+                  })()}
                 </tbody>
               </table>
             </div>
