@@ -308,15 +308,16 @@ func studyWhere(f StudyFilters) (string, []any) {
 
 // allowedStudySortCols maps safe sort_by values to their SQL column names.
 var allowedStudySortCols = map[string]string{
-	"created_at":     "created_at",
-	"updated_at":     "updated_at",
-	"status":         "status",
-	"modality":       "modality",
-	"body_part":      "body_part",
-	"source":         "source",
-	"instance_count": "instance_count",
-	"assigned_at":    "assigned_at",
-	"study_date":     "study_date",
+	"created_at":      "created_at",
+	"updated_at":      "updated_at",
+	"status":          "status",
+	"modality":        "modality",
+	"body_part":       "body_part",
+	"source":          "source",
+	"instance_count":  "instance_count",
+	"assigned_at":     "assigned_at",
+	"study_date":      "study_date",
+	"anon_patient_id": "anon_patient_id",
 }
 
 func ListStudies(ctx context.Context, db *sql.DB, f StudyFilters, limit, offset int) ([]Study, error) {
