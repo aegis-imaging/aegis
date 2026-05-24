@@ -157,6 +157,32 @@ func (s *Server) runDefacing(study *model.Study) {
 		return
 	}
 
+	// Upload defaced files from local cleanDir into the object store so
+	// /dicomweb/ WADO-RS retrievals can find them. Without this, dicom_store
+	// is flipped to "clean" but the cloud bucket never receives the files —
+	// causing 404s on every instance retrieve in production (Cloud Run's
+	// container filesystem is ephemeral).
+	for i, outPath := range svcResp.OutputPaths {
+		f, err := os.Open(outPath)
+		if err != nil {
+			log.Printf("deface: open output %s for upload: %v", outPath, err)
+			model.UpdateStudyStatus(ctx, s.db, study.ID, "received")
+			s.notifyPipelineFailure(ctx, studyUID, "defacing",
+				fmt.Sprintf("upload prep failed: %v", err))
+			return
+		}
+		key := fmt.Sprintf("dicom/clean/%s/%d.dcm", studyUID, i)
+		if err := s.store.Store(ctx, key, f); err != nil {
+			f.Close()
+			log.Printf("deface: upload %s to store: %v", key, err)
+			model.UpdateStudyStatus(ctx, s.db, study.ID, "received")
+			s.notifyPipelineFailure(ctx, studyUID, "defacing",
+				fmt.Sprintf("clean-store upload failed: %v", err))
+			return
+		}
+		f.Close()
+	}
+
 	if err := model.UpdateStudyDefaced(ctx, s.db, study.ID); err != nil {
 		log.Printf("deface: update study record for %s: %v", studyUID, err)
 		return
