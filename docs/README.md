@@ -36,3 +36,6 @@ When given a research task, save your findings to `docs/research/<topic>.md` bef
 | `deployment/` | Deployment guides — currently `on-premises.md` for airgapped / data-residency installs |
 | `runbooks/` | Operational runbooks — alert response, incident response, secret rotation, cross-cloud routing |
 | `planning/` | Planning docs and sprint backlogs |
+| `evidence/` | Compliance evidence snapshots |
+| `monitoring/` | Monitoring + alerting reference |
+| `tools/` | Tooling reference and integration notes |
