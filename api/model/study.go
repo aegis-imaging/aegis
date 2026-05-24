@@ -17,6 +17,7 @@ type Study struct {
 	BodyPart               string     `json:"body_part"`
 	StudyDescription       string     `json:"study_description"`
 	StudyDate              *string    `json:"study_date,omitempty"`
+	AnonPatientID          *string    `json:"anon_patient_id,omitempty"`
 	SeriesCount            int        `json:"series_count"`
 	InstanceCount          int        `json:"instance_count"`
 	Status                 string     `json:"status"`
@@ -56,7 +57,7 @@ type Study struct {
 
 const studyColumns = `
 	id, project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
-	study_description, study_date, series_count, instance_count, status, defacing_required,
+	study_description, study_date, anon_patient_id, series_count, instance_count, status, defacing_required,
 	dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 	bids_required, bids_status, classification_required, classification_status,
 	protocol_required, protocol_status,
@@ -82,7 +83,7 @@ type scannable interface {
 func scanStudy(row scannable, s *Study) error {
 	return row.Scan(
 		&s.ID, &s.ProjectID, &s.UploadSessionID, &s.InstitutionID, &s.StudyInstanceUID,
-		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.StudyDate, &s.SeriesCount, &s.InstanceCount,
+		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.StudyDate, &s.AnonPatientID, &s.SeriesCount, &s.InstanceCount,
 		&s.Status, &s.DefacingRequired, &s.DicomStore, &s.Source,
 		&s.PhiScanRequired, &s.PhiScanStatus, &s.QcRequired, &s.QcStatus,
 		&s.BidsRequired, &s.BidsStatus,
@@ -105,6 +106,26 @@ func scanStudy(row scannable, s *Study) error {
 	)
 }
 
+// UpdateStudyDicomMetadata writes DICOM-tag-derived metadata fields onto
+// an existing study row. Used by both the ingest path (after the first
+// .dcm is stored) and the admin backfill endpoint for legacy studies that
+// pre-date the extraction step.
+//
+// Pass nil to leave a field unchanged (COALESCE semantics).
+//
+// Distinct from UpdateStudyMetadata, which the classification service uses
+// to update modality/body_part after model inference.
+func UpdateStudyDicomMetadata(ctx context.Context, db *sql.DB, studyID string, anonPatientID, studyDate *string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies
+		SET anon_patient_id = COALESCE($1, anon_patient_id),
+		    study_date      = COALESCE($2, study_date),
+		    updated_at      = now()
+		WHERE id = $3`,
+		anonPatientID, studyDate, studyID)
+	return err
+}
+
 func SetStudyAutoShareURL(ctx context.Context, db *sql.DB, studyID, url string) error {
 	_, err := db.ExecContext(ctx,
 		`UPDATE studies SET auto_share_url = $1, updated_at = now() WHERE id = $2`,
@@ -115,7 +136,7 @@ func SetStudyAutoShareURL(ctx context.Context, db *sql.DB, studyID, url string) 
 func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 	return db.QueryRowContext(ctx, `
 		INSERT INTO studies (project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
-		                     study_description, study_date, series_count, instance_count, status, defacing_required,
+		                     study_description, study_date, anon_patient_id, series_count, instance_count, status, defacing_required,
 		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 		                     bids_required, bids_status,
 		                     classification_required, classification_status,
@@ -124,10 +145,10 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		                     pixel_redaction_required, pixel_redaction_status,
 		                     analytics_required, analytics_status,
 		                     sct_required, sct_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
-		s.StudyDescription, s.StudyDate, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
+		s.StudyDescription, s.StudyDate, s.AnonPatientID, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
 		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus,
 		s.BidsRequired, s.BidsStatus,
 		s.ClassificationRequired, s.ClassificationStatus,
@@ -287,15 +308,16 @@ func studyWhere(f StudyFilters) (string, []any) {
 
 // allowedStudySortCols maps safe sort_by values to their SQL column names.
 var allowedStudySortCols = map[string]string{
-	"created_at":     "created_at",
-	"updated_at":     "updated_at",
-	"status":         "status",
-	"modality":       "modality",
-	"body_part":      "body_part",
-	"source":         "source",
-	"instance_count": "instance_count",
-	"assigned_at":    "assigned_at",
-	"study_date":     "study_date",
+	"created_at":      "created_at",
+	"updated_at":      "updated_at",
+	"status":          "status",
+	"modality":        "modality",
+	"body_part":       "body_part",
+	"source":          "source",
+	"instance_count":  "instance_count",
+	"assigned_at":     "assigned_at",
+	"study_date":      "study_date",
+	"anon_patient_id": "anon_patient_id",
 }
 
 func ListStudies(ctx context.Context, db *sql.DB, f StudyFilters, limit, offset int) ([]Study, error) {

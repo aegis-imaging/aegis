@@ -76,18 +76,22 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 
 	// ── Read and group DICOM parts by StudyInstanceUID ───────────────
 	type dicomPart struct {
-		data     []byte
-		studyUID string
-		modality string
-		bodyPart string
-		studyDesc string
+		data          []byte
+		studyUID      string
+		modality      string
+		bodyPart      string
+		studyDesc     string
+		anonPatientID string
+		studyDate     string
 	}
 
 	type studyGroup struct {
-		parts    []dicomPart
-		modality string
-		bodyPart string
-		studyDesc string
+		parts         []dicomPart
+		modality      string
+		bodyPart      string
+		studyDesc     string
+		anonPatientID string
+		studyDate     string
 	}
 
 	groups := make(map[string]*studyGroup)
@@ -139,11 +143,13 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		}
 
 		p := dicomPart{
-			data:     data,
-			studyUID: stowGetStringTag(dataset, tag.StudyInstanceUID),
-			modality: stowGetStringTag(dataset, tag.Modality),
-			bodyPart: stowGetStringTag(dataset, tag.BodyPartExamined),
-			studyDesc: stowGetStringTag(dataset, tag.StudyDescription),
+			data:          data,
+			studyUID:      stowGetStringTag(dataset, tag.StudyInstanceUID),
+			modality:      stowGetStringTag(dataset, tag.Modality),
+			bodyPart:      stowGetStringTag(dataset, tag.BodyPartExamined),
+			studyDesc:     stowGetStringTag(dataset, tag.StudyDescription),
+			anonPatientID: stowGetStringTag(dataset, tag.PatientID),
+			studyDate:     stowGetStringTag(dataset, tag.StudyDate),
 		}
 		if p.studyUID == "" {
 			// Assign a generated UID based on the part index if missing.
@@ -153,12 +159,22 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		g, exists := groups[p.studyUID]
 		if !exists {
 			g = &studyGroup{
-				modality:  p.modality,
-				bodyPart:  p.bodyPart,
-				studyDesc: p.studyDesc,
+				modality:      p.modality,
+				bodyPart:      p.bodyPart,
+				studyDesc:     p.studyDesc,
+				anonPatientID: p.anonPatientID,
+				studyDate:     p.studyDate,
 			}
 			groups[p.studyUID] = g
 			orderedUIDs = append(orderedUIDs, p.studyUID)
+		} else {
+			// First non-empty wins per study (in case later parts have the tag but the first didn't).
+			if g.anonPatientID == "" && p.anonPatientID != "" {
+				g.anonPatientID = p.anonPatientID
+			}
+			if g.studyDate == "" && p.studyDate != "" {
+				g.studyDate = p.studyDate
+			}
 		}
 		g.parts = append(g.parts, p)
 		partIndex++
@@ -209,12 +225,23 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		// Create study record.
 		bodyPartUpper := strings.ToUpper(g.bodyPart)
 		defacingRequired := bodyPartUpper == "HEAD" || bodyPartUpper == "BRAIN"
+		var anonPatientIDPtr, studyDatePtr *string
+		if g.anonPatientID != "" {
+			v := g.anonPatientID
+			anonPatientIDPtr = &v
+		}
+		if g.studyDate != "" {
+			v := g.studyDate
+			studyDatePtr = &v
+		}
 		study := &model.Study{
 			ProjectID:        project.ID,
 			StudyInstanceUID: studyUID,
 			Modality:         g.modality,
 			BodyPart:         g.bodyPart,
 			StudyDescription: g.studyDesc,
+			StudyDate:        studyDatePtr,
+			AnonPatientID:    anonPatientIDPtr,
 			InstanceCount:    len(g.parts),
 			Status:           "received",
 			DefacingRequired: defacingRequired,
