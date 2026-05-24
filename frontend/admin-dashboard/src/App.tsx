@@ -4916,29 +4916,29 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
   const projectName = (id: string) => projects.find(p => p.id === id)?.name ?? id
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">Anonymization Profiles</div>
-            <div className="routing-section-sub">
+            <div className="">Anonymization Profiles</div>
+            <div className="xn-muted">
               Named DICOM tag retention overrides applied during upload de-identification.
               The project's default profile is automatically used by the upload portal.
             </div>
           </div>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New profile</button>}
+          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openCreate}>+ New profile</button>}
         </div>
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>{editingId ? 'Edit profile' : 'New profile'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Profile name *"
+            {formError && <div className="xn-error">{formError}</div>}
+            <div className="">
+              <input className="xn-filter" placeholder="Profile name *"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               {!editingId && (
-                <select className="form-select" aria-label="Project"
+                <select className="" aria-label="Project"
                   value={formProject}
                   onChange={e => setFormProject(e.target.value)}>
                   {projects.map(p => (
@@ -4946,10 +4946,10 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                   ))}
                 </select>
               )}
-              <input className="form-input form-input--wide" placeholder="Description"
+              <input className="xn-filter" placeholder="Description"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-              <input className="form-input form-input--wide"
+              <input className="xn-filter"
                 placeholder="Retained tags — comma-separated DICOM keywords (e.g. PatientAge, StudyDate)"
                 value={tagsInput}
                 onChange={e => setTagsInput(e.target.value)} />
@@ -4959,24 +4959,24 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                 {' '}Enabled
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="xn-muted">Loading…</div>}
+        {error   && <div className="xn-error">{error}</div>}
         {!loading && !error && profiles.length === 0 && (
-          <div className="state-empty">No profiles yet. Create one to override tag retention per project.</div>
+          <div className="xn-muted">No profiles yet. Create one to override tag retention per project.</div>
         )}
         {!loading && !error && profiles.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -4993,27 +4993,27 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                 return (
                   <tr key={p.id} className={p.enabled ? '' : 'routing-row--disabled'}>
                     <td>
-                      <div className="routing-name">{p.name}</div>
-                      {p.description && <div className="routing-desc">{p.description}</div>}
+                      <div className="">{p.name}</div>
+                      {p.description && <div className="xn-muted">{p.description}</div>}
                       {isDefault && <span className="badge badge--status-approved">default</span>}
                     </td>
                     <td>{projectName(p.project_id)}</td>
                     <td>
                       {p.retained_tags?.length > 0
                         ? <span title={p.retained_tags.join(', ')}>{p.retained_tags.length} tag{p.retained_tags.length !== 1 ? 's' : ''}</span>
-                        : <span className="routing-desc">none (full strip)</span>
+                        : <span className="xn-muted">none (full strip)</span>
                       }
                     </td>
                     <td>{p.enabled ? 'Yes' : 'No'}</td>
                     <td>
                       {isAdmin && (
-                        <div className="actions-cell">
-                          <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                        <div className="xn-section-controls">
+                          <button type="button" className="xn-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
                           <button type="button" className="btn btn--secondary"
                             onClick={() => setDefault(p.project_id, p.id, p.name)}>
                             {isDefault ? 'Clear default' : 'Set default'}
                           </button>
-                          <button type="button" className="btn btn--revoke" onClick={() => del(p.id, p.name)}>Delete</button>
+                          <button type="button" className="xn-btn-secondary" onClick={() => del(p.id, p.name)}>Delete</button>
                         </div>
                       )}
                     </td>
@@ -5183,17 +5183,17 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
   }
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">Protocol Templates</div>
-            <div className="routing-section-sub">
+            <div className="">Protocol Templates</div>
+            <div className="xn-muted">
               Define expected acquisition parameters per manufacturer/model/sequence.
               Studies are checked against matching templates when protocol compliance is required.
             </div>
           </div>
-          <div className="actions-cell">
+          <div className="xn-section-controls">
             {projects.length > 0 && (
               <a
                 className="btn btn--secondary"
@@ -5224,7 +5224,7 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 </button>
               </>
             )}
-            {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
+            {isAdmin && <button type="button" className="xn-btn-primary" onClick={openCreate}>+ New template</button>}
           </div>
         </div>
         {importMsg && (
@@ -5234,15 +5234,15 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
         )}
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>{editingId ? 'Edit template' : 'New template'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Template name *"
+            {formError && <div className="xn-error">{formError}</div>}
+            <div className="">
+              <input className="xn-filter" placeholder="Template name *"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               {!editingId && (
-                <select className="form-select" aria-label="Project"
+                <select className="" aria-label="Project"
                   value={formProject}
                   onChange={e => setFormProject(e.target.value)}>
                   {projects.map(p => (
@@ -5250,28 +5250,28 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                   ))}
                 </select>
               )}
-              <input className="form-input form-input--wide" placeholder="Description"
+              <input className="xn-filter" placeholder="Description"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             <div className="routing-form-section-label">Scanner Match Criteria</div>
-            <div className="form-grid">
-              <input className="form-input" placeholder="Manufacturer (e.g. Siemens)"
+            <div className="">
+              <input className="xn-filter" placeholder="Manufacturer (e.g. Siemens)"
                 value={form.manufacturer}
                 onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))} />
-              <input className="form-input" placeholder="Model (e.g. Prisma)"
+              <input className="xn-filter" placeholder="Model (e.g. Prisma)"
                 value={form.model}
                 onChange={e => setForm(f => ({ ...f, model: e.target.value }))} />
-              <input className="form-input" placeholder="Software version (e.g. syngo MR E11)"
+              <input className="xn-filter" placeholder="Software version (e.g. syngo MR E11)"
                 value={form.software_version}
                 onChange={e => setForm(f => ({ ...f, software_version: e.target.value }))} />
-              <input className="form-input" placeholder="Sequence type (e.g. T1w, FLAIR, DWI)"
+              <input className="xn-filter" placeholder="Sequence type (e.g. T1w, FLAIR, DWI)"
                 value={form.sequence_type}
                 onChange={e => setForm(f => ({ ...f, sequence_type: e.target.value }))} />
             </div>
             <div className="routing-form-section-label">Compliance Rules (JSON)</div>
-            <div className="form-grid">
-              <textarea className="form-input form-input--wide" rows={6}
+            <div className="">
+              <textarea className="xn-filter" rows={6}
                 placeholder='{"SliceThickness":{"min":0.5,"max":1.5},"RepetitionTime":{"min":1900,"max":2200}}'
                 value={form.rules}
                 onChange={e => setForm(f => ({ ...f, rules: e.target.value }))} />
@@ -5281,24 +5281,24 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
               {' '}Enabled
             </label>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="xn-muted">Loading…</div>}
+        {error   && <div className="xn-error">{error}</div>}
         {!loading && !error && templates.length === 0 && (
-          <div className="state-empty">No protocol templates yet. Create one to define expected acquisition parameters.</div>
+          <div className="xn-muted">No protocol templates yet. Create one to define expected acquisition parameters.</div>
         )}
         {!loading && !error && templates.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -5315,8 +5315,8 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
               {templates.map(t => (
                 <tr key={t.id} className={t.enabled ? '' : 'routing-row--disabled'}>
                   <td>
-                    <div className="routing-name">{t.name}</div>
-                    {t.description && <div className="routing-desc">{t.description}</div>}
+                    <div className="">{t.name}</div>
+                    {t.description && <div className="xn-muted">{t.description}</div>}
                   </td>
                   <td>{projectName(t.project_id)}</td>
                   <td>{t.manufacturer || '—'}</td>
@@ -5326,9 +5326,9 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                   <td>{t.enabled ? 'Yes' : 'No'}</td>
                   <td>
                     {isAdmin && (
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEdit(t)}>Edit</button>
-                        <button type="button" className="btn btn--revoke" onClick={() => del(t.id, t.name)}>Delete</button>
+                      <div className="xn-section-controls">
+                        <button type="button" className="xn-btn-secondary" onClick={() => openEdit(t)}>Edit</button>
+                        <button type="button" className="xn-btn-secondary" onClick={() => del(t.id, t.name)}>Delete</button>
                       </div>
                     )}
                   </td>
@@ -5994,16 +5994,16 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
     fetchInstProjects(selectedInst.id)
   }
 
-  if (loading) return <div className="state-loading">Loading institutions…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="xn-muted">Loading institutions…</div>
+  if (error)   return <div className="xn-error">{error}</div>
 
   return (
     <div className="institutions-panel">
-      <div className="routing-section-header">
+      <div className="xn-section-bar">
         <h2>Institutions</h2>
-        <div className="actions-cell">
-          <button type="button" className="btn-refresh" onClick={fetchInstitutions}>Refresh</button>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ Add institution</button>}
+        <div className="xn-section-controls">
+          <button type="button" className="xn-icon-btn" onClick={fetchInstitutions}>Refresh</button>
+          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNew}>+ Add institution</button>}
         </div>
       </div>
       <p className="routing-hint">
@@ -6012,51 +6012,51 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
 
       {/* Create / Edit form */}
       {isAdmin && showForm && (
-        <div className="routing-form">
+        <div className="xn-section">
           <h3>{editingId ? 'Edit institution' : 'New institution'}</h3>
-          {formError && <div className="form-error">{formError}</div>}
-          <div className="form-grid">
-            <input className="form-input" placeholder="Name *" value={form.name}
+          {formError && <div className="xn-error">{formError}</div>}
+          <div className="">
+            <input className="xn-filter" placeholder="Name *" value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-            <input className="form-input" placeholder="Slug (auto-generated)" value={form.slug}
+            <input className="xn-filter" placeholder="Slug (auto-generated)" value={form.slug}
               onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-            <select className="form-select" aria-label="Type" value={form.institution_type}
+            <select className="" aria-label="Type" value={form.institution_type}
               onChange={e => setForm(f => ({ ...f, institution_type: e.target.value as Institution['institution_type'] }))}>
               <option value="sender">Sender (uploads studies)</option>
               <option value="receiver">Receiver (receives studies)</option>
               <option value="both">Both</option>
             </select>
-            <input className="form-input form-input--wide" placeholder="Description" value={form.description}
+            <input className="xn-filter" placeholder="Description" value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div className="routing-form-section-label">Contact</div>
-          <div className="form-grid">
-            <input className="form-input" placeholder="Contact name" value={form.contact_name}
+          <div className="">
+            <input className="xn-filter" placeholder="Contact name" value={form.contact_name}
               onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))} />
-            <input className="form-input" type="email" placeholder="Contact email" value={form.contact_email}
+            <input className="xn-filter" type="email" placeholder="Contact email" value={form.contact_email}
               onChange={e => setForm(f => ({ ...f, contact_email: e.target.value }))} />
           </div>
           <div className="routing-form-section-label">Network Identity</div>
-          <div className="form-grid">
-            <input className="form-input" placeholder="IP ranges (CIDR, comma-separated)" value={form.ip_ranges}
+          <div className="">
+            <input className="xn-filter" placeholder="IP ranges (CIDR, comma-separated)" value={form.ip_ranges}
               onChange={e => setForm(f => ({ ...f, ip_ranges: e.target.value }))} />
-            <input className="form-input" placeholder="DICOM AE title" value={form.ae_title}
+            <input className="xn-filter" placeholder="DICOM AE title" value={form.ae_title}
               onChange={e => setForm(f => ({ ...f, ae_title: e.target.value }))} />
           </div>
-          <div className="form-row form-row--actions">
-            <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+          <div className="xn-form-actions">
+            <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
               {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
             </button>
-            <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </div>
       )}
 
       {/* Institutions table */}
       {institutions.length === 0 && !showForm ? (
-        <div className="state-empty">No institutions yet.</div>
+        <div className="xn-muted">No institutions yet.</div>
       ) : institutions.length > 0 && (
-        <table className="routing-table">
+        <table className="xn-table">
           <thead>
             <tr>
               <th>Institution</th>
@@ -6077,9 +6077,9 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                 ].join(' ')}
               >
                 <td>
-                  <div className="routing-name">{inst.name}</div>
-                  {inst.description && <div className="routing-desc">{inst.description}</div>}
-                  <code className="inst-slug">{inst.slug}</code>
+                  <div className="">{inst.name}</div>
+                  {inst.description && <div className="xn-muted">{inst.description}</div>}
+                  <code className="xn-code">{inst.slug}</code>
                 </td>
                 <td>
                   <span className={`routing-action routing-action--${inst.institution_type}`}>
@@ -6088,9 +6088,9 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </td>
                 <td>
                   {inst.contact_name && <div>{inst.contact_name}</div>}
-                  {inst.contact_email && <div className="routing-desc">{inst.contact_email}</div>}
+                  {inst.contact_email && <div className="xn-muted">{inst.contact_email}</div>}
                 </td>
-                <td className="routing-desc">
+                <td className="xn-muted">
                   {inst.ip_ranges && <div>{inst.ip_ranges}</div>}
                   {inst.ae_title  && <div>AE: {inst.ae_title}</div>}
                 </td>
@@ -6100,18 +6100,18 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                   </span>
                 </td>
                 <td>
-                  <div className="actions-cell">
+                  <div className="xn-section-controls">
                     <button type="button" className="btn btn--share"
                       onClick={() => selectedInst?.id === inst.id ? setSelectedInst(null) : selectInst(inst)}>
                       {selectedInst?.id === inst.id ? 'Close' : 'Projects'}
                     </button>
-                    {isAdmin && <button type="button" className="btn btn--edit" onClick={() => openEdit(inst)}>Edit</button>}
+                    {isAdmin && <button type="button" className="xn-btn-secondary" onClick={() => openEdit(inst)}>Edit</button>}
                     {isAdmin && (
                       <button type="button" className="btn btn--secondary" onClick={() => toggleInst(inst)}>
                         {inst.enabled ? 'Disable' : 'Enable'}
                       </button>
                     )}
-                    {isAdmin && <button type="button" className="btn btn--revoke" onClick={() => deleteInst(inst.id, inst.name)}>Delete</button>}
+                    {isAdmin && <button type="button" className="xn-btn-secondary" onClick={() => deleteInst(inst.id, inst.name)}>Delete</button>}
                   </div>
                 </td>
               </tr>
@@ -6147,17 +6147,17 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
           {isAdmin && (
             <>
               <div className="routing-form-section-label">Link to project</div>
-              {linkError && <div className="form-error">{linkError}</div>}
+              {linkError && <div className="xn-error">{linkError}</div>}
               <div className="form-row">
-                <input className="form-input" placeholder="Project ID (UUID)"
+                <input className="xn-filter" placeholder="Project ID (UUID)"
                   value={linkProjectID} onChange={e => setLinkProjectID(e.target.value)} />
-                <select className="form-select" aria-label="Role" value={linkRole}
+                <select className="" aria-label="Role" value={linkRole}
                   onChange={e => setLinkRole(e.target.value as 'sender' | 'receiver' | 'admin')}>
                   <option value="sender">sender</option>
                   <option value="receiver">receiver</option>
                   <option value="admin">admin</option>
                 </select>
-                <button type="button" className="btn-primary" onClick={linkProject} disabled={linkSaving}>
+                <button type="button" className="xn-btn-primary" onClick={linkProject} disabled={linkSaving}>
                   {linkSaving ? 'Linking…' : 'Link'}
                 </button>
               </div>
@@ -6165,11 +6165,11 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
           )}
 
           {projLoading ? (
-            <div className="state-loading">Loading…</div>
+            <div className="xn-muted">Loading…</div>
           ) : instProjects.length === 0 ? (
-            <div className="state-empty">No projects linked yet.</div>
+            <div className="xn-muted">No projects linked yet.</div>
           ) : (
-            <table className="routing-table">
+            <table className="xn-table">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -6182,13 +6182,13 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                 {instProjects.map(ip => (
                   <tr key={ip.project_id}>
                     <td>
-                      <div className="routing-name">{ip.project_name || ip.project_id}</div>
+                      <div className="">{ip.project_name || ip.project_id}</div>
                     </td>
                     <td><code className={`routing-action routing-action--${ip.role}`}>{ip.role}</code></td>
-                    <td className="td-date">{fmtDate(ip.created_at)}</td>
+                    <td className="">{fmtDate(ip.created_at)}</td>
                     <td>
                       {isAdmin && (
-                        <button type="button" className="btn btn--revoke" onClick={() => unlinkProject(ip.project_id)}>
+                        <button type="button" className="xn-btn-secondary" onClick={() => unlinkProject(ip.project_id)}>
                           Unlink
                         </button>
                       )}
