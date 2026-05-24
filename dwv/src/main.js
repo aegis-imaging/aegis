@@ -102,6 +102,10 @@ if (!studyUID) {
   app = new App()
   app.init(options)
 
+  // Keep DWV canvas dimensions in sync with the container whenever the
+  // window (or parent iframe) is resized.
+  window.addEventListener('resize', () => app.onResize())
+
   // 'load' fires once per loaded data item, AFTER DWV has set up the layer
   // group's active layer — the correct place to call setTool(). Using 'loadend'
   // instead causes getActiveLayer() to return undefined so bindLayerGroup() is
@@ -141,9 +145,9 @@ if (!studyUID) {
       if (container) container.style.display = 'none'
     } else {
       setStatus('Ready', 'ready')
-      // Dispatch resize so DWV recomputes canvas dimensions — guards against a
-      // race where the container wasn't fully painted during the initial render.
-      window.dispatchEvent(new Event('resize'))
+      // Defer onResize so the browser finishes painting the iframe layout
+      // before DWV queries clientHeight to recompute canvas dimensions.
+      setTimeout(() => app.onResize(), 0)
     }
   })
 
