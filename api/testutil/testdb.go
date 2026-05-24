@@ -130,7 +130,8 @@ func cleanAndSeed(t *testing.T, db *sql.DB) {
 			audit_trail,
 			api_keys,
 			invite_codes,
-			projects
+			projects,
+			tenants
 		CASCADE
 	`)
 	if err != nil {
