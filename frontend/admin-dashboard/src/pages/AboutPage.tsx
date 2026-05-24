@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import '../styles/about.css'
 
 // AboutPage is the public landing surface that visitors see when they hit
@@ -40,9 +39,12 @@ function HeroSection() {
           study navigation modeled on XNAT.
         </p>
         <div className="about-actions">
-          <Link to="/" className="about-btn about-btn-primary">
+          {/* Plain <a href>, not <Link to>: client-side router stays in the
+              React app and never hits the IAP-gated backend. See AboutLayout
+              comments for full rationale. */}
+          <a href="/" className="about-btn about-btn-primary">
             Sign in
-          </Link>
+          </a>
           <a
             href="https://github.com/aegis-imaging/aegis"
             target="_blank"
@@ -176,7 +178,7 @@ function ContactSection() {
             GitHub
           </a>
           . Existing collaborators with invite credentials can{' '}
-          <Link to="/">sign in</Link> to the application.
+          <a href="/">sign in</a> to the application.
         </p>
       </div>
     </section>

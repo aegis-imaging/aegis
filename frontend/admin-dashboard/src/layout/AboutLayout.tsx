@@ -4,9 +4,14 @@ import '../styles/about.css'
 // AboutLayout is the public chrome around /about/*. It deliberately does not
 // call /api/auth/me — these routes are reachable without authentication so
 // the GCP IAP path-based config can route them through the no-IAP backend
-// service (admin_public). The "Sign in" button points at the apex root,
-// which falls through to the IAP-gated backend and triggers the standard
-// Google login flow.
+// service (admin_public).
+//
+// "Sign in" MUST be a plain <a href> (full page navigation), NOT a
+// react-router <Link> (client-side navigation). Client-side nav stays
+// inside the React app at /about, hits RootRedirect, gets 401 from
+// /api/auth/me, and bounces straight back to /about — infinite loop.
+// A real <a href="/"> takes the browser through the IAP-gated backend,
+// which triggers the Google OAuth flow.
 export function AboutLayout() {
   return (
     <div className="about-shell">
@@ -24,9 +29,9 @@ export function AboutLayout() {
             Source
           </a>
         </nav>
-        <Link to="/" className="about-signin">
+        <a href="/" className="about-signin">
           Sign in
-        </Link>
+        </a>
       </header>
       <main>
         <Outlet />
