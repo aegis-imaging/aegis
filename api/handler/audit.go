@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -46,6 +47,12 @@ func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request) {
 		Search:       q.Get("search"),
 		DateFrom:     dateFrom,
 		DateTo:       dateTo,
+	}
+	// Tenant scope: a tenant in the request context restricts the listing to
+	// that tenant's audit rows. Legacy single-tenant requests (no tenant)
+	// see everything they would have seen pre-multitenant.
+	if t := middleware.TenantFromContext(r.Context()); t != nil {
+		f.TenantID = t.ID
 	}
 	projectID := q.Get("project_id")
 	access, ok := s.requireResearcherProjectScope(w, r, projectID)

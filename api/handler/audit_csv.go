@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -34,6 +35,9 @@ func (s *Server) ExportAuditCSV(w http.ResponseWriter, r *http.Request) {
 		Search:       q.Get("search"),
 		DateFrom:     dateFrom,
 		DateTo:       dateTo,
+	}
+	if t := middleware.TenantFromContext(r.Context()); t != nil {
+		f.TenantID = t.ID
 	}
 	projectID := q.Get("project_id")
 	access, ok := s.requireResearcherProjectScope(w, r, projectID)
