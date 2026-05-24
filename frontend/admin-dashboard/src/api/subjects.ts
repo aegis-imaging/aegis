@@ -111,7 +111,39 @@ async function getJSON<T>(url: string): Promise<T> {
   return (await res.json()) as T
 }
 
+async function postJSON<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    // Try to surface the server's error message so the form can show it.
+    let detail = `HTTP ${res.status}`
+    try {
+      const j = await res.json()
+      if (j && typeof j === 'object' && 'error' in j && typeof j.error === 'string') {
+        detail = j.error
+      }
+    } catch {
+      // body wasn't JSON; fall back to status code
+    }
+    throw new Error(detail)
+  }
+  return (await res.json()) as T
+}
+
 export const apiListProjects = () => getJSON<Project[]>('/api/projects')
+
+export type CreateProjectRequest = {
+  name: string
+  slug?: string
+  description?: string
+}
+
+export const apiCreateProject = (req: CreateProjectRequest) =>
+  postJSON<Project>('/api/projects', req)
 
 export const apiGetProject = (projectId: string) =>
   getJSON<Project>(`/api/projects/${encodeURIComponent(projectId)}`)
