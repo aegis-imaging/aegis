@@ -1,0 +1,31 @@
+# Runtime deps the bridge needs at PyInstaller-freeze time.
+# Versions deliberately float on the minor — pin in CI lockfile.
+
+# DICOM stack
+pydicom>=2.4.0
+pynetdicom>=2.0.2
+pylibjpeg>=2.0.0
+pylibjpeg-openjpeg>=2.0.0
+pylibjpeg-libjpeg>=2.0.0
+
+# Cloud storage SDKs (storage_backend.py picks one at runtime)
+boto3>=1.34.0
+azure-storage-blob>=12.19.0
+azure-identity>=1.15.0
+google-cloud-storage>=2.14.0
+
+# Service framework
+fastapi>=0.110.0
+uvicorn>=0.29.0
+requests>=2.31.0
+
+# Config + credentials
+pyyaml>=6.0
+keyring>=24.0
+
+# Build deps
+pyinstaller>=6.0
+
+# Windows-only (uncomment in the Windows CI job — listed here as the source
+# of truth for the version pin):
+# pywin32>=306
