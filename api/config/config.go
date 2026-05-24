@@ -193,16 +193,16 @@ func Load() *Config {
 		AzureStorageContainer: envOr("AZURE_STORAGE_CONTAINER", "dicom"),
 
 		DefacingServiceURL:       os.Getenv("DEFACING_SERVICE_URL"),       // e.g. http://localhost:8081
-		PhiDetectionServiceURL:   os.Getenv("PHI_DETECTION_SERVICE_URL"),  // e.g. http://localhost:8082
-		QcServiceURL:             os.Getenv("QC_SERVICE_URL"),             // e.g. http://localhost:8083
-		BidsServiceURL:           os.Getenv("BIDS_SERVICE_URL"),           // e.g. http://localhost:8084
-		ClassificationServiceURL: os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
-		ProtocolServiceURL:       os.Getenv("PROTOCOL_SERVICE_URL"),       // e.g. http://localhost:8086
-		DimseReceiverURL:         os.Getenv("DIMSE_RECEIVER_URL"),         // e.g. http://localhost:8087
+		PhiDetectionServiceURL:   sidecarURL("PHI_DETECTION_SERVICE_URL",   "phi"),
+		QcServiceURL:             sidecarURL("QC_SERVICE_URL",              "qc"),
+		BidsServiceURL:           sidecarURL("BIDS_SERVICE_URL",            "bids"),
+		ClassificationServiceURL: sidecarURL("CLASSIFICATION_SERVICE_URL",  "classify"),
+		ProtocolServiceURL:       sidecarURL("PROTOCOL_SERVICE_URL",        "protocol"),
+		SynthServiceURL:          sidecarURL("SYNTH_SERVICE_URL",           "synth"),
+		DimseReceiverURL:         os.Getenv("DIMSE_RECEIVER_URL"),          // e.g. http://localhost:8087
 		DimseOperatorAPIKey:      os.Getenv("DIMSE_OPERATOR_API_KEY"),
-		AnalyticsServiceURL:      os.Getenv("ANALYTICS_SERVICE_URL"),      // e.g. http://localhost:8089
-		SctServiceURL:            os.Getenv("SCT_SERVICE_URL"),            // e.g. http://localhost:8090
-		SynthServiceURL:          os.Getenv("SYNTH_SERVICE_URL"),          // e.g. http://localhost:8088
+		AnalyticsServiceURL:      os.Getenv("ANALYTICS_SERVICE_URL"),       // e.g. http://localhost:8089
+		SctServiceURL:            os.Getenv("SCT_SERVICE_URL"),             // e.g. http://localhost:8090
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 
@@ -268,6 +268,26 @@ func floatEnvOr(key string, fallback float64) float64 {
 		}
 	}
 	return fallback
+}
+
+// sidecarURL resolves the per-sidecar base URL from environment.
+// Legacy override: if the per-sidecar env var (e.g. PHI_DETECTION_SERVICE_URL)
+// is set, use it unchanged — preserves backward compatibility for any local
+// dev setup that still runs the old standalone containers.
+// Otherwise derive it from the unified DICOM_TOOLS_URL by appending the
+// sub-module's prefix (e.g. DICOM_TOOLS_URL + "/phi"). This is the path that
+// will be taken in production once the consolidated dicom-tools Cloud Run
+// service is deployed.
+// Returns empty string if neither is set, which keeps the existing
+// "feature disabled" semantics on the consuming handlers.
+func sidecarURL(legacyEnvKey, prefix string) string {
+	if v := os.Getenv(legacyEnvKey); v != "" {
+		return v
+	}
+	if base := os.Getenv("DICOM_TOOLS_URL"); base != "" {
+		return base + "/" + prefix
+	}
+	return ""
 }
 
 func envInt(key string, fallback int) int {
