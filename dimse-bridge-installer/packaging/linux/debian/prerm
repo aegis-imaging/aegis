@@ -1,0 +1,23 @@
+#!/bin/sh
+# prerm — runs before dpkg removes the package.
+#
+# Stop and disable the service so dpkg can safely delete the binary.
+
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            systemctl stop aegis-dimse-bridge.service || true
+            systemctl disable aegis-dimse-bridge.service || true
+        fi
+        ;;
+    failed-upgrade)
+        ;;
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

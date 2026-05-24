@@ -1,0 +1,17 @@
+Package: aegis-dimse-bridge
+Version: 1.0.0
+Section: net
+Priority: optional
+Architecture: amd64
+Depends: libc6 (>= 2.31), libssl3 | libssl1.1, adduser
+Maintainer: AEGIS Imaging <ops@aegisimaging.ai>
+Homepage: https://aegisimaging.ai
+Description: AEGIS DIMSE Bridge — DICOM C-STORE receiver for AEGIS
+ The AEGIS DIMSE Bridge accepts DICOM C-STORE associations from local
+ PACS, modalities, and workstations on TCP/11112 and securely forwards
+ studies to the AEGIS control plane for de-identification, quality
+ control, and downstream distribution.
+ .
+ The bridge is a self-contained PyInstaller bundle: it ships its own
+ Python interpreter and DICOM stack, so the only host dependencies are
+ libc and OpenSSL.

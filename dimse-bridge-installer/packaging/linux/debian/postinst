@@ -1,0 +1,52 @@
+#!/bin/sh
+# postinst — runs after dpkg unpacks the .deb.
+#
+# Creates the _aegis service user, ensures config + log dirs exist, then
+# enables and starts the systemd unit.
+
+set -e
+
+case "$1" in
+    configure)
+        if ! getent passwd _aegis >/dev/null; then
+            adduser --system --group --no-create-home \
+                --home /var/lib/aegis \
+                --shell /usr/sbin/nologin \
+                --gecos "AEGIS DIMSE Bridge" \
+                _aegis
+        fi
+
+        mkdir -p /etc/aegis /var/log/aegis /var/lib/aegis
+        chown _aegis:_aegis /var/log/aegis /var/lib/aegis
+        chown root:_aegis /etc/aegis
+        chmod 0750 /etc/aegis
+
+        # Install starter bridge.yml if absent — dpkg already handles conffile
+        # promotion, this branch only fires when the file was never shipped.
+        if [ ! -f /etc/aegis/bridge.yml ]; then
+            cat > /etc/aegis/bridge.yml <<'EOF'
+# AEGIS DIMSE Bridge configuration.
+# Run `sudo aegis-bridge pair --server https://api.aegisimaging.ai --token <TOKEN>`
+# to populate credentials, then `sudo systemctl restart aegis-dimse-bridge`.
+server_url: ""
+listen_port: 11112
+aet: "AEGISBRIDGE"
+EOF
+            chown root:_aegis /etc/aegis/bridge.yml
+            chmod 0640 /etc/aegis/bridge.yml
+        fi
+
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload
+            systemctl enable --now aegis-dimse-bridge.service || true
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
