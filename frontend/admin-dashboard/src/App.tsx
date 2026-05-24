@@ -796,20 +796,6 @@ function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' |
 
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 
-const ACTION_GROUPS: Record<string, string> = {
-  'upload.init':      'upload',
-  'upload.complete':  'upload',
-  'ingest.internal':  'upload',
-  'study.approved':   'study-ok',
-  'study.rejected':   'study-err',
-  'share.created':    'share',
-  'share.revoked':    'share-revoked',
-  'export.redeemed':  'share',
-  'deface.triggered': 'deface',
-  'deface.complete':  'deface',
-  'deface.failed':    'deface-err',
-}
-
 const AUDIT_PAGE_SIZE = 100
 const AUDIT_CATEGORIES = ['study', 'admin_user', 'pipeline', 'phi_scan', 'qc_check', 'bids', 'classification', 'protocol_check', 'export', 'routing', 'institution', 'project', 'digest', 'destination']
 
@@ -907,13 +893,30 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
   })()
 
   return (
-    <div>
-      <div className="audit-toolbar">
-        <div className="audit-filters">
-          <span className="audit-filter-label">Category:</span>
+    <>
+      {/* Filters */}
+      <section className="xn-section">
+        <div className="xn-section-bar">
+          <h2>Filters</h2>
+          <div className="xn-section-controls">
+            <button
+              type="button"
+              className="xn-icon-btn"
+              onClick={() => fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page)}
+              title="Refresh audit log"
+              aria-label="Refresh audit log"
+            >
+              ↻
+            </button>
+            <a href={auditCsvUrl} download="audit.csv" className="xn-btn-secondary">Export CSV</a>
+          </div>
+        </div>
+
+        <div className="xn-chip-row">
+          <span className="xn-chip-row-label">Category:</span>
           <button
             type="button"
-            className={`audit-filter-btn${actionFilter === '' ? ' audit-filter-btn--active' : ''}`}
+            className={`xn-chip${actionFilter === '' ? ' xn-chip-active' : ''}`}
             onClick={() => setCategory('')}
           >
             All
@@ -922,150 +925,189 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
             <button
               key={cat}
               type="button"
-              className={`audit-filter-btn${actionFilter === cat ? ' audit-filter-btn--active' : ''}`}
+              className={`xn-chip${actionFilter === cat ? ' xn-chip-active' : ''}`}
               onClick={() => setCategory(cat === actionFilter ? '' : cat)}
             >
               {cat}
             </button>
           ))}
         </div>
-        <div className="audit-actor-filter">
-          <input
-            type="text"
-            placeholder="Filter by actor (email)…"
-            value={actorInput}
-            onChange={e => setActorInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && applyActorFilter()}
-            className="audit-actor-input"
-          />
-          <button type="button" className="btn-secondary" onClick={applyActorFilter}>Apply</button>
-          {actorFilter && <button type="button" className="btn-secondary" onClick={clearActorFilter}>Clear</button>}
-        </div>
-        <div className="audit-actor-filter">
-          <input
-            type="text"
-            placeholder="Search across actor, action, resource…"
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && applySearch()}
-            className="audit-actor-input"
-            style={{minWidth:'220px'}}
-          />
-          <button type="button" className="btn-secondary" onClick={applySearch}>Search</button>
-          {(searchFilter || dateFrom || dateTo) && <button type="button" className="btn-secondary" onClick={clearSearch}>Clear</button>}
-        </div>
-        <div className="audit-actor-filter" style={{gap:'6px'}}>
-          <label style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>From</label>
-          <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(0) }} className="audit-actor-input" style={{width:'130px'}} />
-          <label style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>To</label>
-          <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0) }} className="audit-actor-input" style={{width:'130px'}} />
-        </div>
-        <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page)}>Refresh</button>
-        <a href={auditCsvUrl} download="audit.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
-      </div>
 
-      {/* Recent actors summary */}
-      <div style={{marginBottom:'8px'}}>
-        <button type="button" className="btn-secondary" onClick={loadActors} style={{fontSize:'0.8rem'}}>
-          {showActors ? '▲ Hide activity summary' : '▼ Recent admin activity'}
-        </button>
+        <div className="xn-section-controls" style={{ marginTop: 12, alignItems: 'center' }}>
+          <div className="xn-control">
+            <span className="xn-control-label">Actor</span>
+            <input
+              type="text"
+              className="xn-filter"
+              placeholder="email…"
+              value={actorInput}
+              onChange={e => setActorInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && applyActorFilter()}
+              style={{ minWidth: 180 }}
+            />
+            <button type="button" className="xn-btn-secondary" onClick={applyActorFilter}>Apply</button>
+            {actorFilter && <button type="button" className="xn-btn-secondary" onClick={clearActorFilter}>Clear</button>}
+          </div>
+          <div className="xn-control">
+            <span className="xn-control-label">Search</span>
+            <input
+              type="text"
+              className="xn-filter"
+              placeholder="actor / action / resource…"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && applySearch()}
+              style={{ minWidth: 220 }}
+            />
+            <button type="button" className="xn-btn-secondary" onClick={applySearch}>Search</button>
+            {(searchFilter || dateFrom || dateTo) && (
+              <button type="button" className="xn-btn-secondary" onClick={clearSearch}>Clear</button>
+            )}
+          </div>
+          <div className="xn-control">
+            <span className="xn-control-label">From</span>
+            <input
+              type="date"
+              className="xn-filter"
+              value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPage(0) }}
+              style={{ minWidth: 140 }}
+            />
+          </div>
+          <div className="xn-control">
+            <span className="xn-control-label">To</span>
+            <input
+              type="date"
+              className="xn-filter"
+              value={dateTo}
+              onChange={e => { setDateTo(e.target.value); setPage(0) }}
+              style={{ minWidth: 140 }}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Recent actors */}
+      <section className="xn-section">
+        <div className="xn-section-bar">
+          <h2>Recent admin activity</h2>
+          <button type="button" className="xn-btn-secondary" onClick={loadActors}>
+            {showActors ? 'Hide' : 'Show'}
+          </button>
+        </div>
         {showActors && actors && (
-          <div style={{marginTop:'6px',overflowX:'auto'}}>
-            <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'700px'}}>
-              <thead><tr><th>Actor</th><th>Actions (30d)</th><th>Last action</th><th>Last seen</th></tr></thead>
+          <div className="xn-table-wrap">
+            <table className="xn-table">
+              <thead>
+                <tr><th>Actor</th><th>Actions (30d)</th><th>Last action</th><th>Last seen</th></tr>
+              </thead>
               <tbody>
-                {actors.length === 0
-                  ? <tr><td colSpan={4} className="td-muted">No activity in last 30 days.</td></tr>
-                  : actors.map(a => (
-                    <tr key={a.actor}>
-                      <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{a.actor}</td>
-                      <td>{a.action_count}</td>
-                      <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{a.last_action}</td>
-                      <td className="td-date">{fmtDate(a.last_seen_at)}</td>
-                    </tr>
-                  ))}
+                {actors.length === 0 ? (
+                  <tr><td colSpan={4} className="xn-muted">No activity in last 30 days.</td></tr>
+                ) : actors.map(a => (
+                  <tr key={a.actor}>
+                    <td><code className="xn-code">{a.actor}</code></td>
+                    <td>{a.action_count}</td>
+                    <td><code className="xn-code">{a.last_action}</code></td>
+                    <td>{fmtDate(a.last_seen_at)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </section>
 
-      {loading && <div className="state-loading">Loading audit log…</div>}
-      {error   && <div className="state-error">{error}</div>}
+      {/* Entries */}
+      <section className="xn-section">
+        {loading && <div className="xn-muted">Loading audit log…</div>}
+        {error && <div className="xn-error">{error}</div>}
 
-      {!loading && !error && entries.length === 0 && (
-        <div className="state-empty">No audit entries yet.</div>
-      )}
+        {!loading && !error && entries.length === 0 && (
+          <div className="xn-muted">No audit entries yet.</div>
+        )}
 
-      {!loading && !error && entries.length > 0 && (
-        <div className="audit-table-wrap">
-          <div className="audit-pagination-bar">
-            <span className="audit-total">{total} entries</span>
-            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
-          </div>
-          <table className="audit-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Actor</th>
-                <th>Resource</th>
-                <th>IP</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map(e => {
-                const group = ACTION_GROUPS[e.action] ?? 'neutral'
-                const hasDetail = e.detail && Object.keys(e.detail).length > 0
-                const isExpanded = expandedId === e.id
-                return (
-                  <>
-                    <tr key={e.id} className="audit-row">
-                      <td className="audit-time">{fmtDate(e.created_at)}</td>
-                      <td><span className={`audit-action audit-action--${group}`}>{e.action}</span></td>
-                      <td className="audit-actor">{e.actor || '—'}</td>
-                      <td className="audit-resource">
-                        <span className="audit-resource-type">{e.resource_type}</span>
-                        <span className="audit-resource-id">{uidShort(e.resource_id)}</span>
-                      </td>
-                      <td className="audit-ip">{e.ip_address || '—'}</td>
-                      <td>
-                        {hasDetail ? (
-                          <button
-                            type="button"
-                            className="audit-detail-toggle"
-                            onClick={() => setExpandedId(isExpanded ? null : e.id)}
-                          >
-                            {isExpanded ? 'hide' : 'show'}
-                          </button>
-                        ) : (
-                          <span className="audit-no-detail">—</span>
+        {!loading && !error && entries.length > 0 && (
+          <>
+            <div className="xn-section-bar">
+              <span className="xn-muted">{total} entries</span>
+              <div className="xn-section-controls">
+                <button type="button" className="xn-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                <span className="xn-muted">Page {page + 1} of {totalPages}</span>
+                <button type="button" className="xn-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+              </div>
+            </div>
+
+            <div className="xn-table-wrap">
+              <table className="xn-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Resource</th>
+                    <th>IP</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map(e => {
+                    const hasDetail = e.detail && Object.keys(e.detail).length > 0
+                    const isExpanded = expandedId === e.id
+                    return (
+                      <Fragment key={e.id}>
+                        <tr>
+                          <td>{fmtDate(e.created_at)}</td>
+                          <td><span className="xn-pill">{e.action}</span></td>
+                          <td>{e.actor || '—'}</td>
+                          <td>
+                            <span className="xn-muted" style={{ marginRight: 6 }}>{e.resource_type}</span>
+                            <code className="xn-code">{uidShort(e.resource_id)}</code>
+                          </td>
+                          <td>{e.ip_address || '—'}</td>
+                          <td>
+                            {hasDetail ? (
+                              <button
+                                type="button"
+                                className="xn-btn-secondary"
+                                style={{ padding: '2px 8px', fontSize: 12 }}
+                                onClick={() => setExpandedId(isExpanded ? null : e.id)}
+                              >
+                                {isExpanded ? 'hide' : 'show'}
+                              </button>
+                            ) : (
+                              <span className="xn-muted">—</span>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && hasDetail && (
+                          <tr>
+                            <td colSpan={6}>
+                              <pre style={{ whiteSpace: 'pre-wrap', margin: 0, padding: 12, background: 'var(--xn-bg)', borderRadius: 6, fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace', fontSize: 12 }}>
+                                {JSON.stringify(e.detail, null, 2)}
+                              </pre>
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                    </tr>
-                    {isExpanded && hasDetail && (
-                      <tr key={`${e.id}-detail`} className="audit-detail-row">
-                        <td colSpan={6}>
-                          <pre className="audit-detail-pre">{JSON.stringify(e.detail, null, 2)}</pre>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                )
-              })}
-            </tbody>
-          </table>
-          <div className="audit-pagination-bar audit-pagination-bar--bottom">
-            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
-          </div>
-        </div>
-      )}
-    </div>
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="xn-section-bar" style={{ marginTop: 12 }}>
+              <span />
+              <div className="xn-section-controls">
+                <button type="button" className="xn-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                <span className="xn-muted">Page {page + 1} of {totalPages}</span>
+                <button type="button" className="xn-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+    </>
   )
 }
 
