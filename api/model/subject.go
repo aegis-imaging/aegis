@@ -7,11 +7,18 @@ import (
 	"github.com/lib/pq"
 )
 
-// SubjectAggregate enriches a SubjectSummary with the data the XNAT-style
-// subject list needs in a single round trip: study count, latest study date,
+// SubjectAggregate enriches a subject row with the data the XNAT-style
+// listing needs in a single round trip: study count, latest study date,
 // distinct modalities, and optional research demographics.
+//
+// `SubjectID` is the canonical, editable subject identifier (populated at
+// ingest from the DICOM-derived pseudonymized PatientID, then optionally
+// re-keyed by researchers to merge patients across studies).
+// `AnonPatientID` is also surfaced so the UI can display the immutable
+// ingest-time value when it differs from a researcher-assigned subject_id.
 type SubjectAggregate struct {
 	SubjectID       string               `json:"subject_id"`
+	AnonPatientID   *string              `json:"anon_patient_id,omitempty"`
 	ProjectID       string               `json:"project_id"`
 	StudyCount      int                  `json:"study_count"`
 	LatestStudyDate *string              `json:"latest_study_date,omitempty"`
@@ -20,18 +27,20 @@ type SubjectAggregate struct {
 }
 
 // ListProjectSubjects returns one row per distinct subject_id in the given
-// project, enriched with study count, most recent study_date, and the set of
-// modalities seen across that subject's studies. Demographics are looked up
-// separately by the caller / handler so this function stays cheap when only
-// the listing is needed.
+// project, enriched with study count, most recent study_date, the set of
+// modalities seen across that subject's studies, and the ingest-time
+// anon_patient_id (when it agrees within the group). Demographics are
+// looked up separately by the handler so this stays cheap when only the
+// listing is needed.
 //
-// If institutionID is non-empty (site-scoped researchers), the aggregate is
-// computed only over studies in that institution.
+// If institutionID is non-empty (site-scoped researchers), the aggregate
+// is computed only over studies in that institution.
 func ListProjectSubjects(ctx context.Context, db *sql.DB, projectID, institutionID string) ([]SubjectAggregate, error) {
 	q := `
 		SELECT
 			subject_id,
 			project_id,
+			max(anon_patient_id) AS anon_patient_id,
 			count(*) AS study_count,
 			max(study_date) AS latest_study_date,
 			COALESCE(
@@ -60,7 +69,14 @@ func ListProjectSubjects(ctx context.Context, db *sql.DB, projectID, institution
 	for rows.Next() {
 		var a SubjectAggregate
 		var mods pq.StringArray
-		if err := rows.Scan(&a.SubjectID, &a.ProjectID, &a.StudyCount, &a.LatestStudyDate, &mods); err != nil {
+		if err := rows.Scan(
+			&a.SubjectID,
+			&a.ProjectID,
+			&a.AnonPatientID,
+			&a.StudyCount,
+			&a.LatestStudyDate,
+			&mods,
+		); err != nil {
 			return nil, err
 		}
 		a.Modalities = []string(mods)
@@ -69,14 +85,15 @@ func ListProjectSubjects(ctx context.Context, db *sql.DB, projectID, institution
 	return out, rows.Err()
 }
 
-// GetProjectSubject returns a single subject aggregate (study count, latest
-// study date, modalities) for a (project, subject) pair. Returns sql.ErrNoRows
-// if the subject has no studies in the project.
+// GetProjectSubject returns a single subject aggregate (study count,
+// latest study date, modalities) for a (project, subject_id) pair.
+// Returns sql.ErrNoRows if no matching studies exist.
 func GetProjectSubject(ctx context.Context, db *sql.DB, projectID, subjectID, institutionID string) (*SubjectAggregate, error) {
 	q := `
 		SELECT
 			subject_id,
 			project_id,
+			max(anon_patient_id) AS anon_patient_id,
 			count(*) AS study_count,
 			max(study_date) AS latest_study_date,
 			COALESCE(
@@ -97,7 +114,14 @@ func GetProjectSubject(ctx context.Context, db *sql.DB, projectID, subjectID, in
 	var a SubjectAggregate
 	var mods pq.StringArray
 	err := db.QueryRowContext(ctx, q, args...).
-		Scan(&a.SubjectID, &a.ProjectID, &a.StudyCount, &a.LatestStudyDate, &mods)
+		Scan(
+			&a.SubjectID,
+			&a.ProjectID,
+			&a.AnonPatientID,
+			&a.StudyCount,
+			&a.LatestStudyDate,
+			&mods,
+		)
 	if err != nil {
 		return nil, err
 	}

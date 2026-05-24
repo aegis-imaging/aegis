@@ -116,10 +116,20 @@ func scanStudy(row scannable, s *Study) error {
 // Distinct from UpdateStudyMetadata, which the classification service uses
 // to update modality/body_part after model inference.
 func UpdateStudyDicomMetadata(ctx context.Context, db *sql.DB, studyID string, anonPatientID, studyDate *string) error {
+	// When the backfill discovers an anon_patient_id for a legacy study,
+	// seed subject_id too (only if subject_id is still NULL/empty). This
+	// keeps the editable subject identifier and the ingest-time audit
+	// value in sync for studies that pre-dated the unified model.
 	_, err := db.ExecContext(ctx, `
 		UPDATE studies
 		SET anon_patient_id = COALESCE($1, anon_patient_id),
 		    study_date      = COALESCE($2, study_date),
+		    subject_id      = CASE
+		                          WHEN (subject_id IS NULL OR subject_id = '')
+		                               AND $1 IS NOT NULL AND $1 <> ''
+		                          THEN $1
+		                          ELSE subject_id
+		                      END,
 		    updated_at      = now()
 		WHERE id = $3`,
 		anonPatientID, studyDate, studyID)
@@ -134,9 +144,19 @@ func SetStudyAutoShareURL(ctx context.Context, db *sql.DB, studyID, url string) 
 }
 
 func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
+	// subject_id is the canonical, editable subject identifier. When a
+	// caller doesn't explicitly provide one (legacy paths, tests), fall
+	// back to anon_patient_id so the row never lands with both NULL —
+	// that keeps the XNAT-style subject listing from missing newly
+	// ingested studies.
+	subjectID := s.SubjectID
+	if subjectID == nil && s.AnonPatientID != nil && *s.AnonPatientID != "" {
+		v := *s.AnonPatientID
+		subjectID = &v
+	}
 	return db.QueryRowContext(ctx, `
 		INSERT INTO studies (project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
-		                     study_description, study_date, anon_patient_id, series_count, instance_count, status, defacing_required,
+		                     study_description, study_date, anon_patient_id, subject_id, series_count, instance_count, status, defacing_required,
 		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 		                     bids_required, bids_status,
 		                     classification_required, classification_status,
@@ -145,10 +165,10 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		                     pixel_redaction_required, pixel_redaction_status,
 		                     analytics_required, analytics_status,
 		                     sct_required, sct_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
-		s.StudyDescription, s.StudyDate, s.AnonPatientID, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
+		s.StudyDescription, s.StudyDate, s.AnonPatientID, subjectID, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
 		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus,
 		s.BidsRequired, s.BidsStatus,
 		s.ClassificationRequired, s.ClassificationStatus,
@@ -158,6 +178,10 @@ func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 		s.AnalyticsRequired, s.AnalyticsStatus,
 		s.SctRequired, s.SctStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
+	// Note: callers reading s.SubjectID after CreateStudy will see what
+	// they passed in; we don't write the fallback back into s to keep
+	// the function side-effect surface minimal. The persisted value is
+	// correct in the database either way.
 }
 
 func GetStudyByID(ctx context.Context, db *sql.DB, id string) (*Study, error) {

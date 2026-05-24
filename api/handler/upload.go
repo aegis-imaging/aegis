@@ -339,6 +339,10 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 	}
 
 	// Create study record
+	// SubjectID is the canonical, editable subject identifier. At ingest
+	// we initialize it to the DICOM-derived anonymized PatientID so the
+	// study lands in the XNAT-style subject listing immediately; a
+	// researcher can later re-key it to merge patients across studies.
 	study := &model.Study{
 		ProjectID:        session.ProjectID,
 		UploadSessionID:  &session.ID,
@@ -349,6 +353,7 @@ func (s *Server) ingestFiles(ctx context.Context, session *model.UploadSession, 
 		StudyDescription: "",
 		StudyDate:        studyDate,
 		AnonPatientID:    anonPatientIDPtr,
+		SubjectID:        anonPatientIDPtr,
 		SeriesCount:      0,
 		InstanceCount:    len(files),
 		Status:           "received",
