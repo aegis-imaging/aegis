@@ -1,4 +1,4 @@
-// Spoke mTLS middleware — identifies spoke-site routers by their client cert.
+// Satellite mTLS middleware — identifies satellite-site routers by their client cert.
 //
 // In production, TLS is typically terminated at a reverse proxy (GCP HTTPS LB,
 // AWS ALB, nginx, etc.). The proxy is expected to forward the validated peer
@@ -8,9 +8,9 @@
 //   X-Client-Cert-Fingerprint: hex SHA-256 fingerprint (some load balancers only forward this)
 //
 // We compute the SHA-256 thumbprint over the DER-encoded cert and look up the
-// institution by it. On success we attach a SpokeIdentity to the request
+// institution by it. On success we attach a SatelliteIdentity to the request
 // context; downstream handlers (e.g. upload-init) can use it to attribute the
-// incoming study to the right spoke without an API key.
+// incoming study to the right satellite without an API key.
 //
 // If no cert is present, the middleware is a no-op — the request continues
 // down the normal auth chain (browser session, API key, IP allowlist).
@@ -34,50 +34,50 @@ import (
 const (
 	headerClientCert        = "X-Client-Cert"
 	headerClientCertFP      = "X-Client-Cert-Fingerprint"
-	headerSpokeSiteAdvisory = "X-Aegis-Spoke-Site"
+	headerSatelliteSiteAdvisory = "X-Aegis-Satellite-Site"
 )
 
-// SpokeIdentity is what the middleware attaches to ctx on success.
-type SpokeIdentity struct {
+// SatelliteIdentity is what the middleware attaches to ctx on success.
+type SatelliteIdentity struct {
 	Institution        *model.Institution
 	CertThumbprint     string // lowercase hex sha256
 	CertSubjectDN      string
-	SiteAdvisory       string // value of X-Aegis-Spoke-Site (informational)
+	SiteAdvisory       string // value of X-Aegis-Satellite-Site (informational)
 	ReadDirectlyFromTLS bool
 }
 
-type spokeContextKey struct{}
+type satelliteContextKey struct{}
 
-// SpokeIdentityContextKey returns the context key used for SpokeIdentity.
+// SatelliteIdentityContextKey returns the context key used for SatelliteIdentity.
 // Exposed for tests.
-func SpokeIdentityContextKey() any { return spokeContextKey{} }
+func SatelliteIdentityContextKey() any { return satelliteContextKey{} }
 
-// SpokeFromContext returns the SpokeIdentity, if any.
-func SpokeFromContext(ctx context.Context) *SpokeIdentity {
-	if v, ok := ctx.Value(spokeContextKey{}).(*SpokeIdentity); ok {
+// SatelliteFromContext returns the SatelliteIdentity, if any.
+func SatelliteFromContext(ctx context.Context) *SatelliteIdentity {
+	if v, ok := ctx.Value(satelliteContextKey{}).(*SatelliteIdentity); ok {
 		return v
 	}
 	return nil
 }
 
-// WithSpokeMTLS wraps the next handler with spoke-mTLS context attachment.
+// WithSatelliteMTLS wraps the next handler with satellite-mTLS context attachment.
 // The middleware never rejects; it just populates context when a valid cert
 // is presented. Authorization decisions stay with the downstream handler so
 // the same chain can accept browser uploads, API-key uploads, and spoke
 // uploads from one endpoint.
-func WithSpokeMTLS(db *sql.DB) func(http.HandlerFunc) http.HandlerFunc {
+func WithSatelliteMTLS(db *sql.DB) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			ident := identifySpoke(r, db)
+			ident := identifySatellite(r, db)
 			if ident != nil {
-				r = r.WithContext(context.WithValue(r.Context(), spokeContextKey{}, ident))
+				r = r.WithContext(context.WithValue(r.Context(), satelliteContextKey{}, ident))
 			}
 			next(w, r)
 		}
 	}
 }
 
-func identifySpoke(r *http.Request, db *sql.DB) *SpokeIdentity {
+func identifySatellite(r *http.Request, db *sql.DB) *SatelliteIdentity {
 	thumb, subj, fromTLS, ok := extractCertThumbprint(r)
 	if !ok {
 		return nil
@@ -90,11 +90,11 @@ func identifySpoke(r *http.Request, db *sql.DB) *SpokeIdentity {
 		}
 		return nil
 	}
-	return &SpokeIdentity{
+	return &SatelliteIdentity{
 		Institution:         inst,
 		CertThumbprint:      thumb,
 		CertSubjectDN:       subj,
-		SiteAdvisory:        strings.TrimSpace(r.Header.Get(headerSpokeSiteAdvisory)),
+		SiteAdvisory:        strings.TrimSpace(r.Header.Get(headerSatelliteSiteAdvisory)),
 		ReadDirectlyFromTLS: fromTLS,
 	}
 }

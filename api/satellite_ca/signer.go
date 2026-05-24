@@ -1,7 +1,7 @@
-// Package spoke_ca signs CSRs from spoke routers so the cloud's mTLS upload
+// Package satellite_ca signs CSRs from satellite routers so the cloud's mTLS upload
 // path can authenticate them. Three deployment modes:
 //
-//  1. Configured PKI (prod): SPOKE_CA_CERT_PATH + SPOKE_CA_KEY_PATH point at a
+//  1. Configured PKI (prod): SATELLITE_CA_CERT_PATH + SATELLITE_CA_KEY_PATH point at a
 //     real intermediate CA (sitting under your existing root) whose private
 //     key the API can read. The right pick for an enterprise.
 //
@@ -10,10 +10,10 @@
 //     memory, and signs from there. Useful for self-host installs and CI but
 //     not durable across restarts.
 //
-//  3. Disabled (legacy compat): SPOKE_CA_ENABLED=false. /api/spokes/enroll
+//  3. Disabled (legacy compat): SATELLITE_CA_ENABLED=false. /api/satellites/enroll
 //     returns 503. Admins can still provision certs out-of-band and post the
 //     thumbprint to PUT /api/institutions/{id}/client-cert.
-package spoke_ca
+package satellite_ca
 
 import (
 	"crypto/ecdsa"
@@ -33,7 +33,7 @@ import (
 	"time"
 )
 
-// Signer wraps a CA cert + private key and signs spoke client CSRs.
+// Signer wraps a CA cert + private key and signs satellite client CSRs.
 type Signer struct {
 	mu       sync.Mutex
 	caCert   *x509.Certificate
@@ -63,7 +63,7 @@ func Load(certPath, keyPath string, validityDays int) (*Signer, error) {
 		return nil, nil
 	}
 	if certPath == "" || keyPath == "" {
-		return nil, errors.New("SPOKE_CA_CERT_PATH and SPOKE_CA_KEY_PATH must both be set, or both unset")
+		return nil, errors.New("SATELLITE_CA_CERT_PATH and SATELLITE_CA_KEY_PATH must both be set, or both unset")
 	}
 	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
@@ -101,7 +101,7 @@ func NewEphemeral(validityDays int) (*Signer, error) {
 	caTpl := &x509.Certificate{
 		SerialNumber: bigSerial(),
 		Subject: pkix.Name{
-			CommonName:   "AEGIS Spoke Issuer (ephemeral)",
+			CommonName:   "AEGIS Satellite Issuer (ephemeral)",
 			Organization: []string{"AEGIS"},
 		},
 		NotBefore:             now.Add(-10 * time.Minute),
@@ -133,7 +133,7 @@ func NewEphemeral(validityDays int) (*Signer, error) {
 func (s *Signer) Source() string { return s.source }
 
 // CAPEM returns the CA cert PEM bundle that should be returned to enrolled
-// spokes so they can validate the cloud's serving cert (if the cloud is on
+// satellites so they can validate the cloud's serving cert (if the cloud is on
 // the same chain).
 func (s *Signer) CAPEM() string { return string(s.caPEM) }
 
@@ -169,7 +169,7 @@ func (s *Signer) Sign(csrPEM string, fallbackCN string) (*SignedCert, error) {
 		SerialNumber: bigSerial(),
 		Subject: pkix.Name{
 			CommonName:   cn,
-			Organization: []string{"AEGIS Spoke"},
+			Organization: []string{"AEGIS Satellite"},
 		},
 		NotBefore:   now.Add(-5 * time.Minute),
 		NotAfter:    now.Add(s.validity),

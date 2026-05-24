@@ -1,4 +1,4 @@
-package spoke_ca_test
+package satellite_ca_test
 
 import (
 	"crypto/ecdsa"
@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aegis-imaging/aegis/api/spoke_ca"
+	"github.com/aegis-imaging/aegis/api/satellite_ca"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ func makeCSR(t *testing.T, cn string) string {
 }
 
 func TestEphemeralSignerSignsCSR(t *testing.T) {
-	signer, err := spoke_ca.NewEphemeral(30)
+	signer, err := satellite_ca.NewEphemeral(30)
 	require.NoError(t, err)
 	assert.Equal(t, "ephemeral", signer.Source())
 
@@ -44,7 +44,7 @@ func TestEphemeralSignerSignsCSR(t *testing.T) {
 }
 
 func TestSignFallsBackToProvidedCN(t *testing.T) {
-	signer, err := spoke_ca.NewEphemeral(30)
+	signer, err := satellite_ca.NewEphemeral(30)
 	require.NoError(t, err)
 	// CSR with empty CN.
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -60,14 +60,14 @@ func TestSignFallsBackToProvidedCN(t *testing.T) {
 }
 
 func TestSignRejectsInvalidPEM(t *testing.T) {
-	signer, err := spoke_ca.NewEphemeral(30)
+	signer, err := satellite_ca.NewEphemeral(30)
 	require.NoError(t, err)
 	_, err = signer.Sign("not a pem", "x")
 	assert.Error(t, err)
 }
 
 func TestSignRejectsEmptyCN(t *testing.T) {
-	signer, err := spoke_ca.NewEphemeral(30)
+	signer, err := satellite_ca.NewEphemeral(30)
 	require.NoError(t, err)
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -80,15 +80,15 @@ func TestSignRejectsEmptyCN(t *testing.T) {
 }
 
 func TestLoadNilWhenPathsEmpty(t *testing.T) {
-	s, err := spoke_ca.Load("", "", 30)
+	s, err := satellite_ca.Load("", "", 30)
 	require.NoError(t, err)
 	assert.Nil(t, s)
 }
 
 func TestLoadRequiresBothPaths(t *testing.T) {
-	_, err := spoke_ca.Load("/tmp/cert", "", 30)
+	_, err := satellite_ca.Load("/tmp/cert", "", 30)
 	assert.Error(t, err)
-	_, err = spoke_ca.Load("", "/tmp/key", 30)
+	_, err = satellite_ca.Load("", "/tmp/key", 30)
 	assert.Error(t, err)
 }
 
@@ -118,7 +118,7 @@ func TestLoadFromDisk(t *testing.T) {
 	require.NoError(t, os.WriteFile(keyPath,
 		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600))
 
-	signer, err := spoke_ca.Load(certPath, keyPath, 30)
+	signer, err := satellite_ca.Load(certPath, keyPath, 30)
 	require.NoError(t, err)
 	require.NotNil(t, signer)
 	assert.Equal(t, "configured", signer.Source())

@@ -9,7 +9,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
-// EnrollSpoke POST /api/spokes/enroll
+// EnrollSatellite POST /api/satellites/enroll
 //
 // PUBLIC endpoint — no admin auth required. The enrollment token itself IS
 // the credential. Each token redeems exactly once.
@@ -17,12 +17,12 @@ import (
 // Body: {"token": "<raw token>", "csr_pem": "<PEM CSR>", "site_id": "..."}
 // Response: {"client_cert_pem", "ca_pem", "thumbprint", "subject_dn", "not_after"}
 //
-// On success we (a) sign the CSR with the AEGIS spoke-issuer CA, (b) record
+// On success we (a) sign the CSR with the AEGIS satellite-issuer CA, (b) record
 // the resulting cert thumbprint on the institution the token belongs to so
 // the mTLS middleware can later match incoming uploads, and (c) audit it.
-func (s *Server) EnrollSpoke(w http.ResponseWriter, r *http.Request) {
-	if s.spokeCA == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "spoke enrollment is disabled on this server")
+func (s *Server) EnrollSatellite(w http.ResponseWriter, r *http.Request) {
+	if s.satelliteCA == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "satellite enrollment is disabled on this server")
 		return
 	}
 
@@ -42,7 +42,7 @@ func (s *Server) EnrollSpoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := model.RedeemSpokeEnrollmentToken(r.Context(), s.db, req.Token)
+	token, err := model.RedeemSatelliteEnrollmentToken(r.Context(), s.db, req.Token)
 	if err != nil {
 		if errors.Is(err, model.ErrEnrollmentTokenInvalid) {
 			s.writeError(w, http.StatusUnauthorized, "enrollment token invalid or expired")
@@ -63,7 +63,7 @@ func (s *Server) EnrollSpoke(w http.ResponseWriter, r *http.Request) {
 		fallbackCN = inst.Slug
 	}
 
-	signed, err := s.spokeCA.Sign(req.CSRPEM, fallbackCN)
+	signed, err := s.satelliteCA.Sign(req.CSRPEM, fallbackCN)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "CSR signing failed: "+err.Error())
 		return
@@ -74,7 +74,7 @@ func (s *Server) EnrollSpoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	model.CreateAuditEntry(r.Context(), s.db, "spoke.enrolled",
+	model.CreateAuditEntry(r.Context(), s.db, "satellite.enrolled",
 		"system", "institution", inst.ID, clientIP(r), map[string]any{
 			"token_id":   token.ID,
 			"site_id":    fallbackCN,
