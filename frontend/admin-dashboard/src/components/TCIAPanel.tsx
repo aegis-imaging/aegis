@@ -198,7 +198,7 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
           <label className="tcia-label">Min slices</label>
           <input
             type="number"
-            className="xn-filter"
+            className="aegis-filter"
             value={minSlices}
             min={1}
             max={1000}
@@ -226,7 +226,7 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
         <div className="tcia-field tcia-field--action">
           <button
             type="button"
-            className="xn-btn-primary"
+            className="aegis-btn-primary"
             onClick={searchSeries}
             disabled={searching || importing}
           >
@@ -249,7 +249,7 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
             {isAdmin && (
               <button
                 type="button"
-                className="xn-btn-primary"
+                className="aegis-btn-primary"
                 onClick={importSelected}
                 disabled={!someChecked || importing}
               >

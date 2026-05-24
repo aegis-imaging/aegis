@@ -2,72 +2,72 @@
  *
  * Colors follow the project's colorblind-friendly palette (teal/orange) and
  * stay neutral so this file can be themed via the existing dark-theme.css
- * variables. Class prefix `xn-` (eXperience nav) keeps this isolated from
+ * variables. Class prefix `aegis-` (eXperience nav) keeps this isolated from
  * the existing admin dashboard classes.
  */
 
 :root {
-  --xn-bg: #f8f9fb;
-  --xn-surface: #ffffff;
-  --xn-border: #e2e8f0;
-  --xn-text: #0f172a;
-  --xn-muted: #64748b;
-  --xn-link: #0d9488;
-  --xn-link-hover: #0f766e;
-  --xn-active-bg: #ccfbf1;
-  --xn-error-bg: #ffedd5;
-  --xn-error-text: #9a3412;
+  --aegis-bg: #f8f9fb;
+  --aegis-surface: #ffffff;
+  --aegis-border: #e2e8f0;
+  --aegis-text: #0f172a;
+  --aegis-muted: #64748b;
+  --aegis-link: #0d9488;
+  --aegis-link-hover: #0f766e;
+  --aegis-active-bg: #ccfbf1;
+  --aegis-error-bg: #ffedd5;
+  --aegis-error-text: #9a3412;
 }
 
-.xn-shell {
+.aegis-shell {
   min-height: 100vh;
-  background: var(--xn-bg);
-  color: var(--xn-text);
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* ── Top bar ─────────────────────────────────────────────────────────── */
 
-.xn-topbar {
+.aegis-topbar {
   display: flex;
   align-items: center;
   gap: 24px;
   padding: 10px 24px;
-  background: var(--xn-surface);
-  border-bottom: 1px solid var(--xn-border);
+  background: var(--aegis-surface);
+  border-bottom: 1px solid var(--aegis-border);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
-.xn-brand {
+.aegis-brand {
   font-weight: 700;
   letter-spacing: 0.04em;
   font-size: 16px;
-  color: var(--xn-text);
+  color: var(--aegis-text);
   text-decoration: none;
 }
 
-.xn-topnav {
+.aegis-topnav {
   display: flex;
   gap: 12px;
 }
 
-.xn-topnav a {
-  color: var(--xn-muted);
+.aegis-topnav a {
+  color: var(--aegis-muted);
   text-decoration: none;
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 14px;
 }
 
-.xn-topnav a:hover,
-.xn-topnav a.xn-active {
-  color: var(--xn-text);
-  background: var(--xn-active-bg);
+.aegis-topnav a:hover,
+.aegis-topnav a.aegis-active {
+  color: var(--aegis-text);
+  background: var(--aegis-active-bg);
 }
 
-.xn-search-slot {
+.aegis-search-slot {
   flex: 1;
   display: flex;
   justify-content: flex-end;
@@ -75,34 +75,34 @@
 
 /* ── Search ──────────────────────────────────────────────────────────── */
 
-.xn-search {
+.aegis-search {
   position: relative;
   width: 360px;
   max-width: 100%;
 }
 
-.xn-search-input {
+.aegis-search-input {
   width: 100%;
   padding: 8px 12px;
   font-size: 14px;
-  border: 1px solid var(--xn-border);
+  border: 1px solid var(--aegis-border);
   border-radius: 8px;
-  background: var(--xn-bg);
-  color: var(--xn-text);
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
 }
 
-.xn-search-input:focus {
-  outline: 2px solid var(--xn-link);
+.aegis-search-input:focus {
+  outline: 2px solid var(--aegis-link);
   outline-offset: -1px;
 }
 
-.xn-search-dropdown {
+.aegis-search-dropdown {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: var(--xn-surface);
-  border: 1px solid var(--xn-border);
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
   max-height: 480px;
@@ -110,30 +110,30 @@
   z-index: 20;
 }
 
-.xn-search-status {
+.aegis-search-status {
   padding: 12px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   font-size: 13px;
 }
 
-.xn-search-section {
+.aegis-search-section {
   padding: 6px 0;
-  border-bottom: 1px solid var(--xn-border);
+  border-bottom: 1px solid var(--aegis-border);
 }
 
-.xn-search-section:last-child {
+.aegis-search-section:last-child {
   border-bottom: none;
 }
 
-.xn-search-section-title {
+.aegis-search-section-title {
   padding: 6px 12px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
 }
 
-.xn-search-hit {
+.aegis-search-hit {
   display: block;
   width: 100%;
   text-align: left;
@@ -142,93 +142,93 @@
   padding: 8px 12px;
   cursor: pointer;
   font: inherit;
-  color: var(--xn-text);
+  color: var(--aegis-text);
 }
 
-.xn-search-hit:hover {
-  background: var(--xn-active-bg);
+.aegis-search-hit:hover {
+  background: var(--aegis-active-bg);
 }
 
-.xn-search-label {
+.aegis-search-label {
   font-size: 14px;
   font-weight: 500;
 }
 
-.xn-search-secondary {
+.aegis-search-secondary {
   font-size: 12px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   margin-top: 2px;
 }
 
 /* ── Breadcrumbs ─────────────────────────────────────────────────────── */
 
-.xn-breadcrumbs {
+.aegis-breadcrumbs {
   padding: 8px 24px;
-  background: var(--xn-bg);
-  border-bottom: 1px solid var(--xn-border);
+  background: var(--aegis-bg);
+  border-bottom: 1px solid var(--aegis-border);
   font-size: 13px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
 }
 
-.xn-crumb a {
-  color: var(--xn-link);
+.aegis-crumb a {
+  color: var(--aegis-link);
   text-decoration: none;
 }
 
-.xn-crumb a:hover {
-  color: var(--xn-link-hover);
+.aegis-crumb a:hover {
+  color: var(--aegis-link-hover);
   text-decoration: underline;
 }
 
-.xn-crumb-sep {
+.aegis-crumb-sep {
   margin: 0 8px;
-  color: var(--xn-border);
+  color: var(--aegis-border);
 }
 
 /* ── Main content ────────────────────────────────────────────────────── */
 
-.xn-main {
+.aegis-main {
   padding: 24px;
   max-width: 1280px;
   margin: 0 auto;
 }
 
-.xn-page-header h1 {
+.aegis-page-header h1 {
   margin: 0 0 4px;
   font-size: 24px;
   font-weight: 600;
 }
 
-.xn-muted {
-  color: var(--xn-muted);
+.aegis-muted {
+  color: var(--aegis-muted);
 }
 
-.xn-error {
+.aegis-error {
   padding: 12px 16px;
   border-radius: 8px;
-  background: var(--xn-error-bg);
-  color: var(--xn-error-text);
+  background: var(--aegis-error-bg);
+  color: var(--aegis-error-text);
   margin: 12px 0;
   font-size: 14px;
 }
 
 /* ── Home page cards ─────────────────────────────────────────────────── */
 
-.xn-home-greeting h1 {
+.aegis-home-greeting h1 {
   font-size: 28px;
   margin: 0 0 4px;
 }
 
-.xn-home-projects {
+.aegis-home-projects {
   margin-top: 24px;
 }
 
-.xn-home-projects h2 {
+.aegis-home-projects h2 {
   font-size: 18px;
   margin-bottom: 12px;
 }
 
-.xn-card-grid {
+.aegis-card-grid {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -237,70 +237,70 @@
   gap: 16px;
 }
 
-.xn-card {
-  background: var(--xn-surface);
-  border: 1px solid var(--xn-border);
+.aegis-card {
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
   border-radius: 12px;
   transition: border-color 120ms ease, transform 120ms ease;
 }
 
-.xn-card:hover {
-  border-color: var(--xn-link);
+.aegis-card:hover {
+  border-color: var(--aegis-link);
   transform: translateY(-1px);
 }
 
-.xn-card-link {
+.aegis-card-link {
   display: block;
   padding: 16px;
   color: inherit;
   text-decoration: none;
 }
 
-.xn-card-title {
+.aegis-card-title {
   font-size: 16px;
   font-weight: 600;
 }
 
-.xn-card-meta {
+.aegis-card-meta {
   display: flex;
   gap: 8px;
   align-items: center;
   margin: 6px 0;
   font-size: 12px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
 }
 
-.xn-card-desc {
+.aegis-card-desc {
   margin: 8px 0 0;
   font-size: 13px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
 }
 
-.xn-pill {
+.aegis-pill {
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--xn-active-bg);
-  color: var(--xn-link-hover);
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
   font-size: 11px;
   font-weight: 600;
 }
 
 /* ── Section / table / defs ──────────────────────────────────────────── */
 
-.xn-section {
-  background: var(--xn-surface);
-  border: 1px solid var(--xn-border);
+.aegis-section {
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
   border-radius: 12px;
   padding: 16px;
   margin-top: 16px;
 }
 
-.xn-section h2 {
+.aegis-section h2 {
   margin: 0 0 8px;
   font-size: 16px;
 }
 
-.xn-section-bar {
+.aegis-section-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -308,168 +308,168 @@
   margin-bottom: 12px;
 }
 
-.xn-filter {
+.aegis-filter {
   padding: 6px 10px;
-  border: 1px solid var(--xn-border);
+  border: 1px solid var(--aegis-border);
   border-radius: 6px;
   font-size: 13px;
   min-width: 220px;
 }
 
-.xn-table {
+.aegis-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
 
-.xn-table thead th {
+.aegis-table thead th {
   text-align: left;
   font-weight: 600;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--xn-border);
-  color: var(--xn-muted);
+  border-bottom: 1px solid var(--aegis-border);
+  color: var(--aegis-muted);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.xn-table tbody td {
+.aegis-table tbody td {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--xn-border);
+  border-bottom: 1px solid var(--aegis-border);
 }
 
-.xn-table tbody tr:hover {
-  background: var(--xn-bg);
+.aegis-table tbody tr:hover {
+  background: var(--aegis-bg);
 }
 
-.xn-table a {
-  color: var(--xn-link);
+.aegis-table a {
+  color: var(--aegis-link);
   text-decoration: none;
   font-weight: 500;
 }
 
-.xn-table a:hover {
-  color: var(--xn-link-hover);
+.aegis-table a:hover {
+  color: var(--aegis-link-hover);
   text-decoration: underline;
 }
 
-.xn-defs {
+.aegis-defs {
   display: grid;
   grid-template-columns: 180px 1fr;
   gap: 6px 16px;
   margin: 0;
 }
 
-.xn-defs dt {
-  color: var(--xn-muted);
+.aegis-defs dt {
+  color: var(--aegis-muted);
   font-size: 13px;
 }
 
-.xn-defs dd {
+.aegis-defs dd {
   margin: 0;
   font-size: 14px;
 }
 
 /* ── Section controls (filters, sort selectors) ──────────────────────── */
 
-.xn-section-controls {
+.aegis-section-controls {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.xn-control {
+.aegis-control {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.xn-control-label {
+.aegis-control-label {
   font-size: 12px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
 }
 
-.xn-control select {
+.aegis-control select {
   padding: 5px 8px;
   font-size: 13px;
-  border: 1px solid var(--xn-border);
+  border: 1px solid var(--aegis-border);
   border-radius: 6px;
-  background: var(--xn-surface);
-  color: var(--xn-text);
+  background: var(--aegis-surface);
+  color: var(--aegis-text);
 }
 
-.xn-icon-btn {
+.aegis-icon-btn {
   width: 30px;
   height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--xn-surface);
-  border: 1px solid var(--xn-border);
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
-  color: var(--xn-text);
+  color: var(--aegis-text);
 }
 
-.xn-icon-btn:hover {
-  background: var(--xn-active-bg);
-  color: var(--xn-link-hover);
+.aegis-icon-btn:hover {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
 }
 
 /* ── Filter chips (modality, etc.) ───────────────────────────────────── */
 
-.xn-chip-row {
+.aegis-chip-row {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
   margin: 4px 0 12px;
   padding: 8px 0;
-  border-bottom: 1px dashed var(--xn-border);
+  border-bottom: 1px dashed var(--aegis-border);
 }
 
-.xn-chip-row-label {
+.aegis-chip-row-label {
   font-size: 12px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   margin-right: 4px;
 }
 
-.xn-chip {
+.aegis-chip {
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--xn-bg);
-  border: 1px solid var(--xn-border);
-  color: var(--xn-text);
+  background: var(--aegis-bg);
+  border: 1px solid var(--aegis-border);
+  color: var(--aegis-text);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }
 
-.xn-chip:hover {
-  border-color: var(--xn-link);
+.aegis-chip:hover {
+  border-color: var(--aegis-link);
 }
 
-.xn-chip-active {
-  background: var(--xn-active-bg);
-  color: var(--xn-link-hover);
-  border-color: var(--xn-link);
+.aegis-chip-active {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+  border-color: var(--aegis-link);
 }
 
-.xn-chip-clear {
+.aegis-chip-clear {
   padding: 4px 8px;
   background: none;
   border: 0;
   font-size: 12px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   cursor: pointer;
   text-decoration: underline;
 }
 
-.xn-chip-clear:hover {
-  color: var(--xn-link-hover);
+.aegis-chip-clear:hover {
+  color: var(--aegis-link-hover);
 }
 
 /* ── Pipeline stage indicators ───────────────────────────────────────── */
@@ -479,7 +479,7 @@
  * project's teal/orange axis — never red/green.
  */
 
-.xn-stage {
+.aegis-stage {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -491,44 +491,44 @@
   line-height: 1;
 }
 
-.xn-stage-na {
-  color: var(--xn-border);
+.aegis-stage-na {
+  color: var(--aegis-border);
   font-weight: 400;
 }
 
-.xn-stage-pending {
-  background: var(--xn-bg);
-  color: var(--xn-muted);
-  border: 1px solid var(--xn-border);
+.aegis-stage-pending {
+  background: var(--aegis-bg);
+  color: var(--aegis-muted);
+  border: 1px solid var(--aegis-border);
 }
 
-.xn-stage-running {
+.aegis-stage-running {
   background: #fef3c7;
   color: #a16207;
   border: 1px solid #fde68a;
 }
 
-.xn-stage-complete {
-  background: var(--xn-active-bg);
-  color: var(--xn-link-hover);
-  border: 1px solid var(--xn-link);
+.aegis-stage-complete {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+  border: 1px solid var(--aegis-link);
 }
 
-.xn-stage-partial {
+.aegis-stage-partial {
   background: #fef3c7;
   color: #a16207;
   border: 1px solid #d97706;
 }
 
-.xn-stage-failed {
-  background: var(--xn-error-bg);
-  color: var(--xn-error-text);
+.aegis-stage-failed {
+  background: var(--aegis-error-bg);
+  color: var(--aegis-error-text);
   border: 1px solid #ea580c;
 }
 
 /* ── Study status pill ───────────────────────────────────────────────── */
 
-.xn-status {
+.aegis-status {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 999px;
@@ -537,52 +537,52 @@
   text-transform: lowercase;
 }
 
-.xn-status-default {
-  background: var(--xn-bg);
-  color: var(--xn-muted);
-  border: 1px solid var(--xn-border);
+.aegis-status-default {
+  background: var(--aegis-bg);
+  color: var(--aegis-muted);
+  border: 1px solid var(--aegis-border);
 }
 
-.xn-status-active {
+.aegis-status-active {
   background: #fef3c7;
   color: #a16207;
 }
 
-.xn-status-approved {
-  background: var(--xn-active-bg);
-  color: var(--xn-link-hover);
+.aegis-status-approved {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
 }
 
-.xn-status-rejected {
-  background: var(--xn-error-bg);
-  color: var(--xn-error-text);
+.aegis-status-rejected {
+  background: var(--aegis-error-bg);
+  color: var(--aegis-error-text);
 }
 
 /* ── Table tweaks for dense subject pages ────────────────────────────── */
 
-.xn-table-wrap {
+.aegis-table-wrap {
   overflow-x: auto;
 }
 
-.xn-cell-truncate {
+.aegis-cell-truncate {
   max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.xn-code {
+.aegis-code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12px;
   padding: 1px 5px;
-  background: var(--xn-bg);
+  background: var(--aegis-bg);
   border-radius: 4px;
 }
 
 /* ── Buttons (primary / secondary) ────────────────────────────────────── */
 
-.xn-btn-primary,
-.xn-btn-secondary {
+.aegis-btn-primary,
+.aegis-btn-secondary {
   padding: 8px 16px;
   border-radius: 6px;
   font-size: 14px;
@@ -592,42 +592,42 @@
   transition: background 120ms ease, border-color 120ms ease;
 }
 
-.xn-btn-primary {
-  background: var(--xn-link);
+.aegis-btn-primary {
+  background: var(--aegis-link);
   color: #ffffff;
 }
 
-.xn-btn-primary:hover:not(:disabled) {
-  background: var(--xn-link-hover);
+.aegis-btn-primary:hover:not(:disabled) {
+  background: var(--aegis-link-hover);
 }
 
-.xn-btn-primary:disabled {
-  background: var(--xn-border);
-  color: var(--xn-muted);
+.aegis-btn-primary:disabled {
+  background: var(--aegis-border);
+  color: var(--aegis-muted);
   cursor: not-allowed;
 }
 
-.xn-btn-secondary {
-  background: var(--xn-surface);
-  color: var(--xn-text);
-  border-color: var(--xn-border);
+.aegis-btn-secondary {
+  background: var(--aegis-surface);
+  color: var(--aegis-text);
+  border-color: var(--aegis-border);
 }
 
-.xn-btn-secondary:hover:not(:disabled) {
-  border-color: var(--xn-link);
-  color: var(--xn-link-hover);
+.aegis-btn-secondary:hover:not(:disabled) {
+  border-color: var(--aegis-link);
+  color: var(--aegis-link-hover);
 }
 
-.xn-btn-secondary:disabled {
-  color: var(--xn-muted);
+.aegis-btn-secondary:disabled {
+  color: var(--aegis-muted);
   cursor: not-allowed;
 }
 
 /* ── New project form (inline on HomePage) ────────────────────────────── */
 
-.xn-new-project {
-  background: var(--xn-surface);
-  border: 1px solid var(--xn-border);
+.aegis-new-project {
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
   border-radius: 10px;
   padding: 20px;
   margin: 16px 0;
@@ -637,47 +637,47 @@
   max-width: 560px;
 }
 
-.xn-form-row {
+.aegis-form-row {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.xn-form-row label {
+.aegis-form-row label {
   font-size: 13px;
   font-weight: 500;
-  color: var(--xn-text);
+  color: var(--aegis-text);
 }
 
-.xn-form-row input,
-.xn-form-row textarea {
+.aegis-form-row input,
+.aegis-form-row textarea {
   padding: 8px 10px;
   font-size: 14px;
-  border: 1px solid var(--xn-border);
+  border: 1px solid var(--aegis-border);
   border-radius: 6px;
-  background: var(--xn-bg);
-  color: var(--xn-text);
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
   font-family: inherit;
 }
 
-.xn-form-row textarea {
+.aegis-form-row textarea {
   resize: vertical;
   min-height: 56px;
 }
 
-.xn-form-row input:focus,
-.xn-form-row textarea:focus {
-  outline: 2px solid var(--xn-link);
+.aegis-form-row input:focus,
+.aegis-form-row textarea:focus {
+  outline: 2px solid var(--aegis-link);
   outline-offset: -1px;
 }
 
-.xn-form-hint {
+.aegis-form-hint {
   font-size: 12px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   margin-top: 2px;
 }
 
-.xn-form-actions {
+.aegis-form-actions {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -687,32 +687,32 @@
 /*
  * The admin dashboard sets `data-theme="dark"` on documentElement when dark
  * mode is active (see the darkMode useEffect in App.tsx). Mirror that toggle
- * for the xn-* variable set so the new chrome adapts. Teal stays teal in
+ * for the aegis-* variable set so the new chrome adapts. Teal stays teal in
  * dark mode (brighter for AA contrast on dark surfaces); orange stays orange.
  */
 
 :root[data-theme="dark"] {
-  --xn-bg: #0f172a;
-  --xn-surface: #1e293b;
-  --xn-border: #334155;
-  --xn-text: #f1f5f9;
-  --xn-muted: #94a3b8;
-  --xn-link: #2dd4bf;
-  --xn-link-hover: #5eead4;
-  --xn-active-bg: rgba(45, 212, 191, 0.18);
-  --xn-error-bg: rgba(234, 88, 12, 0.18);
-  --xn-error-text: #fed7aa;
+  --aegis-bg: #0f172a;
+  --aegis-surface: #1e293b;
+  --aegis-border: #334155;
+  --aegis-text: #f1f5f9;
+  --aegis-muted: #94a3b8;
+  --aegis-link: #2dd4bf;
+  --aegis-link-hover: #5eead4;
+  --aegis-active-bg: rgba(45, 212, 191, 0.18);
+  --aegis-error-bg: rgba(234, 88, 12, 0.18);
+  --aegis-error-text: #fed7aa;
 }
 
 /* ── Page header strip (used on every admin tab + per-project pages) ── */
 
-.xn-page-header {
+.aegis-page-header {
   padding-bottom: 14px;
   margin-bottom: 18px;
-  border-bottom: 1px solid var(--xn-border);
+  border-bottom: 1px solid var(--aegis-border);
 }
 
-.xn-page-header-row {
+.aegis-page-header-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -720,15 +720,15 @@
   flex-wrap: wrap;
 }
 
-.xn-page-description {
+.aegis-page-description {
   margin: 4px 0 0;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   font-size: 13px;
   max-width: 720px;
   line-height: 1.5;
 }
 
-.xn-page-header-actions {
+.aegis-page-header-actions {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -737,50 +737,50 @@
 
 /* ── Admin body: sidebar + content grid ──────────────────────────────── */
 /*
- * Admin breaks out of the centered xn-main column — research-grade tables
+ * Admin breaks out of the centered aegis-main column — research-grade tables
  * need horizontal room. The grid is a sidebar (fixed) + a fluid content
  * region. When collapsed, the sidebar shrinks to icon-only.
  */
 
-.xn-admin-body {
+.aegis-admin-body {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   align-items: stretch;
   min-height: calc(100vh - 95px);
-  background: var(--xn-bg);
+  background: var(--aegis-bg);
 }
 
-.xn-admin-body.xn-admin-body--collapsed {
+.aegis-admin-body.aegis-admin-body--collapsed {
   grid-template-columns: 56px minmax(0, 1fr);
 }
 
-.xn-admin-content {
+.aegis-admin-content {
   padding: 22px 28px 40px;
   min-width: 0;
 }
 
 @media (max-width: 768px) {
-  .xn-admin-body,
-  .xn-admin-body.xn-admin-body--collapsed {
+  .aegis-admin-body,
+  .aegis-admin-body.aegis-admin-body--collapsed {
     grid-template-columns: 1fr;
   }
-  .xn-sidenav {
+  .aegis-sidenav {
     position: fixed;
     inset: 53px 0 0 0;
     z-index: 15;
     transform: translateX(-100%);
     transition: transform 180ms ease;
   }
-  .xn-admin-body:not(.xn-admin-body--collapsed) .xn-sidenav {
+  .aegis-admin-body:not(.aegis-admin-body--collapsed) .aegis-sidenav {
     transform: translateX(0);
   }
 }
 
 /* ── Sidebar nav ─────────────────────────────────────────────────────── */
 
-.xn-sidenav {
-  background: var(--xn-surface);
-  border-right: 1px solid var(--xn-border);
+.aegis-sidenav {
+  background: var(--aegis-surface);
+  border-right: 1px solid var(--aegis-border);
   position: sticky;
   top: 53px;
   align-self: start;
@@ -792,17 +792,17 @@
   gap: 4px;
 }
 
-.xn-sidenav-toolbar {
+.aegis-sidenav-toolbar {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px;
   margin-bottom: 8px;
-  border-bottom: 1px solid var(--xn-border);
+  border-bottom: 1px solid var(--aegis-border);
   padding-bottom: 10px;
 }
 
-.xn-sidenav-search {
+.aegis-sidenav-search {
   flex: 1;
   display: inline-flex;
   align-items: center;
@@ -810,28 +810,28 @@
   gap: 8px;
   padding: 6px 10px;
   font-size: 13px;
-  color: var(--xn-muted);
-  background: var(--xn-bg);
-  border: 1px solid var(--xn-border);
+  color: var(--aegis-muted);
+  background: var(--aegis-bg);
+  border: 1px solid var(--aegis-border);
   border-radius: 6px;
   cursor: pointer;
 }
 
-.xn-sidenav-search:hover {
-  border-color: var(--xn-link);
-  color: var(--xn-text);
+.aegis-sidenav-search:hover {
+  border-color: var(--aegis-link);
+  color: var(--aegis-text);
 }
 
-.xn-sidenav-search kbd {
+.aegis-sidenav-search kbd {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11px;
   padding: 1px 5px;
-  background: var(--xn-surface);
-  border: 1px solid var(--xn-border);
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
   border-radius: 3px;
 }
 
-.xn-sidenav-iconbtn {
+.aegis-sidenav-iconbtn {
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -841,33 +841,33 @@
   border: 1px solid transparent;
   border-radius: 6px;
   font-size: 14px;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
 }
 
-.xn-sidenav-iconbtn:hover {
-  background: var(--xn-active-bg);
-  color: var(--xn-link-hover);
+.aegis-sidenav-iconbtn:hover {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
 }
 
-.xn-sidenav-group {
+.aegis-sidenav-group {
   margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
-.xn-sidenav-group-label {
+.aegis-sidenav-group-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   padding: 6px 10px 4px;
   font-weight: 600;
 }
 
-.xn-sidenav-item {
+.aegis-sidenav-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -876,7 +876,7 @@
   border-radius: 6px;
   border: 0;
   background: transparent;
-  color: var(--xn-text);
+  color: var(--aegis-text);
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
@@ -893,30 +893,30 @@
  * left accent stripe rendered by the ::before below.
  */
 
-.xn-sidenav-item:hover {
-  background: var(--xn-bg);
-  color: var(--xn-text);
+.aegis-sidenav-item:hover {
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
 }
 
-.xn-sidenav-item--active,
-.xn-sidenav-item--active:hover {
-  background: var(--xn-active-bg);
-  color: var(--xn-link-hover);
+.aegis-sidenav-item--active,
+.aegis-sidenav-item--active:hover {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
   font-weight: 600;
 }
 
-.xn-sidenav-item--active::before {
+.aegis-sidenav-item--active::before {
   content: "";
   position: absolute;
   left: -2px;
   top: 4px;
   bottom: 4px;
   width: 2px;
-  background: var(--xn-link);
+  background: var(--aegis-link);
   border-radius: 2px;
 }
 
-.xn-sidenav-icon {
+.aegis-sidenav-icon {
   flex: 0 0 18px;
   width: 18px;
   text-align: center;
@@ -924,14 +924,14 @@
   line-height: 1;
 }
 
-.xn-sidenav-label {
+.aegis-sidenav-label {
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.xn-sidenav-badge {
+.aegis-sidenav-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -939,41 +939,41 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: var(--xn-error-bg);
-  color: var(--xn-error-text);
+  background: var(--aegis-error-bg);
+  color: var(--aegis-error-text);
   font-size: 11px;
   font-weight: 700;
 }
 
-.xn-admin-body--collapsed .xn-sidenav-label,
-.xn-admin-body--collapsed .xn-sidenav-group-label,
-.xn-admin-body--collapsed .xn-sidenav-footer,
-.xn-admin-body--collapsed .xn-sidenav-search span,
-.xn-admin-body--collapsed .xn-sidenav-search kbd {
+.aegis-admin-body--collapsed .aegis-sidenav-label,
+.aegis-admin-body--collapsed .aegis-sidenav-group-label,
+.aegis-admin-body--collapsed .aegis-sidenav-footer,
+.aegis-admin-body--collapsed .aegis-sidenav-search span,
+.aegis-admin-body--collapsed .aegis-sidenav-search kbd {
   display: none;
 }
 
-.xn-admin-body--collapsed .xn-sidenav-toolbar {
+.aegis-admin-body--collapsed .aegis-sidenav-toolbar {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
 }
 
-.xn-admin-body--collapsed .xn-sidenav-search {
+.aegis-admin-body--collapsed .aegis-sidenav-search {
   justify-content: center;
   padding: 6px;
 }
 
-.xn-admin-body--collapsed .xn-sidenav-item {
+.aegis-admin-body--collapsed .aegis-sidenav-item {
   justify-content: center;
   padding: 8px 6px;
 }
 
-.xn-admin-body--collapsed .xn-sidenav-item--active::before {
+.aegis-admin-body--collapsed .aegis-sidenav-item--active::before {
   left: 0;
 }
 
-.xn-admin-body--collapsed .xn-sidenav-badge {
+.aegis-admin-body--collapsed .aegis-sidenav-badge {
   position: absolute;
   top: 2px;
   right: 2px;
@@ -985,53 +985,53 @@
 
 /* ── Sidebar footer ──────────────────────────────────────────────────── */
 
-.xn-sidenav-footer {
+.aegis-sidenav-footer {
   margin-top: auto;
   padding: 12px 6px 4px;
-  border-top: 1px solid var(--xn-border);
+  border-top: 1px solid var(--aegis-border);
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.xn-sidenav-footer-row {
+.aegis-sidenav-footer-row {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.xn-sidenav-footer-label {
+.aegis-sidenav-footer-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--xn-muted);
+  color: var(--aegis-muted);
   font-weight: 600;
   padding-left: 4px;
 }
 
-.xn-sidenav-footer select,
-.xn-sidenav-footer input[type="text"] {
+.aegis-sidenav-footer select,
+.aegis-sidenav-footer input[type="text"] {
   width: 100%;
   padding: 5px 8px;
   font-size: 12.5px;
-  border: 1px solid var(--xn-border);
+  border: 1px solid var(--aegis-border);
   border-radius: 6px;
-  background: var(--xn-surface);
-  color: var(--xn-text);
+  background: var(--aegis-surface);
+  color: var(--aegis-text);
 }
 
-.xn-sidenav-footer-badge {
+.aegis-sidenav-footer-badge {
   display: inline-block;
   padding: 3px 8px;
   border-radius: 6px;
-  background: var(--xn-bg);
-  border: 1px solid var(--xn-border);
-  color: var(--xn-muted);
+  background: var(--aegis-bg);
+  border: 1px solid var(--aegis-border);
+  color: var(--aegis-muted);
   font-size: 11px;
   font-weight: 500;
 }
 
-.xn-sidenav-overlay {
+.aegis-sidenav-overlay {
   position: fixed;
   inset: 53px 0 0 0;
   background: rgba(15, 23, 42, 0.4);
@@ -1040,7 +1040,7 @@
 }
 
 @media (max-width: 768px) {
-  .xn-admin-body:not(.xn-admin-body--collapsed) .xn-sidenav-overlay {
+  .aegis-admin-body:not(.aegis-admin-body--collapsed) .aegis-sidenav-overlay {
     display: block;
   }
 }

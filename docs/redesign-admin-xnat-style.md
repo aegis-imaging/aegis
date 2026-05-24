@@ -3,8 +3,8 @@
 ## Context
 
 The new XNAT-style researcher home (`/`) shipped via #497 introduced a
-clean `xn-*` design system: teal/orange colorblind-safe palette,
-top-bar nav, breadcrumbs, card-based `xn-section` containers. It feels
+clean `aegis-*` design system: teal/orange colorblind-safe palette,
+top-bar nav, breadcrumbs, card-based `aegis-section` containers. It feels
 modern and purpose-built for academic research.
 
 The existing admin section (`/admin/*`) still uses the legacy chrome:
@@ -29,31 +29,31 @@ feature.
 
 ## Visual direction
 
-The new admin uses the same `xn-*` design system as the researcher
+The new admin uses the same `aegis-*` design system as the researcher
 home:
 
-- **Top bar** (`.xn-topbar`): brand on left, primary nav in the middle
+- **Top bar** (`.aegis-topbar`): brand on left, primary nav in the middle
   (Home / Admin), global search on right. Already exists from #497 —
   the new admin lives under this same shell, not in a separate
   sidebar.
 - **Left sidebar** (re-skinned, not removed): the existing nav groups
   (Overview / Data / Config / Advanced / Admin) stay but use
-  `xn-sidenav-*` classes with the teal/orange palette, the same hover
+  `aegis-sidenav-*` classes with the teal/orange palette, the same hover
   + active states as the topbar, and consistent typography. The
   collapse toggle stays.
-- **Page chrome**: every tab gets a `xn-page-header` with title +
-  description, then content in `xn-section` cards. No more bare
+- **Page chrome**: every tab gets a `aegis-page-header` with title +
+  description, then content in `aegis-section` cards. No more bare
   tables on white backgrounds — every block lives in a card.
 - **Tables**: replace inline-styled tables with the existing
-  `xn-table` class (used on `ProjectPage`, `SubjectPage`). Striped
-  rows, sticky headers, hover states, the `xn-pill` status indicators
+  `aegis-table` class (used on `ProjectPage`, `SubjectPage`). Striped
+  rows, sticky headers, hover states, the `aegis-pill` status indicators
   already defined.
-- **Forms**: use the `xn-form-row` / `xn-btn-primary` /
-  `xn-btn-secondary` classes added in #511. No more inline-styled
+- **Forms**: use the `aegis-form-row` / `aegis-btn-primary` /
+  `aegis-btn-secondary` classes added in #511. No more inline-styled
   inputs.
-- **Pipeline stage indicators**: reuse the `xn-stage-*` glyph + color
+- **Pipeline stage indicators**: reuse the `aegis-stage-*` glyph + color
   combo from `SubjectPage.tsx` (○ ◌ ● ◐ ✕ —) for any status display.
-- **Dark mode**: keep the existing toggle but ensure `xn-*` classes
+- **Dark mode**: keep the existing toggle but ensure `aegis-*` classes
   read from CSS variables that respond to it (already wired in
   `nav.css`).
 
@@ -115,7 +115,7 @@ moves come after the redesign is stable.
 - `frontend/admin-dashboard/src/styles/panels.css`,
   `dark-theme.css`, `forms-shares.css`, `viewers.css`,
   `components.css`, `layout.css` — legacy CSS files that will be
-  progressively migrated into `xn-*` patterns and eventually deleted.
+  progressively migrated into `aegis-*` patterns and eventually deleted.
 - `frontend/admin-dashboard/src/pages/admin/` — new directory for
   the per-tab page components extracted from `App.tsx`.
 
@@ -126,10 +126,10 @@ After each lands, the next can begin from a clean develop.
 
 ### PR 1 — Admin shell restyle (no functional changes)
 
-Apply `xn-*` chrome to `/admin/*`: topbar (already present from #497
+Apply `aegis-*` chrome to `/admin/*`: topbar (already present from #497
 via `<AdminApp>` wrapper, but the inner admin still has its own
-topbar — unify), left sidebar restyled with `xn-sidenav-*` classes,
-page header strip with `xn-page-header`. The 18 tab body blocks stay
+topbar — unify), left sidebar restyled with `aegis-sidenav-*` classes,
+page header strip with `aegis-page-header`. The 18 tab body blocks stay
 visually unchanged in this PR — only the chrome around them
 changes. Smallest PR, biggest visual delta.
 
@@ -144,8 +144,8 @@ pattern.
 
 ### PR 3 — Restyle the first 3 tabs
 
-Now that they're isolated files, apply `xn-table` + `xn-section` +
-`xn-form-row` patterns to studies/audit/users. Drop the inline
+Now that they're isolated files, apply `aegis-table` + `aegis-section` +
+`aegis-form-row` patterns to studies/audit/users. Drop the inline
 styles. ~3 small PRs would also work (one per tab) if the diff is
 too big.
 
@@ -182,7 +182,7 @@ collapse differently.
   mix of restyled + legacy tabs for a few hours/days. Acceptable;
   the alternative (one giant PR) is worse.
 - **Dark mode breakage**: legacy CSS may have dark-mode tweaks that
-  the new `xn-*` system doesn't yet have. Mitigation: each restyle
+  the new `aegis-*` system doesn't yet have. Mitigation: each restyle
   PR explicitly tests dark mode and adds variables as needed.
 - **Behavior changes**: some tabs use ad-hoc state management
   (localStorage keys, scroll positions). Mitigation: keep all
@@ -206,7 +206,7 @@ After each PR's deploy:
 - Role-model refinement (deferred per user direction; current model
   is fine for now).
 - Mobile-first responsive design.
-- Light/dark theme variable cleanup (the current `--xn-*` variables
+- Light/dark theme variable cleanup (the current `--aegis-*` variables
   already work; legacy CSS variables under `dark-theme.css` can be
   retired in PR 9).
 - Search inside the admin section (currently only the top-bar search

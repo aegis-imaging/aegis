@@ -36,13 +36,13 @@ function PageHeader({
   actions?: React.ReactNode
 }) {
   return (
-    <header className="xn-page-header">
-      <div className="xn-page-header-row">
+    <header className="aegis-page-header">
+      <div className="aegis-page-header-row">
         <div>
           <h1>{title}</h1>
-          {description && <p className="xn-page-description">{description}</p>}
+          {description && <p className="aegis-page-description">{description}</p>}
         </div>
-        {actions && <div className="xn-page-header-actions">{actions}</div>}
+        {actions && <div className="aegis-page-header-actions">{actions}</div>}
       </div>
     </header>
   )
@@ -895,28 +895,28 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
   return (
     <>
       {/* Filters */}
-      <section className="xn-section">
-        <div className="xn-section-bar">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Filters</h2>
-          <div className="xn-section-controls">
+          <div className="aegis-section-controls">
             <button
               type="button"
-              className="xn-icon-btn"
+              className="aegis-icon-btn"
               onClick={() => fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page)}
               title="Refresh audit log"
               aria-label="Refresh audit log"
             >
               ↻
             </button>
-            <a href={auditCsvUrl} download="audit.csv" className="xn-btn-secondary">Export CSV</a>
+            <a href={auditCsvUrl} download="audit.csv" className="aegis-btn-secondary">Export CSV</a>
           </div>
         </div>
 
-        <div className="xn-chip-row">
-          <span className="xn-chip-row-label">Category:</span>
+        <div className="aegis-chip-row">
+          <span className="aegis-chip-row-label">Category:</span>
           <button
             type="button"
-            className={`xn-chip${actionFilter === '' ? ' xn-chip-active' : ''}`}
+            className={`aegis-chip${actionFilter === '' ? ' aegis-chip-active' : ''}`}
             onClick={() => setCategory('')}
           >
             All
@@ -925,7 +925,7 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
             <button
               key={cat}
               type="button"
-              className={`xn-chip${actionFilter === cat ? ' xn-chip-active' : ''}`}
+              className={`aegis-chip${actionFilter === cat ? ' aegis-chip-active' : ''}`}
               onClick={() => setCategory(cat === actionFilter ? '' : cat)}
             >
               {cat}
@@ -933,52 +933,52 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
           ))}
         </div>
 
-        <div className="xn-section-controls" style={{ marginTop: 12, alignItems: 'center' }}>
-          <div className="xn-control">
-            <span className="xn-control-label">Actor</span>
+        <div className="aegis-section-controls" style={{ marginTop: 12, alignItems: 'center' }}>
+          <div className="aegis-control">
+            <span className="aegis-control-label">Actor</span>
             <input
               type="text"
-              className="xn-filter"
+              className="aegis-filter"
               placeholder="email…"
               value={actorInput}
               onChange={e => setActorInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && applyActorFilter()}
               style={{ minWidth: 180 }}
             />
-            <button type="button" className="xn-btn-secondary" onClick={applyActorFilter}>Apply</button>
-            {actorFilter && <button type="button" className="xn-btn-secondary" onClick={clearActorFilter}>Clear</button>}
+            <button type="button" className="aegis-btn-secondary" onClick={applyActorFilter}>Apply</button>
+            {actorFilter && <button type="button" className="aegis-btn-secondary" onClick={clearActorFilter}>Clear</button>}
           </div>
-          <div className="xn-control">
-            <span className="xn-control-label">Search</span>
+          <div className="aegis-control">
+            <span className="aegis-control-label">Search</span>
             <input
               type="text"
-              className="xn-filter"
+              className="aegis-filter"
               placeholder="actor / action / resource…"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && applySearch()}
               style={{ minWidth: 220 }}
             />
-            <button type="button" className="xn-btn-secondary" onClick={applySearch}>Search</button>
+            <button type="button" className="aegis-btn-secondary" onClick={applySearch}>Search</button>
             {(searchFilter || dateFrom || dateTo) && (
-              <button type="button" className="xn-btn-secondary" onClick={clearSearch}>Clear</button>
+              <button type="button" className="aegis-btn-secondary" onClick={clearSearch}>Clear</button>
             )}
           </div>
-          <div className="xn-control">
-            <span className="xn-control-label">From</span>
+          <div className="aegis-control">
+            <span className="aegis-control-label">From</span>
             <input
               type="date"
-              className="xn-filter"
+              className="aegis-filter"
               value={dateFrom}
               onChange={e => { setDateFrom(e.target.value); setPage(0) }}
               style={{ minWidth: 140 }}
             />
           </div>
-          <div className="xn-control">
-            <span className="xn-control-label">To</span>
+          <div className="aegis-control">
+            <span className="aegis-control-label">To</span>
             <input
               type="date"
-              className="xn-filter"
+              className="aegis-filter"
               value={dateTo}
               onChange={e => { setDateTo(e.target.value); setPage(0) }}
               style={{ minWidth: 140 }}
@@ -988,27 +988,27 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
       </section>
 
       {/* Recent actors */}
-      <section className="xn-section">
-        <div className="xn-section-bar">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Recent admin activity</h2>
-          <button type="button" className="xn-btn-secondary" onClick={loadActors}>
+          <button type="button" className="aegis-btn-secondary" onClick={loadActors}>
             {showActors ? 'Hide' : 'Show'}
           </button>
         </div>
         {showActors && actors && (
-          <div className="xn-table-wrap">
-            <table className="xn-table">
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
               <thead>
                 <tr><th>Actor</th><th>Actions (30d)</th><th>Last action</th><th>Last seen</th></tr>
               </thead>
               <tbody>
                 {actors.length === 0 ? (
-                  <tr><td colSpan={4} className="xn-muted">No activity in last 30 days.</td></tr>
+                  <tr><td colSpan={4} className="aegis-muted">No activity in last 30 days.</td></tr>
                 ) : actors.map(a => (
                   <tr key={a.actor}>
-                    <td><code className="xn-code">{a.actor}</code></td>
+                    <td><code className="aegis-code">{a.actor}</code></td>
                     <td>{a.action_count}</td>
-                    <td><code className="xn-code">{a.last_action}</code></td>
+                    <td><code className="aegis-code">{a.last_action}</code></td>
                     <td>{fmtDate(a.last_seen_at)}</td>
                   </tr>
                 ))}
@@ -1019,27 +1019,27 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
       </section>
 
       {/* Entries */}
-      <section className="xn-section">
-        {loading && <div className="xn-muted">Loading audit log…</div>}
-        {error && <div className="xn-error">{error}</div>}
+      <section className="aegis-section">
+        {loading && <div className="aegis-muted">Loading audit log…</div>}
+        {error && <div className="aegis-error">{error}</div>}
 
         {!loading && !error && entries.length === 0 && (
-          <div className="xn-muted">No audit entries yet.</div>
+          <div className="aegis-muted">No audit entries yet.</div>
         )}
 
         {!loading && !error && entries.length > 0 && (
           <>
-            <div className="xn-section-bar">
-              <span className="xn-muted">{total} entries</span>
-              <div className="xn-section-controls">
-                <button type="button" className="xn-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                <span className="xn-muted">Page {page + 1} of {totalPages}</span>
-                <button type="button" className="xn-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <div className="aegis-section-bar">
+              <span className="aegis-muted">{total} entries</span>
+              <div className="aegis-section-controls">
+                <button type="button" className="aegis-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                <span className="aegis-muted">Page {page + 1} of {totalPages}</span>
+                <button type="button" className="aegis-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
               </div>
             </div>
 
-            <div className="xn-table-wrap">
-              <table className="xn-table">
+            <div className="aegis-table-wrap">
+              <table className="aegis-table">
                 <thead>
                   <tr>
                     <th>Time</th>
@@ -1058,32 +1058,32 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
                       <Fragment key={e.id}>
                         <tr>
                           <td>{fmtDate(e.created_at)}</td>
-                          <td><span className="xn-pill">{e.action}</span></td>
+                          <td><span className="aegis-pill">{e.action}</span></td>
                           <td>{e.actor || '—'}</td>
                           <td>
-                            <span className="xn-muted" style={{ marginRight: 6 }}>{e.resource_type}</span>
-                            <code className="xn-code">{uidShort(e.resource_id)}</code>
+                            <span className="aegis-muted" style={{ marginRight: 6 }}>{e.resource_type}</span>
+                            <code className="aegis-code">{uidShort(e.resource_id)}</code>
                           </td>
                           <td>{e.ip_address || '—'}</td>
                           <td>
                             {hasDetail ? (
                               <button
                                 type="button"
-                                className="xn-btn-secondary"
+                                className="aegis-btn-secondary"
                                 style={{ padding: '2px 8px', fontSize: 12 }}
                                 onClick={() => setExpandedId(isExpanded ? null : e.id)}
                               >
                                 {isExpanded ? 'hide' : 'show'}
                               </button>
                             ) : (
-                              <span className="xn-muted">—</span>
+                              <span className="aegis-muted">—</span>
                             )}
                           </td>
                         </tr>
                         {isExpanded && hasDetail && (
                           <tr>
                             <td colSpan={6}>
-                              <pre style={{ whiteSpace: 'pre-wrap', margin: 0, padding: 12, background: 'var(--xn-bg)', borderRadius: 6, fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace', fontSize: 12 }}>
+                              <pre style={{ whiteSpace: 'pre-wrap', margin: 0, padding: 12, background: 'var(--aegis-bg)', borderRadius: 6, fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace', fontSize: 12 }}>
                                 {JSON.stringify(e.detail, null, 2)}
                               </pre>
                             </td>
@@ -1096,12 +1096,12 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
               </table>
             </div>
 
-            <div className="xn-section-bar" style={{ marginTop: 12 }}>
+            <div className="aegis-section-bar" style={{ marginTop: 12 }}>
               <span />
-              <div className="xn-section-controls">
-                <button type="button" className="xn-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                <span className="xn-muted">Page {page + 1} of {totalPages}</span>
-                <button type="button" className="xn-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+              <div className="aegis-section-controls">
+                <button type="button" className="aegis-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                <span className="aegis-muted">Page {page + 1} of {totalPages}</span>
+                <button type="button" className="aegis-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
               </div>
             </div>
           </>
@@ -1307,7 +1307,7 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
               title="Download all shares as CSV"
             >↓ CSV</a>
           )}
-          <button type="button" className="xn-icon-btn" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
+          <button type="button" className="aegis-icon-btn" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
         </div>
       </div>
 
@@ -1329,19 +1329,19 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
         </div>
       )}
 
-      {loading && <div className="xn-muted">Loading shares…</div>}
-      {error && <div className="xn-error">{error}</div>}
+      {loading && <div className="aegis-muted">Loading shares…</div>}
+      {error && <div className="aegis-error">{error}</div>}
       {!loading && !error && shares.length === 0 && (
-        <div className="xn-muted">No export shares found.</div>
+        <div className="aegis-muted">No export shares found.</div>
       )}
 
       {!loading && !error && shares.length > 0 && (
         <div className="audit-table-wrap">
           <div className="audit-pagination-bar">
             <span className="audit-total">{total} shares</span>
-            <button type="button" className="xn-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <button type="button" className="aegis-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
             <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="xn-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button type="button" className="aegis-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
           <table className="audit-table">
             <thead>
@@ -1371,7 +1371,7 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
                     <td>
                       <button
                         type="button"
-                        className="xn-btn-secondary"
+                        className="aegis-btn-secondary"
                         onClick={() => toggleDownloads(s.id)}
                         title="View download history"
                       >
@@ -1386,10 +1386,10 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
                     <td className="audit-time">{fmtDate(s.created_at)}</td>
                     <td>
                       {isAdmin && (s.status === 'active' || s.status === 'expired') ? (
-                        <div className="xn-section-controls">
+                        <div className="aegis-section-controls">
                           <button
                             type="button"
-                            className="xn-btn-secondary"
+                            className="aegis-btn-secondary"
                             disabled={extending === s.id}
                             onClick={() => extendShare(s.id)}
                             title="Extend share expiry"
@@ -1446,9 +1446,9 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
             </tbody>
           </table>
           <div className="audit-pagination-bar audit-pagination-bar--bottom">
-            <button type="button" className="xn-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <button type="button" className="aegis-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
             <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="xn-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button type="button" className="aegis-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
         </div>
       )}
@@ -2112,8 +2112,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
     return () => window.clearInterval(id)
   }, [hasLiveShareCountdown])
 
-  if (loading) return <div className="xn-muted">Loading study details…</div>
-  if (!study) return <div className="xn-error">Study not found. <button type="button" className="xn-btn-secondary" onClick={onBack}>Back</button></div>
+  if (loading) return <div className="aegis-muted">Loading study details…</div>
+  if (!study) return <div className="aegis-error">Study not found. <button type="button" className="aegis-btn-secondary" onClick={onBack}>Back</button></div>
 
   const stages: PipelineStage[] = [
     { label: 'Classification', required: study.classification_required, status: study.classification_status, step: 'classify' },
@@ -2364,9 +2364,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       <div className="study-detail__section">
         <h3 className="study-detail__section-title">Actions</h3>
         <div className="study-detail__actions">
-          {projectCaps.canApproveReject && canApprove && <button type="button" className="xn-btn-primary" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
-          {projectCaps.canApproveReject && canReject && <button type="button" className="xn-btn-secondary" onClick={handleReject}>Reject</button>}
-          {projectCaps.canApproveReject && canReactivate && <button type="button" className="xn-btn-primary" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
+          {projectCaps.canApproveReject && canApprove && <button type="button" className="aegis-btn-primary" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
+          {projectCaps.canApproveReject && canReject && <button type="button" className="aegis-btn-secondary" onClick={handleReject}>Reject</button>}
+          {projectCaps.canApproveReject && canReactivate && <button type="button" className="aegis-btn-primary" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
           {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
           {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
           {isAdmin && canProtocolCheck && <button type="button" className="btn btn--protocol-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/protocol-check`)}>Check Protocol</button>}
@@ -2374,13 +2374,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           {isAdmin && canBidsConvert && <button type="button" className="btn btn--bids-convert" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/bids-convert`)}>Convert to BIDS</button>}
           {canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
           {isAdmin && study.bids_status === 'complete' && study.analytics_status !== 'analyzing' && (
-            <button type="button" className="xn-btn-secondary" onClick={() => setLongAnalyticsOpen(o => !o)}>{longAnalyticsOpen ? 'Cancel' : 'Longitudinal Analytics'}</button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setLongAnalyticsOpen(o => !o)}>{longAnalyticsOpen ? 'Cancel' : 'Longitudinal Analytics'}</button>
           )}
           {isAdmin && study.analytics_status !== 'analyzing' && (
             <div ref={analyticsDetailMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
               <button
                 type="button"
-                className="xn-btn-secondary"
+                className="aegis-btn-secondary"
                 onClick={() => setAnalyticsDetailMenuOpen(o => !o)}
                 title="Run a neuroimaging analytics tool on this study"
               >
@@ -2448,9 +2448,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           )}
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
           <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View'}</button>
-          <button type="button" className="xn-btn-secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
-          <button type="button" className="xn-btn-secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
-          {isAdmin && <button type="button" className="xn-btn-secondary" onClick={openReassign}>Move to Project</button>}
+          <button type="button" className="aegis-btn-secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
+          <button type="button" className="aegis-btn-secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
+          {isAdmin && <button type="button" className="aegis-btn-secondary" onClick={openReassign}>Move to Project</button>}
         </div>
         {isAdmin && reassignOpen && (
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -2464,8 +2464,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <button type="button" className="xn-btn-primary" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
-            <button type="button" className="xn-btn-secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
+            <button type="button" className="aegis-btn-primary" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
           </div>
         )}
         {isAdmin && longAnalyticsOpen && (
@@ -2483,7 +2483,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               />
               <button
                 type="button"
-                className="xn-btn-primary"
+                className="aegis-btn-primary"
                 disabled={longWorking || !longBaselineId.trim()}
                 onClick={async () => {
                   setLongWorking(true)
@@ -2506,7 +2506,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                   }
                 }}
               >{longWorking ? 'Starting…' : 'Start Analysis'}</button>
-              <button type="button" className="xn-btn-secondary" onClick={() => { setLongAnalyticsOpen(false); setLongBaselineId('') }}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => { setLongAnalyticsOpen(false); setLongBaselineId('') }}>Cancel</button>
             </div>
             {relationships.length > 0 && (
               <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
@@ -2532,8 +2532,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               onChange={e => setRejectReasonText(e.target.value)}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button type="button" className="xn-btn-secondary" onClick={confirmReject}>Confirm Reject</button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={confirmReject}>Confirm Reject</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
             </div>
           </div>
         )}
@@ -2542,8 +2542,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       {/* DICOM tag inspection panel */}
       {tagsOpen && (
         <div className="dicom-tags-panel">
-          {tagsLoading && <div className="xn-muted">Loading tags…</div>}
-          {!tagsLoading && dicomTags && dicomTags.length === 0 && <div className="xn-muted">No tags found.</div>}
+          {tagsLoading && <div className="aegis-muted">Loading tags…</div>}
+          {!tagsLoading && dicomTags && dicomTags.length === 0 && <div className="aegis-muted">No tags found.</div>}
           {!tagsLoading && dicomTags && dicomTags.length > 0 && (
             <table className="audit-table dicom-tags-table">
               <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Value</th></tr></thead>
@@ -2565,12 +2565,12 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
       {/* Anonymization diff panel */}
       {anonDiffOpen && (
         <div className="dicom-tags-panel">
-          {anonDiffLoading && <div className="xn-muted">Loading diff…</div>}
-          {!anonDiffLoading && anonDiffMsg && <div className="xn-muted">{anonDiffMsg}</div>}
+          {anonDiffLoading && <div className="aegis-muted">Loading diff…</div>}
+          {!anonDiffLoading && anonDiffMsg && <div className="aegis-muted">{anonDiffMsg}</div>}
           {!anonDiffLoading && anonDiff && (() => {
             const { removed, modified, added } = anonDiff.diff
             const totalChanges = removed.length + modified.length + added.length
-            if (totalChanges === 0) return <div className="xn-muted">No tag differences found — files appear identical.</div>
+            if (totalChanges === 0) return <div className="aegis-muted">No tag differences found — files appear identical.</div>
             return (
               <div>
                 {removed.length > 0 && (
@@ -2661,7 +2661,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               style={{ width: 160 }}
               title="Leave blank for unlimited downloads"
             />
-            <button type="button" className="xn-btn-primary" disabled={!shareEmail} onClick={handleShare}>Send</button>
+            <button type="button" className="aegis-btn-primary" disabled={!shareEmail} onClick={handleShare}>Send</button>
           </div>
           {shareResult && (
             <div className="share-result">
@@ -2688,7 +2688,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               <span className="note-char-count">{noteText.length}/2000</span>
               <button
                 type="button"
-                className="xn-btn-secondary"
+                className="aegis-btn-secondary"
                 disabled={!noteText.trim() || noteSaving}
                 onClick={async () => {
                   setNoteSaving(true)
@@ -2757,7 +2757,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
             <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>
               <a
                 href={`/api/studies/${studyId}/audit.csv`}
-                className="xn-btn-secondary"
+                className="aegis-btn-secondary"
                 download
                 title="Download audit trail as CSV"
                 style={{fontSize:'0.8rem'}}
@@ -2819,7 +2819,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               <code style={{ fontSize: 11, color: '#0f766e', flex: 1, wordBreak: 'break-all' }}>{study.auto_share_url}</code>
               <button
                 type="button"
-                className="xn-btn-secondary"
+                className="aegis-btn-secondary"
                 style={{ fontSize: 12, padding: '2px 10px', whiteSpace: 'nowrap' }}
                 onClick={() => navigator.clipboard.writeText(study.auto_share_url!)}
               >
@@ -2912,7 +2912,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                   value={newLabel}
                   onChange={e => setNewLabel(e.target.value)}
                 />
-                <button type="submit" className="xn-btn-primary" disabled={labelSaving || !newLabel.trim()}>
+                <button type="submit" className="aegis-btn-primary" disabled={labelSaving || !newLabel.trim()}>
                   {labelSaving ? 'Adding…' : 'Add'}
                 </button>
               </form>
@@ -2973,7 +2973,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                     )}
                     {rel.notes && <span className="routing-desc" style={{ fontStyle: 'italic' }}>{rel.notes}</span>}
                     {isAdmin && (
-                      <button type="button" className="xn-btn-secondary" style={{ marginLeft: 'auto' }}
+                      <button type="button" className="aegis-btn-secondary" style={{ marginLeft: 'auto' }}
                         title="Remove this relationship link"
                         onClick={async () => {
                           await fetch(`/api/studies/${studyId}/relationships/${rel.id}`, { method: 'DELETE' })
@@ -2990,7 +2990,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
             {isAdmin && (
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
                 <div style={{ fontWeight: 500, fontSize: '0.875rem', marginBottom: '8px' }}>Link a study</div>
-                {linkError && <div className="xn-error" style={{ marginBottom: '8px' }}>{linkError}</div>}
+                {linkError && <div className="aegis-error" style={{ marginBottom: '8px' }}>{linkError}</div>}
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <input className="form-input" style={{ flex: '1 1 260px' }}
                     placeholder="Study UUID or DICOM UID"
@@ -3006,7 +3006,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                     placeholder="Notes (optional)"
                     value={linkNotes}
                     onChange={e => setLinkNotes(e.target.value)} />
-                  <button type="button" className="xn-btn-primary" disabled={linkSaving || !linkStudyUID.trim()}
+                  <button type="button" className="aegis-btn-primary" disabled={linkSaving || !linkStudyUID.trim()}
                     onClick={async () => {
                       setLinkSaving(true)
                       setLinkError(null)
@@ -3045,7 +3045,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
 
         {detailTab === 'diagnostics' && (
           <div className="diagnostics-panel">
-            {!diagnostics && <p className="xn-muted">Diagnostics not available.</p>}
+            {!diagnostics && <p className="aegis-muted">Diagnostics not available.</p>}
             {diagnostics && (
               <>
                 <div className={`diagnostics-summary diagnostics-summary--${diagnostics.summary.stuck ? 'stuck' : diagnostics.summary.terminal ? 'terminal' : 'ok'}`}>
@@ -3143,7 +3143,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                 <div style={{display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end'}}>
                   <button
                     type="button"
-                    className="xn-btn-secondary"
+                    className="aegis-btn-secondary"
                     disabled={!noteText.trim() || noteSaving}
                     onClick={async () => {
                       setNoteSaving(true)
@@ -4123,64 +4123,64 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className="xn-muted">Loading routing configuration…</div>
-  if (error)   return <div className="xn-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading routing configuration…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
     <div >
 
       {/* ── Destinations ── */}
-      <section className="xn-section">
-        <div className="xn-section-bar">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Destinations</h2>
-          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNewDest}>+ Add destination</button>}
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNewDest}>+ Add destination</button>}
         </div>
         <p className="routing-hint">External DICOM endpoints that studies can be forwarded to via <code>route_to</code> rules.</p>
 
         {isAdmin && showDestForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>{editingDestId ? 'Edit destination' : 'New destination'}</h3>
-            {destError && <div className="xn-error">{destError}</div>}
+            {destError && <div className="aegis-error">{destError}</div>}
             <div className="">
-              <input className="xn-filter" placeholder="Name *" value={destForm.name}
+              <input className="aegis-filter" placeholder="Name *" value={destForm.name}
                 onChange={e => setDestForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="xn-filter" placeholder="Slug (auto-generated if blank)" value={destForm.slug}
+              <input className="aegis-filter" placeholder="Slug (auto-generated if blank)" value={destForm.slug}
                 onChange={e => setDestForm(f => ({ ...f, slug: e.target.value }))} />
               <select className="" aria-label="Type" value={destForm.type}
                 onChange={e => setDestForm(f => ({ ...f, type: e.target.value as 'dicomweb' | 'dimse' }))}>
                 <option value="dicomweb">DICOMweb (STOW-RS)</option>
                 <option value="dimse">DIMSE (C-STORE)</option>
               </select>
-              <input className="xn-filter" placeholder="Description" value={destForm.description}
+              <input className="aegis-filter" placeholder="Description" value={destForm.description}
                 onChange={e => setDestForm(f => ({ ...f, description: e.target.value }))} />
               {destForm.type === 'dicomweb' && (
-                <input className="xn-filter" placeholder="DICOMweb base URL *" value={destForm.dicomweb_url}
+                <input className="aegis-filter" placeholder="DICOMweb base URL *" value={destForm.dicomweb_url}
                   onChange={e => setDestForm(f => ({ ...f, dicomweb_url: e.target.value }))} />
               )}
               {destForm.type === 'dimse' && (
                 <>
-                  <input className="xn-filter" placeholder="AE Title" value={destForm.ae_title}
+                  <input className="aegis-filter" placeholder="AE Title" value={destForm.ae_title}
                     onChange={e => setDestForm(f => ({ ...f, ae_title: e.target.value }))} />
-                  <input className="xn-filter" placeholder="Host" value={destForm.host}
+                  <input className="aegis-filter" placeholder="Host" value={destForm.host}
                     onChange={e => setDestForm(f => ({ ...f, host: e.target.value }))} />
-                  <input className="xn-filter" placeholder="Port" type="number" value={destForm.port || ''}
+                  <input className="aegis-filter" placeholder="Port" type="number" value={destForm.port || ''}
                     onChange={e => setDestForm(f => ({ ...f, port: Number(e.target.value) }))} />
                 </>
               )}
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={saveDest} disabled={destSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveDest} disabled={destSaving}>
                 {destSaving ? 'Saving…' : editingDestId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowDestForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowDestForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {destinations.length === 0 && !showDestForm ? (
-          <div className="xn-muted">No destinations yet.</div>
+          <div className="aegis-muted">No destinations yet.</div>
         ) : destinations.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -4205,7 +4205,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                   <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
                     <td>
                       <div className="">{d.name}</div>
-                      {d.description && <div className="xn-muted">{d.description}</div>}
+                      {d.description && <div className="aegis-muted">{d.description}</div>}
                       {healthSummary && healthSummary.test_count > 0 && (
                         <div style={{
                           marginTop: 4, fontSize: 11, padding: '2px 6px', borderRadius: 4,
@@ -4246,14 +4246,14 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                       </span>
                     </td>
                     <td>
-                      <div className="xn-section-controls">
+                      <div className="aegis-section-controls">
                         <button type="button" className="btn btn--secondary" onClick={() => testDest(d.id)} disabled={testing}>
                           {testing ? 'Testing…' : 'Test'}
                         </button>
                         {isAdmin && (
                           <>
-                            <button type="button" className="xn-btn-secondary" onClick={() => openEditDest(d)}>Edit</button>
-                            <button type="button" className="xn-btn-secondary" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                            <button type="button" className="aegis-btn-secondary" onClick={() => openEditDest(d)}>Edit</button>
+                            <button type="button" className="aegis-btn-secondary" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
                           </>
                         )}
                       </div>
@@ -4267,8 +4267,8 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
       </section>
 
       {/* ── Routing Rules ── */}
-      <section className="xn-section">
-        <div className="xn-section-bar">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Routing Rules</h2>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {projectId && (
@@ -4301,7 +4301,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 </button>
               </>
             )}
-            {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNewRule}>+ Add rule</button>}
+            {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNewRule}>+ Add rule</button>}
           </div>
         </div>
         {rulesImportMsg && (
@@ -4315,22 +4315,22 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
         </p>
 
         {isAdmin && showRuleForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>{editingRuleId ? 'Edit rule' : 'New rule'}</h3>
-            {ruleError && <div className="xn-error">{ruleError}</div>}
+            {ruleError && <div className="aegis-error">{ruleError}</div>}
             <div className="">
-              <input className="xn-filter" placeholder="Rule name *" value={ruleForm.name}
+              <input className="aegis-filter" placeholder="Rule name *" value={ruleForm.name}
                 onChange={e => setRuleForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="xn-filter" placeholder="Description" value={ruleForm.description}
+              <input className="aegis-filter" placeholder="Description" value={ruleForm.description}
                 onChange={e => setRuleForm(f => ({ ...f, description: e.target.value }))} />
-              <input className="xn-filter" placeholder="Priority (default 100)" type="number" value={ruleForm.priority}
+              <input className="aegis-filter" placeholder="Priority (default 100)" type="number" value={ruleForm.priority}
                 onChange={e => setRuleForm(f => ({ ...f, priority: Number(e.target.value) }))} />
             </div>
             <div className="routing-form-section-label">Conditions (leave blank = match any)</div>
             <div className="">
-              <input className="xn-filter" placeholder="Modality (e.g. MRI, CT, PET)" value={ruleForm.modality ?? ''}
+              <input className="aegis-filter" placeholder="Modality (e.g. MRI, CT, PET)" value={ruleForm.modality ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, modality: e.target.value || null }))} />
-              <input className="xn-filter" placeholder="Body part (e.g. HEAD, CHEST)" value={ruleForm.body_part ?? ''}
+              <input className="aegis-filter" placeholder="Body part (e.g. HEAD, CHEST)" value={ruleForm.body_part ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, body_part: e.target.value || null }))} />
               <select className="" aria-label="Source filter" value={ruleForm.source ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, source: e.target.value || null }))}>
@@ -4365,17 +4365,17 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 </select>
               )}
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={saveRule} disabled={ruleSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveRule} disabled={ruleSaving}>
                 {ruleSaving ? 'Saving…' : editingRuleId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowRuleForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowRuleForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {rules.length === 0 && !showRuleForm ? (
-          <div className="xn-muted">No routing rules yet. Studies follow the default pipeline.</div>
+          <div className="aegis-muted">No routing rules yet. Studies follow the default pipeline.</div>
         ) : rules.length > 0 && (
           <>
           {isAdmin && selectedRuleIds.size > 0 && (
@@ -4387,7 +4387,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               {bulkToggleMsg && <span style={{ fontSize: '0.8rem', color: bulkToggleMsg.startsWith('HTTP') || bulkToggleMsg.includes('failed') ? '#ea580c' : '#0d9488' }}>{bulkToggleMsg}</span>}
             </div>
           )}
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th style={{ width: 32 }}>
@@ -4452,7 +4452,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                     </td>
                     <td>
                       <div className="">{r.name}</div>
-                      {r.description && <div className="xn-muted">{r.description}</div>}
+                      {r.description && <div className="aegis-muted">{r.description}</div>}
                     </td>
                     <td className="routing-conditions">
                       {conditions.length > 0
@@ -4461,7 +4461,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                     </td>
                     <td>
                       <code className={`routing-action routing-action--${r.action}`}>{r.action}</code>
-                      {destName && <div className="xn-muted">→ {destName}</div>}
+                      {destName && <div className="aegis-muted">→ {destName}</div>}
                     </td>
                     <td>
                       <span className={`badge badge--${r.enabled ? 'enabled' : 'disabled'}`}>
@@ -4470,12 +4470,12 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                     </td>
                     <td>
                       {isAdmin && (
-                        <div className="xn-section-controls">
-                          <button type="button" className="xn-btn-secondary" onClick={() => openEditRule(r)}>Edit</button>
+                        <div className="aegis-section-controls">
+                          <button type="button" className="aegis-btn-secondary" onClick={() => openEditRule(r)}>Edit</button>
                           <button type="button" className="btn btn--secondary" onClick={() => toggleRule(r)}>
                             {r.enabled ? 'Disable' : 'Enable'}
                           </button>
-                          <button type="button" className="xn-btn-secondary" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
+                          <button type="button" className="aegis-btn-secondary" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
                         </div>
                       )}
                     </td>
@@ -4489,8 +4489,8 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
       </section>
 
       {/* ── Rule Analytics ── */}
-      <section className="xn-section">
-        <div className="xn-section-bar" style={{ cursor: 'pointer' }} onClick={() => setRuleStatsOpen(o => !o)}>
+      <section className="aegis-section">
+        <div className="aegis-section-bar" style={{ cursor: 'pointer' }} onClick={() => setRuleStatsOpen(o => !o)}>
           <h2>Rule Analytics {ruleStatsOpen ? '▲' : '▼'}</h2>
           <select
             className=""
@@ -4507,7 +4507,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
         </div>
         {ruleStatsOpen && (
           <div>
-            {ruleStatsLoading && <div className="xn-muted">Loading rule analytics…</div>}
+            {ruleStatsLoading && <div className="aegis-muted">Loading rule analytics…</div>}
             {!ruleStatsLoading && ruleStats && (
               <>
                 <div style={{ display: 'flex', gap: '16px', margin: '12px 0', flexWrap: 'wrap' }}>
@@ -4528,7 +4528,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                   : (
                     <>
                       <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '16px 0 8px', color: '#374151' }}>Rules by hit count</h3>
-                      <table className="xn-table">
+                      <table className="aegis-table">
                         <thead>
                           <tr>
                             <th>Rule</th>
@@ -4559,7 +4559,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 {ruleStats.unused_rules.length > 0 && (
                   <>
                     <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '16px 0 8px', color: '#b45309' }}>Unused rules (no hits in period)</h3>
-                    <table className="xn-table">
+                    <table className="aegis-table">
                       <thead>
                         <tr>
                           <th>Rule</th>
@@ -4586,8 +4586,8 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
       </section>
 
       {/* ── Routing Health ── */}
-      <section className="xn-section">
-        <div className="xn-section-bar" style={{ cursor: 'pointer' }} onClick={() => setHealthOpen(o => !o)}>
+      <section className="aegis-section">
+        <div className="aegis-section-bar" style={{ cursor: 'pointer' }} onClick={() => setHealthOpen(o => !o)}>
           <h2>Routing Health {healthOpen ? '▲' : '▼'}</h2>
           <select
             className=""
@@ -4604,7 +4604,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
         </div>
         {healthOpen && (
           <div>
-            {healthLoading && <div className="xn-muted">Loading routing health…</div>}
+            {healthLoading && <div className="aegis-muted">Loading routing health…</div>}
             {!healthLoading && routingHealth && (
               <>
                 <div style={{ display: 'flex', gap: '24px', margin: '12px 0', flexWrap: 'wrap' }}>
@@ -4623,9 +4623,9 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                   ))}
                 </div>
                 {routingHealth.by_destination.length === 0
-                  ? <div className="xn-muted">No routing attempts recorded in this period.</div>
+                  ? <div className="aegis-muted">No routing attempts recorded in this period.</div>
                   : (
-                    <table className="xn-table">
+                    <table className="aegis-table">
                       <thead>
                         <tr>
                           <th>Destination</th>
@@ -4917,24 +4917,24 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div >
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">Anonymization Profiles</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Named DICOM tag retention overrides applied during upload de-identification.
               The project's default profile is automatically used by the upload portal.
             </div>
           </div>
-          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openCreate}>+ New profile</button>}
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openCreate}>+ New profile</button>}
         </div>
 
         {isAdmin && showForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>{editingId ? 'Edit profile' : 'New profile'}</h3>
-            {formError && <div className="xn-error">{formError}</div>}
+            {formError && <div className="aegis-error">{formError}</div>}
             <div className="">
-              <input className="xn-filter" placeholder="Profile name *"
+              <input className="aegis-filter" placeholder="Profile name *"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               {!editingId && (
@@ -4946,10 +4946,10 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                   ))}
                 </select>
               )}
-              <input className="xn-filter" placeholder="Description"
+              <input className="aegis-filter" placeholder="Description"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-              <input className="xn-filter"
+              <input className="aegis-filter"
                 placeholder="Retained tags — comma-separated DICOM keywords (e.g. PatientAge, StudyDate)"
                 value={tagsInput}
                 onChange={e => setTagsInput(e.target.value)} />
@@ -4959,24 +4959,24 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                 {' '}Enabled
               </label>
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="xn-muted">Loading…</div>}
-        {error   && <div className="xn-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
         {!loading && !error && profiles.length === 0 && (
-          <div className="xn-muted">No profiles yet. Create one to override tag retention per project.</div>
+          <div className="aegis-muted">No profiles yet. Create one to override tag retention per project.</div>
         )}
         {!loading && !error && profiles.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -4994,26 +4994,26 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                   <tr key={p.id} className={p.enabled ? '' : 'routing-row--disabled'}>
                     <td>
                       <div className="">{p.name}</div>
-                      {p.description && <div className="xn-muted">{p.description}</div>}
+                      {p.description && <div className="aegis-muted">{p.description}</div>}
                       {isDefault && <span className="badge badge--status-approved">default</span>}
                     </td>
                     <td>{projectName(p.project_id)}</td>
                     <td>
                       {p.retained_tags?.length > 0
                         ? <span title={p.retained_tags.join(', ')}>{p.retained_tags.length} tag{p.retained_tags.length !== 1 ? 's' : ''}</span>
-                        : <span className="xn-muted">none (full strip)</span>
+                        : <span className="aegis-muted">none (full strip)</span>
                       }
                     </td>
                     <td>{p.enabled ? 'Yes' : 'No'}</td>
                     <td>
                       {isAdmin && (
-                        <div className="xn-section-controls">
-                          <button type="button" className="xn-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
+                        <div className="aegis-section-controls">
+                          <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
                           <button type="button" className="btn btn--secondary"
                             onClick={() => setDefault(p.project_id, p.id, p.name)}>
                             {isDefault ? 'Clear default' : 'Set default'}
                           </button>
-                          <button type="button" className="xn-btn-secondary" onClick={() => del(p.id, p.name)}>Delete</button>
+                          <button type="button" className="aegis-btn-secondary" onClick={() => del(p.id, p.name)}>Delete</button>
                         </div>
                       )}
                     </td>
@@ -5184,16 +5184,16 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div >
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">Protocol Templates</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Define expected acquisition parameters per manufacturer/model/sequence.
               Studies are checked against matching templates when protocol compliance is required.
             </div>
           </div>
-          <div className="xn-section-controls">
+          <div className="aegis-section-controls">
             {projects.length > 0 && (
               <a
                 className="btn btn--secondary"
@@ -5224,7 +5224,7 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 </button>
               </>
             )}
-            {isAdmin && <button type="button" className="xn-btn-primary" onClick={openCreate}>+ New template</button>}
+            {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openCreate}>+ New template</button>}
           </div>
         </div>
         {importMsg && (
@@ -5234,11 +5234,11 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
         )}
 
         {isAdmin && showForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>{editingId ? 'Edit template' : 'New template'}</h3>
-            {formError && <div className="xn-error">{formError}</div>}
+            {formError && <div className="aegis-error">{formError}</div>}
             <div className="">
-              <input className="xn-filter" placeholder="Template name *"
+              <input className="aegis-filter" placeholder="Template name *"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               {!editingId && (
@@ -5250,28 +5250,28 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                   ))}
                 </select>
               )}
-              <input className="xn-filter" placeholder="Description"
+              <input className="aegis-filter" placeholder="Description"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             <div className="routing-form-section-label">Scanner Match Criteria</div>
             <div className="">
-              <input className="xn-filter" placeholder="Manufacturer (e.g. Siemens)"
+              <input className="aegis-filter" placeholder="Manufacturer (e.g. Siemens)"
                 value={form.manufacturer}
                 onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))} />
-              <input className="xn-filter" placeholder="Model (e.g. Prisma)"
+              <input className="aegis-filter" placeholder="Model (e.g. Prisma)"
                 value={form.model}
                 onChange={e => setForm(f => ({ ...f, model: e.target.value }))} />
-              <input className="xn-filter" placeholder="Software version (e.g. syngo MR E11)"
+              <input className="aegis-filter" placeholder="Software version (e.g. syngo MR E11)"
                 value={form.software_version}
                 onChange={e => setForm(f => ({ ...f, software_version: e.target.value }))} />
-              <input className="xn-filter" placeholder="Sequence type (e.g. T1w, FLAIR, DWI)"
+              <input className="aegis-filter" placeholder="Sequence type (e.g. T1w, FLAIR, DWI)"
                 value={form.sequence_type}
                 onChange={e => setForm(f => ({ ...f, sequence_type: e.target.value }))} />
             </div>
             <div className="routing-form-section-label">Compliance Rules (JSON)</div>
             <div className="">
-              <textarea className="xn-filter" rows={6}
+              <textarea className="aegis-filter" rows={6}
                 placeholder='{"SliceThickness":{"min":0.5,"max":1.5},"RepetitionTime":{"min":1900,"max":2200}}'
                 value={form.rules}
                 onChange={e => setForm(f => ({ ...f, rules: e.target.value }))} />
@@ -5281,24 +5281,24 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
               {' '}Enabled
             </label>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="xn-muted">Loading…</div>}
-        {error   && <div className="xn-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
         {!loading && !error && templates.length === 0 && (
-          <div className="xn-muted">No protocol templates yet. Create one to define expected acquisition parameters.</div>
+          <div className="aegis-muted">No protocol templates yet. Create one to define expected acquisition parameters.</div>
         )}
         {!loading && !error && templates.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -5316,7 +5316,7 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 <tr key={t.id} className={t.enabled ? '' : 'routing-row--disabled'}>
                   <td>
                     <div className="">{t.name}</div>
-                    {t.description && <div className="xn-muted">{t.description}</div>}
+                    {t.description && <div className="aegis-muted">{t.description}</div>}
                   </td>
                   <td>{projectName(t.project_id)}</td>
                   <td>{t.manufacturer || '—'}</td>
@@ -5326,9 +5326,9 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                   <td>{t.enabled ? 'Yes' : 'No'}</td>
                   <td>
                     {isAdmin && (
-                      <div className="xn-section-controls">
-                        <button type="button" className="xn-btn-secondary" onClick={() => openEdit(t)}>Edit</button>
-                        <button type="button" className="xn-btn-secondary" onClick={() => del(t.id, t.name)}>Delete</button>
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(t)}>Edit</button>
+                        <button type="button" className="aegis-btn-secondary" onClick={() => del(t.id, t.name)}>Delete</button>
                       </div>
                     )}
                   </td>
@@ -5563,24 +5563,24 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
 
   return (
     <div >
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">Email Digest Subscriptions</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Periodic study summary emails sent per project. Weekly digests send every 7 days;
               monthly every 30 days. No PHI is included.
             </div>
           </div>
-          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openCreate}>+ New subscription</button>}
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openCreate}>+ New subscription</button>}
         </div>
 
         {isAdmin && showForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>New subscription</h3>
-            {formError && <div className="xn-error">{formError}</div>}
+            {formError && <div className="aegis-error">{formError}</div>}
             <div className="">
-              <input className="xn-filter" type="email" placeholder="Email address *"
+              <input className="aegis-filter" type="email" placeholder="Email address *"
                 value={formEmail}
                 onChange={e => setFormEmail(e.target.value)} />
               <select className="" aria-label="Project"
@@ -5597,24 +5597,24 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                 <option value="monthly">Monthly</option>
               </select>
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : 'Subscribe'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="xn-muted">Loading…</div>}
-        {error   && <div className="xn-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
         {!loading && !error && subs.length === 0 && (
-          <div className="xn-muted">No subscriptions yet.</div>
+          <div className="aegis-muted">No subscriptions yet.</div>
         )}
         {!loading && !error && subs.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Email</th>
@@ -5630,11 +5630,11 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                   <td>{sub.email}</td>
                   <td>{sub.project_name}</td>
                   <td className="text-capitalize">{sub.frequency}</td>
-                  <td>{sub.last_sent_at ? fmtDate(sub.last_sent_at) : <span className="xn-muted">never</span>}</td>
+                  <td>{sub.last_sent_at ? fmtDate(sub.last_sent_at) : <span className="aegis-muted">never</span>}</td>
                   <td>
                     {isAdmin && (
-                      <div className="xn-section-controls">
-                        <button type="button" className="xn-btn-secondary"
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary"
                           onClick={() => del(sub.id, sub.email)}>Remove</button>
                       </div>
                     )}
@@ -5647,30 +5647,30 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
       </div>
 
       {/* ── Webhook subscriptions ── */}
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">Webhook Subscriptions</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               HTTP POST callbacks fired on study events, signed with HMAC-SHA256 when a secret is set.
             </div>
           </div>
-          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openWebhookCreate}>+ New webhook</button>}
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openWebhookCreate}>+ New webhook</button>}
         </div>
 
         {isAdmin && showWebhookForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>{whEditId ? 'Edit webhook' : 'New webhook'}</h3>
-            {whFormError && <div className="xn-error">{whFormError}</div>}
+            {whFormError && <div className="aegis-error">{whFormError}</div>}
             <div className="">
-              <input className="xn-filter" type="url" placeholder="Endpoint URL (https://…) *"
+              <input className="aegis-filter" type="url" placeholder="Endpoint URL (https://…) *"
                 value={whURL} onChange={e => setWhURL(e.target.value)} />
               <select className="" aria-label="Project scope"
                 value={whProject} onChange={e => setWhProject(e.target.value)}>
                 <option value="">All projects</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <input className="xn-filter" type="text" placeholder="Secret (optional, for HMAC signing)"
+              <input className="aegis-filter" type="text" placeholder="Secret (optional, for HMAC signing)"
                 value={whSecret} onChange={e => setWhSecret(e.target.value)} />
             </div>
             <div className="form-row" style={{ gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
@@ -5688,23 +5688,23 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                 Enabled
               </label>
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={saveWebhook} disabled={whSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveWebhook} disabled={whSaving}>
                 {whSaving ? 'Saving…' : (whEditId ? 'Update' : 'Create')}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowWebhookForm(false)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowWebhookForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="xn-muted">Loading…</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
         {!loading && !error && webhooks.length === 0 && (
-          <div className="xn-muted">No webhook subscriptions yet.</div>
+          <div className="aegis-muted">No webhook subscriptions yet.</div>
         )}
         {!loading && !error && webhooks.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>URL</th>
@@ -5720,32 +5720,32 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                   <tr key={wh.id}>
                     <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
                     <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
-                    <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="xn-muted">all</span>}</td>
+                    <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="aegis-muted">all</span>}</td>
                     <td>
                       <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
                         {wh.enabled ? 'enabled' : 'disabled'}
                       </span>
                     </td>
                     <td>
-                      <div className="xn-section-controls">
-                        <button type="button" className="xn-btn-secondary"
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary"
                           onClick={() => showStats(wh.id)}
                           title="View delivery statistics">
                           {statsWhId === wh.id ? 'Hide Stats' : 'Stats'}
                         </button>
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           onClick={() => showDeliveries(wh.id)}
                           title="View delivery log">
                           {deliveryWhId === wh.id ? 'Hide Log' : 'Log'}
                         </button>
                         {isAdmin && (
                           <>
-                            <button type="button" className="xn-btn-secondary"
+                            <button type="button" className="aegis-btn-secondary"
                               title="Send a test study.approved payload"
                               onClick={() => testWebhook(wh.id, wh.url)}>Test</button>
-                            <button type="button" className="xn-btn-secondary"
+                            <button type="button" className="aegis-btn-secondary"
                               onClick={() => openWebhookEdit(wh)}>Edit</button>
-                            <button type="button" className="xn-btn-secondary"
+                            <button type="button" className="aegis-btn-secondary"
                               onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
                           </>
                         )}
@@ -5816,7 +5816,7 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                                   {isAdmin && (
                                     <td>
                                       {!d.success && (
-                                        <button type="button" className="xn-btn-secondary"
+                                        <button type="button" className="aegis-btn-secondary"
                                           title="Re-deliver this payload"
                                           onClick={() => retryDelivery(d.id, wh.id)}>Retry</button>
                                       )}
@@ -5994,16 +5994,16 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
     fetchInstProjects(selectedInst.id)
   }
 
-  if (loading) return <div className="xn-muted">Loading institutions…</div>
-  if (error)   return <div className="xn-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading institutions…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
     <div className="institutions-panel">
-      <div className="xn-section-bar">
+      <div className="aegis-section-bar">
         <h2>Institutions</h2>
-        <div className="xn-section-controls">
-          <button type="button" className="xn-icon-btn" onClick={fetchInstitutions}>Refresh</button>
-          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNew}>+ Add institution</button>}
+        <div className="aegis-section-controls">
+          <button type="button" className="aegis-icon-btn" onClick={fetchInstitutions}>Refresh</button>
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNew}>+ Add institution</button>}
         </div>
       </div>
       <p className="routing-hint">
@@ -6012,13 +6012,13 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
 
       {/* Create / Edit form */}
       {isAdmin && showForm && (
-        <div className="xn-section">
+        <div className="aegis-section">
           <h3>{editingId ? 'Edit institution' : 'New institution'}</h3>
-          {formError && <div className="xn-error">{formError}</div>}
+          {formError && <div className="aegis-error">{formError}</div>}
           <div className="">
-            <input className="xn-filter" placeholder="Name *" value={form.name}
+            <input className="aegis-filter" placeholder="Name *" value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-            <input className="xn-filter" placeholder="Slug (auto-generated)" value={form.slug}
+            <input className="aegis-filter" placeholder="Slug (auto-generated)" value={form.slug}
               onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
             <select className="" aria-label="Type" value={form.institution_type}
               onChange={e => setForm(f => ({ ...f, institution_type: e.target.value as Institution['institution_type'] }))}>
@@ -6026,37 +6026,37 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
               <option value="receiver">Receiver (receives studies)</option>
               <option value="both">Both</option>
             </select>
-            <input className="xn-filter" placeholder="Description" value={form.description}
+            <input className="aegis-filter" placeholder="Description" value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div className="routing-form-section-label">Contact</div>
           <div className="">
-            <input className="xn-filter" placeholder="Contact name" value={form.contact_name}
+            <input className="aegis-filter" placeholder="Contact name" value={form.contact_name}
               onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))} />
-            <input className="xn-filter" type="email" placeholder="Contact email" value={form.contact_email}
+            <input className="aegis-filter" type="email" placeholder="Contact email" value={form.contact_email}
               onChange={e => setForm(f => ({ ...f, contact_email: e.target.value }))} />
           </div>
           <div className="routing-form-section-label">Network Identity</div>
           <div className="">
-            <input className="xn-filter" placeholder="IP ranges (CIDR, comma-separated)" value={form.ip_ranges}
+            <input className="aegis-filter" placeholder="IP ranges (CIDR, comma-separated)" value={form.ip_ranges}
               onChange={e => setForm(f => ({ ...f, ip_ranges: e.target.value }))} />
-            <input className="xn-filter" placeholder="DICOM AE title" value={form.ae_title}
+            <input className="aegis-filter" placeholder="DICOM AE title" value={form.ae_title}
               onChange={e => setForm(f => ({ ...f, ae_title: e.target.value }))} />
           </div>
-          <div className="xn-form-actions">
-            <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
+          <div className="aegis-form-actions">
+            <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
               {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
             </button>
-            <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </div>
       )}
 
       {/* Institutions table */}
       {institutions.length === 0 && !showForm ? (
-        <div className="xn-muted">No institutions yet.</div>
+        <div className="aegis-muted">No institutions yet.</div>
       ) : institutions.length > 0 && (
-        <table className="xn-table">
+        <table className="aegis-table">
           <thead>
             <tr>
               <th>Institution</th>
@@ -6078,8 +6078,8 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
               >
                 <td>
                   <div className="">{inst.name}</div>
-                  {inst.description && <div className="xn-muted">{inst.description}</div>}
-                  <code className="xn-code">{inst.slug}</code>
+                  {inst.description && <div className="aegis-muted">{inst.description}</div>}
+                  <code className="aegis-code">{inst.slug}</code>
                 </td>
                 <td>
                   <span className={`routing-action routing-action--${inst.institution_type}`}>
@@ -6088,9 +6088,9 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </td>
                 <td>
                   {inst.contact_name && <div>{inst.contact_name}</div>}
-                  {inst.contact_email && <div className="xn-muted">{inst.contact_email}</div>}
+                  {inst.contact_email && <div className="aegis-muted">{inst.contact_email}</div>}
                 </td>
-                <td className="xn-muted">
+                <td className="aegis-muted">
                   {inst.ip_ranges && <div>{inst.ip_ranges}</div>}
                   {inst.ae_title  && <div>AE: {inst.ae_title}</div>}
                 </td>
@@ -6100,18 +6100,18 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                   </span>
                 </td>
                 <td>
-                  <div className="xn-section-controls">
+                  <div className="aegis-section-controls">
                     <button type="button" className="btn btn--share"
                       onClick={() => selectedInst?.id === inst.id ? setSelectedInst(null) : selectInst(inst)}>
                       {selectedInst?.id === inst.id ? 'Close' : 'Projects'}
                     </button>
-                    {isAdmin && <button type="button" className="xn-btn-secondary" onClick={() => openEdit(inst)}>Edit</button>}
+                    {isAdmin && <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(inst)}>Edit</button>}
                     {isAdmin && (
                       <button type="button" className="btn btn--secondary" onClick={() => toggleInst(inst)}>
                         {inst.enabled ? 'Disable' : 'Enable'}
                       </button>
                     )}
-                    {isAdmin && <button type="button" className="xn-btn-secondary" onClick={() => deleteInst(inst.id, inst.name)}>Delete</button>}
+                    {isAdmin && <button type="button" className="aegis-btn-secondary" onClick={() => deleteInst(inst.id, inst.name)}>Delete</button>}
                   </div>
                 </td>
               </tr>
@@ -6147,9 +6147,9 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
           {isAdmin && (
             <>
               <div className="routing-form-section-label">Link to project</div>
-              {linkError && <div className="xn-error">{linkError}</div>}
+              {linkError && <div className="aegis-error">{linkError}</div>}
               <div className="form-row">
-                <input className="xn-filter" placeholder="Project ID (UUID)"
+                <input className="aegis-filter" placeholder="Project ID (UUID)"
                   value={linkProjectID} onChange={e => setLinkProjectID(e.target.value)} />
                 <select className="" aria-label="Role" value={linkRole}
                   onChange={e => setLinkRole(e.target.value as 'sender' | 'receiver' | 'admin')}>
@@ -6157,7 +6157,7 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                   <option value="receiver">receiver</option>
                   <option value="admin">admin</option>
                 </select>
-                <button type="button" className="xn-btn-primary" onClick={linkProject} disabled={linkSaving}>
+                <button type="button" className="aegis-btn-primary" onClick={linkProject} disabled={linkSaving}>
                   {linkSaving ? 'Linking…' : 'Link'}
                 </button>
               </div>
@@ -6165,11 +6165,11 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
           )}
 
           {projLoading ? (
-            <div className="xn-muted">Loading…</div>
+            <div className="aegis-muted">Loading…</div>
           ) : instProjects.length === 0 ? (
-            <div className="xn-muted">No projects linked yet.</div>
+            <div className="aegis-muted">No projects linked yet.</div>
           ) : (
-            <table className="xn-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -6188,7 +6188,7 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                     <td className="">{fmtDate(ip.created_at)}</td>
                     <td>
                       {isAdmin && (
-                        <button type="button" className="xn-btn-secondary" onClick={() => unlinkProject(ip.project_id)}>
+                        <button type="button" className="aegis-btn-secondary" onClick={() => unlinkProject(ip.project_id)}>
                           Unlink
                         </button>
                       )}
@@ -6521,106 +6521,106 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  if (loading) return <div className="xn-muted">Loading projects…</div>
-  if (error)   return <div className="xn-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading projects…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
     <div >
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">Projects</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Projects group studies and control anonymization profiles. Each upload is associated with one project.
             </div>
           </div>
-          <div className="xn-section-controls">
-            <button type="button" className="xn-icon-btn" onClick={fetchProjects}>Refresh</button>
-            {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNew}>+ New project</button>}
+          <div className="aegis-section-controls">
+            <button type="button" className="aegis-icon-btn" onClick={fetchProjects}>Refresh</button>
+            {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNew}>+ New project</button>}
           </div>
         </div>
 
         {isAdmin && showForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>{editingId ? 'Edit project' : 'New project'}</h3>
-            {formError && <div className="xn-error">{formError}</div>}
+            {formError && <div className="aegis-error">{formError}</div>}
             <div className="">
-              <input className="xn-filter" placeholder="Name *"
+              <input className="aegis-filter" placeholder="Name *"
                 value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="xn-filter" placeholder="Slug (auto-generated if blank)"
+              <input className="aegis-filter" placeholder="Slug (auto-generated if blank)"
                 value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-              <input className="xn-filter" placeholder="Description"
+              <input className="aegis-filter" placeholder="Description"
                 value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             {editingId && (
               <div className="routing-hint">Note: changing the slug will break existing upload portal URLs for this project.</div>
             )}
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline PHI config editor */}
         {phiProjectId && phiConfig && (
-          <div className="xn-section" style={{ marginTop: '16px' }}>
+          <div className="aegis-section" style={{ marginTop: '16px' }}>
             <h3>PHI Scan Config — {projects.find(p => p.id === phiProjectId)?.name}</h3>
-            <div className="xn-muted" style={{ marginBottom: '12px' }}>
+            <div className="aegis-muted" style={{ marginBottom: '12px' }}>
               Override the PHI detection sensitivity thresholds for this project.
               These values are read by the PHI detection service at scan time.
             </div>
-            {phiError && <div className="xn-error">{phiError}</div>}
+            {phiError && <div className="aegis-error">{phiError}</div>}
             <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Confidence threshold (0–1, default 0.4)
-                <input className="xn-filter" type="number" min="0" max="1" step="0.05"
+                <input className="aegis-filter" type="number" min="0" max="1" step="0.05"
                   value={phiConfig.confidence_threshold}
                   onChange={e => setPhiConfig(c => c ? { ...c, confidence_threshold: parseFloat(e.target.value) } : c)} />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Min text length (chars, default 3)
-                <input className="xn-filter" type="number" min="1" step="1"
+                <input className="aegis-filter" type="number" min="1" step="1"
                   value={phiConfig.min_text_length}
                   onChange={e => setPhiConfig(c => c ? { ...c, min_text_length: parseInt(e.target.value, 10) } : c)} />
               </label>
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={savePhiConfig} disabled={phiSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={savePhiConfig} disabled={phiSaving}>
                 {phiSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setPhiProjectId(null)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setPhiProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline retention policy editor */}
         {retentionProjectId && (
-          <div className="xn-section" style={{ marginTop: '16px' }}>
+          <div className="aegis-section" style={{ marginTop: '16px' }}>
             <h3>Retention Policy — {projects.find(p => p.id === retentionProjectId)?.name}</h3>
-            <div className="xn-muted" style={{ marginBottom: '12px' }}>
+            <div className="aegis-muted" style={{ marginBottom: '12px' }}>
               Approved studies older than this threshold are automatically marked as expired.
               Leave blank to keep studies indefinitely. Use "Preview" to see impact before saving.
             </div>
-            {retentionError && <div className="xn-error">{retentionError}</div>}
+            {retentionError && <div className="aegis-error">{retentionError}</div>}
             <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Retention period (days, blank = unlimited)
-                <input className="xn-filter" type="number" min="1" step="1" placeholder="e.g. 90"
+                <input className="aegis-filter" type="number" min="1" step="1" placeholder="e.g. 90"
                   value={retentionDraft}
                   onChange={e => { setRetentionDraft(e.target.value); setRetentionPreview(null) }} />
               </label>
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={saveRetention} disabled={retentionSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveRetention} disabled={retentionSaving}>
                 {retentionSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={previewRetention} disabled={retentionPreviewing || !retentionDraft}>
+              <button type="button" className="aegis-btn-secondary" onClick={previewRetention} disabled={retentionPreviewing || !retentionDraft}>
                 {retentionPreviewing ? 'Checking…' : 'Preview impact'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => { setRetentionProjectId(null); setRetentionPreview(null) }}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => { setRetentionProjectId(null); setRetentionPreview(null) }}>Cancel</button>
             </div>
             {retentionPreview && (
               <div style={{ marginTop: 12, padding: '10px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6 }}>
@@ -6657,38 +6657,38 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
 
         {/* Inline SLA threshold editor */}
         {slaProjectId && (
-          <div className="xn-section" style={{ marginTop: '16px' }}>
+          <div className="aegis-section" style={{ marginTop: '16px' }}>
             <h3>SLA Threshold — {projects.find(p => p.id === slaProjectId)?.name}</h3>
-            <div className="xn-muted" style={{ marginBottom: '12px' }}>
+            <div className="aegis-muted" style={{ marginBottom: '12px' }}>
               Studies idle beyond this threshold are surfaced as "stuck". Leave blank to use the global default (60 min).
             </div>
-            {slaError && <div className="xn-error">{slaError}</div>}
+            {slaError && <div className="aegis-error">{slaError}</div>}
             <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Stuck threshold (minutes, blank = global default)
-                <input className="xn-filter" type="number" min="1" step="1" placeholder="e.g. 120"
+                <input className="aegis-filter" type="number" min="1" step="1" placeholder="e.g. 120"
                   value={slaDraft}
                   onChange={e => setSlaDraft(e.target.value)} />
               </label>
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={saveSla} disabled={slaSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveSla} disabled={slaSaving}>
                 {slaSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setSlaProjectId(null)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setSlaProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline storage quota editor */}
         {quotaProjectId && (
-          <div className="xn-section" style={{ marginTop: '16px' }}>
+          <div className="aegis-section" style={{ marginTop: '16px' }}>
             <h3>Storage Quota — {projects.find(p => p.id === quotaProjectId)?.name}</h3>
-            <div className="xn-muted" style={{ marginBottom: '12px' }}>
+            <div className="aegis-muted" style={{ marginBottom: '12px' }}>
               Maximum total storage for this project. Uploads are rejected when the quota is reached.
               Leave blank to allow unlimited storage.
             </div>
-            {quotaError && <div className="xn-error">{quotaError}</div>}
+            {quotaError && <div className="aegis-error">{quotaError}</div>}
             {quotaUsage && (
               <div style={{ marginBottom: '12px' }}>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
@@ -6712,24 +6712,24 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
             <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Storage limit (GB, blank = unlimited)
-                <input className="xn-filter" type="number" min="0.1" step="0.1" placeholder="e.g. 10"
+                <input className="aegis-filter" type="number" min="0.1" step="0.1" placeholder="e.g. 10"
                   value={quotaDraft}
                   onChange={e => setQuotaDraft(e.target.value)} />
               </label>
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={saveQuota} disabled={quotaSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveQuota} disabled={quotaSaving}>
                 {quotaSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setQuotaProjectId(null)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setQuotaProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {projects.length === 0 && !showForm ? (
-          <div className="xn-muted">No projects yet.</div>
+          <div className="aegis-muted">No projects yet.</div>
         ) : projects.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Project</th>
@@ -6752,45 +6752,45 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                       {p.name}
                       {p.archived && <span className="badge badge--neutral" style={{marginLeft:'6px'}}>archived</span>}
                     </div>
-                    {p.description && <div className="xn-muted">{p.description}</div>}
+                    {p.description && <div className="aegis-muted">{p.description}</div>}
                   </td>
-                  <td><code className="xn-code">{p.slug}</code></td>
+                  <td><code className="aegis-code">{p.slug}</code></td>
                   <td>
                     {p.default_anon_profile_id
-                      ? <span className="xn-pill">profile set</span>
-                      : <span className="xn-muted">none</span>}
+                      ? <span className="aegis-pill">profile set</span>
+                      : <span className="aegis-muted">none</span>}
                   </td>
                   <td>
                     {p.retention_days != null
                       ? <span className="badge badge--status">{p.retention_days}d</span>
-                      : <span className="xn-muted">unlimited</span>}
+                      : <span className="aegis-muted">unlimited</span>}
                   </td>
                   <td>
                     {p.stuck_threshold_minutes != null
                       ? <span className="badge badge--status">{p.stuck_threshold_minutes}m</span>
-                      : <span className="xn-muted">60m</span>}
+                      : <span className="aegis-muted">60m</span>}
                   </td>
                   <td>
                     {p.storage_quota_bytes != null
                       ? <span className="badge badge--status">{formatBytes(p.storage_quota_bytes)}</span>
-                      : <span className="xn-muted">unlimited</span>}
+                      : <span className="aegis-muted">unlimited</span>}
                   </td>
                   <td>
                     {p.restricted
                       ? <span className="badge badge--warn" title="Only project members can see this project">Restricted</span>
-                      : <span className="xn-muted">Open</span>}
+                      : <span className="aegis-muted">Open</span>}
                   </td>
                   <td>
                     {p.member_count != null
                       ? <span className="badge badge--neutral">{p.member_count}</span>
-                      : <span className="xn-muted">—</span>}
+                      : <span className="aegis-muted">—</span>}
                   </td>
                   <td className="">{fmtDate(p.created_at)}</td>
                   <td>
                     {isAdmin && (
-                      <div className="xn-section-controls">
-                        <button type="button" className="xn-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
-                        <button type="button" className="xn-btn-secondary"
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="aegis-btn-secondary"
                           title="Dispatch export forwarding for all approved studies in this project"
                           onClick={async () => {
                             const res = await fetch(`/api/projects/${p.id}/export-batch`, { method: 'POST' })
@@ -6801,22 +6801,22 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           }}>
                           Export Batch
                         </button>
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Configure PHI scan sensitivity for this project"
                           onClick={() => openPhiConfig(p.id)}>
                           PHI Config
                         </button>
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Set study retention period for this project"
                           onClick={() => openRetention(p)}>
                           Retention
                         </button>
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Set per-project SLA threshold for stuck studies"
                           onClick={() => openSla(p)}>
                           SLA
                         </button>
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Set per-project storage quota"
                           onClick={() => openQuota(p)}>
                           Quota
@@ -6828,12 +6828,12 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => toggleArchive(p)}>
                           {archiving === p.id ? '…' : p.archived ? 'Restore' : 'Archive'}
                         </button>
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Duplicate this project with all settings (routing rules, profiles, templates)"
                           onClick={() => cloneProject(p)}>
                           Clone
                         </button>
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Manage project members and their access levels"
                           onClick={() => setMembersProject({ id: p.id, name: p.name })}>
                           Members
@@ -6846,7 +6846,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => toggleRestricted(p)}>
                           {restrictedToggling === p.id ? '…' : p.restricted ? 'Restricted' : 'Restrict'}
                         </button>
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           title="View compliance metrics for this project"
                           onClick={() => setComplianceProjectId(p.id)}>
                           Compliance
@@ -6860,7 +6860,7 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                             ↓ CSV
                           </a>
                         )}
-                        <button type="button" className="xn-btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           title="View pipeline health snapshot for this project"
                           onClick={() => setHealthProject({ id: p.id, name: p.name })}>
                           Health
@@ -7383,8 +7383,8 @@ function InviteCodesPanel() {
 
   const SITE = 'https://aegisimaging.ai'
 
-  if (loading) return <div className="xn-muted">Loading…</div>
-  if (error)   return <div className="xn-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
     <div >
@@ -7408,15 +7408,15 @@ function InviteCodesPanel() {
 
       {/* ── Access Requests tab ──────────────────────────────────────────── */}
       {subTab === 'requests' && (
-        <div className="xn-section">
-          <div className="xn-section-bar">
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
             <div>
               <div className="">Access Requests</div>
-              <div className="xn-muted">
+              <div className="aegis-muted">
                 Users who submitted an access request form. Approve to generate and email an invite code; deny to reject.
               </div>
             </div>
-            <div className="xn-section-controls">
+            <div className="aegis-section-controls">
               <select
                 value={reqFilter}
                 onChange={e => setReqFilter(e.target.value as typeof reqFilter)}
@@ -7427,17 +7427,17 @@ function InviteCodesPanel() {
                 <option value="denied">Denied</option>
                 <option value="all">All</option>
               </select>
-              <button type="button" className="xn-icon-btn" onClick={loadRequests}>Refresh</button>
+              <button type="button" className="aegis-icon-btn" onClick={loadRequests}>Refresh</button>
             </div>
           </div>
 
-          {reqLoading && <div className="xn-muted">Loading…</div>}
-          {reqError   && <div className="xn-error">{reqError}</div>}
+          {reqLoading && <div className="aegis-muted">Loading…</div>}
+          {reqError   && <div className="aegis-error">{reqError}</div>}
           {!reqLoading && !reqError && requests.length === 0 && (
-            <div className="xn-muted">No {reqFilter !== 'all' ? reqFilter : ''} requests.</div>
+            <div className="aegis-muted">No {reqFilter !== 'all' ? reqFilter : ''} requests.</div>
           )}
           {!reqLoading && !reqError && requests.length > 0 && (
-            <table className="xn-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Requester</th>
@@ -7474,10 +7474,10 @@ function InviteCodesPanel() {
                     </td>
                     <td>
                       {req.status === 'pending' ? (
-                        <div className="xn-section-controls">
+                        <div className="aegis-section-controls">
                           <button
                             type="button"
-                            className="xn-btn-secondary"
+                            className="aegis-btn-secondary"
                             disabled={reqActing[req.id]}
                             onClick={() => approveRequest(req.id)}
                             style={{ background: '#0d9488', color: '#fff', border: 'none' }}
@@ -7486,7 +7486,7 @@ function InviteCodesPanel() {
                           </button>
                           <button
                             type="button"
-                            className="xn-btn-secondary"
+                            className="aegis-btn-secondary"
                             disabled={reqActing[req.id]}
                             onClick={() => denyRequest(req.id, req.email)}
                           >
@@ -7508,30 +7508,30 @@ function InviteCodesPanel() {
       )}
 
       {/* ── Invite Codes tab ─────────────────────────────────────────────── */}
-      {subTab === 'codes' && <div className="xn-section">
-        <div className="xn-section-bar">
+      {subTab === 'codes' && <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">Invite Codes</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Per-person codes for landing page access. Each code is unique and can be individually revoked.
               Share the direct link (<code style={{ fontSize: '0.8rem' }}>{SITE}/?invite=CODE</code>) for one-click admission.
             </div>
           </div>
-          <div className="xn-section-controls">
-            <button type="button" className="xn-icon-btn" onClick={load}>Refresh</button>
-            <button type="button" className="xn-btn-primary" onClick={() => { setShowForm(true); setNewCode(null) }}>
+          <div className="aegis-section-controls">
+            <button type="button" className="aegis-icon-btn" onClick={load}>Refresh</button>
+            <button type="button" className="aegis-btn-primary" onClick={() => { setShowForm(true); setNewCode(null) }}>
               + New code
             </button>
           </div>
         </div>
 
         {showForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>New invite code</h3>
-            {formError && <div className="xn-error">{formError}</div>}
+            {formError && <div className="aegis-error">{formError}</div>}
             <div className="">
               <input
-                className="xn-filter"
+                className="aegis-filter"
                 placeholder="Label (e.g. Dr. Jane Smith) *"
                 value={formLabel}
                 onChange={e => setFormLabel(e.target.value)}
@@ -7539,26 +7539,26 @@ function InviteCodesPanel() {
                 autoFocus
               />
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={create} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={create} disabled={saving}>
                 {saving ? 'Creating…' : 'Generate code'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {newCode && (
-          <div className="xn-section" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
+          <div className="aegis-section" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
             <strong style={{ color: '#0f766e' }}>New invite code — share with your recipient:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
               <code style={{ background: '#ccfbf1', padding: '6px 12px', borderRadius: '6px', fontSize: '0.95rem', letterSpacing: '0.1em', flex: 1 }}>
                 {newCode}
               </code>
-              <button type="button" className="xn-btn-secondary" onClick={() => copy(newCode, 'code')}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => copy(newCode, 'code')}>
                 {copied === 'code' ? 'Copied!' : 'Copy code'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => copy(`${SITE}/?invite=${newCode}`, 'link')}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => copy(`${SITE}/?invite=${newCode}`, 'link')}>
                 {copied === 'link' ? 'Copied!' : 'Copy link'}
               </button>
             </div>
@@ -7566,9 +7566,9 @@ function InviteCodesPanel() {
         )}
 
         {codes.length === 0 && !showForm ? (
-          <div className="xn-muted">No invite codes yet. Create one to grant landing page access.</div>
+          <div className="aegis-muted">No invite codes yet. Create one to grant landing page access.</div>
         ) : codes.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Code</th>
@@ -7589,7 +7589,7 @@ function InviteCodesPanel() {
                       <code style={{ fontSize: '0.85rem', letterSpacing: '0.08em' }}>{ic.code}</code>
                       <button
                         type="button"
-                        className="xn-btn-secondary"
+                        className="aegis-btn-secondary"
                         title="Copy code"
                         onClick={() => copy(ic.code, ic.id + '-code')}
                         style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -7598,7 +7598,7 @@ function InviteCodesPanel() {
                       </button>
                       <button
                         type="button"
-                        className="xn-btn-secondary"
+                        className="aegis-btn-secondary"
                         title="Copy invite link"
                         onClick={() => copy(`${SITE}/?invite=${ic.code}`, ic.id + '-link')}
                         style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -7608,7 +7608,7 @@ function InviteCodesPanel() {
                       {ic.enabled && (
                         <button
                           type="button"
-                          className="xn-btn-secondary"
+                          className="aegis-btn-secondary"
                           title="Email this invite code"
                           onClick={() => { setSendId(ic.id); setSendEmail(''); setSendName(''); setSendResult(null) }}
                           style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -7651,11 +7651,11 @@ function InviteCodesPanel() {
                     }
                   </td>
                   <td>
-                    <div className="xn-section-controls">
+                    <div className="aegis-section-controls">
                       {ic.user_email && (
                         <button
                           type="button"
-                          className="xn-btn-secondary"
+                          className="aegis-btn-secondary"
                           title={`View audit activity for ${ic.user_email}`}
                           style={{ fontSize: '0.7rem', padding: '2px 6px' }}
                           onClick={() => { fetchActivity(ic); setAdminInviteId(null); setSendId(null) }}
@@ -7666,7 +7666,7 @@ function InviteCodesPanel() {
                       {ic.user_email && (
                         <button
                           type="button"
-                          className="xn-btn-secondary"
+                          className="aegis-btn-secondary"
                           title={`Invite ${ic.user_email} to admin dashboard`}
                           style={{ fontSize: '0.7rem', padding: '2px 6px', color: '#0d9488', borderColor: '#0d9488' }}
                           onClick={() => { setAdminInviteId(adminInviteId === ic.id ? null : ic.id); setAdminInviteResult(null); setSendId(null); setActivityId(null) }}
@@ -7675,11 +7675,11 @@ function InviteCodesPanel() {
                         </button>
                       )}
                       {ic.enabled && (
-                        <button type="button" className="xn-btn-secondary" onClick={() => revoke(ic)}>
+                        <button type="button" className="aegis-btn-secondary" onClick={() => revoke(ic)}>
                           Revoke
                         </button>
                       )}
-                      <button type="button" className="xn-btn-secondary" onClick={() => del(ic)}>
+                      <button type="button" className="aegis-btn-secondary" onClick={() => del(ic)}>
                         Delete
                       </button>
                     </div>
@@ -7697,7 +7697,7 @@ function InviteCodesPanel() {
                               {' '}— {activityData.total} entries
                               <button
                                 type="button"
-                                className="xn-btn-secondary"
+                                className="aegis-btn-secondary"
                                 style={{ marginLeft: 8, fontSize: '0.65rem', padding: '1px 5px' }}
                                 onClick={() => setActivityId(null)}
                               >✕</button>
@@ -7749,13 +7749,13 @@ function InviteCodesPanel() {
                         </select>
                         <button
                           type="button"
-                          className="xn-btn-primary"
+                          className="aegis-btn-primary"
                           onClick={() => sendAdminInvite(ic)}
                           disabled={adminInviteSending}
                         >{adminInviteSending ? 'Sending…' : 'Send Invite'}</button>
                         <button
                           type="button"
-                          className="xn-btn-secondary"
+                          className="aegis-btn-secondary"
                           onClick={() => { setAdminInviteId(null); setAdminInviteResult(null) }}
                         >Cancel</button>
                         {adminInviteResult && (
@@ -7777,7 +7777,7 @@ function InviteCodesPanel() {
                             <button
                               key={cloud}
                               type="button"
-                              className="xn-btn-secondary"
+                              className="aegis-btn-secondary"
                               onClick={() => setAdminInviteHelpCloud(cloud)}
                               style={{
                                 fontSize: '0.7rem', padding: '2px 8px',
@@ -7849,13 +7849,13 @@ function InviteCodesPanel() {
                         />
                         <button
                           type="button"
-                          className="xn-btn-primary"
+                          className="aegis-btn-primary"
                           onClick={() => sendCode(ic)}
                           disabled={sending}
                         >{sending ? 'Sending…' : 'Send'}</button>
                         <button
                           type="button"
-                          className="xn-btn-secondary"
+                          className="aegis-btn-secondary"
                           onClick={() => { setSendId(null); setSendResult(null) }}
                         >Cancel</button>
                         {sendResult && (
@@ -7942,38 +7942,38 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
     fetchPeers()
   }
 
-  if (loading) return <div className="xn-muted">Loading…</div>
-  if (error)   return <div className="xn-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
     <div >
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">Federation Peers</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Trusted remote AEGIS instances for future cross-tenant study federation.
               No data flows between peers yet — this is a configuration stub.
             </div>
           </div>
-          <div className="xn-section-controls">
-            <button type="button" className="xn-icon-btn" onClick={fetchPeers}>Refresh</button>
-            {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNew}>+ Add peer</button>}
+          <div className="aegis-section-controls">
+            <button type="button" className="aegis-icon-btn" onClick={fetchPeers}>Refresh</button>
+            {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNew}>+ Add peer</button>}
           </div>
         </div>
 
         {isAdmin && showForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>{editingId ? 'Edit peer' : 'New federation peer'}</h3>
-            {formError && <div className="xn-error">{formError}</div>}
+            {formError && <div className="aegis-error">{formError}</div>}
             <div className="">
-              <input className="xn-filter" placeholder="Name *"
+              <input className="aegis-filter" placeholder="Name *"
                 value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="xn-filter" placeholder="Slug (auto-generated)"
+              <input className="aegis-filter" placeholder="Slug (auto-generated)"
                 value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-              <input className="xn-filter" placeholder="API URL * (e.g. https://peer.example.com)"
+              <input className="aegis-filter" placeholder="API URL * (e.g. https://peer.example.com)"
                 value={form.api_url} onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))} />
-              <input className="xn-filter" placeholder="Notes"
+              <input className="aegis-filter" placeholder="Notes"
                 value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
             {editingId && (
@@ -7983,19 +7983,19 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
                 Enabled
               </label>
             )}
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add peer'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {peers.length === 0 && !showForm ? (
-          <div className="xn-muted">No federation peers configured.</div>
+          <div className="aegis-muted">No federation peers configured.</div>
         ) : peers.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Peer</th>
@@ -8011,21 +8011,21 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
                 <tr key={p.id}>
                   <td>
                     <div className="">{p.name}</div>
-                    {p.notes && <div className="xn-muted">{p.notes}</div>}
+                    {p.notes && <div className="aegis-muted">{p.notes}</div>}
                   </td>
-                  <td><code className="xn-code">{p.slug}</code></td>
+                  <td><code className="aegis-code">{p.slug}</code></td>
                   <td><a href={p.api_url} target="_blank" rel="noopener noreferrer">{p.api_url}</a></td>
                   <td>
                     {p.enabled
-                      ? <span className="xn-pill">enabled</span>
-                      : <span className="xn-muted">disabled</span>}
+                      ? <span className="aegis-pill">enabled</span>
+                      : <span className="aegis-muted">disabled</span>}
                   </td>
                   <td className="">{fmtDate(p.created_at)}</td>
                   {isAdmin && (
                     <td>
-                      <div className="xn-section-controls">
-                        <button type="button" className="xn-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
-                        <button type="button" className="xn-btn-secondary" onClick={() => deletePeer(p)}>Delete</button>
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="aegis-btn-secondary" onClick={() => deletePeer(p)}>Delete</button>
                       </div>
                     </td>
                   )}
@@ -8224,28 +8224,28 @@ function UsersPanel() {
     setActivityLoading(false)
   }
 
-  if (loading) return <div className="xn-muted">Loading users…</div>
-  if (error)   return <div className="xn-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading users…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
     <>
-      <section className="xn-section">
-        <div className="xn-section-bar">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Admin Users</h2>
-          <div className="xn-section-controls">
-            <button type="button" className="xn-icon-btn" onClick={fetchUsers} title="Refresh" aria-label="Refresh">↻</button>
-            <button type="button" className="xn-btn-primary" onClick={openNew}>+ Add user</button>
+          <div className="aegis-section-controls">
+            <button type="button" className="aegis-icon-btn" onClick={fetchUsers} title="Refresh" aria-label="Refresh">↻</button>
+            <button type="button" className="aegis-btn-primary" onClick={openNew}>+ Add user</button>
           </div>
         </div>
-        <p className="xn-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: 13 }}>
+        <p className="aegis-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: 13 }}>
           Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production.
         </p>
 
         {users.length === 0 && !showForm ? (
-          <div className="xn-muted">No users yet.</div>
+          <div className="aegis-muted">No users yet.</div>
         ) : users.length > 0 && (
-          <div className="xn-table-wrap">
-            <table className="xn-table">
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>User</th>
@@ -8262,22 +8262,22 @@ function UsersPanel() {
                     <tr style={{ opacity: u.enabled ? 1 : 0.5 }}>
                       <td>
                         <div style={{ fontWeight: 500 }}>{u.name || u.email}</div>
-                        {u.name && <div className="xn-muted" style={{ fontSize: 12 }}>{u.email}</div>}
+                        {u.name && <div className="aegis-muted" style={{ fontSize: 12 }}>{u.email}</div>}
                       </td>
-                      <td><span className="xn-pill">{u.role}</span></td>
+                      <td><span className="aegis-pill">{u.role}</span></td>
                       <td>
                         {u.enabled
-                          ? <span className="xn-pill">enabled</span>
-                          : <span className="xn-muted" style={{ fontSize: 12 }}>disabled</span>}
+                          ? <span className="aegis-pill">enabled</span>
+                          : <span className="aegis-muted" style={{ fontSize: 12 }}>disabled</span>}
                       </td>
-                      <td className="xn-muted">{u.notes || '—'}</td>
+                      <td className="aegis-muted">{u.notes || '—'}</td>
                       <td>{fmtDate(u.created_at)}</td>
                       <td>
-                        <div className="xn-section-controls">
-                          <button type="button" className="xn-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openEdit(u)}>Edit</button>
-                          <button type="button" className="xn-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openPrefs(u)}
+                        <div className="aegis-section-controls">
+                          <button type="button" className="aegis-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openEdit(u)}>Edit</button>
+                          <button type="button" className="aegis-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openPrefs(u)}
                             title="Configure digest frequency and notification event preferences">Prefs</button>
-                          <button type="button" className="xn-btn-secondary"
+                          <button type="button" className="aegis-btn-secondary"
                             disabled={inviteSendingId === u.id}
                             style={{ padding: '4px 10px', fontSize: 12 }}
                             onClick={() => sendInvite(u)}
@@ -8285,19 +8285,19 @@ function UsersPanel() {
                             {inviteSendingId === u.id ? 'Sending…' : 'Send Invite'}
                           </button>
                           <button type="button"
-                            className={activityUserId === u.id ? 'xn-btn-primary' : 'xn-btn-secondary'}
+                            className={activityUserId === u.id ? 'aegis-btn-primary' : 'aegis-btn-secondary'}
                             style={{ padding: '4px 10px', fontSize: 12 }}
                             onClick={() => openActivity(u)}
                             title="View login sessions and recent audit activity for this user">
                             Activity
                           </button>
-                          <button type="button" className="xn-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => toggleUser(u)}>
+                          <button type="button" className="aegis-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => toggleUser(u)}>
                             {u.enabled ? 'Disable' : 'Enable'}
                           </button>
-                          <button type="button" className="xn-btn-secondary" style={{ padding: '4px 10px', fontSize: 12, color: 'var(--xn-error-text)', borderColor: 'var(--xn-error-text)' }} onClick={() => deleteUser(u.id, u.email)}>Delete</button>
+                          <button type="button" className="aegis-btn-secondary" style={{ padding: '4px 10px', fontSize: 12, color: 'var(--aegis-error-text)', borderColor: 'var(--aegis-error-text)' }} onClick={() => deleteUser(u.id, u.email)}>Delete</button>
                         </div>
                         {inviteSentMsg[u.id] && (
-                          <div className="xn-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                          <div className="aegis-muted" style={{ fontSize: 11, marginTop: 4 }}>
                             {inviteSentMsg[u.id]}
                           </div>
                         )}
@@ -8305,35 +8305,35 @@ function UsersPanel() {
                     </tr>
                     {activityUserId === u.id && (
                       <tr>
-                        <td colSpan={6} style={{ padding: 0, background: 'var(--xn-bg)' }}>
+                        <td colSpan={6} style={{ padding: 0, background: 'var(--aegis-bg)' }}>
                           <div style={{ padding: 16 }}>
-                            <div className="xn-section-bar">
+                            <div className="aegis-section-bar">
                               <h3 style={{ margin: 0, fontSize: 14 }}>
                                 Activity — {activityUserName}
-                                <span className="xn-muted" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>{activityEmail}</span>
+                                <span className="aegis-muted" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>{activityEmail}</span>
                               </h3>
-                              <button type="button" className="xn-btn-secondary" onClick={() => setActivityUserId(null)}>Close</button>
+                              <button type="button" className="aegis-btn-secondary" onClick={() => setActivityUserId(null)}>Close</button>
                             </div>
                             {activityLoading ? (
-                              <div className="xn-muted">Loading activity…</div>
+                              <div className="aegis-muted">Loading activity…</div>
                             ) : (
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                                 <div>
-                                  <div className="xn-control-label" style={{ marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                                  <div className="aegis-control-label" style={{ marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
                                     Login Sessions (last 20)
                                   </div>
                                   {activitySessions.length === 0 ? (
-                                    <div className="xn-muted" style={{ fontSize: 12 }}>No sessions recorded yet.</div>
+                                    <div className="aegis-muted" style={{ fontSize: 12 }}>No sessions recorded yet.</div>
                                   ) : (
-                                    <div className="xn-table-wrap">
-                                      <table className="xn-table" style={{ fontSize: 12 }}>
+                                    <div className="aegis-table-wrap">
+                                      <table className="aegis-table" style={{ fontSize: 12 }}>
                                         <thead><tr><th>When</th><th>IP</th><th>Browser</th></tr></thead>
                                         <tbody>
                                           {activitySessions.map(s => (
                                             <tr key={s.id}>
                                               <td>{fmtDate(s.created_at)}</td>
-                                              <td><code className="xn-code">{s.ip_address || '—'}</code></td>
-                                              <td className="xn-cell-truncate" title={s.user_agent}>
+                                              <td><code className="aegis-code">{s.ip_address || '—'}</code></td>
+                                              <td className="aegis-cell-truncate" title={s.user_agent}>
                                                 {s.user_agent ? s.user_agent.replace(/\s*\(.*?\)\s*/g, ' ').trim().slice(0, 40) : '—'}
                                               </td>
                                             </tr>
@@ -8344,21 +8344,21 @@ function UsersPanel() {
                                   )}
                                 </div>
                                 <div>
-                                  <div className="xn-control-label" style={{ marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                                  <div className="aegis-control-label" style={{ marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
                                     Recent Actions (last 20)
                                   </div>
                                   {activityAudit.length === 0 ? (
-                                    <div className="xn-muted" style={{ fontSize: 12 }}>No audit entries found.</div>
+                                    <div className="aegis-muted" style={{ fontSize: 12 }}>No audit entries found.</div>
                                   ) : (
-                                    <div className="xn-table-wrap">
-                                      <table className="xn-table" style={{ fontSize: 12 }}>
+                                    <div className="aegis-table-wrap">
+                                      <table className="aegis-table" style={{ fontSize: 12 }}>
                                         <thead><tr><th>When</th><th>Action</th><th>Resource</th></tr></thead>
                                         <tbody>
                                           {activityAudit.map(a => (
                                             <tr key={a.id}>
                                               <td>{fmtDate(a.created_at)}</td>
-                                              <td><code className="xn-code">{a.action}</code></td>
-                                              <td className="xn-muted">
+                                              <td><code className="aegis-code">{a.action}</code></td>
+                                              <td className="aegis-muted">
                                                 {a.resource_type}{a.resource_id ? ` ${a.resource_id.slice(0, 8)}…` : ''}
                                               </td>
                                             </tr>
@@ -8383,22 +8383,22 @@ function UsersPanel() {
       </section>
 
       {showForm && (
-        <section className="xn-section">
-          <div className="xn-section-bar">
+        <section className="aegis-section">
+          <div className="aegis-section-bar">
             <h2>{editingId ? 'Edit user' : 'New user'}</h2>
           </div>
-          {formError && <div className="xn-error">{formError}</div>}
-          <div className="xn-form-row">
+          {formError && <div className="aegis-error">{formError}</div>}
+          <div className="aegis-form-row">
             <label htmlFor="user-email">Email *</label>
             <input id="user-email" type="email" value={form.email}
               onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
           </div>
-          <div className="xn-form-row">
+          <div className="aegis-form-row">
             <label htmlFor="user-name">Display name</label>
             <input id="user-name" value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
-          <div className="xn-form-row">
+          <div className="aegis-form-row">
             <label htmlFor="user-role">Role</label>
             <select id="user-role" value={form.role}
               onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'viewer' }))}>
@@ -8406,30 +8406,30 @@ function UsersPanel() {
               <option value="viewer">viewer — read-only</option>
             </select>
           </div>
-          <div className="xn-form-row">
+          <div className="aegis-form-row">
             <label htmlFor="user-notes">Notes</label>
             <input id="user-notes" value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="(optional)" />
           </div>
-          <div className="xn-form-actions">
-            <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
+          <div className="aegis-form-actions">
+            <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
               {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
             </button>
-            <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </section>
       )}
 
       {prefsUserId && (
-        <section className="xn-section">
-          <div className="xn-section-bar">
+        <section className="aegis-section">
+          <div className="aegis-section-bar">
             <h2>Notification Preferences — {prefsUserName}</h2>
           </div>
-          <p className="xn-muted" style={{ fontSize: 13, marginTop: 0 }}>
+          <p className="aegis-muted" style={{ fontSize: 13, marginTop: 0 }}>
             Controls digest email frequency and which events trigger notifications for this user.
           </p>
-          {prefsError && <div className="xn-error">{prefsError}</div>}
-          <div className="xn-form-row">
+          {prefsError && <div className="aegis-error">{prefsError}</div>}
+          <div className="aegis-form-row">
             <label htmlFor="prefs-freq">Digest frequency</label>
             <select id="prefs-freq" value={prefsFreq} onChange={e => setPrefsFreq(e.target.value)}>
               <option value="none">None — no digest emails</option>
@@ -8438,7 +8438,7 @@ function UsersPanel() {
               <option value="monthly">Monthly</option>
             </select>
           </div>
-          <div className="xn-form-row">
+          <div className="aegis-form-row">
             <label>Notify on events</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {NOTIFY_EVENT_OPTIONS.map(opt => (
@@ -8446,16 +8446,16 @@ function UsersPanel() {
                   <input type="checkbox" checked={prefsEvents.includes(opt.value)}
                     onChange={() => togglePrefsEvent(opt.value)} />
                   <span>{opt.label}</span>
-                  <code className="xn-code">{opt.value}</code>
+                  <code className="aegis-code">{opt.value}</code>
                 </label>
               ))}
             </div>
           </div>
-          <div className="xn-form-actions">
-            <button type="button" className="xn-btn-primary" onClick={savePrefs} disabled={prefsSaving}>
+          <div className="aegis-form-actions">
+            <button type="button" className="aegis-btn-primary" onClick={savePrefs} disabled={prefsSaving}>
               {prefsSaving ? 'Saving…' : 'Save'}
             </button>
-            <button type="button" className="xn-btn-secondary" onClick={() => setPrefsUserId(null)}>Cancel</button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setPrefsUserId(null)}>Cancel</button>
           </div>
         </section>
       )}
@@ -8776,15 +8776,15 @@ function DimseOpsPanel() {
 
   return (
     <div >
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">DIMSE Retry Operations</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Monitor and control DIMSE ingest pending/dead-letter queues.
             </div>
           </div>
-          <button type="button" className="xn-icon-btn" onClick={load} disabled={loading || disableBulk}>
+          <button type="button" className="aegis-icon-btn" onClick={load} disabled={loading || disableBulk}>
             Refresh
           </button>
         </div>
@@ -8793,8 +8793,8 @@ function DimseOpsPanel() {
           This panel proxies <code>/ingest/retry*</code> controls from the DIMSE sidecar through the API.
         </p>
 
-        {error && <div className="xn-error">{error}</div>}
-        {loading && <div className="xn-muted">Loading DIMSE operations…</div>}
+        {error && <div className="aegis-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading DIMSE operations…</div>}
 
         {!loading && summary && (
           <>
@@ -8825,18 +8825,18 @@ function DimseOpsPanel() {
               </div>
             </div>
 
-            <div className="xn-section">
+            <div className="aegis-section">
               <h3>Bulk Controls</h3>
               <div className="">
                 <input
-                  className="xn-filter"
+                  className="aegis-filter"
                   type="text"
                   placeholder="Filter by StudyInstanceUID (optional)"
                   value={studyFilter}
                   onChange={(e) => setStudyFilter(e.target.value)}
                 />
                 <input
-                  className="xn-filter"
+                  className="aegis-filter"
                   type="number"
                   min={1}
                   max={50000}
@@ -8844,7 +8844,7 @@ function DimseOpsPanel() {
                   onChange={(e) => setBulkLimit(Number(e.target.value) || 1)}
                 />
               </div>
-              <div className="xn-form-actions">
+              <div className="aegis-form-actions">
                 <button
                   type="button"
                   className="btn btn--secondary"
@@ -8883,7 +8883,7 @@ function DimseOpsPanel() {
                 </button>
                 <button
                   type="button"
-                  className="xn-btn-secondary"
+                  className="aegis-btn-secondary"
                   disabled={disableBulk}
                   onClick={() => runAction(
                     'Clear dead-letter',
@@ -8904,17 +8904,17 @@ function DimseOpsPanel() {
       </div>
 
       {!loading && details && (
-        <div className="xn-section">
-          <div className="xn-section-bar">
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
             <div>
               <div className="">Pending Queue ({details.pending_total})</div>
             </div>
           </div>
 
           {details.pending_items.length === 0 ? (
-            <div className="xn-muted">No pending retry items.</div>
+            <div className="aegis-muted">No pending retry items.</div>
           ) : (
-            <table className="xn-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Study UID</th>
@@ -8934,14 +8934,14 @@ function DimseOpsPanel() {
                     <td>
                       {item.next_attempt_at > 0 ? `${item.seconds_until_next_attempt}s` : 'n/a'}
                       {item.next_attempt_at > 0 && (
-                        <div className="xn-muted">{fmtDate(new Date(item.next_attempt_at * 1000).toISOString())}</div>
+                        <div className="aegis-muted">{fmtDate(new Date(item.next_attempt_at * 1000).toISOString())}</div>
                       )}
                     </td>
                     <td>{item.age_seconds}s</td>
                     <td>{item.file_count} files / {item.series_count} series</td>
                     <td><code>{item.last_error || '—'}</code></td>
                     <td>
-                      <div className="xn-section-controls">
+                      <div className="aegis-section-controls">
                         <button
                           type="button"
                           className="btn btn--secondary"
@@ -8955,7 +8955,7 @@ function DimseOpsPanel() {
                         </button>
                         <button
                           type="button"
-                          className="xn-btn-secondary"
+                          className="aegis-btn-secondary"
                           disabled={disableBulk}
                           onClick={() => runAction(
                             'Clear pending study',
@@ -8976,17 +8976,17 @@ function DimseOpsPanel() {
       )}
 
       {!loading && details && (
-        <div className="xn-section">
-          <div className="xn-section-bar">
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
             <div>
               <div className="">Dead-letter Queue ({details.dead_letter_total})</div>
             </div>
           </div>
 
           {details.dead_letter_items.length === 0 ? (
-            <div className="xn-muted">No dead-letter items.</div>
+            <div className="aegis-muted">No dead-letter items.</div>
           ) : (
-            <table className="xn-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Study UID</th>
@@ -9006,7 +9006,7 @@ function DimseOpsPanel() {
                     <td>{item.file_count} files / {item.series_count} series</td>
                     <td><code>{item.last_error || '—'}</code></td>
                     <td>
-                      <div className="xn-section-controls">
+                      <div className="aegis-section-controls">
                         <button
                           type="button"
                           className="btn btn--secondary"
@@ -9020,7 +9020,7 @@ function DimseOpsPanel() {
                         </button>
                         <button
                           type="button"
-                          className="xn-btn-secondary"
+                          className="aegis-btn-secondary"
                           disabled={disableBulk}
                           onClick={() => runAction(
                             'Clear dead-letter study',
@@ -9041,14 +9041,14 @@ function DimseOpsPanel() {
       )}
 
       {!loading && (
-        <div className="xn-section">
-          <div className="xn-section-bar">
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
             <div className="">Recent Retry Alerts</div>
           </div>
           {alerts.length === 0 ? (
-            <div className="xn-muted">No recent retry threshold alerts.</div>
+            <div className="aegis-muted">No recent retry threshold alerts.</div>
           ) : (
-            <table className="xn-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -9075,14 +9075,14 @@ function DimseOpsPanel() {
       )}
 
       {!loading && (
-        <div className="xn-section">
-          <div className="xn-section-bar">
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
             <div className="">Recent Operator Actions</div>
           </div>
           {actions.length === 0 ? (
-            <div className="xn-muted">No recent retry-control actions.</div>
+            <div className="aegis-muted">No recent retry-control actions.</div>
           ) : (
-            <table className="xn-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -9202,60 +9202,60 @@ function APIKeysPanel() {
 
   return (
     <div >
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">API Keys</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Machine-to-machine credentials for programmatic API access. The raw key is shown only once at creation.
             </div>
           </div>
-          <button type="button" className="xn-btn-primary" onClick={() => { setShowForm(true); setNewKeyValue(null) }}>
+          <button type="button" className="aegis-btn-primary" onClick={() => { setShowForm(true); setNewKeyValue(null) }}>
             + New API key
           </button>
         </div>
 
         {newKeyValue && (
-          <div className="xn-section" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+          <div className="aegis-section" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
             <strong style={{ color: '#166534' }}>API key {newKeyLabel} — copy it now, it will not be shown again:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
               <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
                 {newKeyValue}
               </code>
-              <button type="button" className="xn-btn-secondary"
+              <button type="button" className="aegis-btn-secondary"
                 onClick={() => navigator.clipboard.writeText(newKeyValue!)}>Copy</button>
             </div>
-            <button type="button" className="xn-btn-secondary" style={{ marginTop: '8px' }} onClick={() => setNewKeyValue(null)}>Dismiss</button>
+            <button type="button" className="aegis-btn-secondary" style={{ marginTop: '8px' }} onClick={() => setNewKeyValue(null)}>Dismiss</button>
           </div>
         )}
 
         {showForm && (
-          <div className="xn-section">
+          <div className="aegis-section">
             <h3>New API key</h3>
-            {formError && <div className="xn-error">{formError}</div>}
+            {formError && <div className="aegis-error">{formError}</div>}
             <div className="">
-              <input className="xn-filter" type="text" placeholder="Key name *"
+              <input className="aegis-filter" type="text" placeholder="Key name *"
                 value={formName} onChange={e => setFormName(e.target.value)} />
-              <input className="xn-filter" type="date" placeholder="Expiry date (optional)"
+              <input className="aegis-filter" type="date" placeholder="Expiry date (optional)"
                 value={formExpiry} onChange={e => setFormExpiry(e.target.value)}
                 title="Expiry date (optional)" />
             </div>
-            <div className="xn-form-actions">
-              <button type="button" className="xn-btn-primary" onClick={create} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={create} disabled={saving}>
                 {saving ? 'Creating…' : 'Create'}
               </button>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
-        {loading && <div className="xn-muted">Loading…</div>}
-        {error   && <div className="xn-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
         {!loading && !error && keys.length === 0 && (
-          <div className="xn-muted">No API keys yet.</div>
+          <div className="aegis-muted">No API keys yet.</div>
         )}
         {!loading && !error && keys.length > 0 && (
-          <table className="xn-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -9273,23 +9273,23 @@ function APIKeysPanel() {
                   <td>{k.name}</td>
                   <td><code style={{ fontSize: '0.8rem' }}>{k.key_prefix}…</code></td>
                   <td>{k.created_by}</td>
-                  <td>{k.last_used_at ? fmtDate(k.last_used_at) : <span className="xn-muted">never</span>}</td>
-                  <td>{k.expires_at ? fmtDate(k.expires_at) : <span className="xn-muted">never</span>}</td>
+                  <td>{k.last_used_at ? fmtDate(k.last_used_at) : <span className="aegis-muted">never</span>}</td>
+                  <td>{k.expires_at ? fmtDate(k.expires_at) : <span className="aegis-muted">never</span>}</td>
                   <td>
                     <span className={`status-badge status-badge--${k.enabled ? 'clean' : 'failed'}`}>
                       {k.enabled ? 'active' : 'disabled'}
                     </span>
                   </td>
                   <td>
-                    <div className="xn-section-controls">
-                      <button type="button" className="xn-btn-secondary" onClick={() => toggle(k)}>
+                    <div className="aegis-section-controls">
+                      <button type="button" className="aegis-btn-secondary" onClick={() => toggle(k)}>
                         {k.enabled ? 'Disable' : 'Enable'}
                       </button>
-                      <button type="button" className="xn-btn-secondary" onClick={() => rotate(k)}
+                      <button type="button" className="aegis-btn-secondary" onClick={() => rotate(k)}
                         disabled={rotatingId === k.id}>
                         {rotatingId === k.id ? 'Rotating…' : 'Rotate'}
                       </button>
-                      <button type="button" className="xn-btn-secondary" onClick={() => del(k)}>Delete</button>
+                      <button type="button" className="aegis-btn-secondary" onClick={() => del(k)}>Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -9410,29 +9410,29 @@ function DownloadsPanel() {
 
   return (
     <div >
-      <div className="xn-section">
-        <div className="xn-section-bar">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
             <div className="">Desktop client installers</div>
-            <div className="xn-muted">
+            <div className="aegis-muted">
               Manage and distribute installable AEGIS desktop apps. Upload new versions, mark which version is current per platform, and email install links to specific users.
             </div>
           </div>
-          <button type="button" className="xn-btn-primary" onClick={() => setShowUpload(true)}>
+          <button type="button" className="aegis-btn-primary" onClick={() => setShowUpload(true)}>
             + Upload version
           </button>
         </div>
 
         {toast && (
-          <div className="xn-section" style={{ background: '#ccfbf1', border: '1px solid #5eead4', color: '#0f766e' }}>
+          <div className="aegis-section" style={{ background: '#ccfbf1', border: '1px solid #5eead4', color: '#0f766e' }}>
             {toast}
           </div>
         )}
-        {loading && <div className="xn-muted">Loading…</div>}
-        {error   && <div className="xn-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
 
         {!loading && !error && installers.length === 0 && (
-          <div className="xn-muted">
+          <div className="aegis-muted">
             No installers uploaded yet. Click <strong>Upload version</strong> to register the first one — or use the JSON API to register an external download URL (e.g. GitHub Releases).
           </div>
         )}
@@ -9490,14 +9490,14 @@ function DownloadsPanel() {
                             }}>{current.changelog}</div>
                           )}
                         </div>
-                        <div className="xn-section-controls" style={{ flexShrink: 0 }}>
-                          <a className="xn-btn-secondary" href={downloadHref(current)} target="_blank" rel="noreferrer">
+                        <div className="aegis-section-controls" style={{ flexShrink: 0 }}>
+                          <a className="aegis-btn-secondary" href={downloadHref(current)} target="_blank" rel="noreferrer">
                             Download
                           </a>
-                          <button type="button" className="xn-btn-secondary" onClick={() => setShowSendFor(current)}>
+                          <button type="button" className="aegis-btn-secondary" onClick={() => setShowSendFor(current)}>
                             Send link
                           </button>
-                          <button type="button" className="xn-btn-secondary" onClick={() => del(current)}>
+                          <button type="button" className="aegis-btn-secondary" onClick={() => del(current)}>
                             Delete
                           </button>
                         </div>
@@ -9507,7 +9507,7 @@ function DownloadsPanel() {
                           <summary style={{ cursor: 'pointer', color: '#64748b', fontSize: '13px' }}>
                             {history.length} older version{history.length === 1 ? '' : 's'}
                           </summary>
-                          <table className="xn-table" style={{ marginTop: '8px' }}>
+                          <table className="aegis-table" style={{ marginTop: '8px' }}>
                             <thead>
                               <tr>
                                 <th>Version</th><th>Size</th><th>Released</th><th>Actions</th>
@@ -9520,10 +9520,10 @@ function DownloadsPanel() {
                                   <td>{fmtBytes(h.size_bytes)}</td>
                                   <td>{fmtDate(h.released_at)}</td>
                                   <td>
-                                    <div className="xn-section-controls">
-                                      <a className="xn-btn-secondary" href={downloadHref(h)} target="_blank" rel="noreferrer">Download</a>
-                                      <button type="button" className="xn-btn-secondary" onClick={() => markCurrent(h)}>Mark current</button>
-                                      <button type="button" className="xn-btn-secondary" onClick={() => del(h)}>Delete</button>
+                                    <div className="aegis-section-controls">
+                                      <a className="aegis-btn-secondary" href={downloadHref(h)} target="_blank" rel="noreferrer">Download</a>
+                                      <button type="button" className="aegis-btn-secondary" onClick={() => markCurrent(h)}>Mark current</button>
+                                      <button type="button" className="aegis-btn-secondary" onClick={() => del(h)}>Delete</button>
                                     </div>
                                   </td>
                                 </tr>
@@ -9544,7 +9544,7 @@ function DownloadsPanel() {
         {!loading && !error && invites.length > 0 && (
           <div style={{ marginTop: '32px' }}>
             <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#334155' }}>Recent install link sends</h3>
-            <table className="xn-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Recipient</th>
@@ -10921,19 +10921,19 @@ export function App() {
     <NavLink
       to={`/admin/${target}`}
       className={({ isActive }) =>
-        `xn-sidenav-item${isActive ? ' xn-sidenav-item--active' : ''}`
+        `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
       }
       onClick={() => { if (window.innerWidth < 900) setSidebarOpen(false) }}
       title={!sidebarOpen ? label : undefined}
     >
-      <span className="xn-sidenav-icon">{icon}</span>
-      <span className="xn-sidenav-label">{label}</span>
+      <span className="aegis-sidenav-icon">{icon}</span>
+      <span className="aegis-sidenav-label">{label}</span>
       {badge}
     </NavLink>
   )
 
   return (
-    <div className="xn-shell">
+    <div className="aegis-shell">
       {/* Cmd/Ctrl+K quick-search palette */}
       {paletteOpen && (
         <div className="palette-overlay" onClick={() => setPaletteOpen(false)}>
@@ -11008,14 +11008,14 @@ export function App() {
       <TopBar />
       <Breadcrumbs />
 
-      <div className={`xn-admin-body${sidebarOpen ? '' : ' xn-admin-body--collapsed'}`}>
+      <div className={`aegis-admin-body${sidebarOpen ? '' : ' aegis-admin-body--collapsed'}`}>
         {/* Sidebar nav */}
-        <aside className="xn-sidenav">
+        <aside className="aegis-sidenav">
           {/* Sidebar toolbar: search palette + theme toggle + refresh + collapse */}
-          <div className="xn-sidenav-toolbar">
+          <div className="aegis-sidenav-toolbar">
             <button
               type="button"
-              className="xn-sidenav-search"
+              className="aegis-sidenav-search"
               onClick={() => { setPaletteOpen(true); setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }}
               title="Quick search (⌘K)"
             >
@@ -11024,7 +11024,7 @@ export function App() {
             </button>
             <button
               type="button"
-              className="xn-sidenav-iconbtn"
+              className="aegis-sidenav-iconbtn"
               onClick={() => setDarkMode(d => !d)}
               title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -11034,7 +11034,7 @@ export function App() {
             {tab === 'studies' && (
               <button
                 type="button"
-                className="xn-sidenav-iconbtn"
+                className="aegis-sidenav-iconbtn"
                 onClick={() => setRefreshTick(t => t + 1)}
                 title="Refresh studies"
                 aria-label="Refresh studies"
@@ -11044,7 +11044,7 @@ export function App() {
             )}
             <button
               type="button"
-              className="xn-sidenav-iconbtn"
+              className="aegis-sidenav-iconbtn"
               onClick={toggleSidebar}
               title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
               aria-label={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
@@ -11053,22 +11053,22 @@ export function App() {
             </button>
           </div>
 
-          <div className="xn-sidenav-group">
-            <div className="xn-sidenav-group-label">Overview</div>
-            {navItem('Studies', 'studies', '\u{1F4CB}', stuckCount > 0 ? <span className="xn-sidenav-badge">{stuckCount}</span> : undefined)}
+          <div className="aegis-sidenav-group">
+            <div className="aegis-sidenav-group-label">Overview</div>
+            {navItem('Studies', 'studies', '\u{1F4CB}', stuckCount > 0 ? <span className="aegis-sidenav-badge">{stuckCount}</span> : undefined)}
             {navItem('Audit Log', 'audit', '\u{1F4DC}')}
             {navItem('Agent', 'agent', '\u{1F916}')}
           </div>
 
-          <div className="xn-sidenav-group">
-            <div className="xn-sidenav-group-label">Data</div>
+          <div className="aegis-sidenav-group">
+            <div className="aegis-sidenav-group-label">Data</div>
             {navItem('Shares', 'shares', '\u{1F517}')}
             {navItem('Routing', 'routing', '\u{1F6E4}')}
             {isAdmin && navItem('DIMSE Ops', 'dimse_ops', '\u{1F4E1}')}
           </div>
 
-          <div className="xn-sidenav-group">
-            <div className="xn-sidenav-group-label">Config</div>
+          <div className="aegis-sidenav-group">
+            <div className="aegis-sidenav-group-label">Config</div>
             {navItem('Projects', 'projects', '\u{1F4C1}')}
             {navItem('Institutions', 'institutions', '\u{1F3E5}')}
             {navItem('Satellites', 'satellites', '\u{1F4F6}')}
@@ -11077,16 +11077,16 @@ export function App() {
             {navItem('Notifications', 'notifications', '\u{1F514}')}
           </div>
 
-          <div className="xn-sidenav-group">
-            <div className="xn-sidenav-group-label">Advanced</div>
+          <div className="aegis-sidenav-group">
+            <div className="aegis-sidenav-group-label">Advanced</div>
             {navItem('Federation', 'federation', '\u{1F310}')}
             {navItem('TCIA Import', 'tcia_import', '\u{1F4E5}')}
             {navItem('System', 'system', '\u{2699}')}
           </div>
 
           {isAdmin && (
-            <div className="xn-sidenav-group">
-              <div className="xn-sidenav-group-label">Admin</div>
+            <div className="aegis-sidenav-group">
+              <div className="aegis-sidenav-group-label">Admin</div>
               {navItem('Users', 'users', '\u{1F464}')}
               {navItem('API Keys', 'api_keys', '\u{1F511}')}
               {navItem('Invite Codes', 'invite_codes', '\u{1F3AB}')}
@@ -11094,10 +11094,10 @@ export function App() {
             </div>
           )}
 
-          <div className="xn-sidenav-footer">
+          <div className="aegis-sidenav-footer">
             {projects.length > 1 && (
-              <div className="xn-sidenav-footer-row">
-                <label className="xn-sidenav-footer-label" htmlFor="global-project-select">Project</label>
+              <div className="aegis-sidenav-footer-row">
+                <label className="aegis-sidenav-footer-label" htmlFor="global-project-select">Project</label>
                 <select
                   id="global-project-select"
                   value={globalProjectId}
@@ -11116,8 +11116,8 @@ export function App() {
                 </select>
               </div>
             )}
-            <div className="xn-sidenav-footer-row">
-              <label className="xn-sidenav-footer-label" htmlFor="display-timezone-mode">Timezone</label>
+            <div className="aegis-sidenav-footer-row">
+              <label className="aegis-sidenav-footer-label" htmlFor="display-timezone-mode">Timezone</label>
               <select
                 id="display-timezone-mode"
                 value={displayTimezoneMode}
@@ -11141,11 +11141,11 @@ export function App() {
                 </>
               )}
             </div>
-            <span className="xn-sidenav-footer-badge" title="Active project/scope">
+            <span className="aegis-sidenav-footer-badge" title="Active project/scope">
               {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
             </span>
             {currentUser && (
-              <span className="xn-sidenav-footer-badge">
+              <span className="aegis-sidenav-footer-badge">
                 {currentUser.name || currentUser.email} ({currentUser.role})
               </span>
             )}
@@ -11153,10 +11153,10 @@ export function App() {
         </aside>
 
         {/* Mobile overlay */}
-        {sidebarOpen && <div className="xn-sidenav-overlay" onClick={() => setSidebarOpen(false)} />}
+        {sidebarOpen && <div className="aegis-sidenav-overlay" onClick={() => setSidebarOpen(false)} />}
 
         {/* Main content */}
-        <section className="xn-admin-content">
+        <section className="aegis-admin-content">
           {!(tab === 'studies' && selectedStudyId) && (
             <PageHeader
               title={TAB_META[tab].title}
@@ -11262,7 +11262,7 @@ export function App() {
               background: '#fff', border: '1px solid #fed7aa', borderRadius: 6,
               padding: '10px 14px', marginBottom: 10, overflowX: 'auto'
             }}>
-              <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+              <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                 <thead>
                   <tr>
                     <th>Study UID</th>
@@ -11281,8 +11281,8 @@ export function App() {
                       title="Click to view study details"
                     >
                       <td style={{fontFamily: 'monospace', fontSize: '0.75rem'}}>{s.study_instance_uid}</td>
-                      <td>{s.modality || <span className="xn-muted">—</span>}</td>
-                      <td>{s.body_part || <span className="xn-muted">—</span>}</td>
+                      <td>{s.modality || <span className="aegis-muted">—</span>}</td>
+                      <td>{s.body_part || <span className="aegis-muted">—</span>}</td>
                       <td>{new Date(s.expires_at).toLocaleDateString()}</td>
                       <td style={{color: s.days_until_expiry <= 1 ? '#ea580c' : s.days_until_expiry <= 3 ? '#b45309' : '#374151', fontWeight: 600}}>
                         {s.days_until_expiry === 0 ? 'Today' : `${s.days_until_expiry}d`}
@@ -11297,20 +11297,20 @@ export function App() {
 
           {/* Breakdown stats toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="xn-btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
               {showBreakdown ? '▲ Hide breakdown' : '▼ Modality / body part breakdown'}
             </button>
             {showBreakdown && breakdown && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
-                <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
+                <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
                   <thead><tr><th>Modality</th><th>Body part</th><th>Count</th></tr></thead>
                   <tbody>
                     {breakdown.length === 0
-                      ? <tr><td colSpan={3} className="xn-muted">No studies yet.</td></tr>
+                      ? <tr><td colSpan={3} className="aegis-muted">No studies yet.</td></tr>
                       : breakdown.map((r, i) => (
                         <tr key={i}>
-                          <td>{r.modality || <span className="xn-muted">—</span>}</td>
-                          <td>{r.body_part || <span className="xn-muted">—</span>}</td>
+                          <td>{r.modality || <span className="aegis-muted">—</span>}</td>
+                          <td>{r.body_part || <span className="aegis-muted">—</span>}</td>
                           <td>{r.count}</td>
                         </tr>
                       ))}
@@ -11322,15 +11322,15 @@ export function App() {
 
           {/* Timeline (daily ingestion) toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="xn-btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
               {showTimeline ? '▲ Hide timeline' : '▼ Daily ingestion (last 30 days)'}
             </button>
             {showTimeline && timeline && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
                 {timeline.length === 0
-                  ? <span className="xn-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                  ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
                   : (
-                    <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
+                    <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
                       <thead><tr><th>Date</th><th>Received</th><th>Approved</th></tr></thead>
                       <tbody>
                         {timeline.map(d => (
@@ -11349,15 +11349,15 @@ export function App() {
 
           {/* Stage processing times toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="xn-btn-secondary" onClick={loadProcessingTimes} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadProcessingTimes} style={{fontSize:'0.8rem'}}>
               {showProcessingTimes ? '▲ Hide stage processing times' : '▼ Stage processing times (last 30 days)'}
             </button>
             {showProcessingTimes && processingTimes && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
                 {processingTimes.length === 0
-                  ? <span className="xn-muted" style={{fontSize:'0.8rem'}}>No pipeline events in the last 30 days.</span>
+                  ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No pipeline events in the last 30 days.</span>
                   : (
-                    <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
+                    <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
                       <thead>
                         <tr>
                           <th>Stage</th>
@@ -11388,15 +11388,15 @@ export function App() {
 
           {/* Pipeline funnel toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="xn-btn-secondary" onClick={loadFunnel} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadFunnel} style={{fontSize:'0.8rem'}}>
               {showFunnel ? '▲ Hide pipeline funnel' : '▼ Pipeline funnel (last 30 days)'}
             </button>
             {showFunnel && funnel && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
                 {funnel.length === 0
-                  ? <span className="xn-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                  ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
                   : (
-                    <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
+                    <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
                       <thead>
                         <tr>
                           <th>Stage</th>
@@ -11447,7 +11447,7 @@ export function App() {
 
           {/* Cohort report toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="xn-btn-secondary" onClick={loadCohortReport} style={{fontSize:'0.8rem'}} disabled={cohortLoading}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadCohortReport} style={{fontSize:'0.8rem'}} disabled={cohortLoading}>
               {cohortLoading ? 'Loading…' : showCohortReport ? '▲ Hide cohort report' : '▼ Cohort report (per-subject summary)'}
             </button>
             {!globalProjectId && (
@@ -11467,10 +11467,10 @@ export function App() {
                   <span style={{fontSize:'0.75rem',color:'#9ca3af'}}>Generated {new Date(cohortReport.generated_at).toLocaleTimeString()}</span>
                 </div>
                 {cohortReport.subjects.length === 0
-                  ? <span className="xn-muted" style={{fontSize:'0.8rem'}}>No subjects with linked studies in this project.</span>
+                  ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No subjects with linked studies in this project.</span>
                   : (
                     <div style={{overflowX:'auto'}}>
-                      <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'900px'}}>
+                      <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'900px'}}>
                         <thead>
                           <tr>
                             <th>Subject ID</th>
@@ -11492,7 +11492,7 @@ export function App() {
                               <td style={{textAlign:'right'}}>{s.study_count}</td>
                               <td style={{textAlign:'right',color:'#0f766e'}}>{s.approved_count}</td>
                               <td style={{textAlign:'right',color: s.pending_count > 0 ? '#b45309' : '#6b7280'}}>{s.pending_count}</td>
-                              <td>{(s.modalities ?? []).join(', ') || <span className="xn-muted">—</span>}</td>
+                              <td>{(s.modalities ?? []).join(', ') || <span className="aegis-muted">—</span>}</td>
                               <td style={{textAlign:'center',color: s.all_approved ? '#0f766e' : '#9a3412'}}>{s.all_approved ? '✓' : '✗'}</td>
                               <td style={{textAlign:'center',color: s.has_defaced ? '#0f766e' : '#9ca3af'}}>{s.has_defaced ? '✓' : '—'}</td>
                               <td style={{textAlign:'center',color: s.has_exported ? '#0f766e' : '#9ca3af'}}>{s.has_exported ? '✓' : '—'}</td>
@@ -11520,7 +11520,7 @@ export function App() {
           {/* Upload Study button */}
           {isAdmin && (
             <div style={{ marginBottom: 10 }}>
-              <button type="button" className="xn-btn-secondary" onClick={() => setShowUploadModal(true)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowUploadModal(true)}>
                 ↑ Upload Study
               </button>
             </div>
@@ -11620,7 +11620,7 @@ export function App() {
               <button
                 key={preset.label}
                 type="button"
-                className="xn-btn-secondary"
+                className="aegis-btn-secondary"
                 style={{fontSize: '0.75rem', padding: '2px 7px'}}
                 title={preset.days === 0 ? 'Studies received today' : `Studies received in the last ${preset.days} days`}
                 onClick={() => {
@@ -11650,11 +11650,11 @@ export function App() {
               onChange={e => setDateToF(e.target.value)}
             />
             {hasFilters && (
-              <button type="button" className="xn-btn-secondary" onClick={clearFilters}>Clear</button>
+              <button type="button" className="aegis-btn-secondary" onClick={clearFilters}>Clear</button>
             )}
             {/* Save current filter as a named preset */}
             {hasFilters && !showSaveFilterPrompt && (
-              <button type="button" className="xn-btn-secondary" onClick={() => { setSaveFilterName(''); setShowSaveFilterPrompt(true) }} title="Save current filters as a preset">
+              <button type="button" className="aegis-btn-secondary" onClick={() => { setSaveFilterName(''); setShowSaveFilterPrompt(true) }} title="Save current filters as a preset">
                 Save filter
               </button>
             )}
@@ -11671,8 +11671,8 @@ export function App() {
                   autoFocus
                   style={{ width: 130 }}
                 />
-                <button type="button" className="xn-btn-secondary" onClick={saveCurrentFilter} disabled={!saveFilterName.trim()}>Save</button>
-                <button type="button" className="xn-btn-secondary" onClick={() => setShowSaveFilterPrompt(false)}>✕</button>
+                <button type="button" className="aegis-btn-secondary" onClick={saveCurrentFilter} disabled={!saveFilterName.trim()}>Save</button>
+                <button type="button" className="aegis-btn-secondary" onClick={() => setShowSaveFilterPrompt(false)}>✕</button>
               </span>
             )}
             {/* Load saved filter presets dropdown */}
@@ -11680,7 +11680,7 @@ export function App() {
               <div ref={savedFiltersMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   type="button"
-                  className="xn-btn-secondary"
+                  className="aegis-btn-secondary"
                   onClick={() => setSavedFiltersMenuOpen(v => !v)}
                   title="Load a saved filter preset"
                 >
@@ -11730,7 +11730,7 @@ export function App() {
               </span>
             )}
             {state === 'loaded' && studiesTotal > 0 && (
-              <a href={csvUrl} download="studies.csv" className="xn-btn-secondary">Export CSV</a>
+              <a href={csvUrl} download="studies.csv" className="aegis-btn-secondary">Export CSV</a>
             )}
             <button
               type="button"
@@ -11760,10 +11760,10 @@ export function App() {
             </button>
           </div>
 
-          {state === 'loading' && <div className="xn-muted">Loading studies…</div>}
-          {state === 'error'   && <div className="xn-error">{error}</div>}
+          {state === 'loading' && <div className="aegis-muted">Loading studies…</div>}
+          {state === 'error'   && <div className="aegis-error">{error}</div>}
           {state === 'loaded' && studiesTotal === 0 && (
-            <div className="xn-muted">
+            <div className="aegis-muted">
               {hasFilters
                 ? 'No studies match your filters.'
                 : 'No studies yet. Upload DICOM files via the Upload Portal.'}
@@ -11773,12 +11773,12 @@ export function App() {
           {state === 'loaded' && bulkSelected.size > 0 && isAdmin && (
             <div className="bulk-action-bar">
               <span className="bulk-action-bar__count">{bulkSelected.size} selected</span>
-              <button type="button" className="xn-btn-primary" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
-              <button type="button" className="xn-btn-secondary" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
+              <button type="button" className="aegis-btn-primary" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
               <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
               <input
                 type="text"
-                className="xn-filter"
+                className="aegis-filter"
                 placeholder="Label name…"
                 value={bulkLabelInput}
                 onChange={e => setBulkLabelInput(e.target.value)}
@@ -11786,11 +11786,11 @@ export function App() {
                 style={{width:'130px'}}
                 disabled={bulkWorking}
               />
-              <button type="button" className="xn-btn-secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
-              <button type="button" className="xn-btn-secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
               <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
               <select
-                className="xn-filter"
+                className="aegis-filter"
                 value={bulkPipelineStep}
                 onChange={e => setBulkPipelineStep(e.target.value)}
                 disabled={bulkWorking}
@@ -11804,11 +11804,11 @@ export function App() {
                 <option value="bids">BIDS Convert</option>
                 <option value="export">Export</option>
               </select>
-              <button type="button" className="xn-btn-secondary" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
               <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
               <input
                 type="email"
-                className="xn-filter"
+                className="aegis-filter"
                 placeholder="Share to email…"
                 value={bulkShareEmail}
                 onChange={e => setBulkShareEmail(e.target.value)}
@@ -11817,7 +11817,7 @@ export function App() {
               />
               <input
                 type="number"
-                className="xn-filter"
+                className="aegis-filter"
                 placeholder="Hours"
                 value={bulkShareExpiry}
                 onChange={e => setBulkShareExpiry(e.target.value)}
@@ -11827,8 +11827,8 @@ export function App() {
                 disabled={bulkWorking}
                 title="Expiry in hours (default 168 = 7 days)"
               />
-              <button type="button" className="xn-btn-secondary" disabled={bulkWorking || !bulkShareEmail.trim()} onClick={doBulkShare} title="Create export shares for all selected approved studies">Share selected</button>
-              <button type="button" className="xn-btn-secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking || !bulkShareEmail.trim()} onClick={doBulkShare} title="Create export shares for all selected approved studies">Share selected</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
             </div>
           )}
 
@@ -12015,7 +12015,7 @@ export function App() {
             <div className="pagination">
               <button
                 type="button"
-                className="xn-btn-secondary"
+                className="aegis-btn-secondary"
                 disabled={page === 0}
                 onClick={() => setPage(p => p - 1)}
               >
@@ -12026,7 +12026,7 @@ export function App() {
               </span>
               <button
                 type="button"
-                className="xn-btn-secondary"
+                className="aegis-btn-secondary"
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage(p => p + 1)}
               >
@@ -12064,7 +12064,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleProtocolTrend}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleProtocolTrend}>
                   {showProtocolTrend ? '▲ Hide protocol trend' : '▼ Protocol compliance trend (30d)'}
                 </button>
                 {showProtocolTrend && protocolTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12084,7 +12084,7 @@ export function App() {
                   {protocolTrend.days.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No protocol checks recorded in this period.</p>
                   ) : (
-                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Day</th>
@@ -12118,7 +12118,7 @@ export function App() {
           {isAdmin && stuckCount > 0 && (
             <div style={{marginTop: 10, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={() => setShowStuckPanel(v => !v)}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={() => setShowStuckPanel(v => !v)}>
                   {showStuckPanel ? '▲ Hide stuck studies' : `▼ Stuck studies (${stuckCount})`}
                 </button>
                 {showStuckPanel && (
@@ -12129,7 +12129,7 @@ export function App() {
               </div>
               {showStuckPanel && stuckStudies.length > 0 && (
                 <div style={{background: '#fff', border: '1px solid #fed7aa', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
-                  <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                  <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                     <thead>
                       <tr>
                         <th>Study UID</th>
@@ -12144,12 +12144,12 @@ export function App() {
                         <tr key={s.id}>
                           <td style={{fontFamily:'monospace', fontSize:'0.72rem'}}>{s.study_instance_uid}</td>
                           <td><span className={`badge badge--${s.status}`}>{s.status}</span></td>
-                          <td>{s.modality || <span className="xn-muted">—</span>}</td>
-                          <td>{s.updated_at ? new Date(s.updated_at).toLocaleString() : <span className="xn-muted">—</span>}</td>
+                          <td>{s.modality || <span className="aegis-muted">—</span>}</td>
+                          <td>{s.updated_at ? new Date(s.updated_at).toLocaleString() : <span className="aegis-muted">—</span>}</td>
                           <td style={{textAlign:'right'}}>
                             <button
                               type="button"
-                              className="xn-btn-secondary"
+                              className="aegis-btn-secondary"
                               style={{fontSize:'0.72rem', padding:'2px 8px'}}
                               title="Re-evaluate routing rules for this study to restart the pipeline"
                               onClick={async () => {
@@ -12178,7 +12178,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={togglePhiTrend}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={togglePhiTrend}>
                   {showPhiTrend ? '▲ Hide PHI scan trend' : '▼ PHI scan trend (30d)'}
                 </button>
                 {showPhiTrend && phiTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12196,7 +12196,7 @@ export function App() {
                   {phiTrend.days.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No PHI scans recorded in this period.</p>
                   ) : (
-                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Day</th>
@@ -12226,7 +12226,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleModalityTrend}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleModalityTrend}>
                   {showModalityTrend ? '▲ Hide modality trend' : '▼ Modality trend (30d)'}
                 </button>
                 {showModalityTrend && modalityTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12244,7 +12244,7 @@ export function App() {
                         ))}
                       </div>
                       {modalityTrend.days.length > 0 && (
-                        <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                        <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                           <thead>
                             <tr>
                               <th>Day</th>
@@ -12278,7 +12278,7 @@ export function App() {
           {isAdmin && globalProjectId && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleLabelUsage}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleLabelUsage}>
                   {showLabelUsage ? '▲ Hide label usage' : '▼ Label usage'}
                 </button>
                 {showLabelUsage && labelUsageLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12288,7 +12288,7 @@ export function App() {
                   {labelUsage.labels.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No labels applied to studies in this project.</p>
                   ) : (
-                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Label</th>
@@ -12316,7 +12316,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleSourceTrend}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleSourceTrend}>
                   {showSourceTrend ? '▲ Hide source trend' : '▼ Source trend (30d)'}
                 </button>
                 {showSourceTrend && sourceTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12332,7 +12332,7 @@ export function App() {
                   {sourceTrend.days.filter(d => d.total > 0).length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies ingested in this period.</p>
                   ) : (
-                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Day</th>
@@ -12362,7 +12362,7 @@ export function App() {
           {isAdmin && globalProjectId && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleInstitBreakdown}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleInstitBreakdown}>
                   {showInstitBreakdown ? '▲ Hide institution breakdown' : '▼ Institution breakdown'}
                 </button>
                 {showInstitBreakdown && institBreakdownLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12372,7 +12372,7 @@ export function App() {
                   {institBreakdown.rows.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies in this project yet.</p>
                   ) : (
-                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Institution</th>
@@ -12404,7 +12404,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleTrashPanel}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleTrashPanel}>
                   {showTrashPanel ? '▲ Hide deleted studies' : `▼ Deleted studies (trash)`}
                 </button>
                 {showTrashPanel && trashTotal > 0 && (
@@ -12421,7 +12421,7 @@ export function App() {
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No soft-deleted studies.</p>
                   ) : (
                     <>
-                      <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                         <thead>
                           <tr>
                             <th>Study UID</th>
@@ -12436,14 +12436,14 @@ export function App() {
                           {trashStudies.map(s => (
                             <tr key={s.id}>
                               <td style={{fontFamily: 'monospace', fontSize: '0.72rem'}}>{s.study_instance_uid}</td>
-                              <td>{s.status || <span className="xn-muted">—</span>}</td>
-                              <td>{s.modality || <span className="xn-muted">—</span>}</td>
-                              <td>{s.body_part || <span className="xn-muted">—</span>}</td>
-                              <td>{s.deleted_at ? new Date(s.deleted_at).toLocaleString() : <span className="xn-muted">—</span>}</td>
+                              <td>{s.status || <span className="aegis-muted">—</span>}</td>
+                              <td>{s.modality || <span className="aegis-muted">—</span>}</td>
+                              <td>{s.body_part || <span className="aegis-muted">—</span>}</td>
+                              <td>{s.deleted_at ? new Date(s.deleted_at).toLocaleString() : <span className="aegis-muted">—</span>}</td>
                               <td style={{textAlign: 'right', whiteSpace: 'nowrap'}}>
                                 <button
                                   type="button"
-                                  className="xn-btn-primary"
+                                  className="aegis-btn-primary"
                                   style={{fontSize: '0.72rem', padding: '2px 8px', marginRight: 4}}
                                   onClick={() => restoreDeletedStudy(s.id)}
                                   title="Restore study — makes it visible in the studies list again"
@@ -12452,7 +12452,7 @@ export function App() {
                                 </button>
                                 <button
                                   type="button"
-                                  className="xn-btn-secondary"
+                                  className="aegis-btn-secondary"
                                   style={{fontSize: '0.72rem', padding: '2px 8px'}}
                                   onClick={() => permDeleteStudy(s.id, s.study_instance_uid)}
                                   title="Permanently delete study and all DICOM files — cannot be undone"
@@ -12466,9 +12466,9 @@ export function App() {
                       </table>
                       {trashTotal > TRASH_PAGE_SIZE && (
                         <div style={{display: 'flex', gap: 8, marginTop: 8, alignItems: 'center'}}>
-                          <button type="button" className="xn-btn-secondary" disabled={trashPage === 0} onClick={() => { setTrashPage(p => p - 1); loadTrash(trashPage - 1) }}>← Prev</button>
+                          <button type="button" className="aegis-btn-secondary" disabled={trashPage === 0} onClick={() => { setTrashPage(p => p - 1); loadTrash(trashPage - 1) }}>← Prev</button>
                           <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Page {trashPage + 1} of {Math.ceil(trashTotal / TRASH_PAGE_SIZE)}</span>
-                          <button type="button" className="xn-btn-secondary" disabled={(trashPage + 1) * TRASH_PAGE_SIZE >= trashTotal} onClick={() => { setTrashPage(p => p + 1); loadTrash(trashPage + 1) }}>Next →</button>
+                          <button type="button" className="aegis-btn-secondary" disabled={(trashPage + 1) * TRASH_PAGE_SIZE >= trashTotal} onClick={() => { setTrashPage(p => p + 1); loadTrash(trashPage + 1) }}>Next →</button>
                         </div>
                       )}
                     </>
@@ -12531,7 +12531,7 @@ export function App() {
       {/* System Health tab */}
       {tab === 'system' && <SystemHealthPanel />}
         </section>
-      </div>{/* end xn-admin-body */}
+      </div>{/* end aegis-admin-body */}
 
       {/* Upload Study Modal */}
       {showUploadModal && (
