@@ -11260,7 +11260,7 @@ export function App() {
               background: '#fff', border: '1px solid #fed7aa', borderRadius: 6,
               padding: '10px 14px', marginBottom: 10, overflowX: 'auto'
             }}>
-              <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+              <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                 <thead>
                   <tr>
                     <th>Study UID</th>
@@ -11279,8 +11279,8 @@ export function App() {
                       title="Click to view study details"
                     >
                       <td style={{fontFamily: 'monospace', fontSize: '0.75rem'}}>{s.study_instance_uid}</td>
-                      <td>{s.modality || <span className="td-muted">—</span>}</td>
-                      <td>{s.body_part || <span className="td-muted">—</span>}</td>
+                      <td>{s.modality || <span className="xn-muted">—</span>}</td>
+                      <td>{s.body_part || <span className="xn-muted">—</span>}</td>
                       <td>{new Date(s.expires_at).toLocaleDateString()}</td>
                       <td style={{color: s.days_until_expiry <= 1 ? '#ea580c' : s.days_until_expiry <= 3 ? '#b45309' : '#374151', fontWeight: 600}}>
                         {s.days_until_expiry === 0 ? 'Today' : `${s.days_until_expiry}d`}
@@ -11295,20 +11295,20 @@ export function App() {
 
           {/* Breakdown stats toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="xn-btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
               {showBreakdown ? '▲ Hide breakdown' : '▼ Modality / body part breakdown'}
             </button>
             {showBreakdown && breakdown && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
-                <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
+                <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
                   <thead><tr><th>Modality</th><th>Body part</th><th>Count</th></tr></thead>
                   <tbody>
                     {breakdown.length === 0
-                      ? <tr><td colSpan={3} className="td-muted">No studies yet.</td></tr>
+                      ? <tr><td colSpan={3} className="xn-muted">No studies yet.</td></tr>
                       : breakdown.map((r, i) => (
                         <tr key={i}>
-                          <td>{r.modality || <span className="td-muted">—</span>}</td>
-                          <td>{r.body_part || <span className="td-muted">—</span>}</td>
+                          <td>{r.modality || <span className="xn-muted">—</span>}</td>
+                          <td>{r.body_part || <span className="xn-muted">—</span>}</td>
                           <td>{r.count}</td>
                         </tr>
                       ))}
@@ -11320,15 +11320,15 @@ export function App() {
 
           {/* Timeline (daily ingestion) toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="xn-btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
               {showTimeline ? '▲ Hide timeline' : '▼ Daily ingestion (last 30 days)'}
             </button>
             {showTimeline && timeline && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
                 {timeline.length === 0
-                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                  ? <span className="xn-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
                   : (
-                    <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
+                    <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
                       <thead><tr><th>Date</th><th>Received</th><th>Approved</th></tr></thead>
                       <tbody>
                         {timeline.map(d => (
@@ -11347,15 +11347,15 @@ export function App() {
 
           {/* Stage processing times toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="btn-secondary" onClick={loadProcessingTimes} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="xn-btn-secondary" onClick={loadProcessingTimes} style={{fontSize:'0.8rem'}}>
               {showProcessingTimes ? '▲ Hide stage processing times' : '▼ Stage processing times (last 30 days)'}
             </button>
             {showProcessingTimes && processingTimes && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
                 {processingTimes.length === 0
-                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No pipeline events in the last 30 days.</span>
+                  ? <span className="xn-muted" style={{fontSize:'0.8rem'}}>No pipeline events in the last 30 days.</span>
                   : (
-                    <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
+                    <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
                       <thead>
                         <tr>
                           <th>Stage</th>
@@ -11386,15 +11386,15 @@ export function App() {
 
           {/* Pipeline funnel toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="btn-secondary" onClick={loadFunnel} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="xn-btn-secondary" onClick={loadFunnel} style={{fontSize:'0.8rem'}}>
               {showFunnel ? '▲ Hide pipeline funnel' : '▼ Pipeline funnel (last 30 days)'}
             </button>
             {showFunnel && funnel && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
                 {funnel.length === 0
-                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                  ? <span className="xn-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
                   : (
-                    <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
+                    <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
                       <thead>
                         <tr>
                           <th>Stage</th>
@@ -11445,7 +11445,7 @@ export function App() {
 
           {/* Cohort report toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="btn-secondary" onClick={loadCohortReport} style={{fontSize:'0.8rem'}} disabled={cohortLoading}>
+            <button type="button" className="xn-btn-secondary" onClick={loadCohortReport} style={{fontSize:'0.8rem'}} disabled={cohortLoading}>
               {cohortLoading ? 'Loading…' : showCohortReport ? '▲ Hide cohort report' : '▼ Cohort report (per-subject summary)'}
             </button>
             {!globalProjectId && (
@@ -11465,10 +11465,10 @@ export function App() {
                   <span style={{fontSize:'0.75rem',color:'#9ca3af'}}>Generated {new Date(cohortReport.generated_at).toLocaleTimeString()}</span>
                 </div>
                 {cohortReport.subjects.length === 0
-                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No subjects with linked studies in this project.</span>
+                  ? <span className="xn-muted" style={{fontSize:'0.8rem'}}>No subjects with linked studies in this project.</span>
                   : (
                     <div style={{overflowX:'auto'}}>
-                      <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'900px'}}>
+                      <table className="xn-table" style={{fontSize:'0.8rem',maxWidth:'900px'}}>
                         <thead>
                           <tr>
                             <th>Subject ID</th>
@@ -11490,7 +11490,7 @@ export function App() {
                               <td style={{textAlign:'right'}}>{s.study_count}</td>
                               <td style={{textAlign:'right',color:'#0f766e'}}>{s.approved_count}</td>
                               <td style={{textAlign:'right',color: s.pending_count > 0 ? '#b45309' : '#6b7280'}}>{s.pending_count}</td>
-                              <td>{(s.modalities ?? []).join(', ') || <span className="td-muted">—</span>}</td>
+                              <td>{(s.modalities ?? []).join(', ') || <span className="xn-muted">—</span>}</td>
                               <td style={{textAlign:'center',color: s.all_approved ? '#0f766e' : '#9a3412'}}>{s.all_approved ? '✓' : '✗'}</td>
                               <td style={{textAlign:'center',color: s.has_defaced ? '#0f766e' : '#9ca3af'}}>{s.has_defaced ? '✓' : '—'}</td>
                               <td style={{textAlign:'center',color: s.has_exported ? '#0f766e' : '#9ca3af'}}>{s.has_exported ? '✓' : '—'}</td>
@@ -11518,7 +11518,7 @@ export function App() {
           {/* Upload Study button */}
           {isAdmin && (
             <div style={{ marginBottom: 10 }}>
-              <button type="button" className="btn btn--action" onClick={() => setShowUploadModal(true)}>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowUploadModal(true)}>
                 ↑ Upload Study
               </button>
             </div>
@@ -11618,7 +11618,7 @@ export function App() {
               <button
                 key={preset.label}
                 type="button"
-                className="btn btn--secondary"
+                className="xn-btn-secondary"
                 style={{fontSize: '0.75rem', padding: '2px 7px'}}
                 title={preset.days === 0 ? 'Studies received today' : `Studies received in the last ${preset.days} days`}
                 onClick={() => {
@@ -11648,11 +11648,11 @@ export function App() {
               onChange={e => setDateToF(e.target.value)}
             />
             {hasFilters && (
-              <button type="button" className="btn btn--secondary" onClick={clearFilters}>Clear</button>
+              <button type="button" className="xn-btn-secondary" onClick={clearFilters}>Clear</button>
             )}
             {/* Save current filter as a named preset */}
             {hasFilters && !showSaveFilterPrompt && (
-              <button type="button" className="btn btn--secondary" onClick={() => { setSaveFilterName(''); setShowSaveFilterPrompt(true) }} title="Save current filters as a preset">
+              <button type="button" className="xn-btn-secondary" onClick={() => { setSaveFilterName(''); setShowSaveFilterPrompt(true) }} title="Save current filters as a preset">
                 Save filter
               </button>
             )}
@@ -11669,8 +11669,8 @@ export function App() {
                   autoFocus
                   style={{ width: 130 }}
                 />
-                <button type="button" className="btn btn--action" onClick={saveCurrentFilter} disabled={!saveFilterName.trim()}>Save</button>
-                <button type="button" className="btn btn--secondary" onClick={() => setShowSaveFilterPrompt(false)}>✕</button>
+                <button type="button" className="xn-btn-secondary" onClick={saveCurrentFilter} disabled={!saveFilterName.trim()}>Save</button>
+                <button type="button" className="xn-btn-secondary" onClick={() => setShowSaveFilterPrompt(false)}>✕</button>
               </span>
             )}
             {/* Load saved filter presets dropdown */}
@@ -11678,7 +11678,7 @@ export function App() {
               <div ref={savedFiltersMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   type="button"
-                  className="btn btn--secondary"
+                  className="xn-btn-secondary"
                   onClick={() => setSavedFiltersMenuOpen(v => !v)}
                   title="Load a saved filter preset"
                 >
@@ -11728,7 +11728,7 @@ export function App() {
               </span>
             )}
             {state === 'loaded' && studiesTotal > 0 && (
-              <a href={csvUrl} download="studies.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
+              <a href={csvUrl} download="studies.csv" className="xn-btn-secondary">Export CSV</a>
             )}
             <button
               type="button"
@@ -11758,10 +11758,10 @@ export function App() {
             </button>
           </div>
 
-          {state === 'loading' && <div className="state-loading">Loading studies…</div>}
-          {state === 'error'   && <div className="state-error">{error}</div>}
+          {state === 'loading' && <div className="xn-muted">Loading studies…</div>}
+          {state === 'error'   && <div className="xn-error">{error}</div>}
           {state === 'loaded' && studiesTotal === 0 && (
-            <div className="state-empty">
+            <div className="xn-muted">
               {hasFilters
                 ? 'No studies match your filters.'
                 : 'No studies yet. Upload DICOM files via the Upload Portal.'}
@@ -11771,12 +11771,12 @@ export function App() {
           {state === 'loaded' && bulkSelected.size > 0 && isAdmin && (
             <div className="bulk-action-bar">
               <span className="bulk-action-bar__count">{bulkSelected.size} selected</span>
-              <button type="button" className="btn btn--approve" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
-              <button type="button" className="btn btn--reject" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
+              <button type="button" className="xn-btn-primary" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
+              <button type="button" className="xn-btn-secondary" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
               <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
               <input
                 type="text"
-                className="audit-actor-input"
+                className="xn-filter"
                 placeholder="Label name…"
                 value={bulkLabelInput}
                 onChange={e => setBulkLabelInput(e.target.value)}
@@ -11784,11 +11784,11 @@ export function App() {
                 style={{width:'130px'}}
                 disabled={bulkWorking}
               />
-              <button type="button" className="btn btn--action" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
-              <button type="button" className="btn btn--secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
+              <button type="button" className="xn-btn-secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
+              <button type="button" className="xn-btn-secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
               <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
               <select
-                className="audit-actor-input"
+                className="xn-filter"
                 value={bulkPipelineStep}
                 onChange={e => setBulkPipelineStep(e.target.value)}
                 disabled={bulkWorking}
@@ -11802,11 +11802,11 @@ export function App() {
                 <option value="bids">BIDS Convert</option>
                 <option value="export">Export</option>
               </select>
-              <button type="button" className="btn btn--action" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
+              <button type="button" className="xn-btn-secondary" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
               <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
               <input
                 type="email"
-                className="audit-actor-input"
+                className="xn-filter"
                 placeholder="Share to email…"
                 value={bulkShareEmail}
                 onChange={e => setBulkShareEmail(e.target.value)}
@@ -11815,7 +11815,7 @@ export function App() {
               />
               <input
                 type="number"
-                className="audit-actor-input"
+                className="xn-filter"
                 placeholder="Hours"
                 value={bulkShareExpiry}
                 onChange={e => setBulkShareExpiry(e.target.value)}
@@ -11825,8 +11825,8 @@ export function App() {
                 disabled={bulkWorking}
                 title="Expiry in hours (default 168 = 7 days)"
               />
-              <button type="button" className="btn btn--action" disabled={bulkWorking || !bulkShareEmail.trim()} onClick={doBulkShare} title="Create export shares for all selected approved studies">Share selected</button>
-              <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
+              <button type="button" className="xn-btn-secondary" disabled={bulkWorking || !bulkShareEmail.trim()} onClick={doBulkShare} title="Create export shares for all selected approved studies">Share selected</button>
+              <button type="button" className="xn-btn-secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
             </div>
           )}
 
@@ -12013,7 +12013,7 @@ export function App() {
             <div className="pagination">
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="xn-btn-secondary"
                 disabled={page === 0}
                 onClick={() => setPage(p => p - 1)}
               >
@@ -12024,7 +12024,7 @@ export function App() {
               </span>
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="xn-btn-secondary"
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage(p => p + 1)}
               >
@@ -12062,7 +12062,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleProtocolTrend}>
+                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleProtocolTrend}>
                   {showProtocolTrend ? '▲ Hide protocol trend' : '▼ Protocol compliance trend (30d)'}
                 </button>
                 {showProtocolTrend && protocolTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12082,7 +12082,7 @@ export function App() {
                   {protocolTrend.days.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No protocol checks recorded in this period.</p>
                   ) : (
-                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Day</th>
@@ -12116,7 +12116,7 @@ export function App() {
           {isAdmin && stuckCount > 0 && (
             <div style={{marginTop: 10, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={() => setShowStuckPanel(v => !v)}>
+                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={() => setShowStuckPanel(v => !v)}>
                   {showStuckPanel ? '▲ Hide stuck studies' : `▼ Stuck studies (${stuckCount})`}
                 </button>
                 {showStuckPanel && (
@@ -12127,7 +12127,7 @@ export function App() {
               </div>
               {showStuckPanel && stuckStudies.length > 0 && (
                 <div style={{background: '#fff', border: '1px solid #fed7aa', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
-                  <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                  <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                     <thead>
                       <tr>
                         <th>Study UID</th>
@@ -12142,12 +12142,12 @@ export function App() {
                         <tr key={s.id}>
                           <td style={{fontFamily:'monospace', fontSize:'0.72rem'}}>{s.study_instance_uid}</td>
                           <td><span className={`badge badge--${s.status}`}>{s.status}</span></td>
-                          <td>{s.modality || <span className="td-muted">—</span>}</td>
-                          <td>{s.updated_at ? new Date(s.updated_at).toLocaleString() : <span className="td-muted">—</span>}</td>
+                          <td>{s.modality || <span className="xn-muted">—</span>}</td>
+                          <td>{s.updated_at ? new Date(s.updated_at).toLocaleString() : <span className="xn-muted">—</span>}</td>
                           <td style={{textAlign:'right'}}>
                             <button
                               type="button"
-                              className="btn btn--action"
+                              className="xn-btn-secondary"
                               style={{fontSize:'0.72rem', padding:'2px 8px'}}
                               title="Re-evaluate routing rules for this study to restart the pipeline"
                               onClick={async () => {
@@ -12176,7 +12176,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={togglePhiTrend}>
+                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={togglePhiTrend}>
                   {showPhiTrend ? '▲ Hide PHI scan trend' : '▼ PHI scan trend (30d)'}
                 </button>
                 {showPhiTrend && phiTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12194,7 +12194,7 @@ export function App() {
                   {phiTrend.days.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No PHI scans recorded in this period.</p>
                   ) : (
-                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Day</th>
@@ -12224,7 +12224,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleModalityTrend}>
+                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleModalityTrend}>
                   {showModalityTrend ? '▲ Hide modality trend' : '▼ Modality trend (30d)'}
                 </button>
                 {showModalityTrend && modalityTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12242,7 +12242,7 @@ export function App() {
                         ))}
                       </div>
                       {modalityTrend.days.length > 0 && (
-                        <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                        <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                           <thead>
                             <tr>
                               <th>Day</th>
@@ -12276,7 +12276,7 @@ export function App() {
           {isAdmin && globalProjectId && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleLabelUsage}>
+                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleLabelUsage}>
                   {showLabelUsage ? '▲ Hide label usage' : '▼ Label usage'}
                 </button>
                 {showLabelUsage && labelUsageLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12286,7 +12286,7 @@ export function App() {
                   {labelUsage.labels.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No labels applied to studies in this project.</p>
                   ) : (
-                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Label</th>
@@ -12314,7 +12314,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleSourceTrend}>
+                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleSourceTrend}>
                   {showSourceTrend ? '▲ Hide source trend' : '▼ Source trend (30d)'}
                 </button>
                 {showSourceTrend && sourceTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12330,7 +12330,7 @@ export function App() {
                   {sourceTrend.days.filter(d => d.total > 0).length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies ingested in this period.</p>
                   ) : (
-                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Day</th>
@@ -12360,7 +12360,7 @@ export function App() {
           {isAdmin && globalProjectId && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleInstitBreakdown}>
+                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleInstitBreakdown}>
                   {showInstitBreakdown ? '▲ Hide institution breakdown' : '▼ Institution breakdown'}
                 </button>
                 {showInstitBreakdown && institBreakdownLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
@@ -12370,7 +12370,7 @@ export function App() {
                   {institBreakdown.rows.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies in this project yet.</p>
                   ) : (
-                    <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                       <thead>
                         <tr>
                           <th>Institution</th>
@@ -12402,7 +12402,7 @@ export function App() {
           {isAdmin && (
             <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
-                <button type="button" className="btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleTrashPanel}>
+                <button type="button" className="xn-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleTrashPanel}>
                   {showTrashPanel ? '▲ Hide deleted studies' : `▼ Deleted studies (trash)`}
                 </button>
                 {showTrashPanel && trashTotal > 0 && (
@@ -12419,7 +12419,7 @@ export function App() {
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No soft-deleted studies.</p>
                   ) : (
                     <>
-                      <table className="audit-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <table className="xn-table" style={{fontSize: '0.8rem', width: '100%'}}>
                         <thead>
                           <tr>
                             <th>Study UID</th>
@@ -12434,14 +12434,14 @@ export function App() {
                           {trashStudies.map(s => (
                             <tr key={s.id}>
                               <td style={{fontFamily: 'monospace', fontSize: '0.72rem'}}>{s.study_instance_uid}</td>
-                              <td>{s.status || <span className="td-muted">—</span>}</td>
-                              <td>{s.modality || <span className="td-muted">—</span>}</td>
-                              <td>{s.body_part || <span className="td-muted">—</span>}</td>
-                              <td>{s.deleted_at ? new Date(s.deleted_at).toLocaleString() : <span className="td-muted">—</span>}</td>
+                              <td>{s.status || <span className="xn-muted">—</span>}</td>
+                              <td>{s.modality || <span className="xn-muted">—</span>}</td>
+                              <td>{s.body_part || <span className="xn-muted">—</span>}</td>
+                              <td>{s.deleted_at ? new Date(s.deleted_at).toLocaleString() : <span className="xn-muted">—</span>}</td>
                               <td style={{textAlign: 'right', whiteSpace: 'nowrap'}}>
                                 <button
                                   type="button"
-                                  className="btn btn--approve"
+                                  className="xn-btn-primary"
                                   style={{fontSize: '0.72rem', padding: '2px 8px', marginRight: 4}}
                                   onClick={() => restoreDeletedStudy(s.id)}
                                   title="Restore study — makes it visible in the studies list again"
@@ -12450,7 +12450,7 @@ export function App() {
                                 </button>
                                 <button
                                   type="button"
-                                  className="btn btn--reject"
+                                  className="xn-btn-secondary"
                                   style={{fontSize: '0.72rem', padding: '2px 8px'}}
                                   onClick={() => permDeleteStudy(s.id, s.study_instance_uid)}
                                   title="Permanently delete study and all DICOM files — cannot be undone"
@@ -12464,9 +12464,9 @@ export function App() {
                       </table>
                       {trashTotal > TRASH_PAGE_SIZE && (
                         <div style={{display: 'flex', gap: 8, marginTop: 8, alignItems: 'center'}}>
-                          <button type="button" className="btn btn--secondary" disabled={trashPage === 0} onClick={() => { setTrashPage(p => p - 1); loadTrash(trashPage - 1) }}>← Prev</button>
+                          <button type="button" className="xn-btn-secondary" disabled={trashPage === 0} onClick={() => { setTrashPage(p => p - 1); loadTrash(trashPage - 1) }}>← Prev</button>
                           <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Page {trashPage + 1} of {Math.ceil(trashTotal / TRASH_PAGE_SIZE)}</span>
-                          <button type="button" className="btn btn--secondary" disabled={(trashPage + 1) * TRASH_PAGE_SIZE >= trashTotal} onClick={() => { setTrashPage(p => p + 1); loadTrash(trashPage + 1) }}>Next →</button>
+                          <button type="button" className="xn-btn-secondary" disabled={(trashPage + 1) * TRASH_PAGE_SIZE >= trashTotal} onClick={() => { setTrashPage(p => p + 1); loadTrash(trashPage + 1) }}>Next →</button>
                         </div>
                       )}
                     </>
