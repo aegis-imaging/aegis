@@ -1,4 +1,4 @@
-package spoke_ca_test
+package satellite_ca_test
 
 import (
 	"crypto/rand"

@@ -14,28 +14,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestListSpokes_EmptyWhenNoneEnrolled(t *testing.T) {
+func TestListSatellites_EmptyWhenNoneEnrolled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/spokes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/satellites", nil)
 	rr := httptest.NewRecorder()
-	srv.ListSpokes(rr, req)
+	srv.ListSatellites(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 
 	var resp struct {
-		Spokes []map[string]any `json:"spokes"`
+		Satellites []map[string]any `json:"spokes"`
 		Count  int              `json:"count"`
 	}
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
 	assert.Equal(t, 0, resp.Count)
-	assert.NotNil(t, resp.Spokes)
+	assert.NotNil(t, resp.Satellites)
 }
 
-func TestListSpokes_IncludesEnrolledAndPending(t *testing.T) {
+func TestListSatellites_IncludesEnrolledAndPending(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -43,42 +43,42 @@ func TestListSpokes_IncludesEnrolledAndPending(t *testing.T) {
 	srv := testutil.TestServer(t, db)
 
 	// Enrolled: has a thumbprint set.
-	enrolled := testutil.CreateTestInstitution(t, db, "spoke-enrolled")
+	enrolled := testutil.CreateTestInstitution(t, db, "satellite-enrolled")
 	require.NoError(t, model.SetInstitutionClientCert(context.Background(), db, enrolled.ID,
-		"abcd1234", "CN=spoke-enrolled"))
+		"abcd1234", "CN=satellite-enrolled"))
 
 	// Pending: no cert yet, but has an active enrollment token.
-	pending := testutil.CreateTestInstitution(t, db, "spoke-pending")
+	pending := testutil.CreateTestInstitution(t, db, "satellite-pending")
 	_, hash, _ := model.GenerateEnrollmentToken()
-	tok := &model.SpokeEnrollmentToken{
+	tok := &model.SatelliteEnrollmentToken{
 		InstitutionID: pending.ID,
 		ExpiresAt:     time.Now().UTC().Add(2 * time.Hour),
 	}
-	require.NoError(t, model.CreateSpokeEnrollmentToken(context.Background(), db, tok, hash))
+	require.NoError(t, model.CreateSatelliteEnrollmentToken(context.Background(), db, tok, hash))
 
-	// Not a spoke at all: regular institution, no cert, no token.
-	_ = testutil.CreateTestInstitution(t, db, "spoke-irrelevant")
+	// Not a satellite at all: regular institution, no cert, no token.
+	_ = testutil.CreateTestInstitution(t, db, "satellite-irrelevant")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/spokes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/satellites", nil)
 	rr := httptest.NewRecorder()
-	srv.ListSpokes(rr, req)
+	srv.ListSatellites(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 
 	var resp struct {
-		Spokes []map[string]any `json:"spokes"`
+		Satellites []map[string]any `json:"spokes"`
 		Count  int              `json:"count"`
 	}
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
 	assert.Equal(t, 2, resp.Count, "expected enrolled + pending; irrelevant should be excluded")
 
 	byName := map[string]map[string]any{}
-	for _, sp := range resp.Spokes {
+	for _, sp := range resp.Satellites {
 		byName[sp["institution_name"].(string)] = sp
 	}
-	require.Contains(t, byName, "spoke-enrolled")
-	assert.Equal(t, "abcd1234", byName["spoke-enrolled"]["cert_thumbprint"])
+	require.Contains(t, byName, "satellite-enrolled")
+	assert.Equal(t, "abcd1234", byName["satellite-enrolled"]["cert_thumbprint"])
 
-	require.Contains(t, byName, "spoke-pending")
-	assert.Equal(t, "", byName["spoke-pending"]["cert_thumbprint"])
-	assert.EqualValues(t, 1, byName["spoke-pending"]["active_token_count"])
+	require.Contains(t, byName, "satellite-pending")
+	assert.Equal(t, "", byName["satellite-pending"]["cert_thumbprint"])
+	assert.EqualValues(t, 1, byName["satellite-pending"]["active_token_count"])
 }

@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-// SpokeEnrollmentToken is a one-time secret a spoke router presents during
+// SatelliteEnrollmentToken is a one-time secret a satellite router presents during
 // bootstrap to mint its mTLS client cert. Stored hashed; the raw value is
 // returned exactly once at creation and never again.
-type SpokeEnrollmentToken struct {
+type SatelliteEnrollmentToken struct {
 	ID            string     `json:"id"`
 	InstitutionID string     `json:"institution_id"`
 	Label         string     `json:"label"`
@@ -27,7 +27,7 @@ type SpokeEnrollmentToken struct {
 }
 
 // IsActive reports whether the token can still be redeemed right now.
-func (t *SpokeEnrollmentToken) IsActive(now time.Time) bool {
+func (t *SatelliteEnrollmentToken) IsActive(now time.Time) bool {
 	return t.UsedAt == nil && t.RevokedAt == nil && now.Before(t.ExpiresAt)
 }
 
@@ -39,7 +39,7 @@ var ErrEnrollmentTokenInvalid = errors.New("enrollment token invalid or expired"
 
 // GenerateEnrollmentToken creates a fresh random token and returns
 // (raw_token, sha256_hash_hex). The raw token is what the cloud admin hands
-// to the spoke; only the hash is stored.
+// to the satellite; only the hash is stored.
 func GenerateEnrollmentToken() (raw, hashHex string, err error) {
 	var buf [32]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -56,9 +56,9 @@ func HashEnrollmentToken(raw string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func CreateSpokeEnrollmentToken(ctx context.Context, db *sql.DB, t *SpokeEnrollmentToken, hashHex string) error {
+func CreateSatelliteEnrollmentToken(ctx context.Context, db *sql.DB, t *SatelliteEnrollmentToken, hashHex string) error {
 	return db.QueryRowContext(ctx, `
-		INSERT INTO spoke_enrollment_tokens
+		INSERT INTO satellite_enrollment_tokens
 			(institution_id, token_hash, label, created_by, expires_at)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at`,
@@ -66,19 +66,19 @@ func CreateSpokeEnrollmentToken(ctx context.Context, db *sql.DB, t *SpokeEnrollm
 	).Scan(&t.ID, &t.CreatedAt)
 }
 
-func ListSpokeEnrollmentTokens(ctx context.Context, db *sql.DB, institutionID string) ([]SpokeEnrollmentToken, error) {
+func ListSatelliteEnrollmentTokens(ctx context.Context, db *sql.DB, institutionID string) ([]SatelliteEnrollmentToken, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, institution_id, label, created_by, created_at, expires_at, used_at, revoked_at
-		FROM spoke_enrollment_tokens
+		FROM satellite_enrollment_tokens
 		WHERE institution_id = $1
 		ORDER BY created_at DESC`, institutionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []SpokeEnrollmentToken
+	var out []SatelliteEnrollmentToken
 	for rows.Next() {
-		var t SpokeEnrollmentToken
+		var t SatelliteEnrollmentToken
 		var used, revoked sql.NullTime
 		if err := rows.Scan(&t.ID, &t.InstitutionID, &t.Label, &t.CreatedBy,
 			&t.CreatedAt, &t.ExpiresAt, &used, &revoked); err != nil {
@@ -97,11 +97,11 @@ func ListSpokeEnrollmentTokens(ctx context.Context, db *sql.DB, institutionID st
 	return out, rows.Err()
 }
 
-// RedeemSpokeEnrollmentToken looks up a raw token, validates it's still
+// RedeemSatelliteEnrollmentToken looks up a raw token, validates it's still
 // active, marks it used in the same transaction, and returns the token row.
 // Errors with ErrEnrollmentTokenInvalid for any failure to avoid leaking
 // detail to the public enrollment endpoint.
-func RedeemSpokeEnrollmentToken(ctx context.Context, db *sql.DB, rawToken string) (*SpokeEnrollmentToken, error) {
+func RedeemSatelliteEnrollmentToken(ctx context.Context, db *sql.DB, rawToken string) (*SatelliteEnrollmentToken, error) {
 	hash := HashEnrollmentToken(rawToken)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -109,11 +109,11 @@ func RedeemSpokeEnrollmentToken(ctx context.Context, db *sql.DB, rawToken string
 	}
 	defer tx.Rollback()
 
-	var t SpokeEnrollmentToken
+	var t SatelliteEnrollmentToken
 	var used, revoked sql.NullTime
 	err = tx.QueryRowContext(ctx, `
 		SELECT id, institution_id, label, created_by, created_at, expires_at, used_at, revoked_at
-		FROM spoke_enrollment_tokens
+		FROM satellite_enrollment_tokens
 		WHERE token_hash = $1
 		FOR UPDATE`, hash,
 	).Scan(&t.ID, &t.InstitutionID, &t.Label, &t.CreatedBy,
@@ -137,7 +137,7 @@ func RedeemSpokeEnrollmentToken(ctx context.Context, db *sql.DB, rawToken string
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE spoke_enrollment_tokens SET used_at = now() WHERE id = $1`, t.ID); err != nil {
+		`UPDATE satellite_enrollment_tokens SET used_at = now() WHERE id = $1`, t.ID); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -148,9 +148,9 @@ func RedeemSpokeEnrollmentToken(ctx context.Context, db *sql.DB, rawToken string
 	return &t, nil
 }
 
-func RevokeSpokeEnrollmentToken(ctx context.Context, db *sql.DB, tokenID string) error {
+func RevokeSatelliteEnrollmentToken(ctx context.Context, db *sql.DB, tokenID string) error {
 	_, err := db.ExecContext(ctx,
-		`UPDATE spoke_enrollment_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL AND used_at IS NULL`,
+		`UPDATE satellite_enrollment_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL AND used_at IS NULL`,
 		tokenID)
 	return err
 }
