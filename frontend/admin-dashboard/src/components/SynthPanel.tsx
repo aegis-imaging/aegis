@@ -138,7 +138,7 @@ export function SynthPanel({
           <div style={{ display: 'flex', gap: 4 }}>
             <input
               type="number"
-              className="xn-filter"
+              className="aegis-filter"
               value={seed}
               min={0}
               max={999999}
@@ -196,7 +196,7 @@ export function SynthPanel({
           <div className="tcia-field tcia-field--action">
             <button
               type="button"
-              className="xn-btn-primary"
+              className="aegis-btn-primary"
               onClick={generate}
               disabled={generating}
             >

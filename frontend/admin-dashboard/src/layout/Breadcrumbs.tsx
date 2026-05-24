@@ -53,17 +53,17 @@ export function Breadcrumbs() {
   }
 
   return (
-    <nav className="xn-breadcrumbs" aria-label="Breadcrumb">
+    <nav className="aegis-breadcrumbs" aria-label="Breadcrumb">
       {crumbs.map((c, i) => {
         const isLast = i === crumbs.length - 1
         return (
-          <span key={i} className="xn-crumb">
+          <span key={i} className="aegis-crumb">
             {!isLast && c.to ? (
               <Link to={c.to}>{c.label}</Link>
             ) : (
               <span aria-current={isLast ? 'page' : undefined}>{c.label}</span>
             )}
-            {!isLast && <span className="xn-crumb-sep" aria-hidden>›</span>}
+            {!isLast && <span className="aegis-crumb-sep" aria-hidden>›</span>}
           </span>
         )
       })}

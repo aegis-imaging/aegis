@@ -14,12 +14,12 @@ export function StudyPage() {
   }, [studyId])
 
   if (!studyId) {
-    return <div className="xn-error">Missing study ID.</div>
+    return <div className="aegis-error">Missing study ID.</div>
   }
 
   const target = `/admin/studies?study_id=${encodeURIComponent(studyId)}`
   return (
-    <div className="xn-study">
+    <div className="aegis-study">
       <p>
         Opening study detail… If you aren't redirected,{' '}
         <a href={target}>click here</a>.

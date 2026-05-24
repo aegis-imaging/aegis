@@ -9,10 +9,10 @@ import '../styles/nav.css'
 // stays unified across both surfaces.
 export function DashboardLayout() {
   return (
-    <div className="xn-shell">
+    <div className="aegis-shell">
       <TopBar />
       <Breadcrumbs />
-      <main className="xn-main">
+      <main className="aegis-main">
         <Outlet />
       </main>
     </div>
