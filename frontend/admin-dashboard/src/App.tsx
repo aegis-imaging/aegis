@@ -19,7 +19,7 @@ import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
 import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { useStudyEvents } from './hooks/useStudyEvents'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { TopBar } from './layout/TopBar'
 import { Breadcrumbs } from './layout/Breadcrumbs'
 
@@ -10918,16 +10918,18 @@ export function App() {
   }
 
   const navItem = (label: string, target: AppTab, icon: string, badge?: React.ReactNode) => (
-    <button
-      type="button"
-      className={`xn-sidenav-item${tab === target ? ' xn-sidenav-item--active' : ''}`}
-      onClick={() => { setTab(target); if (window.innerWidth < 900) setSidebarOpen(false) }}
+    <NavLink
+      to={`/admin/${target}`}
+      className={({ isActive }) =>
+        `xn-sidenav-item${isActive ? ' xn-sidenav-item--active' : ''}`
+      }
+      onClick={() => { if (window.innerWidth < 900) setSidebarOpen(false) }}
       title={!sidebarOpen ? label : undefined}
     >
       <span className="xn-sidenav-icon">{icon}</span>
       <span className="xn-sidenav-label">{label}</span>
       {badge}
-    </button>
+    </NavLink>
   )
 
   return (
