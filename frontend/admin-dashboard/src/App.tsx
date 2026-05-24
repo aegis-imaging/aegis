@@ -133,7 +133,6 @@ type Study = {
   body_part: string
   study_description: string
   study_date?: string
-  anon_patient_id?: string | null
   series_count: number
   source: string
   status: string
