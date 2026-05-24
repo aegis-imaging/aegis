@@ -29,6 +29,7 @@ function showError(msg) {
 
 let app = null
 let defaultToolSet = false  // guard: only initialise the default tool once
+let loadedCount = 0         // images that rendered successfully; checked in loadend
 
 function syncToolbar(activeTool) {
   document.querySelectorAll('.tool-btn').forEach((btn) => {
@@ -101,12 +102,17 @@ if (!studyUID) {
   app = new App()
   app.init(options)
 
+  // Keep DWV canvas dimensions in sync with the container whenever the
+  // window (or parent iframe) is resized.
+  window.addEventListener('resize', () => app.onResize())
+
   // 'load' fires once per loaded data item, AFTER DWV has set up the layer
   // group's active layer — the correct place to call setTool(). Using 'loadend'
   // instead causes getActiveLayer() to return undefined so bindLayerGroup() is
   // silently skipped and no canvas events are ever bound (DWV source:
   // `void 0 !== n && this.#Fl.bindLayerGroup(t, n)`).
   app.addEventListener('load', () => {
+    loadedCount++
     if (!defaultToolSet) {
       defaultToolSet = true
       try {
@@ -126,11 +132,28 @@ if (!studyUID) {
   })
 
   app.addEventListener('loadend', () => {
-    setStatus('Ready', 'ready')
+    if (loadedCount === 0) {
+      // All instance fetches failed — loaderror fired for each but loadend always
+      // runs last, which previously overwrote the error state with 'Ready'.
+      setStatus('Load failed — no images rendered', 'error')
+      const errEl = document.getElementById('error-message')
+      if (errEl) {
+        errEl.style.display = 'block'
+        errEl.textContent = 'Could not load DICOM images. The files may be unavailable. Check the browser console for details.'
+      }
+      const container = document.getElementById('dwv-container')
+      if (container) container.style.display = 'none'
+    } else {
+      setStatus('Ready', 'ready')
+      // Defer onResize so the browser finishes painting the iframe layout
+      // before DWV queries clientHeight to recompute canvas dimensions.
+      setTimeout(() => app.onResize(), 0)
+    }
   })
 
+  // loaderror fires per-file; don't set status here — loadend runs last and
+  // uses loadedCount to decide the final state.
   app.addEventListener('loaderror', (e) => {
-    setStatus('Load error', 'error')
     console.error('[DWV loaderror]', e.error)
   })
 
