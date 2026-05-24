@@ -65,13 +65,8 @@ variable "api_domain" {
   type        = string
 }
 
-variable "admin_domain" {
-  description = "FQDN routed to the admin dashboard backend (example: admin.aegisimaging.ai)"
-  type        = string
-}
-
 variable "landing_domain" {
-  description = "FQDN for the public marketing / landing page (example: aegisimaging.ai). Leave empty to skip landing page deployment."
+  description = "FQDN of the single application apex (example: aegisimaging.ai). Serves the unified admin-dashboard React app — XNAT routes at /, admin tabs at /admin/*, public about pages at /about. The former admin.* subdomain has been retired in favor of one hostname."
   type        = string
   default     = ""
 }
@@ -168,12 +163,6 @@ variable "classification_service_image" {
 variable "protocol_service_image" {
   description = "Container image URI for the protocol sidecar"
   type        = string
-}
-
-variable "landing_image" {
-  description = "Container image URI for the landing page (React + nginx). Empty = landing Cloud Run service not deployed."
-  type        = string
-  default     = ""
 }
 
 variable "upload_portal_image" {
@@ -403,19 +392,6 @@ variable "contact_email" {
   default     = "contact@aegisimaging.ai"
 }
 
-variable "gate_enabled" {
-  description = "Enable server-side invite gate on landing page (GATE_ENABLED env var)"
-  type        = bool
-  default     = false
-}
-
-variable "gate_secret" {
-  description = "HMAC secret for landing page invite gate tokens (GATE_SECRET env var)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
 variable "allowed_origins" {
   description = "Optional CORS origins override. If empty, defaults to API + admin domains."
   type        = list(string)
@@ -495,7 +471,6 @@ locals {
 
   lb_domains = distinct(compact([
     var.api_domain,
-    var.admin_domain,
     var.landing_domain,
     var.landing_domain != "" ? "www.${var.landing_domain}" : "",
     var.upload_portal_domain,
@@ -503,7 +478,7 @@ locals {
 
   resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : compact([
     "https://${var.api_domain}",
-    "https://${var.admin_domain}",
+    var.landing_domain != "" ? "https://${var.landing_domain}" : "",
     var.upload_portal_domain != "" ? "https://${var.upload_portal_domain}" : "",
   ])
 }
@@ -1250,71 +1225,12 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
   }
 }
 
-# --- Landing page Cloud Run service ---
-
-resource "google_cloud_run_v2_service" "landing" {
-  count    = var.landing_image != "" ? 1 : 0
-  name     = "${local.name_prefix}-landing"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
-
-  # Landing is a stateless nginx container — no data to protect, safe to replace.
-  deletion_protection = false
-
-  template {
-    scaling {
-      min_instance_count = 0
-      max_instance_count = 5
-    }
-
-    containers {
-      image = var.landing_image
-
-      resources {
-        limits = {
-          cpu    = "1"
-          memory = "256Mi"
-        }
-        cpu_idle = true
-      }
-
-      env {
-        name  = "API_BASE_URL"
-        value = "https://${var.api_domain}"
-      }
-
-      env {
-        name  = "GATE_ENABLED"
-        value = var.gate_enabled ? "true" : "false"
-      }
-
-      env {
-        name  = "GATE_SECRET"
-        value = var.gate_secret
-      }
-
-      liveness_probe {
-        failure_threshold     = 3
-        initial_delay_seconds = 5
-        timeout_seconds       = 3
-        period_seconds        = 15
-
-        http_get {
-          path = "/healthz"
-        }
-      }
-    }
-  }
-}
-
-# Landing page is public — no IAP, no auth required.
-resource "google_cloud_run_service_iam_member" "landing_invoker" {
-  count    = var.landing_image != "" ? 1 : 0
-  location = var.region
-  service  = google_cloud_run_v2_service.landing[0].name
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
+# --- Landing page service retired ---
+#
+# The standalone aegis-prod-landing Cloud Run service has been retired.
+# Its content was folded into the admin-dashboard React app under /about/*,
+# which is served via a no-IAP backend (google_compute_backend_service.admin_public)
+# so anonymous visitors can still reach the public about pages.
 
 # --- Upload portal Cloud Run service ---
 
@@ -1493,7 +1409,7 @@ resource "google_cloud_run_v2_service" "mcp_server" {
       }
       env {
         name  = "MCP_AGENT_ALLOWED_ORIGIN"
-        value = "https://${var.admin_domain}"
+        value = "https://${var.landing_domain}"
       }
       env {
         name  = "MCP_AGENT_REQUIRE_AUTH"
@@ -1572,32 +1488,6 @@ resource "google_compute_managed_ssl_certificate" "lb_cert" {
   }
   lifecycle {
     create_before_destroy = true
-  }
-}
-
-resource "google_compute_region_network_endpoint_group" "landing_neg" {
-  count                 = var.landing_image != "" ? 1 : 0
-  name                  = "${local.name_prefix}-landing-neg"
-  region                = var.region
-  network_endpoint_type = "SERVERLESS"
-  cloud_run {
-    service = google_cloud_run_v2_service.landing[0].name
-  }
-}
-
-resource "google_compute_backend_service" "landing" {
-  count                 = var.landing_image != "" ? 1 : 0
-  name                  = "${local.name_prefix}-landing-backend"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  protocol              = "HTTP"
-
-  log_config {
-    enable      = true
-    sample_rate = 0.1
-  }
-
-  backend {
-    group = google_compute_region_network_endpoint_group.landing_neg[0].id
   }
 }
 
@@ -1685,17 +1575,32 @@ resource "google_compute_backend_service" "admin" {
   }
 }
 
+# Public (no-IAP) backend for the /about/* paths.
+#
+# Points at the SAME Cloud Run NEG as the IAP-gated `admin` backend above,
+# so the unified React bundle serves both auth-gated and public routes.
+# GCP IAP is configured per-backend-service, not per-path on a single
+# backend, so the only way to expose a subset of paths publicly is to
+# attach the same Cloud Run service to a second backend service without
+# the `iap {}` block, and route /about/* to it via URL-map path rules.
+resource "google_compute_backend_service" "admin_public" {
+  name                  = "${local.name_prefix}-admin-public-backend"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  protocol              = "HTTP"
+
+  log_config {
+    enable      = true
+    sample_rate = 0.1
+  }
+
+  backend {
+    group = google_compute_region_network_endpoint_group.admin_neg.id
+  }
+}
+
 resource "google_compute_url_map" "https" {
   name            = "${local.name_prefix}-https-map"
-  default_service = var.landing_image != "" ? google_compute_backend_service.landing[0].id : google_compute_backend_service.api.id
-
-  dynamic "host_rule" {
-    for_each = var.landing_domain != "" ? [1] : []
-    content {
-      hosts        = [var.landing_domain]
-      path_matcher = "landing"
-    }
-  }
+  default_service = google_compute_backend_service.admin.id
 
   dynamic "host_rule" {
     for_each = var.upload_portal_domain != "" ? [1] : []
@@ -1710,17 +1615,12 @@ resource "google_compute_url_map" "https" {
     path_matcher = "api"
   }
 
+  # Apex domain (e.g. aegisimaging.ai) serves the unified app.
+  # Default: IAP-gated `admin` backend (XNAT, /admin/*, /search, etc.).
+  # Path rule: /about and /about/* route to `admin_public` (no IAP).
   host_rule {
-    hosts        = [var.admin_domain]
-    path_matcher = "admin"
-  }
-
-  dynamic "path_matcher" {
-    for_each = var.landing_image != "" ? [1] : []
-    content {
-      name            = "landing"
-      default_service = google_compute_backend_service.landing[0].id
-    }
+    hosts        = [var.landing_domain]
+    path_matcher = "app"
   }
 
   dynamic "path_matcher" {
@@ -1737,9 +1637,13 @@ resource "google_compute_url_map" "https" {
   }
 
   path_matcher {
-    name            = "admin"
+    name            = "app"
     default_service = google_compute_backend_service.admin.id
-    # No path rules needed — nginx proxies /api/* to the API backend internally.
+
+    path_rule {
+      paths   = ["/about", "/about/*"]
+      service = google_compute_backend_service.admin_public.id
+    }
   }
 
 }
@@ -2364,10 +2268,6 @@ output "dwv_service_uri" {
   value = var.dwv_image != "" ? google_cloud_run_v2_service.dwv[0].uri : ""
 }
 
-output "landing_service_uri" {
-  value = var.landing_image != "" ? google_cloud_run_v2_service.landing[0].uri : ""
-}
-
 output "load_balancer_ip" {
   value = google_compute_global_address.lb_ip.address
 }
@@ -2385,11 +2285,11 @@ output "api_auth_me_url" {
 }
 
 output "admin_base_url" {
-  value = "https://${var.admin_domain}"
+  value = "https://${var.landing_domain}"
 }
 
 output "admin_root_url" {
-  value = "https://${var.admin_domain}/"
+  value = "https://${var.landing_domain}/"
 }
 
 output "cloud_armor_policy_name" {
