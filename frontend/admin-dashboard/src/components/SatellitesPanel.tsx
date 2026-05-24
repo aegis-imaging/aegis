@@ -1,6 +1,6 @@
 // Spokes management — list enrolled / pending AEGIS Routers, mint new
 // enrollment tokens, revoke certs, view recent activity. Mirrors the data
-// model that powers /api/spokes and the enrollment-token endpoints.
+// model that powers /api/satellites and the enrollment-token endpoints.
 
 import { useEffect, useMemo, useState } from 'react'
 
@@ -57,7 +57,7 @@ export function SatellitesPanel({ isAdmin }: { isAdmin: boolean }) {
   useEffect(() => {
     setLoading(true)
     setError('')
-    fetch('/api/spokes')
+    fetch('/api/satellites')
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then(d => setSatellites(d.spokes || []))
       .catch(e => setError(String(e)))

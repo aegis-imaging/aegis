@@ -29,7 +29,7 @@ func (s *Server) CreateInstitutionEnrollmentToken(w http.ResponseWriter, r *http
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	req.Label = strings.TrimSpace(req.Label)
 	if req.TTLHours <= 0 {
-		req.TTLHours = s.cfg.SpokeEnrollmentTokenTTLHours
+		req.TTLHours = s.cfg.SatelliteEnrollmentTokenTTLHours
 		if req.TTLHours <= 0 {
 			req.TTLHours = 72
 		}
@@ -44,18 +44,18 @@ func (s *Server) CreateInstitutionEnrollmentToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	tok := &model.SpokeEnrollmentToken{
+	tok := &model.SatelliteEnrollmentToken{
 		InstitutionID: inst.ID,
 		Label:         req.Label,
 		CreatedBy:     actorEmail(r),
 		ExpiresAt:     time.Now().UTC().Add(time.Duration(req.TTLHours) * time.Hour),
 	}
-	if err := model.CreateSpokeEnrollmentToken(r.Context(), s.db, tok, hashHex); err != nil {
+	if err := model.CreateSatelliteEnrollmentToken(r.Context(), s.db, tok, hashHex); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "could not create token")
 		return
 	}
 
-	model.CreateAuditEntry(r.Context(), s.db, "spoke.enrollment_token_minted",
+	model.CreateAuditEntry(r.Context(), s.db, "satellite.enrollment_token_minted",
 		actorEmail(r), "institution", inst.ID, clientIP(r), map[string]any{
 			"token_id":   tok.ID,
 			"expires_at": tok.ExpiresAt,
@@ -81,19 +81,19 @@ func (s *Server) CreateInstitutionEnrollmentToken(w http.ResponseWriter, r *http
 // Returns metadata only — never the raw token.
 func (s *Server) ListInstitutionEnrollmentTokens(w http.ResponseWriter, r *http.Request) {
 	instID := r.PathValue("id")
-	tokens, err := model.ListSpokeEnrollmentTokens(r.Context(), s.db, instID)
+	tokens, err := model.ListSatelliteEnrollmentTokens(r.Context(), s.db, instID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "query failed")
 		return
 	}
 	now := time.Now().UTC()
 	type tokenRow struct {
-		model.SpokeEnrollmentToken
+		model.SatelliteEnrollmentToken
 		Status string `json:"status"`
 	}
 	rows := make([]tokenRow, 0, len(tokens))
 	for _, t := range tokens {
-		row := tokenRow{SpokeEnrollmentToken: t}
+		row := tokenRow{SatelliteEnrollmentToken: t}
 		switch {
 		case t.RevokedAt != nil:
 			row.Status = "revoked"
@@ -113,11 +113,11 @@ func (s *Server) ListInstitutionEnrollmentTokens(w http.ResponseWriter, r *http.
 func (s *Server) RevokeInstitutionEnrollmentToken(w http.ResponseWriter, r *http.Request) {
 	instID := r.PathValue("id")
 	tokenID := r.PathValue("tokenID")
-	if err := model.RevokeSpokeEnrollmentToken(r.Context(), s.db, tokenID); err != nil {
+	if err := model.RevokeSatelliteEnrollmentToken(r.Context(), s.db, tokenID); err != nil {
 		s.writeError(w, http.StatusInternalServerError, "revoke failed")
 		return
 	}
-	model.CreateAuditEntry(r.Context(), s.db, "spoke.enrollment_token_revoked",
+	model.CreateAuditEntry(r.Context(), s.db, "satellite.enrollment_token_revoked",
 		actorEmail(r), "institution", instID, clientIP(r), map[string]any{
 			"token_id": tokenID,
 		})

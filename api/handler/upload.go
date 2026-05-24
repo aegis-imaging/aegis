@@ -84,10 +84,10 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var institutionID *string
-	// Spoke-mTLS attribution wins over body selectors and IP allowlist — the
+	// Satellite-mTLS attribution wins over body selectors and IP allowlist — the
 	// cert is the strongest identity signal we have.
-	if spoke := middleware.SpokeFromContext(r.Context()); spoke != nil && spoke.Institution != nil {
-		institutionID = &spoke.Institution.ID
+	if satellite := middleware.SatelliteFromContext(r.Context()); satellite != nil && satellite.Institution != nil {
+		institutionID = &satellite.Institution.ID
 	} else if strings.TrimSpace(req.InstitutionID) != "" || strings.TrimSpace(req.InstitutionSlug) != "" || strings.TrimSpace(req.InstitutionAETitle) != "" {
 		inst, err := s.resolveIngestInstitution(r.Context(), project.ID, req.InstitutionID, req.InstitutionSlug, req.InstitutionAETitle)
 		if err != nil {
@@ -243,13 +243,13 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default source for web uploads is "external"; spoke-mTLS overrides it
-	// so studies are attributed to spoke-sourced traffic in routing/analytics.
+	// Default source for web uploads is "external"; satellite-mTLS overrides it
+	// so studies are attributed to satellite-sourced traffic in routing/analytics.
 	source := "external"
-	if spoke := middleware.SpokeFromContext(r.Context()); spoke != nil && spoke.Institution != nil {
-		source = "spoke"
-		// Spoke wins over a stale institution selector on the session row too.
-		instID := spoke.Institution.ID
+	if satellite := middleware.SatelliteFromContext(r.Context()); satellite != nil && satellite.Institution != nil {
+		source = "satellite"
+		// Satellite wins over a stale institution selector on the session row too.
+		instID := satellite.Institution.ID
 		if session.InstitutionID == nil || *session.InstitutionID != instID {
 			if err := model.UpdateUploadSessionInstitution(r.Context(), s.db, session.ID, &instID); err == nil {
 				session.InstitutionID = &instID

@@ -15,7 +15,7 @@ import (
 // SetInstitutionClientCert PUT /api/institutions/{id}/client-cert
 // Body: {"cert_pem": "..."} OR {"thumbprint": "<sha256 hex>"}
 // (Whichever form the operator has handy.) Saves the cert identity to the
-// institution so spoke-mTLS middleware can match incoming uploads.
+// institution so satellite-mTLS middleware can match incoming uploads.
 func (s *Server) SetInstitutionClientCert(w http.ResponseWriter, r *http.Request) {
 	instID := r.PathValue("id")
 

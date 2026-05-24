@@ -24,20 +24,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// withSpokeCtx puts a SpokeIdentity onto the request context the same way the
+// withSatelliteCtx puts a SatelliteIdentity onto the request context the same way the
 // middleware would, but without depending on header parsing — tests can then
 // drive the handler directly.
-func withSpokeCtx(r *http.Request, inst *model.Institution) *http.Request {
-	ident := &middleware.SpokeIdentity{
+func withSatelliteCtx(r *http.Request, inst *model.Institution) *http.Request {
+	ident := &middleware.SatelliteIdentity{
 		Institution:    inst,
 		CertThumbprint: "deadbeef",
-		CertSubjectDN:  "CN=spoke-test",
+		CertSubjectDN:  "CN=satellite-test",
 	}
-	ctx := context.WithValue(r.Context(), middleware.SpokeIdentityContextKey(), ident)
+	ctx := context.WithValue(r.Context(), middleware.SatelliteIdentityContextKey(), ident)
 	return r.WithContext(ctx)
 }
 
-func TestUploadInit_SpokeIdentityOverridesAttribution(t *testing.T) {
+func TestUploadInit_SatelliteIdentityOverridesAttribution(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -45,10 +45,10 @@ func TestUploadInit_SpokeIdentityOverridesAttribution(t *testing.T) {
 	srv := testutil.TestServer(t, db)
 
 	// Two institutions: one whose ID is in the request body, and another that
-	// owns the spoke cert. The spoke cert must win.
-	spokeInst := testutil.CreateTestInstitution(t, db, "spoke-attribution-spoke")
-	bodyInst := testutil.CreateTestInstitution(t, db, "spoke-attribution-body")
-	// Spoke institutions need sender capability + a project link.
+	// owns the satellite cert. The satellite cert must win.
+	spokeInst := testutil.CreateTestInstitution(t, db, "satellite-attribution-satellite")
+	bodyInst := testutil.CreateTestInstitution(t, db, "satellite-attribution-body")
+	// Satellite institutions need sender capability + a project link.
 	proj := testutil.SeedProject(t, db)
 	require.NoError(t, model.AddInstitutionToProject(context.Background(), db, &model.InstitutionProject{
 		InstitutionID: spokeInst.ID, ProjectID: proj.ID, Role: "sender",
@@ -60,7 +60,7 @@ func TestUploadInit_SpokeIdentityOverridesAttribution(t *testing.T) {
 		"file_count":     2,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", strings.NewReader(string(body)))
-	req = withSpokeCtx(req, spokeInst)
+	req = withSatelliteCtx(req, spokeInst)
 	rr := httptest.NewRecorder()
 	srv.UploadInit(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
@@ -73,11 +73,11 @@ func TestUploadInit_SpokeIdentityOverridesAttribution(t *testing.T) {
 
 	session, err := model.GetUploadSession(context.Background(), db, resp.SessionID)
 	require.NoError(t, err)
-	require.NotNil(t, session.InstitutionID, "spoke should have attributed an institution")
-	assert.Equal(t, spokeInst.ID, *session.InstitutionID, "spoke cert must win over body institution_id")
+	require.NotNil(t, session.InstitutionID, "satellite should have attributed an institution")
+	assert.Equal(t, spokeInst.ID, *session.InstitutionID, "satellite cert must win over body institution_id")
 }
 
-func TestUploadInit_NoSpokeKeepsExistingBehavior(t *testing.T) {
+func TestUploadInit_NoSatelliteKeepsExistingBehavior(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -121,23 +121,23 @@ func TestUploadInit_RealEnrolledCertAttributes(t *testing.T) {
 	}
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
-	inst := testutil.CreateTestInstitution(t, db, "spoke-real-cert")
+	inst := testutil.CreateTestInstitution(t, db, "satellite-real-cert")
 	proj := testutil.SeedProject(t, db)
 	require.NoError(t, model.AddInstitutionToProject(context.Background(), db, &model.InstitutionProject{
 		InstitutionID: inst.ID, ProjectID: proj.ID, Role: "sender",
 	}))
 
-	thumb, subj := mintRealCert(t, "spoke-real-cert")
+	thumb, subj := mintRealCert(t, "satellite-real-cert")
 	require.NoError(t, model.SetInstitutionClientCert(context.Background(), db, inst.ID, thumb, subj))
 
 	// Drive the request through the actual middleware so we exercise the
-	// thumbprint lookup path end-to-end (not just SpokeFromContext).
+	// thumbprint lookup path end-to-end (not just SatelliteFromContext).
 	body, _ := json.Marshal(map[string]any{"project_slug": "default", "file_count": 1})
 	req := httptest.NewRequest(http.MethodPost, "/api/upload/init", strings.NewReader(string(body)))
 	// Use the fingerprint header form so we don't need the full PEM.
 	req.Header.Set("X-Client-Cert-Fingerprint", thumb)
 
-	wrapped := middleware.WithSpokeMTLS(db)(srv.UploadInit)
+	wrapped := middleware.WithSatelliteMTLS(db)(srv.UploadInit)
 	rr := httptest.NewRecorder()
 	wrapped(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
