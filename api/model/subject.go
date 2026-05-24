@@ -11,14 +11,11 @@ import (
 // listing needs in a single round trip: study count, latest study date,
 // distinct modalities, and optional research demographics.
 //
-// `SubjectID` is the canonical, editable subject identifier (populated at
-// ingest from the DICOM-derived pseudonymized PatientID, then optionally
-// re-keyed by researchers to merge patients across studies).
-// `AnonPatientID` is also surfaced so the UI can display the immutable
-// ingest-time value when it differs from a researcher-assigned subject_id.
+// `SubjectID` is the canonical subject identifier — populated at ingest
+// from the DICOM-derived pseudonymized PatientID, then optionally
+// re-keyed by researchers to merge patients across studies.
 type SubjectAggregate struct {
 	SubjectID       string               `json:"subject_id"`
-	AnonPatientID   *string              `json:"anon_patient_id,omitempty"`
 	ProjectID       string               `json:"project_id"`
 	StudyCount      int                  `json:"study_count"`
 	LatestStudyDate *string              `json:"latest_study_date,omitempty"`
@@ -27,9 +24,8 @@ type SubjectAggregate struct {
 }
 
 // ListProjectSubjects returns one row per distinct subject_id in the given
-// project, enriched with study count, most recent study_date, the set of
-// modalities seen across that subject's studies, and the ingest-time
-// anon_patient_id (when it agrees within the group). Demographics are
+// project, enriched with study count, most recent study_date, and the set
+// of modalities seen across that subject's studies. Demographics are
 // looked up separately by the handler so this stays cheap when only the
 // listing is needed.
 //
@@ -40,7 +36,6 @@ func ListProjectSubjects(ctx context.Context, db *sql.DB, projectID, institution
 		SELECT
 			subject_id,
 			project_id,
-			max(anon_patient_id) AS anon_patient_id,
 			count(*) AS study_count,
 			max(study_date) AS latest_study_date,
 			COALESCE(
@@ -72,7 +67,6 @@ func ListProjectSubjects(ctx context.Context, db *sql.DB, projectID, institution
 		if err := rows.Scan(
 			&a.SubjectID,
 			&a.ProjectID,
-			&a.AnonPatientID,
 			&a.StudyCount,
 			&a.LatestStudyDate,
 			&mods,
@@ -93,7 +87,6 @@ func GetProjectSubject(ctx context.Context, db *sql.DB, projectID, subjectID, in
 		SELECT
 			subject_id,
 			project_id,
-			max(anon_patient_id) AS anon_patient_id,
 			count(*) AS study_count,
 			max(study_date) AS latest_study_date,
 			COALESCE(
@@ -117,7 +110,6 @@ func GetProjectSubject(ctx context.Context, db *sql.DB, projectID, subjectID, in
 		Scan(
 			&a.SubjectID,
 			&a.ProjectID,
-			&a.AnonPatientID,
 			&a.StudyCount,
 			&a.LatestStudyDate,
 			&mods,

@@ -165,10 +165,6 @@ type Study = {
   id: string
   project_id: string
   study_instance_uid: string
-  // Anonymized PatientID (e.g. "SUBJ-abc123"). Populated by the ingest path
-  // when the DICOM PatientID tag carries the SUBJ-<hex> value the client-side
-  // anonymizer writes; may be undefined/null for legacy rows.
-  anon_patient_id?: string | null
   modality: string
   body_part: string
   study_description: string
@@ -3427,7 +3423,7 @@ function StudyRow({
           </button>
         </td>
         <td className="td-uid">
-          <button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{study.anon_patient_id || uidShort(study.study_instance_uid)}</button>
+          <button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{study.subject_id || uidShort(study.study_instance_uid)}</button>
           <button
             type="button"
             className={`btn-copy-uid${uidCopied ? ' btn-copy-uid--copied' : ''}`}
@@ -11638,7 +11634,7 @@ export function App() {
               }}
               title={groupByPatient
                 ? 'Show studies as a flat list'
-                : 'Group studies by anonymized patient ID (overrides column sort while on)'}
+                : 'Group studies by subject ID (overrides column sort while on)'}
             >
               {groupByPatient ? 'Ungroup' : 'Group by Patient'}
             </button>
@@ -11731,7 +11727,7 @@ export function App() {
                       />
                     </th>
                     <th className="th-flag" title="Priority flag">★</th>
-                    <th className="th-sortable" onClick={() => setSortF('anon_patient_id')} title="Sort by anonymized patient ID (falls back to study UID when missing)">Patient{sortIcon('anon_patient_id')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('subject_id')} title="Sort by subject ID (falls back to study UID when missing)">Subject{sortIcon('subject_id')}</th>
                     {showDescCol && <th>Description</th>}
                     <th className="th-sortable" onClick={() => setSortF('modality')} title="Sort by modality">Modality{sortIcon('modality')}</th>
                     <th className="th-sortable" onClick={() => setSortF('body_part')} title="Sort by body part">Body Part{sortIcon('body_part')}</th>
@@ -11784,15 +11780,15 @@ export function App() {
                       ))
                     }
 
-                    // Group mode: client-side reorder by (anon_patient_id ASC nulls last,
+                    // Group mode: client-side reorder by (subject_id ASC nulls last,
                     // study_date DESC) regardless of the current column sort. We keep the
                     // sort indicator on whichever column the user clicked — only the visible
                     // order changes.
                     const norm = (v: string | null | undefined) =>
                       v && v.trim() !== '' ? v : null
                     const sortedForGroups = [...studies].sort((a, b) => {
-                      const pa = norm(a.anon_patient_id)
-                      const pb = norm(b.anon_patient_id)
+                      const pa = norm(a.subject_id)
+                      const pb = norm(b.subject_id)
                       if (pa !== pb) {
                         if (pa === null) return 1   // nulls last
                         if (pb === null) return -1
@@ -11807,13 +11803,13 @@ export function App() {
                     })
 
                     // Pre-compute per-group stats (study count + latest study_date) keyed by
-                    // patient ID. Use a sentinel string for the NULL group so we can also
+                    // subject ID. Use a sentinel string for the NULL group so we can also
                     // store it in a normal Map.
-                    const NULL_KEY = ' __no_patient_id__'
+                    const NULL_KEY = ' __no_subject_id__'
                     type GroupStat = { count: number; latestDate: string }
                     const groupStats = new Map<string, GroupStat>()
                     for (const s of sortedForGroups) {
-                      const key = norm(s.anon_patient_id) ?? NULL_KEY
+                      const key = norm(s.subject_id) ?? NULL_KEY
                       const existing = groupStats.get(key)
                       const sd = s.study_date || ''
                       if (existing) {
@@ -11829,13 +11825,13 @@ export function App() {
                     const rows: React.ReactNode[] = []
                     let prevKey: string | null = null
                     for (const study of sortedForGroups) {
-                      const key = norm(study.anon_patient_id) ?? NULL_KEY
+                      const key = norm(study.subject_id) ?? NULL_KEY
                       if (key !== prevKey) {
                         const stat = groupStats.get(key)!
                         const isNullGroup = key === NULL_KEY
                         const label = isNullGroup
-                          ? '(no patient ID)'
-                          : (norm(study.anon_patient_id) as string)
+                          ? '(no subject ID)'
+                          : (norm(study.subject_id) as string)
                         const studyWord = stat.count === 1 ? 'study' : 'studies'
                         const latestSuffix = !isNullGroup && stat.latestDate
                           ? `, latest ${stat.latestDate}`
