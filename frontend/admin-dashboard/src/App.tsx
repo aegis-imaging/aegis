@@ -1307,7 +1307,7 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
               title="Download all shares as CSV"
             >↓ CSV</a>
           )}
-          <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
+          <button type="button" className="xn-icon-btn" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
         </div>
       </div>
 
@@ -1329,19 +1329,19 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
         </div>
       )}
 
-      {loading && <div className="state-loading">Loading shares…</div>}
-      {error && <div className="state-error">{error}</div>}
+      {loading && <div className="xn-muted">Loading shares…</div>}
+      {error && <div className="xn-error">{error}</div>}
       {!loading && !error && shares.length === 0 && (
-        <div className="state-empty">No export shares found.</div>
+        <div className="xn-muted">No export shares found.</div>
       )}
 
       {!loading && !error && shares.length > 0 && (
         <div className="audit-table-wrap">
           <div className="audit-pagination-bar">
             <span className="audit-total">{total} shares</span>
-            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <button type="button" className="xn-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
             <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button type="button" className="xn-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
           <table className="audit-table">
             <thead>
@@ -1371,7 +1371,7 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
                     <td>
                       <button
                         type="button"
-                        className="btn-secondary"
+                        className="xn-btn-secondary"
                         onClick={() => toggleDownloads(s.id)}
                         title="View download history"
                       >
@@ -1386,10 +1386,10 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
                     <td className="audit-time">{fmtDate(s.created_at)}</td>
                     <td>
                       {isAdmin && (s.status === 'active' || s.status === 'expired') ? (
-                        <div className="actions-cell">
+                        <div className="xn-section-controls">
                           <button
                             type="button"
-                            className="btn-secondary"
+                            className="xn-btn-secondary"
                             disabled={extending === s.id}
                             onClick={() => extendShare(s.id)}
                             title="Extend share expiry"
@@ -1446,9 +1446,9 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
             </tbody>
           </table>
           <div className="audit-pagination-bar audit-pagination-bar--bottom">
-            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <button type="button" className="xn-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
             <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button type="button" className="xn-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
         </div>
       )}
@@ -5562,59 +5562,59 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
   }
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">Email Digest Subscriptions</div>
-            <div className="routing-section-sub">
+            <div className="">Email Digest Subscriptions</div>
+            <div className="xn-muted">
               Periodic study summary emails sent per project. Weekly digests send every 7 days;
               monthly every 30 days. No PHI is included.
             </div>
           </div>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New subscription</button>}
+          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openCreate}>+ New subscription</button>}
         </div>
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>New subscription</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" type="email" placeholder="Email address *"
+            {formError && <div className="xn-error">{formError}</div>}
+            <div className="">
+              <input className="xn-filter" type="email" placeholder="Email address *"
                 value={formEmail}
                 onChange={e => setFormEmail(e.target.value)} />
-              <select className="form-select" aria-label="Project"
+              <select className="" aria-label="Project"
                 value={formProject}
                 onChange={e => setFormProject(e.target.value)}>
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
-              <select className="form-select" aria-label="Frequency"
+              <select className="" aria-label="Frequency"
                 value={formFrequency}
                 onChange={e => setFormFrequency(e.target.value as 'weekly' | 'monthly')}>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
               </select>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : 'Subscribe'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="xn-muted">Loading…</div>}
+        {error   && <div className="xn-error">{error}</div>}
         {!loading && !error && subs.length === 0 && (
-          <div className="state-empty">No subscriptions yet.</div>
+          <div className="xn-muted">No subscriptions yet.</div>
         )}
         {!loading && !error && subs.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>Email</th>
@@ -5630,11 +5630,11 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                   <td>{sub.email}</td>
                   <td>{sub.project_name}</td>
                   <td className="text-capitalize">{sub.frequency}</td>
-                  <td>{sub.last_sent_at ? fmtDate(sub.last_sent_at) : <span className="routing-desc">never</span>}</td>
+                  <td>{sub.last_sent_at ? fmtDate(sub.last_sent_at) : <span className="xn-muted">never</span>}</td>
                   <td>
                     {isAdmin && (
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--revoke"
+                      <div className="xn-section-controls">
+                        <button type="button" className="xn-btn-secondary"
                           onClick={() => del(sub.id, sub.email)}>Remove</button>
                       </div>
                     )}
@@ -5647,30 +5647,30 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
       </div>
 
       {/* ── Webhook subscriptions ── */}
-      <div className="routing-section">
-        <div className="routing-section-header">
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">Webhook Subscriptions</div>
-            <div className="routing-section-sub">
+            <div className="">Webhook Subscriptions</div>
+            <div className="xn-muted">
               HTTP POST callbacks fired on study events, signed with HMAC-SHA256 when a secret is set.
             </div>
           </div>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openWebhookCreate}>+ New webhook</button>}
+          {isAdmin && <button type="button" className="xn-btn-primary" onClick={openWebhookCreate}>+ New webhook</button>}
         </div>
 
         {isAdmin && showWebhookForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>{whEditId ? 'Edit webhook' : 'New webhook'}</h3>
-            {whFormError && <div className="form-error">{whFormError}</div>}
-            <div className="form-grid">
-              <input className="form-input" type="url" placeholder="Endpoint URL (https://…) *"
+            {whFormError && <div className="xn-error">{whFormError}</div>}
+            <div className="">
+              <input className="xn-filter" type="url" placeholder="Endpoint URL (https://…) *"
                 value={whURL} onChange={e => setWhURL(e.target.value)} />
-              <select className="form-select" aria-label="Project scope"
+              <select className="" aria-label="Project scope"
                 value={whProject} onChange={e => setWhProject(e.target.value)}>
                 <option value="">All projects</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <input className="form-input" type="text" placeholder="Secret (optional, for HMAC signing)"
+              <input className="xn-filter" type="text" placeholder="Secret (optional, for HMAC signing)"
                 value={whSecret} onChange={e => setWhSecret(e.target.value)} />
             </div>
             <div className="form-row" style={{ gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
@@ -5688,23 +5688,23 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                 Enabled
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveWebhook} disabled={whSaving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={saveWebhook} disabled={whSaving}>
                 {whSaving ? 'Saving…' : (whEditId ? 'Update' : 'Create')}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowWebhookForm(false)}>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowWebhookForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
+        {loading && <div className="xn-muted">Loading…</div>}
         {!loading && !error && webhooks.length === 0 && (
-          <div className="state-empty">No webhook subscriptions yet.</div>
+          <div className="xn-muted">No webhook subscriptions yet.</div>
         )}
         {!loading && !error && webhooks.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>URL</th>
@@ -5720,32 +5720,32 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                   <tr key={wh.id}>
                     <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
                     <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
-                    <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="routing-desc">all</span>}</td>
+                    <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="xn-muted">all</span>}</td>
                     <td>
                       <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
                         {wh.enabled ? 'enabled' : 'disabled'}
                       </span>
                     </td>
                     <td>
-                      <div className="actions-cell">
-                        <button type="button" className="btn-secondary"
+                      <div className="xn-section-controls">
+                        <button type="button" className="xn-btn-secondary"
                           onClick={() => showStats(wh.id)}
                           title="View delivery statistics">
                           {statsWhId === wh.id ? 'Hide Stats' : 'Stats'}
                         </button>
-                        <button type="button" className="btn-secondary"
+                        <button type="button" className="xn-btn-secondary"
                           onClick={() => showDeliveries(wh.id)}
                           title="View delivery log">
                           {deliveryWhId === wh.id ? 'Hide Log' : 'Log'}
                         </button>
                         {isAdmin && (
                           <>
-                            <button type="button" className="btn btn--action"
+                            <button type="button" className="xn-btn-secondary"
                               title="Send a test study.approved payload"
                               onClick={() => testWebhook(wh.id, wh.url)}>Test</button>
-                            <button type="button" className="btn btn--action"
+                            <button type="button" className="xn-btn-secondary"
                               onClick={() => openWebhookEdit(wh)}>Edit</button>
-                            <button type="button" className="btn btn--revoke"
+                            <button type="button" className="xn-btn-secondary"
                               onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
                           </>
                         )}
@@ -5812,11 +5812,11 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                                     </span>
                                     {d.error_message && <span className="td-subtle"> {d.error_message}</span>}
                                   </td>
-                                  <td className="td-date">{fmtDate(d.delivered_at)}</td>
+                                  <td className="">{fmtDate(d.delivered_at)}</td>
                                   {isAdmin && (
                                     <td>
                                       {!d.success && (
-                                        <button type="button" className="btn btn--action"
+                                        <button type="button" className="xn-btn-secondary"
                                           title="Re-deliver this payload"
                                           onClick={() => retryDelivery(d.id, wh.id)}>Retry</button>
                                       )}
@@ -9409,30 +9409,30 @@ function DownloadsPanel() {
   }, [installers])
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">Desktop client installers</div>
-            <div className="routing-section-sub">
+            <div className="">Desktop client installers</div>
+            <div className="xn-muted">
               Manage and distribute installable AEGIS desktop apps. Upload new versions, mark which version is current per platform, and email install links to specific users.
             </div>
           </div>
-          <button type="button" className="btn-primary" onClick={() => setShowUpload(true)}>
+          <button type="button" className="xn-btn-primary" onClick={() => setShowUpload(true)}>
             + Upload version
           </button>
         </div>
 
         {toast && (
-          <div className="routing-form" style={{ background: '#ccfbf1', border: '1px solid #5eead4', color: '#0f766e' }}>
+          <div className="xn-section" style={{ background: '#ccfbf1', border: '1px solid #5eead4', color: '#0f766e' }}>
             {toast}
           </div>
         )}
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="xn-muted">Loading…</div>}
+        {error   && <div className="xn-error">{error}</div>}
 
         {!loading && !error && installers.length === 0 && (
-          <div className="state-empty">
+          <div className="xn-muted">
             No installers uploaded yet. Click <strong>Upload version</strong> to register the first one — or use the JSON API to register an external download URL (e.g. GitHub Releases).
           </div>
         )}
@@ -9490,14 +9490,14 @@ function DownloadsPanel() {
                             }}>{current.changelog}</div>
                           )}
                         </div>
-                        <div className="actions-cell" style={{ flexShrink: 0 }}>
-                          <a className="btn btn--action" href={downloadHref(current)} target="_blank" rel="noreferrer">
+                        <div className="xn-section-controls" style={{ flexShrink: 0 }}>
+                          <a className="xn-btn-secondary" href={downloadHref(current)} target="_blank" rel="noreferrer">
                             Download
                           </a>
-                          <button type="button" className="btn btn--action" onClick={() => setShowSendFor(current)}>
+                          <button type="button" className="xn-btn-secondary" onClick={() => setShowSendFor(current)}>
                             Send link
                           </button>
-                          <button type="button" className="btn btn--revoke" onClick={() => del(current)}>
+                          <button type="button" className="xn-btn-secondary" onClick={() => del(current)}>
                             Delete
                           </button>
                         </div>
@@ -9507,7 +9507,7 @@ function DownloadsPanel() {
                           <summary style={{ cursor: 'pointer', color: '#64748b', fontSize: '13px' }}>
                             {history.length} older version{history.length === 1 ? '' : 's'}
                           </summary>
-                          <table className="routing-table" style={{ marginTop: '8px' }}>
+                          <table className="xn-table" style={{ marginTop: '8px' }}>
                             <thead>
                               <tr>
                                 <th>Version</th><th>Size</th><th>Released</th><th>Actions</th>
@@ -9520,10 +9520,10 @@ function DownloadsPanel() {
                                   <td>{fmtBytes(h.size_bytes)}</td>
                                   <td>{fmtDate(h.released_at)}</td>
                                   <td>
-                                    <div className="actions-cell">
-                                      <a className="btn btn--action" href={downloadHref(h)} target="_blank" rel="noreferrer">Download</a>
-                                      <button type="button" className="btn btn--action" onClick={() => markCurrent(h)}>Mark current</button>
-                                      <button type="button" className="btn btn--revoke" onClick={() => del(h)}>Delete</button>
+                                    <div className="xn-section-controls">
+                                      <a className="xn-btn-secondary" href={downloadHref(h)} target="_blank" rel="noreferrer">Download</a>
+                                      <button type="button" className="xn-btn-secondary" onClick={() => markCurrent(h)}>Mark current</button>
+                                      <button type="button" className="xn-btn-secondary" onClick={() => del(h)}>Delete</button>
                                     </div>
                                   </td>
                                 </tr>
@@ -9544,7 +9544,7 @@ function DownloadsPanel() {
         {!loading && !error && invites.length > 0 && (
           <div style={{ marginTop: '32px' }}>
             <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#334155' }}>Recent install link sends</h3>
-            <table className="routing-table">
+            <table className="xn-table">
               <thead>
                 <tr>
                   <th>Recipient</th>

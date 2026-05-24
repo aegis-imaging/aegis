@@ -150,7 +150,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
       <div className="agent-form">
         <div className="form-row">
           <input
-            className="form-input"
+            className="xn-filter"
             type="text"
             placeholder="Study UUID (e.g. 7445e605-…)"
             value={studyId}
@@ -158,7 +158,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
             title="The database UUID for the study — copy it from the study detail page"
           />
           <input
-            className="form-input"
+            className="xn-filter"
             type="text"
             placeholder="StudyInstanceUID (e.g. 1.2.826.0.1…)"
             value={studyUid}
@@ -168,7 +168,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
         </div>
         <div className="form-row">
           <input
-            className="form-input"
+            className="xn-filter"
             type="text"
             placeholder="Ask a question — or pick one below ↓"
             value={question}
@@ -195,7 +195,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
 
         <div className="form-row">
           <input
-            className="form-input"
+            className="xn-filter"
             type="password"
             placeholder="Agent API key (optional)"
             value={agentApiKey}
@@ -203,7 +203,7 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
             title="Leave blank to use the server-configured API key, or enter your own for rate-limiting purposes"
           />
           <select
-            className="form-input"
+            className="xn-filter"
             value={model}
             onChange={(e) => setModel(e.target.value)}
             title="'Server default' uses the model configured on the MCP server."
@@ -222,15 +222,15 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
           />
           Include next steps
         </label>
-        <div className="form-row form-row--actions">
-          <button type="button" className="btn-primary" onClick={submit} disabled={loading}>
+        <div className="xn-form-actions">
+          <button type="button" className="xn-btn-primary" onClick={submit} disabled={loading}>
             {loading ? 'Running…' : 'Ask agent'}
           </button>
-          <button type="button" className="btn-secondary" onClick={resetForm} disabled={loading}>
+          <button type="button" className="xn-btn-secondary" onClick={resetForm} disabled={loading}>
             Clear
           </button>
         </div>
-        {error && <div className="form-error">{error}</div>}
+        {error && <div className="xn-error">{error}</div>}
       </div>
 
       {data && (
