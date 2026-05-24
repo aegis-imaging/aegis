@@ -9782,12 +9782,12 @@ export function App() {
   const [breakdown, setBreakdown] = useState<BreakdownRow[] | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
   const loadBreakdown = async () => {
+    if (showBreakdown) { setShowBreakdown(false); return }
     const params = new URLSearchParams()
     if (globalProjectId) params.set('project_id', globalProjectId)
     const qs = params.toString()
     const res = await fetch(`/api/stats/breakdown${qs ? '?' + qs : ''}`)
     if (res.ok) { const d = await res.json(); setBreakdown(d.breakdown ?? []); setShowBreakdown(true) }
-    else setShowBreakdown(v => !v)
   }
 
   type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number; total_size_bytes: number }
@@ -9805,33 +9805,33 @@ export function App() {
   const [timeline, setTimeline] = useState<TimelineDay[] | null>(null)
   const [showTimeline, setShowTimeline] = useState(false)
   const loadTimeline = async () => {
+    if (showTimeline) { setShowTimeline(false); return }
     const params = new URLSearchParams({ days: '30' })
     if (globalProjectId) params.set('project_id', globalProjectId)
     const res = await fetch(`/api/stats/timeline?${params}`)
     if (res.ok) { const d = await res.json(); setTimeline(d.timeline ?? []); setShowTimeline(true) }
-    else setShowTimeline(v => !v)
   }
 
   type StageTiming = { stage: string; count: number; avg_seconds: number; p95_seconds: number; min_seconds: number; max_seconds: number }
   const [processingTimes, setProcessingTimes] = useState<StageTiming[] | null>(null)
   const [showProcessingTimes, setShowProcessingTimes] = useState(false)
   const loadProcessingTimes = async () => {
+    if (showProcessingTimes) { setShowProcessingTimes(false); return }
     const params = new URLSearchParams({ days: '30' })
     if (globalProjectId) params.set('project_id', globalProjectId)
     const res = await fetch(`/api/stats/processing-times?${params}`)
     if (res.ok) { const d = await res.json(); setProcessingTimes(d.stages ?? []); setShowProcessingTimes(true) }
-    else setShowProcessingTimes(v => !v)
   }
 
   type FunnelStage = { stage: string; count: number; pct_of_total: number; pct_of_prev: number }
   const [funnel, setFunnel] = useState<FunnelStage[] | null>(null)
   const [showFunnel, setShowFunnel] = useState(false)
   const loadFunnel = async () => {
+    if (showFunnel) { setShowFunnel(false); return }
     const params = new URLSearchParams({ days: '30' })
     if (globalProjectId) params.set('project_id', globalProjectId)
     const res = await fetch(`/api/stats/pipeline-funnel?${params}`)
     if (res.ok) { const d = await res.json(); setFunnel(d.funnel ?? []); setShowFunnel(true) }
-    else setShowFunnel(v => !v)
   }
 
   type CohortSubject = {
