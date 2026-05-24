@@ -345,7 +345,19 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/audit/{id}/annotations` | `ListAuditAnnotations` | `project_member_any` |
 | `auth` | `POST /api/audit/{id}/annotations` | `CreateAuditAnnotation` | `project_member_any` |
 | `auth` | `DELETE /api/audit/{id}/annotations/{annotationID}` | `DeleteAuditAnnotation` | `project_member_any` |
+| `auth` | `GET /api/projects/{id}/subjects` | `ListProjectSubjects` | `project_member_site_scoped` |
+| `auth` | `GET /api/projects/{id}/subjects/{subjectID}` | `GetProjectSubject` | `project_member_site_scoped` |
+| `auth` | `GET /api/search` | `Search` | `project_member_any` |
+| `auth` | `GET /api/studies/{id}/series-metadata` | `ListStudySeriesMetadata` | `project_member_site_scoped` |
+| `auth` | `GET /api/desktop-installers` | `ListDesktopInstallers` | `project_member_any` |
+| `adminOnly` | `POST /api/desktop-installers` | `CreateDesktopInstaller` | `platform_admin` |
+| `adminOnly` | `PATCH /api/desktop-installers/{id}` | `UpdateDesktopInstaller` | `platform_admin` |
+| `adminOnly` | `DELETE /api/desktop-installers/{id}` | `DeleteDesktopInstaller` | `platform_admin` |
+| `auth` | `GET /api/desktop-installers/{id}/download` | `DownloadDesktopInstaller` | `project_member_any` |
+| `adminOnly` | `POST /api/desktop-installers/{id}/email` | `EmailDesktopInstallerInvite` | `platform_admin` |
+| `auth` | `GET /api/desktop-installers/invites` | `ListDesktopInstallerInvites` | `project_member_any` |
+| `adminOnly` | `POST /api/admin/backfill-study-metadata` | `BackfillStudyMetadata` | `platform_admin` |
 
 ## Coverage
-- Total mapped authenticated/admin routes: **296**
+- Total mapped authenticated/admin routes: **338**
 - Every `auth(...)` and `adminOnly(...)` route registration in `api/main.go` is included above.
