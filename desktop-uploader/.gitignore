@@ -1,0 +1,24 @@
+# Node
+node_modules/
+dist/
+pnpm-debug.log
+
+# Rust
+src-tauri/target/
+src-tauri/gen/
+
+# Tauri build outputs
+src-tauri/WixTools/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env
+.env
+.env.local
