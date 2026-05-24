@@ -1,0 +1,281 @@
+/* Public /about/* styling. Class prefix `about-` keeps it isolated from
+ * the `xn-` (XNAT nav) and admin dashboard class trees. Academic tone —
+ * readable, restrained, citation-friendly. Same colorblind-safe palette
+ * variables as nav.css.
+ */
+
+.about-shell {
+  min-height: 100vh;
+  background: var(--xn-bg, #f8f9fb);
+  color: var(--xn-text, #0f172a);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+
+.about-topbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 24px;
+  background: var(--xn-surface, #ffffff);
+  border-bottom: 1px solid var(--xn-border, #e2e8f0);
+}
+
+.about-brand {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 16px;
+  color: var(--xn-text, #0f172a);
+  text-decoration: none;
+}
+
+.about-topnav {
+  display: flex;
+  gap: 12px;
+  margin-left: 8px;
+  flex: 1;
+}
+
+.about-topnav a {
+  color: var(--xn-muted, #64748b);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.about-topnav a:hover {
+  color: var(--xn-text, #0f172a);
+  background: var(--xn-active-bg, #ccfbf1);
+}
+
+.about-signin {
+  padding: 8px 14px;
+  background: var(--xn-link, #0d9488);
+  color: #ffffff;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.about-signin:hover {
+  background: var(--xn-link-hover, #0f766e);
+}
+
+/* ── Container ───────────────────────────────────────────────────────── */
+
+.about-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.about-container-narrow {
+  max-width: 720px;
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+
+.about-hero {
+  padding: 80px 0 56px;
+  background: linear-gradient(180deg, #ffffff 0%, var(--xn-bg, #f8f9fb) 100%);
+}
+
+.about-eyebrow {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--xn-link, #0d9488);
+  margin: 0 0 12px;
+}
+
+.about-headline {
+  font-size: 40px;
+  line-height: 1.15;
+  font-weight: 700;
+  margin: 0 0 16px;
+  letter-spacing: -0.01em;
+}
+
+.about-headline-accent {
+  color: var(--xn-link, #0d9488);
+}
+
+.about-subtitle {
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--xn-muted, #64748b);
+  max-width: 640px;
+  margin: 0 0 24px;
+}
+
+.about-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.about-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 14px;
+  text-decoration: none;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.about-btn-primary {
+  background: var(--xn-link, #0d9488);
+  color: #ffffff;
+}
+
+.about-btn-primary:hover {
+  background: var(--xn-link-hover, #0f766e);
+}
+
+.about-btn-ghost {
+  background: transparent;
+  color: var(--xn-text, #0f172a);
+  border: 1px solid var(--xn-border, #e2e8f0);
+}
+
+.about-btn-ghost:hover {
+  border-color: var(--xn-link, #0d9488);
+  color: var(--xn-link-hover, #0f766e);
+}
+
+/* ── Section ─────────────────────────────────────────────────────────── */
+
+.about-section {
+  padding: 56px 0;
+}
+
+.about-section-alt {
+  background: var(--xn-surface, #ffffff);
+  border-top: 1px solid var(--xn-border, #e2e8f0);
+  border-bottom: 1px solid var(--xn-border, #e2e8f0);
+}
+
+.about-section-title {
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+
+.about-section-lead {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--xn-muted, #64748b);
+  margin: 0 0 24px;
+  max-width: 640px;
+}
+
+.about-section a {
+  color: var(--xn-link, #0d9488);
+  text-decoration: none;
+}
+
+.about-section a:hover {
+  color: var(--xn-link-hover, #0f766e);
+  text-decoration: underline;
+}
+
+/* ── Problem grid ────────────────────────────────────────────────────── */
+
+.about-problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+}
+
+.about-problem-card {
+  background: var(--xn-surface, #ffffff);
+  border: 1px solid var(--xn-border, #e2e8f0);
+  border-left: 3px solid var(--xn-link, #0d9488);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+
+.about-problem-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.about-problem-body {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--xn-text, #0f172a);
+  margin: 0 0 12px;
+}
+
+.about-problem-citation {
+  font-size: 12px;
+  color: var(--xn-muted, #64748b);
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── Approach grid ───────────────────────────────────────────────────── */
+
+.about-approach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin: 24px 0 0;
+}
+
+.about-approach-card {
+  /* Subtle: no border, just spacing. The alt-section background already
+   * differentiates this row. */
+}
+
+.about-approach-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--xn-link-hover, #0f766e);
+}
+
+.about-approach-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--xn-text, #0f172a);
+  margin: 0;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+
+.about-footer {
+  margin-top: auto;
+  padding: 24px 0;
+  background: var(--xn-surface, #ffffff);
+  border-top: 1px solid var(--xn-border, #e2e8f0);
+  font-size: 13px;
+  color: var(--xn-muted, #64748b);
+  text-align: center;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .about-headline {
+    font-size: 30px;
+  }
+  .about-section-title {
+    font-size: 22px;
+  }
+  .about-hero {
+    padding: 48px 0 32px;
+  }
+}

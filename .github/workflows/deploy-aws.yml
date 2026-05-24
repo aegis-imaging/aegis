@@ -11,10 +11,9 @@
 # Phase 1: Build all 15 service images in parallel (matrix) and push to ECR.
 # Phase 2: Update all ECS services (force new deployment) + reboot DIMSE EC2.
 #
-# NOTE: landing uses the monorepo root as build context (its Dockerfile copies
-# frontend/landing/server/ which requires the repo root to be the context).
-# Landing deploy is conditional: workflow updates `aegis-landing` only when the
-# ECS service exists (optional in terraform/aws via landing_image_tag).
+# NOTE: landing service has been retired — its content was folded into
+# admin-dashboard /about/* and served via the no-IAP backend on the same
+# Cloud Run / ECS service.
 
 name: Deploy to AWS
 
@@ -115,10 +114,6 @@ jobs:
           - service: dimse-receiver
             context: dimse-receiver
             dockerfile: dimse-receiver/Dockerfile
-          - service: landing
-            context: .
-            dockerfile: frontend/landing/Dockerfile
-            build_args: "--build-arg VITE_API_BASE_URL=https://aws.api.aegisimaging.ai"
           - service: upload-portal
             context: .
             dockerfile: frontend/upload-portal/Dockerfile
@@ -216,7 +211,6 @@ jobs:
             deploy_if_exists "$SVC"
           done
 
-          deploy_if_exists "aegis-landing"
           deploy_if_exists "aegis-upload-portal"
 
   deploy-dimse:
