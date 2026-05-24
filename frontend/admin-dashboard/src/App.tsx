@@ -8224,245 +8224,242 @@ function UsersPanel() {
     setActivityLoading(false)
   }
 
-  if (loading) return <div className="state-loading">Loading users…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="xn-muted">Loading users…</div>
+  if (error)   return <div className="xn-error">{error}</div>
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
-          <div>
-            <div className="routing-section-title">Admin Users</div>
-            <div className="routing-section-sub">
-              Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production.
-            </div>
-          </div>
-          <div className="actions-cell">
-            <button type="button" className="btn-refresh" onClick={fetchUsers}>Refresh</button>
-            <button type="button" className="btn-primary" onClick={openNew}>+ Add user</button>
+    <>
+      <section className="xn-section">
+        <div className="xn-section-bar">
+          <h2>Admin Users</h2>
+          <div className="xn-section-controls">
+            <button type="button" className="xn-icon-btn" onClick={fetchUsers} title="Refresh" aria-label="Refresh">↻</button>
+            <button type="button" className="xn-btn-primary" onClick={openNew}>+ Add user</button>
           </div>
         </div>
-
-        {showForm && (
-          <div className="routing-form">
-            <h3>{editingId ? 'Edit user' : 'New user'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" type="email" placeholder="Email address *"
-                value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-              <input className="form-input" placeholder="Display name"
-                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <select className="form-select" aria-label="Role" value={form.role}
-                onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'viewer' }))}>
-                <option value="admin">admin — full access</option>
-                <option value="viewer">viewer — read-only</option>
-              </select>
-              <input className="form-input form-input--wide" placeholder="Notes (optional)"
-                value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
-                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        {/* Inline notification preferences editor */}
-        {prefsUserId && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
-            <h3>Notification Preferences — {prefsUserName}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
-              Controls digest email frequency and which events trigger notifications for this user.
-            </div>
-            {prefsError && <div className="form-error">{prefsError}</div>}
-            <div className="form-grid">
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
-                Digest frequency
-                <select className="form-select" value={prefsFreq} onChange={e => setPrefsFreq(e.target.value)}>
-                  <option value="none">None — no digest emails</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </label>
-            </div>
-            <div style={{ marginTop: '12px', fontSize: '0.875rem' }}>
-              <div style={{ marginBottom: '6px', fontWeight: 500 }}>Notify on events</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {NOTIFY_EVENT_OPTIONS.map(opt => (
-                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={prefsEvents.includes(opt.value)}
-                      onChange={() => togglePrefsEvent(opt.value)} />
-                    <span>{opt.label}</span>
-                    <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{opt.value}</code>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="form-row form-row--actions" style={{ marginTop: '12px' }}>
-              <button type="button" className="btn-primary" onClick={savePrefs} disabled={prefsSaving}>
-                {prefsSaving ? 'Saving…' : 'Save'}
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => setPrefsUserId(null)}>Cancel</button>
-            </div>
-          </div>
-        )}
+        <p className="xn-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: 13 }}>
+          Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production.
+        </p>
 
         {users.length === 0 && !showForm ? (
-          <div className="state-empty">No users yet.</div>
+          <div className="xn-muted">No users yet.</div>
         ) : users.length > 0 && (
-          <table className="routing-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Notes</th>
-                <th>Added</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u => (
-                <Fragment key={u.id}>
-                  <tr className={u.enabled ? '' : 'routing-row--disabled'}>
-                    <td>
-                      <div className="routing-name">{u.name || u.email}</div>
-                      {u.name && <div className="routing-desc">{u.email}</div>}
-                    </td>
-                    <td>
-                      <span className={`routing-action routing-action--${u.role}`}>{u.role}</span>
-                    </td>
-                    <td>
-                      <span className={`badge badge--${u.enabled ? 'enabled' : 'disabled'}`}>
-                        {u.enabled ? 'enabled' : 'disabled'}
-                      </span>
-                    </td>
-                    <td className="routing-desc">{u.notes || '—'}</td>
-                    <td className="td-date">{fmtDate(u.created_at)}</td>
-                    <td>
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEdit(u)}>Edit</button>
-                        <button type="button" className="btn btn--action" onClick={() => openPrefs(u)}
-                          title="Configure digest frequency and notification event preferences">
-                          Prefs
-                        </button>
-                        <button type="button" className="btn btn--action"
-                          disabled={inviteSendingId === u.id}
-                          onClick={() => sendInvite(u)}
-                          title="Email a dashboard sign-in invite to this user">
-                          {inviteSendingId === u.id ? 'Sending…' : 'Send Invite'}
-                        </button>
-                        <button type="button"
-                          className={`btn ${activityUserId === u.id ? 'btn--active' : 'btn--secondary'}`}
-                          onClick={() => openActivity(u)}
-                          title="View login sessions and recent audit activity for this user">
-                          Activity
-                        </button>
-                        <button type="button" className="btn btn--secondary" onClick={() => toggleUser(u)}>
-                          {u.enabled ? 'Disable' : 'Enable'}
-                        </button>
-                        <button type="button" className="btn btn--revoke" onClick={() => deleteUser(u.id, u.email)}>Delete</button>
-                      </div>
-                      {inviteSentMsg[u.id] && (
-                        <div style={{ fontSize: '0.75rem', marginTop: '4px',
-                          color: inviteSentMsg[u.id].startsWith('Invite sent') ? 'var(--teal-700)' : 'var(--orange-700)' }}>
-                          {inviteSentMsg[u.id]}
+          <div className="xn-table-wrap">
+            <table className="xn-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  <th>Added</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <Fragment key={u.id}>
+                    <tr style={{ opacity: u.enabled ? 1 : 0.5 }}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{u.name || u.email}</div>
+                        {u.name && <div className="xn-muted" style={{ fontSize: 12 }}>{u.email}</div>}
+                      </td>
+                      <td><span className="xn-pill">{u.role}</span></td>
+                      <td>
+                        {u.enabled
+                          ? <span className="xn-pill">enabled</span>
+                          : <span className="xn-muted" style={{ fontSize: 12 }}>disabled</span>}
+                      </td>
+                      <td className="xn-muted">{u.notes || '—'}</td>
+                      <td>{fmtDate(u.created_at)}</td>
+                      <td>
+                        <div className="xn-section-controls">
+                          <button type="button" className="xn-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openEdit(u)}>Edit</button>
+                          <button type="button" className="xn-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openPrefs(u)}
+                            title="Configure digest frequency and notification event preferences">Prefs</button>
+                          <button type="button" className="xn-btn-secondary"
+                            disabled={inviteSendingId === u.id}
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            onClick={() => sendInvite(u)}
+                            title="Email a dashboard sign-in invite to this user">
+                            {inviteSendingId === u.id ? 'Sending…' : 'Send Invite'}
+                          </button>
+                          <button type="button"
+                            className={activityUserId === u.id ? 'xn-btn-primary' : 'xn-btn-secondary'}
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            onClick={() => openActivity(u)}
+                            title="View login sessions and recent audit activity for this user">
+                            Activity
+                          </button>
+                          <button type="button" className="xn-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => toggleUser(u)}>
+                            {u.enabled ? 'Disable' : 'Enable'}
+                          </button>
+                          <button type="button" className="xn-btn-secondary" style={{ padding: '4px 10px', fontSize: 12, color: 'var(--xn-error-text)', borderColor: 'var(--xn-error-text)' }} onClick={() => deleteUser(u.id, u.email)}>Delete</button>
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                  {activityUserId === u.id && (
-                    <tr>
-                      <td colSpan={6} style={{ padding: 0 }}>
-                        <div style={{ background: 'var(--bg-subtle, #f8fafc)', border: '1px solid var(--border)', borderRadius: '6px', margin: '4px 8px 8px', padding: '16px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
-                              Activity — {activityUserName}
-                              <span style={{ fontWeight: 400, color: 'var(--text-secondary)', marginLeft: '8px', fontSize: '0.8rem' }}>{activityEmail}</span>
-                            </div>
-                            <button type="button" className="btn btn--secondary" onClick={() => setActivityUserId(null)}>Close</button>
+                        {inviteSentMsg[u.id] && (
+                          <div className="xn-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                            {inviteSentMsg[u.id]}
                           </div>
-                          {activityLoading ? (
-                            <div className="state-loading" style={{ padding: '8px 0' }}>Loading activity…</div>
-                          ) : (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                              {/* Login sessions */}
-                              <div>
-                                <div style={{ fontWeight: 500, fontSize: '0.8rem', marginBottom: '8px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                  Login Sessions (last 20)
-                                </div>
-                                {activitySessions.length === 0 ? (
-                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No sessions recorded yet.</div>
-                                ) : (
-                                  <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>When</th>
-                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>IP</th>
-                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>Browser</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {activitySessions.map(s => (
-                                        <tr key={s.id} style={{ borderBottom: '1px solid var(--border-subtle, #f1f5f9)' }}>
-                                          <td style={{ padding: '3px 6px', whiteSpace: 'nowrap' }}>{fmtDate(s.created_at)}</td>
-                                          <td style={{ padding: '3px 6px', fontFamily: 'monospace' }}>{s.ip_address || '—'}</td>
-                                          <td style={{ padding: '3px 6px', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                            title={s.user_agent}>
-                                            {s.user_agent ? s.user_agent.replace(/\s*\(.*?\)\s*/g, ' ').trim().slice(0, 40) : '—'}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                )}
-                              </div>
-                              {/* Recent audit */}
-                              <div>
-                                <div style={{ fontWeight: 500, fontSize: '0.8rem', marginBottom: '8px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                  Recent Actions (last 20)
-                                </div>
-                                {activityAudit.length === 0 ? (
-                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No audit entries found.</div>
-                                ) : (
-                                  <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>When</th>
-                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>Action</th>
-                                        <th style={{ textAlign: 'left', padding: '3px 6px', color: 'var(--text-secondary)', fontWeight: 500 }}>Resource</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {activityAudit.map(a => (
-                                        <tr key={a.id} style={{ borderBottom: '1px solid var(--border-subtle, #f1f5f9)' }}>
-                                          <td style={{ padding: '3px 6px', whiteSpace: 'nowrap' }}>{fmtDate(a.created_at)}</td>
-                                          <td style={{ padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.74rem' }}>{a.action}</td>
-                                          <td style={{ padding: '3px 6px', color: 'var(--text-secondary)' }}>
-                                            {a.resource_type}{a.resource_id ? <span style={{ fontFamily: 'monospace', fontSize: '0.7rem' }}> {a.resource_id.slice(0, 8)}…</span> : ''}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        )}
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                    {activityUserId === u.id && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: 0, background: 'var(--xn-bg)' }}>
+                          <div style={{ padding: 16 }}>
+                            <div className="xn-section-bar">
+                              <h3 style={{ margin: 0, fontSize: 14 }}>
+                                Activity — {activityUserName}
+                                <span className="xn-muted" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>{activityEmail}</span>
+                              </h3>
+                              <button type="button" className="xn-btn-secondary" onClick={() => setActivityUserId(null)}>Close</button>
+                            </div>
+                            {activityLoading ? (
+                              <div className="xn-muted">Loading activity…</div>
+                            ) : (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                                <div>
+                                  <div className="xn-control-label" style={{ marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                                    Login Sessions (last 20)
+                                  </div>
+                                  {activitySessions.length === 0 ? (
+                                    <div className="xn-muted" style={{ fontSize: 12 }}>No sessions recorded yet.</div>
+                                  ) : (
+                                    <div className="xn-table-wrap">
+                                      <table className="xn-table" style={{ fontSize: 12 }}>
+                                        <thead><tr><th>When</th><th>IP</th><th>Browser</th></tr></thead>
+                                        <tbody>
+                                          {activitySessions.map(s => (
+                                            <tr key={s.id}>
+                                              <td>{fmtDate(s.created_at)}</td>
+                                              <td><code className="xn-code">{s.ip_address || '—'}</code></td>
+                                              <td className="xn-cell-truncate" title={s.user_agent}>
+                                                {s.user_agent ? s.user_agent.replace(/\s*\(.*?\)\s*/g, ' ').trim().slice(0, 40) : '—'}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="xn-control-label" style={{ marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                                    Recent Actions (last 20)
+                                  </div>
+                                  {activityAudit.length === 0 ? (
+                                    <div className="xn-muted" style={{ fontSize: 12 }}>No audit entries found.</div>
+                                  ) : (
+                                    <div className="xn-table-wrap">
+                                      <table className="xn-table" style={{ fontSize: 12 }}>
+                                        <thead><tr><th>When</th><th>Action</th><th>Resource</th></tr></thead>
+                                        <tbody>
+                                          {activityAudit.map(a => (
+                                            <tr key={a.id}>
+                                              <td>{fmtDate(a.created_at)}</td>
+                                              <td><code className="xn-code">{a.action}</code></td>
+                                              <td className="xn-muted">
+                                                {a.resource_type}{a.resource_id ? ` ${a.resource_id.slice(0, 8)}…` : ''}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
-    </div>
+      </section>
+
+      {showForm && (
+        <section className="xn-section">
+          <div className="xn-section-bar">
+            <h2>{editingId ? 'Edit user' : 'New user'}</h2>
+          </div>
+          {formError && <div className="xn-error">{formError}</div>}
+          <div className="xn-form-row">
+            <label htmlFor="user-email">Email *</label>
+            <input id="user-email" type="email" value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+          </div>
+          <div className="xn-form-row">
+            <label htmlFor="user-name">Display name</label>
+            <input id="user-name" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div className="xn-form-row">
+            <label htmlFor="user-role">Role</label>
+            <select id="user-role" value={form.role}
+              onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'viewer' }))}>
+              <option value="admin">admin — full access</option>
+              <option value="viewer">viewer — read-only</option>
+            </select>
+          </div>
+          <div className="xn-form-row">
+            <label htmlFor="user-notes">Notes</label>
+            <input id="user-notes" value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="(optional)" />
+          </div>
+          <div className="xn-form-actions">
+            <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+            </button>
+            <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+          </div>
+        </section>
+      )}
+
+      {prefsUserId && (
+        <section className="xn-section">
+          <div className="xn-section-bar">
+            <h2>Notification Preferences — {prefsUserName}</h2>
+          </div>
+          <p className="xn-muted" style={{ fontSize: 13, marginTop: 0 }}>
+            Controls digest email frequency and which events trigger notifications for this user.
+          </p>
+          {prefsError && <div className="xn-error">{prefsError}</div>}
+          <div className="xn-form-row">
+            <label htmlFor="prefs-freq">Digest frequency</label>
+            <select id="prefs-freq" value={prefsFreq} onChange={e => setPrefsFreq(e.target.value)}>
+              <option value="none">None — no digest emails</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div className="xn-form-row">
+            <label>Notify on events</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {NOTIFY_EVENT_OPTIONS.map(opt => (
+                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 'normal', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={prefsEvents.includes(opt.value)}
+                    onChange={() => togglePrefsEvent(opt.value)} />
+                  <span>{opt.label}</span>
+                  <code className="xn-code">{opt.value}</code>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="xn-form-actions">
+            <button type="button" className="xn-btn-primary" onClick={savePrefs} disabled={prefsSaving}>
+              {prefsSaving ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" className="xn-btn-secondary" onClick={() => setPrefsUserId(null)}>Cancel</button>
+          </div>
+        </section>
+      )}
+    </>
   )
 }
 
