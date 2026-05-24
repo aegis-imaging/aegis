@@ -56,25 +56,25 @@ export function SubjectPage() {
     })
   }, [data, sortKey, sortDesc])
 
-  if (error) return <div className="xn-error">{error}</div>
-  if (!data) return <div className="xn-muted">Loading…</div>
+  if (error) return <div className="aegis-error">{error}</div>
+  if (!data) return <div className="aegis-muted">Loading…</div>
 
   const d = data.demographics
 
   return (
-    <div className="xn-subject">
-      <header className="xn-page-header">
+    <div className="aegis-subject">
+      <header className="aegis-page-header">
         <h1>{data.subject_id}</h1>
-        <p className="xn-muted">
+        <p className="aegis-muted">
           {data.study_count} study{data.study_count === 1 ? '' : 's'}
           {(data.modalities ?? []).length > 0 && ` · ${(data.modalities ?? []).join(', ')}`}
         </p>
       </header>
 
-      <section className="xn-section">
+      <section className="aegis-section">
         <h2>Demographics</h2>
         {d ? (
-          <dl className="xn-defs">
+          <dl className="aegis-defs">
             <dt>Sex</dt><dd>{d.sex || '—'}</dd>
             <dt>Age at scan</dt><dd>{d.age_at_scan ?? '—'}</dd>
             <dt>Diagnosis</dt><dd>{d.diagnosis || '—'}</dd>
@@ -91,16 +91,16 @@ export function SubjectPage() {
             )}
           </dl>
         ) : (
-          <div className="xn-muted">No demographic record. Add one from the admin tools.</div>
+          <div className="aegis-muted">No demographic record. Add one from the admin tools.</div>
         )}
       </section>
 
-      <section className="xn-section">
-        <div className="xn-section-bar">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Imaging sessions</h2>
-          <div className="xn-section-controls">
-            <label className="xn-control">
-              <span className="xn-control-label">Sort by</span>
+          <div className="aegis-section-controls">
+            <label className="aegis-control">
+              <span className="aegis-control-label">Sort by</span>
               <select
                 value={sortKey}
                 onChange={(e) => setSortKey(e.target.value as StudySortKey)}
@@ -113,7 +113,7 @@ export function SubjectPage() {
             </label>
             <button
               type="button"
-              className="xn-icon-btn"
+              className="aegis-icon-btn"
               onClick={() => setSortDesc((s) => !s)}
               aria-label={sortDesc ? 'Sort ascending' : 'Sort descending'}
               title={sortDesc ? 'Switch to ascending' : 'Switch to descending'}
@@ -122,10 +122,10 @@ export function SubjectPage() {
             </button>
           </div>
         </div>
-        {data.studies.length === 0 && <div className="xn-muted">No studies for this subject.</div>}
+        {data.studies.length === 0 && <div className="aegis-muted">No studies for this subject.</div>}
         {data.studies.length > 0 && (
-          <div className="xn-table-wrap">
-            <table className="xn-table">
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Study date</th>
@@ -178,7 +178,7 @@ function StudyRow({
       </td>
       <td>{study.modality ?? ''}</td>
       <td>{study.body_part ?? ''}</td>
-      <td className="xn-cell-truncate" title={study.study_description ?? ''}>
+      <td className="aegis-cell-truncate" title={study.study_description ?? ''}>
         {study.study_description ?? ''}
       </td>
       <td>
@@ -207,11 +207,11 @@ function StagePill({
   required?: boolean
   status?: PipelineStatus
 }) {
-  if (!required) return <span className="xn-stage xn-stage-na" aria-label="not required">—</span>
+  if (!required) return <span className="aegis-stage aegis-stage-na" aria-label="not required">—</span>
   const cls = stageClass(status)
   const label = status || 'pending'
   return (
-    <span className={`xn-stage ${cls}`} title={label} aria-label={`Status: ${label}`}>
+    <span className={`aegis-stage ${cls}`} title={label} aria-label={`Status: ${label}`}>
       {stageGlyph(status)}
     </span>
   )
@@ -219,28 +219,28 @@ function StagePill({
 
 function StatusPill({ status }: { status: string }) {
   const cls = studyStatusClass(status)
-  return <span className={`xn-status ${cls}`}>{status}</span>
+  return <span className={`aegis-status ${cls}`}>{status}</span>
 }
 
 function stageClass(status?: PipelineStatus): string {
   switch (status) {
     case 'complete':
-      return 'xn-stage-complete'
+      return 'aegis-stage-complete'
     case 'partial':
-      return 'xn-stage-partial'
+      return 'aegis-stage-partial'
     case 'failed':
-      return 'xn-stage-failed'
+      return 'aegis-stage-failed'
     case 'running':
     case 'scanning':
     case 'analyzing':
     case 'converting':
-      return 'xn-stage-running'
+      return 'aegis-stage-running'
     case 'pending':
     case '':
     case undefined:
-      return 'xn-stage-pending'
+      return 'aegis-stage-pending'
     default:
-      return 'xn-stage-pending'
+      return 'aegis-stage-pending'
   }
 }
 
@@ -265,15 +265,15 @@ function stageGlyph(status?: PipelineStatus): string {
 function studyStatusClass(status: string): string {
   switch (status) {
     case 'approved':
-      return 'xn-status-approved'
+      return 'aegis-status-approved'
     case 'rejected':
     case 'expired':
-      return 'xn-status-rejected'
+      return 'aegis-status-rejected'
     case 'defacing':
     case 'defaced':
-      return 'xn-status-active'
+      return 'aegis-status-active'
     default:
-      return 'xn-status-default'
+      return 'aegis-status-default'
   }
 }
 

@@ -321,7 +321,7 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/studies/{id}/analytics-download` | `ServeAnalyticsDownload` | `project_member_site_scoped` |
 | `auth` | `GET /api/studies/{id}/analytics-files` | `ListAnalyticsFiles` | `project_member_site_scoped` |
 | `auth` | `GET /api/studies/{id}/analytics-files/{path...}` | `ServeAnalyticsFile` | `project_member_site_scoped` |
-| `auth` | `GET /api/spokes` | `ListSpokes` | `project_member_any` |
+| `auth` | `GET /api/satellites` | `ListSatellites` | `project_member_any` |
 | `auth` | `GET /api/projects/{id}/acl` | `ListProjectACL` | `project_member_any` |
 | `adminOnly` | `POST /api/projects/{id}/acl` | `SetProjectACL` | `platform_admin` |
 | `adminOnly` | `DELETE /api/projects/{id}/acl/{aclID}` | `DeleteProjectACL` | `platform_admin` |

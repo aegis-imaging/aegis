@@ -40,23 +40,23 @@ export function HomePage() {
   const isAdmin = me?.role === 'admin'
 
   return (
-    <div className="xn-home">
-      <header className="xn-home-greeting">
+    <div className="aegis-home">
+      <header className="aegis-home-greeting">
         <h1>Welcome{me?.name ? `, ${me.name}` : ''}</h1>
-        <p className="xn-muted">
+        <p className="aegis-muted">
           Your projects appear below. Open a project to view its subjects and imaging sessions.
         </p>
       </header>
 
-      {error && <div className="xn-error">Couldn't load projects: {error}</div>}
+      {error && <div className="aegis-error">Couldn't load projects: {error}</div>}
 
-      <section className="xn-home-projects">
-        <div className="xn-section-bar">
+      <section className="aegis-home-projects">
+        <div className="aegis-section-bar">
           <h2>Projects</h2>
           {isAdmin && !creating && (
             <button
               type="button"
-              className="xn-btn-primary"
+              className="aegis-btn-primary"
               onClick={() => setCreating(true)}
             >
               + New project
@@ -71,27 +71,27 @@ export function HomePage() {
           />
         )}
 
-        {!projects && !error && <div className="xn-muted">Loading…</div>}
+        {!projects && !error && <div className="aegis-muted">Loading…</div>}
         {projects && projects.length === 0 && !creating && (
-          <div className="xn-muted">
+          <div className="aegis-muted">
             {isAdmin
               ? 'No projects yet. Click "+ New project" above to create one.'
               : "You don't have access to any projects yet. Ask a project owner to invite you."}
           </div>
         )}
         {projects && projects.length > 0 && (
-          <ul className="xn-card-grid">
+          <ul className="aegis-card-grid">
             {projects.map((p) => (
-              <li key={p.id} className="xn-card">
-                <Link to={`/projects/${p.id}`} className="xn-card-link">
-                  <div className="xn-card-title">{p.name}</div>
-                  <div className="xn-card-meta">
-                    <span className="xn-pill">{p.slug}</span>
+              <li key={p.id} className="aegis-card">
+                <Link to={`/projects/${p.id}`} className="aegis-card-link">
+                  <div className="aegis-card-title">{p.name}</div>
+                  <div className="aegis-card-meta">
+                    <span className="aegis-pill">{p.slug}</span>
                     {p.member_count != null && (
-                      <span className="xn-muted">{p.member_count} member{p.member_count === 1 ? '' : 's'}</span>
+                      <span className="aegis-muted">{p.member_count} member{p.member_count === 1 ? '' : 's'}</span>
                     )}
                   </div>
-                  {p.description && <p className="xn-card-desc">{p.description}</p>}
+                  {p.description && <p className="aegis-card-desc">{p.description}</p>}
                 </Link>
               </li>
             ))}
@@ -153,8 +153,8 @@ function NewProjectForm({
   }
 
   return (
-    <form className="xn-new-project" onSubmit={handleSubmit}>
-      <div className="xn-form-row">
+    <form className="aegis-new-project" onSubmit={handleSubmit}>
+      <div className="aegis-form-row">
         <label htmlFor="np-name">Name</label>
         <input
           id="np-name"
@@ -166,7 +166,7 @@ function NewProjectForm({
           required
         />
       </div>
-      <div className="xn-form-row">
+      <div className="aegis-form-row">
         <label htmlFor="np-slug">Slug</label>
         <input
           id="np-slug"
@@ -180,9 +180,9 @@ function NewProjectForm({
           pattern="[a-z0-9\-]*"
           title="Lowercase letters, digits, and dashes only"
         />
-        <span className="xn-form-hint">Used in URLs &amp; routing rules. Auto-generated from name if left blank.</span>
+        <span className="aegis-form-hint">Used in URLs &amp; routing rules. Auto-generated from name if left blank.</span>
       </div>
-      <div className="xn-form-row">
+      <div className="aegis-form-row">
         <label htmlFor="np-description">Description</label>
         <textarea
           id="np-description"
@@ -192,12 +192,12 @@ function NewProjectForm({
           placeholder="Optional. What's this project for?"
         />
       </div>
-      {error && <div className="xn-error">{error}</div>}
-      <div className="xn-form-actions">
-        <button type="submit" className="xn-btn-primary" disabled={submitting}>
+      {error && <div className="aegis-error">{error}</div>}
+      <div className="aegis-form-actions">
+        <button type="submit" className="aegis-btn-primary" disabled={submitting}>
           {submitting ? 'Creating…' : 'Create project'}
         </button>
-        <button type="button" className="xn-btn-secondary" onClick={onCancel} disabled={submitting}>
+        <button type="button" className="aegis-btn-secondary" onClick={onCancel} disabled={submitting}>
           Cancel
         </button>
       </div>
