@@ -682,3 +682,357 @@
   gap: 8px;
   align-items: center;
 }
+
+/* ── Dark theme overrides ────────────────────────────────────────────── */
+/*
+ * The admin dashboard sets `data-theme="dark"` on documentElement when dark
+ * mode is active (see the darkMode useEffect in App.tsx). Mirror that toggle
+ * for the xn-* variable set so the new chrome adapts. Teal stays teal in
+ * dark mode (brighter for AA contrast on dark surfaces); orange stays orange.
+ */
+
+:root[data-theme="dark"] {
+  --xn-bg: #0f172a;
+  --xn-surface: #1e293b;
+  --xn-border: #334155;
+  --xn-text: #f1f5f9;
+  --xn-muted: #94a3b8;
+  --xn-link: #2dd4bf;
+  --xn-link-hover: #5eead4;
+  --xn-active-bg: rgba(45, 212, 191, 0.18);
+  --xn-error-bg: rgba(234, 88, 12, 0.18);
+  --xn-error-text: #fed7aa;
+}
+
+/* ── Page header strip (used on every admin tab + per-project pages) ── */
+
+.xn-page-header {
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--xn-border);
+}
+
+.xn-page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.xn-page-description {
+  margin: 4px 0 0;
+  color: var(--xn-muted);
+  font-size: 13px;
+  max-width: 720px;
+  line-height: 1.5;
+}
+
+.xn-page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ── Admin body: sidebar + content grid ──────────────────────────────── */
+/*
+ * Admin breaks out of the centered xn-main column — research-grade tables
+ * need horizontal room. The grid is a sidebar (fixed) + a fluid content
+ * region. When collapsed, the sidebar shrinks to icon-only.
+ */
+
+.xn-admin-body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: stretch;
+  min-height: calc(100vh - 95px);
+  background: var(--xn-bg);
+}
+
+.xn-admin-body.xn-admin-body--collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.xn-admin-content {
+  padding: 22px 28px 40px;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .xn-admin-body,
+  .xn-admin-body.xn-admin-body--collapsed {
+    grid-template-columns: 1fr;
+  }
+  .xn-sidenav {
+    position: fixed;
+    inset: 53px 0 0 0;
+    z-index: 15;
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+  }
+  .xn-admin-body:not(.xn-admin-body--collapsed) .xn-sidenav {
+    transform: translateX(0);
+  }
+}
+
+/* ── Sidebar nav ─────────────────────────────────────────────────────── */
+
+.xn-sidenav {
+  background: var(--xn-surface);
+  border-right: 1px solid var(--xn-border);
+  position: sticky;
+  top: 53px;
+  align-self: start;
+  height: calc(100vh - 53px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 8px 16px;
+  gap: 4px;
+}
+
+.xn-sidenav-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--xn-border);
+  padding-bottom: 10px;
+}
+
+.xn-sidenav-search {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--xn-muted);
+  background: var(--xn-bg);
+  border: 1px solid var(--xn-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.xn-sidenav-search:hover {
+  border-color: var(--xn-link);
+  color: var(--xn-text);
+}
+
+.xn-sidenav-search kbd {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--xn-surface);
+  border: 1px solid var(--xn-border);
+  border-radius: 3px;
+}
+
+.xn-sidenav-iconbtn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--xn-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.xn-sidenav-iconbtn:hover {
+  background: var(--xn-active-bg);
+  color: var(--xn-link-hover);
+}
+
+.xn-sidenav-group {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.xn-sidenav-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--xn-muted);
+  padding: 6px 10px 4px;
+  font-weight: 600;
+}
+
+.xn-sidenav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  margin: 0 2px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--xn-text);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  width: calc(100% - 4px);
+  position: relative;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.xn-sidenav-item:hover {
+  background: var(--xn-active-bg);
+  color: var(--xn-link-hover);
+}
+
+.xn-sidenav-item--active {
+  background: var(--xn-active-bg);
+  color: var(--xn-link-hover);
+  font-weight: 600;
+}
+
+.xn-sidenav-item--active::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--xn-link);
+  border-radius: 2px;
+}
+
+.xn-sidenav-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.xn-sidenav-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.xn-sidenav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--xn-error-bg);
+  color: var(--xn-error-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.xn-admin-body--collapsed .xn-sidenav-label,
+.xn-admin-body--collapsed .xn-sidenav-group-label,
+.xn-admin-body--collapsed .xn-sidenav-footer,
+.xn-admin-body--collapsed .xn-sidenav-search span,
+.xn-admin-body--collapsed .xn-sidenav-search kbd {
+  display: none;
+}
+
+.xn-admin-body--collapsed .xn-sidenav-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.xn-admin-body--collapsed .xn-sidenav-search {
+  justify-content: center;
+  padding: 6px;
+}
+
+.xn-admin-body--collapsed .xn-sidenav-item {
+  justify-content: center;
+  padding: 8px 6px;
+}
+
+.xn-admin-body--collapsed .xn-sidenav-item--active::before {
+  left: 0;
+}
+
+.xn-admin-body--collapsed .xn-sidenav-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  font-size: 9px;
+  padding: 0 3px;
+}
+
+/* ── Sidebar footer ──────────────────────────────────────────────────── */
+
+.xn-sidenav-footer {
+  margin-top: auto;
+  padding: 12px 6px 4px;
+  border-top: 1px solid var(--xn-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.xn-sidenav-footer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.xn-sidenav-footer-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--xn-muted);
+  font-weight: 600;
+  padding-left: 4px;
+}
+
+.xn-sidenav-footer select,
+.xn-sidenav-footer input[type="text"] {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 12.5px;
+  border: 1px solid var(--xn-border);
+  border-radius: 6px;
+  background: var(--xn-surface);
+  color: var(--xn-text);
+}
+
+.xn-sidenav-footer-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--xn-bg);
+  border: 1px solid var(--xn-border);
+  color: var(--xn-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.xn-sidenav-overlay {
+  position: fixed;
+  inset: 53px 0 0 0;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 14;
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .xn-admin-body:not(.xn-admin-body--collapsed) .xn-sidenav-overlay {
+    display: block;
+  }
+}
