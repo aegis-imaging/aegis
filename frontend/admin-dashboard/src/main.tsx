@@ -9,6 +9,9 @@ import { StudyPage } from './pages/StudyPage'
 import { AdminApp } from './pages/AdminApp'
 import { AboutPage } from './pages/AboutPage'
 import { RootRedirect } from './pages/RootRedirect'
+import { ProfileLanding } from './pages/ProfileLanding'
+import { ProfileNotifications } from './pages/ProfileNotifications'
+import { ProfileActivity } from './pages/ProfileActivity'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -33,6 +36,13 @@ createRoot(document.getElementById('root')!).render(
             path="projects/:projectId/subjects/:subjectId/studies/:studyId"
             element={<StudyPage />}
           />
+          {/* Self-service profile pages. Backed by existing admin endpoints
+              for now (only admin users have write access); a follow-up will
+              relax the Go auth to allow non-admin users to manage their own
+              row at these routes. */}
+          <Route path="profile" element={<ProfileLanding />} />
+          <Route path="profile/notifications" element={<ProfileNotifications />} />
+          <Route path="profile/activity" element={<ProfileActivity />} />
         </Route>
 
         {/* Existing 18-tab admin experience under /admin/*. */}
