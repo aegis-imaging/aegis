@@ -7383,11 +7383,11 @@ function InviteCodesPanel() {
 
   const SITE = 'https://aegisimaging.ai'
 
-  if (loading) return <div className="state-loading">Loading…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="xn-muted">Loading…</div>
+  if (error)   return <div className="xn-error">{error}</div>
 
   return (
-    <div className="routing-panel">
+    <div >
       {/* Sub-tab switcher */}
       <div style={{ display: 'flex', gap: '4px', padding: '0 0 16px 0', borderBottom: '1px solid #e2e8f0', marginBottom: '16px' }}>
         {(['codes', 'requests'] as const).map(t => (
@@ -7408,15 +7408,15 @@ function InviteCodesPanel() {
 
       {/* ── Access Requests tab ──────────────────────────────────────────── */}
       {subTab === 'requests' && (
-        <div className="routing-section">
-          <div className="routing-section-header">
+        <div className="xn-section">
+          <div className="xn-section-bar">
             <div>
-              <div className="routing-section-title">Access Requests</div>
-              <div className="routing-section-sub">
+              <div className="">Access Requests</div>
+              <div className="xn-muted">
                 Users who submitted an access request form. Approve to generate and email an invite code; deny to reject.
               </div>
             </div>
-            <div className="actions-cell">
+            <div className="xn-section-controls">
               <select
                 value={reqFilter}
                 onChange={e => setReqFilter(e.target.value as typeof reqFilter)}
@@ -7427,17 +7427,17 @@ function InviteCodesPanel() {
                 <option value="denied">Denied</option>
                 <option value="all">All</option>
               </select>
-              <button type="button" className="btn-refresh" onClick={loadRequests}>Refresh</button>
+              <button type="button" className="xn-icon-btn" onClick={loadRequests}>Refresh</button>
             </div>
           </div>
 
-          {reqLoading && <div className="state-loading">Loading…</div>}
-          {reqError   && <div className="state-error">{reqError}</div>}
+          {reqLoading && <div className="xn-muted">Loading…</div>}
+          {reqError   && <div className="xn-error">{reqError}</div>}
           {!reqLoading && !reqError && requests.length === 0 && (
-            <div className="state-empty">No {reqFilter !== 'all' ? reqFilter : ''} requests.</div>
+            <div className="xn-muted">No {reqFilter !== 'all' ? reqFilter : ''} requests.</div>
           )}
           {!reqLoading && !reqError && requests.length > 0 && (
-            <table className="routing-table">
+            <table className="xn-table">
               <thead>
                 <tr>
                   <th>Requester</th>
@@ -7474,10 +7474,10 @@ function InviteCodesPanel() {
                     </td>
                     <td>
                       {req.status === 'pending' ? (
-                        <div className="actions-cell">
+                        <div className="xn-section-controls">
                           <button
                             type="button"
-                            className="btn-sm"
+                            className="xn-btn-secondary"
                             disabled={reqActing[req.id]}
                             onClick={() => approveRequest(req.id)}
                             style={{ background: '#0d9488', color: '#fff', border: 'none' }}
@@ -7486,7 +7486,7 @@ function InviteCodesPanel() {
                           </button>
                           <button
                             type="button"
-                            className="btn-sm btn-warning"
+                            className="xn-btn-secondary"
                             disabled={reqActing[req.id]}
                             onClick={() => denyRequest(req.id, req.email)}
                           >
@@ -7508,30 +7508,30 @@ function InviteCodesPanel() {
       )}
 
       {/* ── Invite Codes tab ─────────────────────────────────────────────── */}
-      {subTab === 'codes' && <div className="routing-section">
-        <div className="routing-section-header">
+      {subTab === 'codes' && <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">Invite Codes</div>
-            <div className="routing-section-sub">
+            <div className="">Invite Codes</div>
+            <div className="xn-muted">
               Per-person codes for landing page access. Each code is unique and can be individually revoked.
               Share the direct link (<code style={{ fontSize: '0.8rem' }}>{SITE}/?invite=CODE</code>) for one-click admission.
             </div>
           </div>
-          <div className="actions-cell">
-            <button type="button" className="btn-refresh" onClick={load}>Refresh</button>
-            <button type="button" className="btn-primary" onClick={() => { setShowForm(true); setNewCode(null) }}>
+          <div className="xn-section-controls">
+            <button type="button" className="xn-icon-btn" onClick={load}>Refresh</button>
+            <button type="button" className="xn-btn-primary" onClick={() => { setShowForm(true); setNewCode(null) }}>
               + New code
             </button>
           </div>
         </div>
 
         {showForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>New invite code</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
+            {formError && <div className="xn-error">{formError}</div>}
+            <div className="">
               <input
-                className="form-input"
+                className="xn-filter"
                 placeholder="Label (e.g. Dr. Jane Smith) *"
                 value={formLabel}
                 onChange={e => setFormLabel(e.target.value)}
@@ -7539,26 +7539,26 @@ function InviteCodesPanel() {
                 autoFocus
               />
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={create} disabled={saving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={create} disabled={saving}>
                 {saving ? 'Creating…' : 'Generate code'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {newCode && (
-          <div className="routing-form" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
+          <div className="xn-section" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
             <strong style={{ color: '#0f766e' }}>New invite code — share with your recipient:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
               <code style={{ background: '#ccfbf1', padding: '6px 12px', borderRadius: '6px', fontSize: '0.95rem', letterSpacing: '0.1em', flex: 1 }}>
                 {newCode}
               </code>
-              <button type="button" className="btn-secondary" onClick={() => copy(newCode, 'code')}>
+              <button type="button" className="xn-btn-secondary" onClick={() => copy(newCode, 'code')}>
                 {copied === 'code' ? 'Copied!' : 'Copy code'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => copy(`${SITE}/?invite=${newCode}`, 'link')}>
+              <button type="button" className="xn-btn-secondary" onClick={() => copy(`${SITE}/?invite=${newCode}`, 'link')}>
                 {copied === 'link' ? 'Copied!' : 'Copy link'}
               </button>
             </div>
@@ -7566,9 +7566,9 @@ function InviteCodesPanel() {
         )}
 
         {codes.length === 0 && !showForm ? (
-          <div className="state-empty">No invite codes yet. Create one to grant landing page access.</div>
+          <div className="xn-muted">No invite codes yet. Create one to grant landing page access.</div>
         ) : codes.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>Code</th>
@@ -7589,7 +7589,7 @@ function InviteCodesPanel() {
                       <code style={{ fontSize: '0.85rem', letterSpacing: '0.08em' }}>{ic.code}</code>
                       <button
                         type="button"
-                        className="btn-sm"
+                        className="xn-btn-secondary"
                         title="Copy code"
                         onClick={() => copy(ic.code, ic.id + '-code')}
                         style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -7598,7 +7598,7 @@ function InviteCodesPanel() {
                       </button>
                       <button
                         type="button"
-                        className="btn-sm"
+                        className="xn-btn-secondary"
                         title="Copy invite link"
                         onClick={() => copy(`${SITE}/?invite=${ic.code}`, ic.id + '-link')}
                         style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -7608,7 +7608,7 @@ function InviteCodesPanel() {
                       {ic.enabled && (
                         <button
                           type="button"
-                          className="btn-sm"
+                          className="xn-btn-secondary"
                           title="Email this invite code"
                           onClick={() => { setSendId(ic.id); setSendEmail(''); setSendName(''); setSendResult(null) }}
                           style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -7651,11 +7651,11 @@ function InviteCodesPanel() {
                     }
                   </td>
                   <td>
-                    <div className="actions-cell">
+                    <div className="xn-section-controls">
                       {ic.user_email && (
                         <button
                           type="button"
-                          className="btn-sm"
+                          className="xn-btn-secondary"
                           title={`View audit activity for ${ic.user_email}`}
                           style={{ fontSize: '0.7rem', padding: '2px 6px' }}
                           onClick={() => { fetchActivity(ic); setAdminInviteId(null); setSendId(null) }}
@@ -7666,7 +7666,7 @@ function InviteCodesPanel() {
                       {ic.user_email && (
                         <button
                           type="button"
-                          className="btn-sm"
+                          className="xn-btn-secondary"
                           title={`Invite ${ic.user_email} to admin dashboard`}
                           style={{ fontSize: '0.7rem', padding: '2px 6px', color: '#0d9488', borderColor: '#0d9488' }}
                           onClick={() => { setAdminInviteId(adminInviteId === ic.id ? null : ic.id); setAdminInviteResult(null); setSendId(null); setActivityId(null) }}
@@ -7675,11 +7675,11 @@ function InviteCodesPanel() {
                         </button>
                       )}
                       {ic.enabled && (
-                        <button type="button" className="btn-sm btn-warning" onClick={() => revoke(ic)}>
+                        <button type="button" className="xn-btn-secondary" onClick={() => revoke(ic)}>
                           Revoke
                         </button>
                       )}
-                      <button type="button" className="btn-sm btn-danger" onClick={() => del(ic)}>
+                      <button type="button" className="xn-btn-secondary" onClick={() => del(ic)}>
                         Delete
                       </button>
                     </div>
@@ -7697,7 +7697,7 @@ function InviteCodesPanel() {
                               {' '}— {activityData.total} entries
                               <button
                                 type="button"
-                                className="btn-sm"
+                                className="xn-btn-secondary"
                                 style={{ marginLeft: 8, fontSize: '0.65rem', padding: '1px 5px' }}
                                 onClick={() => setActivityId(null)}
                               >✕</button>
@@ -7749,13 +7749,13 @@ function InviteCodesPanel() {
                         </select>
                         <button
                           type="button"
-                          className="btn-primary btn-sm"
+                          className="xn-btn-primary"
                           onClick={() => sendAdminInvite(ic)}
                           disabled={adminInviteSending}
                         >{adminInviteSending ? 'Sending…' : 'Send Invite'}</button>
                         <button
                           type="button"
-                          className="btn-secondary btn-sm"
+                          className="xn-btn-secondary"
                           onClick={() => { setAdminInviteId(null); setAdminInviteResult(null) }}
                         >Cancel</button>
                         {adminInviteResult && (
@@ -7777,7 +7777,7 @@ function InviteCodesPanel() {
                             <button
                               key={cloud}
                               type="button"
-                              className="btn-sm"
+                              className="xn-btn-secondary"
                               onClick={() => setAdminInviteHelpCloud(cloud)}
                               style={{
                                 fontSize: '0.7rem', padding: '2px 8px',
@@ -7849,13 +7849,13 @@ function InviteCodesPanel() {
                         />
                         <button
                           type="button"
-                          className="btn-primary btn-sm"
+                          className="xn-btn-primary"
                           onClick={() => sendCode(ic)}
                           disabled={sending}
                         >{sending ? 'Sending…' : 'Send'}</button>
                         <button
                           type="button"
-                          className="btn-secondary btn-sm"
+                          className="xn-btn-secondary"
                           onClick={() => { setSendId(null); setSendResult(null) }}
                         >Cancel</button>
                         {sendResult && (
@@ -7942,38 +7942,38 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
     fetchPeers()
   }
 
-  if (loading) return <div className="state-loading">Loading…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="xn-muted">Loading…</div>
+  if (error)   return <div className="xn-error">{error}</div>
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">Federation Peers</div>
-            <div className="routing-section-sub">
+            <div className="">Federation Peers</div>
+            <div className="xn-muted">
               Trusted remote AEGIS instances for future cross-tenant study federation.
               No data flows between peers yet — this is a configuration stub.
             </div>
           </div>
-          <div className="actions-cell">
-            <button type="button" className="btn-refresh" onClick={fetchPeers}>Refresh</button>
-            {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ Add peer</button>}
+          <div className="xn-section-controls">
+            <button type="button" className="xn-icon-btn" onClick={fetchPeers}>Refresh</button>
+            {isAdmin && <button type="button" className="xn-btn-primary" onClick={openNew}>+ Add peer</button>}
           </div>
         </div>
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>{editingId ? 'Edit peer' : 'New federation peer'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Name *"
+            {formError && <div className="xn-error">{formError}</div>}
+            <div className="">
+              <input className="xn-filter" placeholder="Name *"
                 value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="form-input" placeholder="Slug (auto-generated)"
+              <input className="xn-filter" placeholder="Slug (auto-generated)"
                 value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-              <input className="form-input form-input--wide" placeholder="API URL * (e.g. https://peer.example.com)"
+              <input className="xn-filter" placeholder="API URL * (e.g. https://peer.example.com)"
                 value={form.api_url} onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))} />
-              <input className="form-input form-input--wide" placeholder="Notes"
+              <input className="xn-filter" placeholder="Notes"
                 value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
             {editingId && (
@@ -7983,19 +7983,19 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
                 Enabled
               </label>
             )}
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add peer'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {peers.length === 0 && !showForm ? (
-          <div className="state-empty">No federation peers configured.</div>
+          <div className="xn-muted">No federation peers configured.</div>
         ) : peers.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>Peer</th>
@@ -8010,22 +8010,22 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
               {peers.map(p => (
                 <tr key={p.id}>
                   <td>
-                    <div className="routing-name">{p.name}</div>
-                    {p.notes && <div className="routing-desc">{p.notes}</div>}
+                    <div className="">{p.name}</div>
+                    {p.notes && <div className="xn-muted">{p.notes}</div>}
                   </td>
-                  <td><code className="inst-slug">{p.slug}</code></td>
+                  <td><code className="xn-code">{p.slug}</code></td>
                   <td><a href={p.api_url} target="_blank" rel="noopener noreferrer">{p.api_url}</a></td>
                   <td>
                     {p.enabled
-                      ? <span className="badge badge--enabled">enabled</span>
-                      : <span className="badge badge--disabled">disabled</span>}
+                      ? <span className="xn-pill">enabled</span>
+                      : <span className="xn-muted">disabled</span>}
                   </td>
-                  <td className="td-date">{fmtDate(p.created_at)}</td>
+                  <td className="">{fmtDate(p.created_at)}</td>
                   {isAdmin && (
                     <td>
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
-                        <button type="button" className="btn btn--delete" onClick={() => deletePeer(p)}>Delete</button>
+                      <div className="xn-section-controls">
+                        <button type="button" className="xn-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="xn-btn-secondary" onClick={() => deletePeer(p)}>Delete</button>
                       </div>
                     </td>
                   )}
@@ -9201,61 +9201,61 @@ function APIKeysPanel() {
   }
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="xn-section">
+        <div className="xn-section-bar">
           <div>
-            <div className="routing-section-title">API Keys</div>
-            <div className="routing-section-sub">
+            <div className="">API Keys</div>
+            <div className="xn-muted">
               Machine-to-machine credentials for programmatic API access. The raw key is shown only once at creation.
             </div>
           </div>
-          <button type="button" className="btn-primary" onClick={() => { setShowForm(true); setNewKeyValue(null) }}>
+          <button type="button" className="xn-btn-primary" onClick={() => { setShowForm(true); setNewKeyValue(null) }}>
             + New API key
           </button>
         </div>
 
         {newKeyValue && (
-          <div className="routing-form" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+          <div className="xn-section" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
             <strong style={{ color: '#166534' }}>API key {newKeyLabel} — copy it now, it will not be shown again:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
               <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
                 {newKeyValue}
               </code>
-              <button type="button" className="btn-secondary"
+              <button type="button" className="xn-btn-secondary"
                 onClick={() => navigator.clipboard.writeText(newKeyValue!)}>Copy</button>
             </div>
-            <button type="button" className="btn-secondary" style={{ marginTop: '8px' }} onClick={() => setNewKeyValue(null)}>Dismiss</button>
+            <button type="button" className="xn-btn-secondary" style={{ marginTop: '8px' }} onClick={() => setNewKeyValue(null)}>Dismiss</button>
           </div>
         )}
 
         {showForm && (
-          <div className="routing-form">
+          <div className="xn-section">
             <h3>New API key</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" type="text" placeholder="Key name *"
+            {formError && <div className="xn-error">{formError}</div>}
+            <div className="">
+              <input className="xn-filter" type="text" placeholder="Key name *"
                 value={formName} onChange={e => setFormName(e.target.value)} />
-              <input className="form-input" type="date" placeholder="Expiry date (optional)"
+              <input className="xn-filter" type="date" placeholder="Expiry date (optional)"
                 value={formExpiry} onChange={e => setFormExpiry(e.target.value)}
                 title="Expiry date (optional)" />
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={create} disabled={saving}>
+            <div className="xn-form-actions">
+              <button type="button" className="xn-btn-primary" onClick={create} disabled={saving}>
                 {saving ? 'Creating…' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="xn-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="xn-muted">Loading…</div>}
+        {error   && <div className="xn-error">{error}</div>}
         {!loading && !error && keys.length === 0 && (
-          <div className="state-empty">No API keys yet.</div>
+          <div className="xn-muted">No API keys yet.</div>
         )}
         {!loading && !error && keys.length > 0 && (
-          <table className="routing-table">
+          <table className="xn-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -9273,23 +9273,23 @@ function APIKeysPanel() {
                   <td>{k.name}</td>
                   <td><code style={{ fontSize: '0.8rem' }}>{k.key_prefix}…</code></td>
                   <td>{k.created_by}</td>
-                  <td>{k.last_used_at ? fmtDate(k.last_used_at) : <span className="routing-desc">never</span>}</td>
-                  <td>{k.expires_at ? fmtDate(k.expires_at) : <span className="routing-desc">never</span>}</td>
+                  <td>{k.last_used_at ? fmtDate(k.last_used_at) : <span className="xn-muted">never</span>}</td>
+                  <td>{k.expires_at ? fmtDate(k.expires_at) : <span className="xn-muted">never</span>}</td>
                   <td>
                     <span className={`status-badge status-badge--${k.enabled ? 'clean' : 'failed'}`}>
                       {k.enabled ? 'active' : 'disabled'}
                     </span>
                   </td>
                   <td>
-                    <div className="actions-cell">
-                      <button type="button" className="btn btn--action" onClick={() => toggle(k)}>
+                    <div className="xn-section-controls">
+                      <button type="button" className="xn-btn-secondary" onClick={() => toggle(k)}>
                         {k.enabled ? 'Disable' : 'Enable'}
                       </button>
-                      <button type="button" className="btn btn--action" onClick={() => rotate(k)}
+                      <button type="button" className="xn-btn-secondary" onClick={() => rotate(k)}
                         disabled={rotatingId === k.id}>
                         {rotatingId === k.id ? 'Rotating…' : 'Rotate'}
                       </button>
-                      <button type="button" className="btn btn--revoke" onClick={() => del(k)}>Delete</button>
+                      <button type="button" className="xn-btn-secondary" onClick={() => del(k)}>Delete</button>
                     </div>
                   </td>
                 </tr>
