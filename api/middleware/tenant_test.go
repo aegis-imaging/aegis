@@ -61,3 +61,39 @@ func TestTenantSlugFromRequest_NoMatch(t *testing.T) {
 	r.Host = "localhost"
 	assert.Equal(t, "", tenantSlugFromRequest(r))
 }
+
+// Regression: requests to the canonical api host MUST NOT be interpreted
+// as tenant requests (slug="api"). Before this guard, the
+// middleware 404'd every request to api.aegisimaging.ai because no
+// tenant named "api" existed — breaking the post-deploy /healthz
+// smoke check on both AWS and GCP.
+func TestTenantSlugFromRequest_ServiceHostIsNotTenant(t *testing.T) {
+	r := httptest.NewRequest("GET", "http://x/healthz", nil)
+	r.Host = "api.aegisimaging.ai"
+	assert.Equal(t, "", tenantSlugFromRequest(r),
+		"api.aegisimaging.ai is the service host, not a tenant")
+}
+
+func TestTenantSlugFromRequest_RegionalServiceHostIsNotTenant(t *testing.T) {
+	// aws.api.aegisimaging.ai is the AWS regional copy of the api host.
+	// "aws" is in ReservedTenantSlugs so this must NOT resolve as a tenant.
+	r := httptest.NewRequest("GET", "http://x/healthz", nil)
+	r.Host = "aws.api.aegisimaging.ai"
+	assert.Equal(t, "", tenantSlugFromRequest(r),
+		"aws.api.aegisimaging.ai is the AWS regional service host, not a tenant")
+}
+
+func TestTenantSlugFromRequest_ReservedAdminLabel(t *testing.T) {
+	r := httptest.NewRequest("GET", "http://x/", nil)
+	r.Host = "admin.api.aegisimaging.ai"
+	assert.Equal(t, "", tenantSlugFromRequest(r),
+		"`admin` is reserved — should not be interpreted as a tenant slug")
+}
+
+func TestTenantSlugFromRequest_RealTenantUnderApiSuffix(t *testing.T) {
+	// The legitimate tenant pattern: <tenant>.api.aegisimaging.ai.
+	r := httptest.NewRequest("GET", "http://x/", nil)
+	r.Host = "acme.api.aegisimaging.ai"
+	assert.Equal(t, "acme", tenantSlugFromRequest(r),
+		"non-reserved labels under api.aegisimaging.ai resolve as tenants")
+}
