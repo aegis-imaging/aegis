@@ -646,6 +646,17 @@ func (s *Server) PairDesktopInstaller(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Browser upload allowlist (chunk 2). If the invite is institution-
+	// scoped and that institution has disabled desktop installer
+	// pairing, deny here AFTER the claim (so the token still burns and
+	// can't be retried elsewhere) and AFTER api-key creation (so we
+	// can clean up the orphaned key). Institution-less invites bypass
+	// the check — they're admin-issued and pre-date the allowlist.
+	if !s.enforceUploadMethod(w, r, inv.InstitutionID, "desktop.installer-pair") {
+		_ = model.DeleteAPIKey(r.Context(), s.db, apiKey.ID)
+		return
+	}
+
 	// Now that the claim succeeded, rename the key so audit reads make sense.
 	if err := s.renameAPIKey(r, apiKey.ID, inv); err != nil {
 		log.Printf("rename paired api key: %v", err)

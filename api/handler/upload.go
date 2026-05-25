@@ -102,6 +102,12 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Browser upload allowlist (chunk 2). No-op when no institution was
+	// attributed — legacy/anonymous uploads keep working as before.
+	if !s.enforceUploadMethod(w, r, institutionID, "browser.web-upload") {
+		return
+	}
+
 	// Create upload session
 	session, err := model.CreateUploadSession(r.Context(), s.db, project.ID, req.FileCount, "", clientIP(r), req.UploaderEmail)
 	if err != nil {
