@@ -1,21 +1,39 @@
 import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { apiGetMe, type CurrentUser } from '../api/subjects'
 
-// ResearcherSidebar renders on every non-admin route (Home, /projects/*,
-// /subjects/*, /studies/*). It's deliberately a thinner, link-only version
-// of the big admin sidebar — admin-tab destinations are reachable from
-// here for users who have permission, so a researcher who's also an admin
-// doesn't need to bounce through /admin/* to reach Audit / Shares / Routing.
+// ResearcherSidebar renders on every routed page (Home, /projects/*,
+// /studies, /shares, /agent, /profile/*, AND /admin/* after PR #550).
+// Two navigation modes:
 //
-// Items are split into a "Researcher" group (visible to everyone authed)
-// and an "Admin" group (only when apiGetMe() returns role === 'admin').
-// Click handlers use plain NavLink — these navigate WITHIN the
-// DashboardLayout subtree for the researcher items, and cross over into
-// the AdminApp subtree for the admin items (so they still get a full
-// in-app nav, not a full-page reload).
+//   item(...)      — NavLink + SPA navigation. Works reliably for the
+//                    researcher tree (/, /studies, /shares, /agent, ...).
+//                    Used inside Workspace / You groups.
+//
+//   adminItem(...) — plain <a href>. Forces a full-page navigation so
+//                    each click is functionally identical to "click, then
+//                    refresh the browser" — which is what users had to do
+//                    manually before this PR for every admin sidebar
+//                    click. The /admin/* routes have a recurring bug
+//                    (#515 #526 #529 #539 #540 #548 #549 #550) where SPA
+//                    navigation updates the URL but the React tree fails
+//                    to re-render until refresh; the brute-force fix is
+//                    to skip React Router entirely for those links.
+//                    Used inside Operations / Configure / Admin groups.
+//                    Slower than SPA nav by a few hundred ms, but
+//                    reliable.
+//
+// Items are visible to everyone authed; the admin-only groups
+// (Operations / Configure / Admin) only render when apiGetMe()
+// returns role === 'admin'.
+//
+// Dedupe note: Studies / Shares / Agent are intentionally NOT repeated
+// in Operations — /studies, /shares, /agent in Workspace already point
+// at the same destinations (with /admin/studies, /admin/shares,
+// /admin/agent redirecting to those in main.tsx).
 export function ResearcherSidebar() {
   const [me, setMe] = useState<CurrentUser | null>(null)
+  const location = useLocation()
 
   useEffect(() => {
     apiGetMe().then(setMe).catch(() => setMe(null))
@@ -23,26 +41,34 @@ export function ResearcherSidebar() {
 
   const isAdmin = me?.role === 'admin'
 
+  // SPA nav — works inside the researcher tree, used for Workspace / You.
   const item = (label: string, to: string, icon: string) => (
     <NavLink
       to={to}
       className={({ isActive }) =>
         `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
       }
-      // No onClick override here — NavLink's native click intercept
-      // calls navigate() internally, and if React Router fails to
-      // intercept the browser's <a href> fallback does a full-page
-      // navigation. The previous defensive preventDefault + navigate()
-      // pattern made the click a single point of failure: when
-      // navigate() silently no-op'd (the symptom users hit on
-      // /admin/* routes — click updates URL but content stayed stale
-      // until a manual page refresh), preventDefault had already
-      // killed the fallback so the click looked completely dead.
     >
       <span className="aegis-sidenav-icon">{icon}</span>
       <span className="aegis-sidenav-label">{label}</span>
     </NavLink>
   )
+
+  // Full-page nav — used for /admin/* links to dodge the SPA-stale-render
+  // bug. The active-class logic is hand-rolled since we lose NavLink's
+  // built-in isActive.
+  const adminItem = (label: string, to: string, icon: string) => {
+    const isActive = location.pathname === to || location.pathname.startsWith(to + '/')
+    return (
+      <a
+        href={to}
+        className={`aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`}
+      >
+        <span className="aegis-sidenav-icon">{icon}</span>
+        <span className="aegis-sidenav-label">{label}</span>
+      </a>
+    )
+  }
 
   return (
     <aside className="aegis-sidenav">
@@ -69,31 +95,33 @@ export function ResearcherSidebar() {
         <>
           <div className="aegis-sidenav-group">
             <div className="aegis-sidenav-group-label">Operations</div>
-            {item('Studies',   '/admin/studies',   '\u{1F4CB}')}
-            {item('Audit log', '/admin/audit',     '\u{1F4DC}')}
-            {item('Shares',    '/admin/shares',    '\u{1F517}')}
-            {item('Routing',   '/admin/routing',   '\u{1F6E4}')}
-            {item('DIMSE Ops', '/admin/dimse_ops', '\u{1F4E1}')}
+            {/* Studies + Shares intentionally omitted — they live in
+                Workspace above. Adding /admin/studies and /admin/shares
+                here just duplicated the Workspace entries and pointed at
+                the broken admin routes. */}
+            {adminItem('Audit log', '/admin/audit',     '\u{1F4DC}')}
+            {adminItem('Routing',   '/admin/routing',   '\u{1F6E4}')}
+            {adminItem('DIMSE Ops', '/admin/dimse_ops', '\u{1F4E1}')}
           </div>
 
           <div className="aegis-sidenav-group">
             <div className="aegis-sidenav-group-label">Configure</div>
-            {item('Projects',     '/admin/projects',     '\u{1F4C1}')}
-            {item('Institutions', '/admin/institutions', '\u{1F3E5}')}
+            {adminItem('Projects',     '/admin/projects',     '\u{1F4C1}')}
+            {adminItem('Institutions', '/admin/institutions', '\u{1F3E5}')}
             {/* Satellites managed per-institution at /admin/institutions/:id —
                 no top-level entry here. /admin/satellites still resolves
                 for direct/bookmark navigation. */}
-            {item('Anon profiles',       '/admin/profiles',           '\u{1F6E1}')}
-            {item('Protocol templates',  '/admin/protocol_templates', '\u{1F4CF}')}
+            {adminItem('Anon profiles',       '/admin/profiles',           '\u{1F6E1}')}
+            {adminItem('Protocol templates',  '/admin/protocol_templates', '\u{1F4CF}')}
           </div>
 
           <div className="aegis-sidenav-group">
             <div className="aegis-sidenav-group-label">Admin</div>
-            {item('Users',         '/admin/users',         '\u{1F464}')}
-            {item('API keys',      '/admin/api_keys',      '\u{1F511}')}
-            {item('Invite codes',  '/admin/invite_codes',  '\u{1F3AB}')}
-            {item('Notifications', '/admin/notifications', '\u{1F514}')}
-            {item('System',        '/admin/system',        '\u{2699}')}
+            {adminItem('Users',         '/admin/users',         '\u{1F464}')}
+            {adminItem('API keys',      '/admin/api_keys',      '\u{1F511}')}
+            {adminItem('Invite codes',  '/admin/invite_codes',  '\u{1F3AB}')}
+            {adminItem('Notifications', '/admin/notifications', '\u{1F514}')}
+            {adminItem('System',        '/admin/system',        '\u{2699}')}
           </div>
         </>
       )}
