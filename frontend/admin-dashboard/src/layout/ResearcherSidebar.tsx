@@ -75,11 +75,13 @@ export function ResearcherSidebar() {
 
           <div className="aegis-sidenav-group">
             <div className="aegis-sidenav-group-label">Configure</div>
-            {item('Projects',     '/admin/projects',           '\u{1F4C1}')}
-            {item('Institutions', '/admin/institutions',       '\u{1F3E5}')}
-            {item('Satellites',   '/admin/satellites',         '\u{1F4F6}')}
-            {item('Anon profiles',     '/admin/profiles',           '\u{1F6E1}')}
-            {item('Protocol templates', '/admin/protocol_templates', '\u{1F4CF}')}
+            {item('Projects',     '/admin/projects',     '\u{1F4C1}')}
+            {item('Institutions', '/admin/institutions', '\u{1F3E5}')}
+            {/* Satellites managed per-institution at /admin/institutions/:id —
+                no top-level entry here. /admin/satellites still resolves
+                for direct/bookmark navigation. */}
+            {item('Anon profiles',       '/admin/profiles',           '\u{1F6E1}')}
+            {item('Protocol templates',  '/admin/protocol_templates', '\u{1F4CF}')}
           </div>
 
           <div className="aegis-sidenav-group">
