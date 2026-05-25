@@ -228,3 +228,52 @@ func TestListAudit_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "project not found")
 }
+
+// TestListAudit_ResearcherSelfQueryWithoutProjectScope verifies that a
+// non-admin researcher can read their own audit history via
+// ?actor=<their-email> without supplying a project_id. This unblocks the
+// /profile/activity page for non-admin users.
+func TestListAudit_ResearcherSelfQueryWithoutProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "audit-self@test.com", "researcher")
+
+	// Two entries by the researcher (visible) + one by someone else (not visible).
+	require.NoError(t, model.CreateAuditEntry(t.Context(), db, "study.approved", researcher.Email, "study", "s1", "", nil))
+	require.NoError(t, model.CreateAuditEntry(t.Context(), db, "study.note", researcher.Email, "study", "s2", "", nil))
+	require.NoError(t, model.CreateAuditEntry(t.Context(), db, "study.rejected", "other@test.com", "study", "s3", "", nil))
+
+	req := httptest.NewRequest("GET", "/api/audit?actor="+researcher.Email+"&limit=100", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAudit(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code, "self-query must bypass the project_id requirement")
+	var result auditPageResponse
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, 2, result.Total, "researcher sees their own 2 entries, not the third entry from another actor")
+	for _, e := range result.Entries {
+		assert.Equal(t, researcher.Email, e.Actor)
+	}
+}
+
+// TestListAudit_ResearcherCrossUserQueryStillRequiresProjectScope verifies
+// the bypass is strictly self-scoped — a researcher cannot use the same
+// ?actor= filter to peek at a different user's history without project
+// access (the project_id requirement still applies).
+func TestListAudit_ResearcherCrossUserQueryStillRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "audit-self-strict@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/audit?actor=someone-else@test.com", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAudit(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries",
+		"self-query bypass must NOT extend to querying other actors' history")
+}
