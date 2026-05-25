@@ -1,40 +1,38 @@
 import { useLocation } from 'react-router-dom'
 import { App } from '../App'
 
-// AdminApp wraps the existing 18-tab admin dashboard for use under the
-// /admin/* route. The App component is the original monolithic dispatch:
-// it owns ~50 useState hooks and renders the active tab via
-// `{tab === 'X' && <Panel />}` conditionals.
+// AdminApp renders the 18-tab admin experience inside DashboardLayout's
+// Outlet. App is the monolithic dispatcher: it owns ~50 useState hooks
+// and renders the active tab via `{tab === 'X' && <Panel />}` conditionals
+// driven by parseAdminTab(location.pathname).
 //
-// Routing quirk this works around — and why this wrapper is more than a
-// pass-through:
+// Why the key={location.pathname}:
 //
-//   The researcher tree (Home, /projects, /agent, /studies, /shares,
-//   /profile/*) lives under DashboardLayout. Each researcher click
-//   swaps the Outlet's child component, so React naturally tears the
-//   old route down and mounts the new one. Re-render is unambiguous.
+//   Every URL under /admin/* maps to this same route element, so React
+//   Router would normally keep App mounted across admin tab clicks. The
+//   conditional renders ARE supposed to re-evaluate when location.pathname
+//   changes, but a recurring class of bugs (PRs #515 #526 #529 #539 #540
+//   #548 #549) showed they don't always — the URL would update, the
+//   breadcrumb would update, but the inner panel kept showing the
+//   previous tab's content until a manual page refresh. The proximate
+//   causes shifted (NavLink stale closures, batched state, useEffect
+//   ordering) but the underlying fragility came from cramming 18 tabs
+//   into one long-lived component.
 //
-//   Inside /admin/*, every URL maps to the *same* route element
-//   (AdminApp → App). Clicking from /admin/studies to /admin/audit
-//   doesn't change the rendered React element — it just updates
-//   location.pathname inside the still-mounted App. Several layers of
-//   defensive code (#526 NavLink, #529 preventDefault+navigate,
-//   #539 isActive from location, #540 key on the inner content section,
-//   #548 drop preventDefault) tried to make the conditional renders
-//   below pick up the new tab, and each fix worked for some renders but
-//   not others — the symptom users repeatedly reported was "URL
-//   changes but the page content stays on the previous tab until I
-//   hit refresh."
+//   Keying App on location.pathname forces a full unmount + remount on
+//   every URL change inside /admin/*. Trade-off: data fetches restart
+//   and scroll position resets per tab click. We accept that because
+//   (a) most tab switches were going to re-fetch their data anyway,
+//   (b) the DashboardLayout sidebar (ResearcherSidebar) stays mounted
+//   so the nav itself doesn't flicker, and
+//   (c) it gives the same clean route-swap semantics the researcher
+//   tree (Home, /studies, /shares, /projects/*) gets for free via the
+//   Outlet swapping its child component on each route match.
 //
-//   The decisive fix: key the entire App on location.pathname. Every
-//   in-admin click now causes React to fully unmount the previous
-//   App instance and mount a fresh one with the new URL. No surviving
-//   state, no stale closures, no missed re-renders. It's heavy-handed
-//   (data fetches restart, scroll position resets), but the previous
-//   tab's data was about to be re-fetched on the new tab anyway, and
-//   the user explicitly asked for "copy the nav from home" — this
-//   matches the route-swap semantics DashboardLayout's Outlet gives
-//   the researcher tree for free.
+// The admin sidebar used to live inside App; with the move under
+// DashboardLayout, ResearcherSidebar covers the Operations / Configure /
+// Admin groups when the user is admin. App now only renders the tab
+// content area (no topbar, no breadcrumbs, no sidebar of its own).
 export function AdminApp() {
   const location = useLocation()
   return <App key={location.pathname} />
