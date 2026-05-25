@@ -10913,13 +10913,26 @@ export function App() {
   type BreakdownRow = { modality: string; body_part: string; count: number }
   const [breakdown, setBreakdown] = useState<BreakdownRow[] | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const [breakdownError, setBreakdownError] = useState<string | null>(null)
+  // Toggles flip `show` immediately so the click always produces a visible
+  // response — the previous version only flipped on `res.ok`, so any silent
+  // fetch failure (auth, network, 500) made the menu appear "broken".
   const loadBreakdown = async () => {
     if (showBreakdown) { setShowBreakdown(false); return }
-    const params = new URLSearchParams()
-    if (globalProjectId) params.set('project_id', globalProjectId)
-    const qs = params.toString()
-    const res = await fetch(`/api/stats/breakdown${qs ? '?' + qs : ''}`)
-    if (res.ok) { const d = await res.json(); setBreakdown(d.breakdown ?? []); setShowBreakdown(true) }
+    setShowBreakdown(true)
+    setBreakdownError(null)
+    try {
+      const params = new URLSearchParams()
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      const qs = params.toString()
+      const res = await fetch(`/api/stats/breakdown${qs ? '?' + qs : ''}`)
+      if (!res.ok) { setBreakdownError(`HTTP ${res.status}`); setBreakdown([]); return }
+      const d = await res.json()
+      setBreakdown(d.breakdown ?? [])
+    } catch (err) {
+      setBreakdownError(err instanceof Error ? err.message : 'Failed to load breakdown')
+      setBreakdown([])
+    }
   }
 
   type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number; total_size_bytes: number }
@@ -10936,34 +10949,64 @@ export function App() {
   type TimelineDay = { date: string; received: number; approved: number }
   const [timeline, setTimeline] = useState<TimelineDay[] | null>(null)
   const [showTimeline, setShowTimeline] = useState(false)
+  const [timelineError, setTimelineError] = useState<string | null>(null)
   const loadTimeline = async () => {
     if (showTimeline) { setShowTimeline(false); return }
-    const params = new URLSearchParams({ days: '30' })
-    if (globalProjectId) params.set('project_id', globalProjectId)
-    const res = await fetch(`/api/stats/timeline?${params}`)
-    if (res.ok) { const d = await res.json(); setTimeline(d.timeline ?? []); setShowTimeline(true) }
+    setShowTimeline(true)
+    setTimelineError(null)
+    try {
+      const params = new URLSearchParams({ days: '30' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      const res = await fetch(`/api/stats/timeline?${params}`)
+      if (!res.ok) { setTimelineError(`HTTP ${res.status}`); setTimeline([]); return }
+      const d = await res.json()
+      setTimeline(d.timeline ?? [])
+    } catch (err) {
+      setTimelineError(err instanceof Error ? err.message : 'Failed to load timeline')
+      setTimeline([])
+    }
   }
 
   type StageTiming = { stage: string; count: number; avg_seconds: number; p95_seconds: number; min_seconds: number; max_seconds: number }
   const [processingTimes, setProcessingTimes] = useState<StageTiming[] | null>(null)
   const [showProcessingTimes, setShowProcessingTimes] = useState(false)
+  const [processingTimesError, setProcessingTimesError] = useState<string | null>(null)
   const loadProcessingTimes = async () => {
     if (showProcessingTimes) { setShowProcessingTimes(false); return }
-    const params = new URLSearchParams({ days: '30' })
-    if (globalProjectId) params.set('project_id', globalProjectId)
-    const res = await fetch(`/api/stats/processing-times?${params}`)
-    if (res.ok) { const d = await res.json(); setProcessingTimes(d.stages ?? []); setShowProcessingTimes(true) }
+    setShowProcessingTimes(true)
+    setProcessingTimesError(null)
+    try {
+      const params = new URLSearchParams({ days: '30' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      const res = await fetch(`/api/stats/processing-times?${params}`)
+      if (!res.ok) { setProcessingTimesError(`HTTP ${res.status}`); setProcessingTimes([]); return }
+      const d = await res.json()
+      setProcessingTimes(d.stages ?? [])
+    } catch (err) {
+      setProcessingTimesError(err instanceof Error ? err.message : 'Failed to load processing times')
+      setProcessingTimes([])
+    }
   }
 
   type FunnelStage = { stage: string; count: number; pct_of_total: number; pct_of_prev: number }
   const [funnel, setFunnel] = useState<FunnelStage[] | null>(null)
   const [showFunnel, setShowFunnel] = useState(false)
+  const [funnelError, setFunnelError] = useState<string | null>(null)
   const loadFunnel = async () => {
     if (showFunnel) { setShowFunnel(false); return }
-    const params = new URLSearchParams({ days: '30' })
-    if (globalProjectId) params.set('project_id', globalProjectId)
-    const res = await fetch(`/api/stats/pipeline-funnel?${params}`)
-    if (res.ok) { const d = await res.json(); setFunnel(d.funnel ?? []); setShowFunnel(true) }
+    setShowFunnel(true)
+    setFunnelError(null)
+    try {
+      const params = new URLSearchParams({ days: '30' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      const res = await fetch(`/api/stats/pipeline-funnel?${params}`)
+      if (!res.ok) { setFunnelError(`HTTP ${res.status}`); setFunnel([]); return }
+      const d = await res.json()
+      setFunnel(d.funnel ?? [])
+    } catch (err) {
+      setFunnelError(err instanceof Error ? err.message : 'Failed to load funnel')
+      setFunnel([])
+    }
   }
 
   type CohortSubject = {
@@ -10978,13 +11021,22 @@ export function App() {
   const [cohortReport, setCohortReport] = useState<CohortReport | null>(null)
   const [showCohortReport, setShowCohortReport] = useState(false)
   const [cohortLoading, setCohortLoading] = useState(false)
+  const [cohortError, setCohortError] = useState<string | null>(null)
   const loadCohortReport = async () => {
     if (!globalProjectId) { alert('Select a project to view the cohort report.'); return }
     if (showCohortReport && cohortReport) { setShowCohortReport(false); return }
+    setShowCohortReport(true)
+    setCohortError(null)
     setCohortLoading(true)
-    const res = await fetch(`/api/projects/${globalProjectId}/cohort-report`)
-    setCohortLoading(false)
-    if (res.ok) { setCohortReport(await res.json()); setShowCohortReport(true) }
+    try {
+      const res = await fetch(`/api/projects/${globalProjectId}/cohort-report`)
+      if (!res.ok) { setCohortError(`HTTP ${res.status}`); return }
+      setCohortReport(await res.json())
+    } catch (err) {
+      setCohortError(err instanceof Error ? err.message : 'Failed to load cohort report')
+    } finally {
+      setCohortLoading(false)
+    }
   }
 
   const fmtDuration = (secs: number): string => {
@@ -11566,22 +11618,26 @@ export function App() {
             <button type="button" className="aegis-btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
               {showBreakdown ? '▲ Hide breakdown' : '▼ Modality / body part breakdown'}
             </button>
-            {showBreakdown && breakdown && (
+            {showBreakdown && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
-                <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
-                  <thead><tr><th>Modality</th><th>Body part</th><th>Count</th></tr></thead>
-                  <tbody>
-                    {breakdown.length === 0
-                      ? <tr><td colSpan={3} className="aegis-muted">No studies yet.</td></tr>
-                      : breakdown.map((r, i) => (
-                        <tr key={i}>
-                          <td>{r.modality || <span className="aegis-muted">—</span>}</td>
-                          <td>{r.body_part || <span className="aegis-muted">—</span>}</td>
-                          <td>{r.count}</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
+                {breakdownError && <div className="aegis-error" style={{fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load breakdown: {breakdownError}</div>}
+                {!breakdown && !breakdownError && <div className="aegis-muted" style={{fontSize:'0.8rem'}}>Loading…</div>}
+                {breakdown && (
+                  <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
+                    <thead><tr><th>Modality</th><th>Body part</th><th>Count</th></tr></thead>
+                    <tbody>
+                      {breakdown.length === 0
+                        ? <tr><td colSpan={3} className="aegis-muted">No studies yet.</td></tr>
+                        : breakdown.map((r, i) => (
+                          <tr key={i}>
+                            <td>{r.modality || <span className="aegis-muted">—</span>}</td>
+                            <td>{r.body_part || <span className="aegis-muted">—</span>}</td>
+                            <td>{r.count}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
           </div>
@@ -11591,9 +11647,11 @@ export function App() {
             <button type="button" className="aegis-btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
               {showTimeline ? '▲ Hide timeline' : '▼ Daily ingestion (last 30 days)'}
             </button>
-            {showTimeline && timeline && (
+            {showTimeline && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
-                {timeline.length === 0
+                {timelineError && <div className="aegis-error" style={{fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load timeline: {timelineError}</div>}
+                {!timeline && !timelineError && <div className="aegis-muted" style={{fontSize:'0.8rem'}}>Loading…</div>}
+                {timeline && (timeline.length === 0
                   ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
                   : (
                     <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
@@ -11608,7 +11666,7 @@ export function App() {
                         ))}
                       </tbody>
                     </table>
-                  )}
+                  ))}
               </div>
             )}
           </div>
@@ -11618,9 +11676,11 @@ export function App() {
             <button type="button" className="aegis-btn-secondary" onClick={loadProcessingTimes} style={{fontSize:'0.8rem'}}>
               {showProcessingTimes ? '▲ Hide stage processing times' : '▼ Stage processing times (last 30 days)'}
             </button>
-            {showProcessingTimes && processingTimes && (
+            {showProcessingTimes && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
-                {processingTimes.length === 0
+                {processingTimesError && <div className="aegis-error" style={{fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load processing times: {processingTimesError}</div>}
+                {!processingTimes && !processingTimesError && <div className="aegis-muted" style={{fontSize:'0.8rem'}}>Loading…</div>}
+                {processingTimes && (processingTimes.length === 0
                   ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No pipeline events in the last 30 days.</span>
                   : (
                     <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
@@ -11647,7 +11707,7 @@ export function App() {
                         ))}
                       </tbody>
                     </table>
-                  )}
+                  ))}
               </div>
             )}
           </div>
@@ -11657,9 +11717,11 @@ export function App() {
             <button type="button" className="aegis-btn-secondary" onClick={loadFunnel} style={{fontSize:'0.8rem'}}>
               {showFunnel ? '▲ Hide pipeline funnel' : '▼ Pipeline funnel (last 30 days)'}
             </button>
-            {showFunnel && funnel && (
+            {showFunnel && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
-                {funnel.length === 0
+                {funnelError && <div className="aegis-error" style={{fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load funnel: {funnelError}</div>}
+                {!funnel && !funnelError && <div className="aegis-muted" style={{fontSize:'0.8rem'}}>Loading…</div>}
+                {funnel && (funnel.length === 0
                   ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
                   : (
                     <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
@@ -11706,7 +11768,7 @@ export function App() {
                         })}
                       </tbody>
                     </table>
-                  )}
+                  ))}
               </div>
             )}
           </div>
@@ -11718,6 +11780,12 @@ export function App() {
             </button>
             {!globalProjectId && (
               <span style={{marginLeft:'8px',fontSize:'0.78rem',color:'#9ca3af'}}>Select a project to load.</span>
+            )}
+            {showCohortReport && cohortError && (
+              <div className="aegis-error" style={{marginTop:'6px',fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load cohort report: {cohortError}</div>
+            )}
+            {showCohortReport && !cohortReport && !cohortError && (
+              <div className="aegis-muted" style={{marginTop:'6px',fontSize:'0.8rem'}}>Loading…</div>
             )}
             {showCohortReport && cohortReport && (
               <div style={{marginTop:'8px'}}>
