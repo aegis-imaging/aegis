@@ -45,12 +45,15 @@ export function ResearcherSidebar() {
 
   return (
     <aside className="aegis-sidenav">
+      {/* Workspace group is the researcher-facing items — Home, plus
+          actions a non-admin researcher legitimately uses on their own.
+          Admin-only routes (Studies triage, Shares manager, etc.) live
+          in the Admin / Config groups below so a researcher who clicks
+          a Workspace item doesn't get bounced into the admin section. */}
       <div className="aegis-sidenav-group">
         <div className="aegis-sidenav-group-label">Workspace</div>
-        {item('Home',     '/',              '\u{1F3E0}')}
-        {item('Studies',  '/admin/studies', '\u{1F4CB}')}
-        {item('Shares',   '/admin/shares',  '\u{1F517}')}
-        {item('Agent',    '/agent',         '\u{1F916}')}
+        {item('Home',  '/',       '\u{1F3E0}')}
+        {item('Agent', '/agent',  '\u{1F916}')}
       </div>
 
       <div className="aegis-sidenav-group">
@@ -62,17 +65,28 @@ export function ResearcherSidebar() {
       {isAdmin && (
         <>
           <div className="aegis-sidenav-group">
-            <div className="aegis-sidenav-group-label">Config</div>
-            {item('Projects',     '/admin/projects',     '\u{1F4C1}')}
-            {item('Institutions', '/admin/institutions', '\u{1F3E5}')}
-            {item('Satellites',   '/admin/satellites',   '\u{1F4F6}')}
-            {item('Routing',      '/admin/routing',      '\u{1F6E4}')}
+            <div className="aegis-sidenav-group-label">Operations</div>
+            {item('Studies',   '/admin/studies',   '\u{1F4CB}')}
+            {item('Audit log', '/admin/audit',     '\u{1F4DC}')}
+            {item('Shares',    '/admin/shares',    '\u{1F517}')}
+            {item('Routing',   '/admin/routing',   '\u{1F6E4}')}
+            {item('DIMSE Ops', '/admin/dimse_ops', '\u{1F4E1}')}
+          </div>
+
+          <div className="aegis-sidenav-group">
+            <div className="aegis-sidenav-group-label">Configure</div>
+            {item('Projects',     '/admin/projects',           '\u{1F4C1}')}
+            {item('Institutions', '/admin/institutions',       '\u{1F3E5}')}
+            {item('Satellites',   '/admin/satellites',         '\u{1F4F6}')}
+            {item('Anon profiles',     '/admin/profiles',           '\u{1F6E1}')}
+            {item('Protocol templates', '/admin/protocol_templates', '\u{1F4CF}')}
           </div>
 
           <div className="aegis-sidenav-group">
             <div className="aegis-sidenav-group-label">Admin</div>
             {item('Users',         '/admin/users',         '\u{1F464}')}
-            {item('Audit log',     '/admin/audit',         '\u{1F4DC}')}
+            {item('API keys',      '/admin/api_keys',      '\u{1F511}')}
+            {item('Invite codes',  '/admin/invite_codes',  '\u{1F3AB}')}
             {item('Notifications', '/admin/notifications', '\u{1F514}')}
             {item('System',        '/admin/system',        '\u{2699}')}
           </div>
