@@ -145,7 +145,6 @@ const ADMIN_TAB_LABELS: Record<string, string> = {
   protocol_templates: 'Protocol Templates',
   notifications: 'Notifications',
   federation: 'Federation',
-  tcia_import: 'TCIA Import',
   system: 'System',
   users: 'Users',
   api_keys: 'API Keys',
