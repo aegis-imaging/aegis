@@ -1,26 +1,27 @@
 import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { apiGetMe, type CurrentUser } from '../api/subjects'
 
 // ResearcherSidebar renders on every routed page (Home, /projects/*,
-// /studies, /shares, /agent, /profile/*, AND /admin/* after PR #550).
+// /studies, /shares, /agent, /tcia, /profile/*, AND /admin/*).
 //
-// All items use NavLink/SPA navigation. The plain-anchor workaround
-// shipped in PR #551 for /admin/* links has been reverted: the actual
-// root cause of "click admin link → URL changes but page stays blank"
-// was the `key={location.pathname}` in AdminApp that forced App to
-// remount on every URL change and wiped currentUser. Removing that
-// key (same PR as this revert) lets SPA nav re-render the conditional
-// tab block in App.tsx without losing auth state.
+// Two modes per click:
+//   - Same-subtree (researcher → researcher, admin → admin):
+//     NavLink/SPA. Fast, preserves auth state.
+//   - Cross-subtree (admin → researcher, or researcher → admin):
+//     plain <a href>, full-page reload. Same pattern TopBar uses.
+//     SPA nav across the /admin/* ↔ rest-of-app boundary silently
+//     no-ops (URL doesn't update, page stays put). PR #553 fixed
+//     this for in-admin clicks, but the cross-boundary case still
+//     fails — full-page nav is the reliable escape hatch without
+//     chasing more state in App.tsx's 12k lines.
 //
 // Items are visible to everyone authed; the admin-only groups
 // (Operations / Configure / Admin) only render when apiGetMe()
 // returns role === 'admin'.
-//
-// Dedupe note: Studies / Shares / Agent live in Workspace only — the
-// admin-side duplicates were dropped in #551.
 export function ResearcherSidebar() {
   const [me, setMe] = useState<CurrentUser | null>(null)
+  const location = useLocation()
 
   useEffect(() => {
     apiGetMe().then(setMe).catch(() => setMe(null))
@@ -28,17 +29,40 @@ export function ResearcherSidebar() {
 
   const isAdmin = me?.role === 'admin'
 
-  const item = (label: string, to: string, icon: string) => (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
-      }
-    >
-      <span className="aegis-sidenav-icon">{icon}</span>
-      <span className="aegis-sidenav-label">{label}</span>
-    </NavLink>
-  )
+  // True when navigating to `to` would cross the /admin/* ↔ rest-of-app
+  // route-subtree boundary. SPA nav across that boundary is unreliable;
+  // a full-page reload is.
+  const crossesAdminBoundary = (to: string): boolean => {
+    const here = location.pathname.startsWith('/admin')
+    const there = to.startsWith('/admin')
+    return here !== there
+  }
+
+  const item = (label: string, to: string, icon: string) => {
+    if (crossesAdminBoundary(to)) {
+      const isActive = location.pathname === to || location.pathname.startsWith(to + '/')
+      return (
+        <a
+          href={to}
+          className={`aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`}
+        >
+          <span className="aegis-sidenav-icon">{icon}</span>
+          <span className="aegis-sidenav-label">{label}</span>
+        </a>
+      )
+    }
+    return (
+      <NavLink
+        to={to}
+        className={({ isActive }) =>
+          `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
+        }
+      >
+        <span className="aegis-sidenav-icon">{icon}</span>
+        <span className="aegis-sidenav-label">{label}</span>
+      </NavLink>
+    )
+  }
 
   return (
     <aside className="aegis-sidenav">
