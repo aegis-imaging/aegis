@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { apiGetMe, type CurrentUser } from '../api/subjects'
 
 // ResearcherSidebar renders on every non-admin route (Home, /projects/*,
@@ -16,7 +16,6 @@ import { apiGetMe, type CurrentUser } from '../api/subjects'
 // in-app nav, not a full-page reload).
 export function ResearcherSidebar() {
   const [me, setMe] = useState<CurrentUser | null>(null)
-  const navigate = useNavigate()
 
   useEffect(() => {
     apiGetMe().then(setMe).catch(() => setMe(null))
@@ -30,13 +29,15 @@ export function ResearcherSidebar() {
       className={({ isActive }) =>
         `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
       }
-      onClick={(e) => {
-        // Same defensive pattern as the admin sidebar — explicit navigate
-        // ensures both the URL and the rendered route update reliably even
-        // when crossing route subtrees.
-        e.preventDefault()
-        navigate(to)
-      }}
+      // No onClick override here — NavLink's native click intercept
+      // calls navigate() internally, and if React Router fails to
+      // intercept the browser's <a href> fallback does a full-page
+      // navigation. The previous defensive preventDefault + navigate()
+      // pattern made the click a single point of failure: when
+      // navigate() silently no-op'd (the symptom users hit on
+      // /admin/* routes — click updates URL but content stayed stale
+      // until a manual page refresh), preventDefault had already
+      // killed the fallback so the click looked completely dead.
     >
       <span className="aegis-sidenav-icon">{icon}</span>
       <span className="aegis-sidenav-label">{label}</span>
