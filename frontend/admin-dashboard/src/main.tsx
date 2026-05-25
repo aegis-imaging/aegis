@@ -13,6 +13,8 @@ import { ProfileLanding } from './pages/ProfileLanding'
 import { ProfileNotifications } from './pages/ProfileNotifications'
 import { ProfileActivity } from './pages/ProfileActivity'
 import { AgentPage } from './pages/AgentPage'
+import { StudiesPage } from './pages/StudiesPage'
+import { SharesPage } from './pages/SharesPage'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -48,6 +50,13 @@ createRoot(document.getElementById('root')!).render(
           {/* AI agent — researcher-accessible (not just admin). Same panel
               that lives at /admin/agent. */}
           <Route path="agent" element={<AgentPage />} />
+
+          {/* Researcher-facing browse views — simpler than the admin
+              triage panels. Click-through goes to the existing
+              /projects/:p/subjects/:s/studies/:study detail route so the
+              rest of the flow stays inside researcher chrome. */}
+          <Route path="studies" element={<StudiesPage />} />
+          <Route path="shares" element={<SharesPage />} />
         </Route>
 
         {/* Existing 18-tab admin experience under /admin/*. */}
