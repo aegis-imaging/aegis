@@ -15,6 +15,7 @@ import { ProfileActivity } from './pages/ProfileActivity'
 import { AgentPage } from './pages/AgentPage'
 import { StudiesPage } from './pages/StudiesPage'
 import { SharesPage } from './pages/SharesPage'
+import { ProjectSettingsPage } from './pages/ProjectSettingsPage'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -31,6 +32,7 @@ createRoot(document.getElementById('root')!).render(
         <Route element={<DashboardLayout />}>
           <Route index element={<RootRedirect />} />
           <Route path="projects/:projectId" element={<ProjectPage />} />
+          <Route path="projects/:projectId/settings" element={<ProjectSettingsPage />} />
           <Route
             path="projects/:projectId/subjects/:subjectId"
             element={<SubjectPage />}
