@@ -56,6 +56,10 @@ export function Breadcrumbs() {
   if (params.studyId) {
     crumbs.push({ label: shortenId(params.studyId, 'Study') })
   }
+  // /projects/:id/settings — sub-route under the project crumb.
+  if (params.projectId && location.pathname.endsWith('/settings') && !params.subjectId) {
+    crumbs.push({ label: 'Settings' })
+  }
 
   // Profile / Agent top-level crumbs.
   if (location.pathname.startsWith('/profile')) {
