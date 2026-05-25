@@ -50,6 +50,28 @@ export function HomePage() {
 
       {error && <div className="aegis-error">Couldn't load projects: {error}</div>}
 
+      {/* Quick actions row — agent + profile. Visible to every authed user. */}
+      <section style={{ marginBottom: 24 }}>
+        <ul className="aegis-card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+          <li className="aegis-card">
+            <Link to="/agent" className="aegis-card-link">
+              <div className="aegis-card-title">🤖 Ask the agent</div>
+              <p className="aegis-card-desc">
+                Natural-language questions about studies, pipeline state, and routing.
+              </p>
+            </Link>
+          </li>
+          <li className="aegis-card">
+            <Link to="/profile/activity" className="aegis-card-link">
+              <div className="aegis-card-title">📜 Your activity</div>
+              <p className="aegis-card-desc">
+                Recent uploads, approvals, and shares attributed to you.
+              </p>
+            </Link>
+          </li>
+        </ul>
+      </section>
+
       <section className="aegis-home-projects">
         <div className="aegis-section-bar">
           <h2>Projects</h2>
