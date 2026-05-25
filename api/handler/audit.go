@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/middleware"
@@ -55,9 +56,25 @@ func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request) {
 		f.TenantID = t.ID
 	}
 	projectID := q.Get("project_id")
-	access, ok := s.requireResearcherProjectScope(w, r, projectID)
-	if !ok {
-		return
+
+	// Self-query relaxation. The /profile/activity page (and any future
+	// non-admin caller) needs to read its own audit entries via
+	// `?actor=<their-email>` without supplying a project_id. The actor
+	// filter naturally restricts the result set to the caller's own
+	// rows, so there's no cross-user data leak. Admins fall through to
+	// the normal scope check (which is a no-op for admins anyway).
+	user := middleware.UserFromContext(r.Context())
+	isSelfQuery := user != nil &&
+		f.Actor != "" &&
+		strings.EqualFold(strings.TrimSpace(f.Actor), user.Email)
+
+	var access *model.UserProjectAccess
+	if !isSelfQuery {
+		var ok bool
+		access, ok = s.requireResearcherProjectScope(w, r, projectID)
+		if !ok {
+			return
+		}
 	}
 	institutionID := ""
 	if access != nil && access.IsSiteScoped() {
