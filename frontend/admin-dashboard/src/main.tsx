@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { DashboardLayout } from './layout/DashboardLayout'
 import { AboutLayout } from './layout/AboutLayout'
 import { ProjectPage } from './pages/ProjectPage'
@@ -59,6 +59,15 @@ createRoot(document.getElementById('root')!).render(
               rest of the flow stays inside researcher chrome. */}
           <Route path="studies" element={<StudiesPage />} />
           <Route path="shares" element={<SharesPage />} />
+
+          {/* Legacy /admin/{studies,shares,agent} redirects. The admin-side
+              variants used to render their own duplicate views; the sidebar
+              now points everyone at the top-level researcher routes, so
+              keep the old URLs working for bookmarks and any in-flight
+              tabs/links rather than breaking them. */}
+          <Route path="admin/studies" element={<Navigate to="/studies" replace />} />
+          <Route path="admin/shares"  element={<Navigate to="/shares"  replace />} />
+          <Route path="admin/agent"   element={<Navigate to="/agent"   replace />} />
 
           {/* Admin tabs now live INSIDE the DashboardLayout so they share
               the researcher sidebar (Workspace / You / Operations / Configure
