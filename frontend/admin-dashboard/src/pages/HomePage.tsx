@@ -50,9 +50,25 @@ export function HomePage() {
 
       {error && <div className="aegis-error">Couldn't load projects: {error}</div>}
 
-      {/* Quick actions row — agent + profile. Visible to every authed user. */}
+      {/* Quick actions row — researcher entry points. Visible to every authed user. */}
       <section style={{ marginBottom: 24 }}>
-        <ul className="aegis-card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+        <ul className="aegis-card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
+          <li className="aegis-card">
+            <Link to="/studies" className="aegis-card-link">
+              <div className="aegis-card-title">📋 Studies</div>
+              <p className="aegis-card-desc">
+                Browse imaging studies you have access to across your projects.
+              </p>
+            </Link>
+          </li>
+          <li className="aegis-card">
+            <Link to="/shares" className="aegis-card-link">
+              <div className="aegis-card-title">🔗 Shares</div>
+              <p className="aegis-card-desc">
+                Outgoing share links you've created and their status.
+              </p>
+            </Link>
+          </li>
           <li className="aegis-card">
             <Link to="/agent" className="aegis-card-link">
               <div className="aegis-card-title">🤖 Ask the agent</div>

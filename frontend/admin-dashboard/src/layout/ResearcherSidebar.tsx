@@ -45,15 +45,17 @@ export function ResearcherSidebar() {
 
   return (
     <aside className="aegis-sidenav">
-      {/* Workspace group is the researcher-facing items — Home, plus
-          actions a non-admin researcher legitimately uses on their own.
-          Admin-only routes (Studies triage, Shares manager, etc.) live
-          in the Admin / Config groups below so a researcher who clicks
-          a Workspace item doesn't get bounced into the admin section. */}
+      {/* Workspace group: researcher-facing routes only. Studies + Shares
+          point at top-level /studies and /shares views (not /admin/*)
+          so non-admin users get a simpler browse experience that doesn't
+          bounce them into the admin triage panels. Admins still get the
+          richer admin views via the Operations group below. */}
       <div className="aegis-sidenav-group">
         <div className="aegis-sidenav-group-label">Workspace</div>
-        {item('Home',  '/',       '\u{1F3E0}')}
-        {item('Agent', '/agent',  '\u{1F916}')}
+        {item('Home',    '/',        '\u{1F3E0}')}
+        {item('Studies', '/studies', '\u{1F4CB}')}
+        {item('Shares',  '/shares',  '\u{1F517}')}
+        {item('Agent',   '/agent',   '\u{1F916}')}
       </div>
 
       <div className="aegis-sidenav-group">
