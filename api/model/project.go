@@ -107,10 +107,17 @@ func SetProjectRestricted(ctx context.Context, db *sql.DB, projectID string, res
 	return err
 }
 
+// GetProjectBySlug looks up a project by slug, case-insensitively. The
+// canonical form stored in the DB is lower-case (enforced at create
+// time), but callers — the importer, upload handler, TCIA import, the
+// admin UI's project picker — pass through user-supplied input that
+// may have been Title-cased or otherwise normalized differently. A
+// LOWER() match keeps the lookup robust without changing storage
+// semantics.
 func GetProjectBySlug(ctx context.Context, db *sql.DB, slug string) (*Project, error) {
 	var p Project
 	err := scanProject(db.QueryRowContext(ctx,
-		`SELECT `+projectColumns+` FROM projects WHERE slug = $1`, slug), &p)
+		`SELECT `+projectColumns+` FROM projects WHERE LOWER(slug) = LOWER($1)`, slug), &p)
 	if err != nil {
 		return nil, err
 	}
