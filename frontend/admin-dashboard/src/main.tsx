@@ -59,10 +59,18 @@ createRoot(document.getElementById('root')!).render(
               rest of the flow stays inside researcher chrome. */}
           <Route path="studies" element={<StudiesPage />} />
           <Route path="shares" element={<SharesPage />} />
-        </Route>
 
-        {/* Existing 18-tab admin experience under /admin/*. */}
-        <Route path="/admin/*" element={<AdminApp />} />
+          {/* Admin tabs now live INSIDE the DashboardLayout so they share
+              the researcher sidebar (Workspace / You / Operations / Configure
+              / Admin groups in ResearcherSidebar). This is the architectural
+              fix for the long-running "click admin nav → URL updates but
+              content stays blank/stale" bug: the sidebar stays mounted
+              across admin tab clicks, only App remounts via the key in
+              AdminApp. Crossing the DashboardLayout ↔ AdminApp subtree
+              boundary used to silently no-op clicks; now there is no
+              boundary to cross. */}
+          <Route path="admin/*" element={<AdminApp />} />
+        </Route>
 
         {/* Anything unmatched falls back to the auth-aware root. */}
         <Route path="*" element={<DashboardLayout />}>
