@@ -81,9 +81,16 @@ type StudyGroup struct {
 	BodyPart         string
 	StudyDescription string
 	StudyDate        string
-	SeriesUIDs       map[string]bool
-	SeriesMeta       map[string]*SeriesInfo // keyed by SeriesInstanceUID
-	Files            []string               // absolute file paths
+	// PatientID is the DICOM (0010,0020) tag — for de-identified inputs
+	// (TCIA, anonymized DIMSE, etc.) this is the per-subject pseudonym
+	// that lets us group studies under a researcher-meaningful subject
+	// (e.g. "UPENN-GBM-0001"). Stored as study.subject_id so the
+	// researcher Studies page can render a real subject column and
+	// link into /projects/:p/subjects/:s/studies/:study.
+	PatientID  string
+	SeriesUIDs map[string]bool
+	SeriesMeta map[string]*SeriesInfo // keyed by SeriesInstanceUID
+	Files      []string               // absolute file paths
 }
 
 // Run executes the batch import.
@@ -292,7 +299,7 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 
 		result.FilesScanned++
 
-		studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate, parseErr := parseDICOMHeaders(path)
+		studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate, patientID, parseErr := parseDICOMHeaders(path)
 		if parseErr != nil {
 			result.FilesSkipped++
 			result.Errors = append(result.Errors, fmt.Sprintf("parse %s: %v", filepath.Base(path), parseErr))
@@ -307,10 +314,18 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 				BodyPart:         strings.ToUpper(bodyPart),
 				StudyDescription: studyDesc,
 				StudyDate:        studyDate,
+				PatientID:        patientID,
 				SeriesUIDs:       make(map[string]bool),
 				SeriesMeta:       make(map[string]*SeriesInfo),
 			}
 			groups[studyUID] = g
+		}
+		// First non-empty PatientID wins: TCIA bundles can include a few
+		// pre-anon files with empty (0010,0020) interspersed with the
+		// real per-subject ID, and we don't want a stray empty later
+		// in the walk to clobber the value we already captured.
+		if g.PatientID == "" && patientID != "" {
+			g.PatientID = patientID
 		}
 		g.Files = append(g.Files, path)
 		if seriesUID != "" {
@@ -334,10 +349,10 @@ func scanDirectory(dir string) (map[string]*StudyGroup, *Result, error) {
 }
 
 // parseDICOMHeaders extracts key tags from a DICOM file without loading pixel data.
-func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate string, err error) {
+func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate, patientID string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", "", "", "", "", "", fmt.Errorf("open: %w", err)
+		return "", "", "", "", "", "", "", "", fmt.Errorf("open: %w", err)
 	}
 	defer f.Close()
 
@@ -347,7 +362,7 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 	// io.ReadAll always returns actual bytes regardless of metadata.
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return "", "", "", "", "", "", "", fmt.Errorf("read: %w", err)
+		return "", "", "", "", "", "", "", "", fmt.Errorf("read: %w", err)
 	}
 
 	dataset, err := dicom.Parse(bytes.NewReader(data), int64(len(data)), nil,
@@ -358,7 +373,7 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 		dicom.AllowMissingMetaElementGroupLength(),
 	)
 	if err != nil {
-		return "", "", "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
+		return "", "", "", "", "", "", "", "", fmt.Errorf("parse DICOM: %w", err)
 	}
 
 	studyUID = getStringTag(dataset, tag.StudyInstanceUID)
@@ -368,11 +383,12 @@ func parseDICOMHeaders(path string) (studyUID, modality, bodyPart, studyDesc, se
 	seriesUID = getStringTag(dataset, tag.SeriesInstanceUID)
 	seriesDesc = getStringTag(dataset, tag.SeriesDescription)
 	studyDate = getStringTag(dataset, tag.StudyDate)
+	patientID = getStringTag(dataset, tag.PatientID)
 
 	if studyUID == "" {
-		return "", "", "", "", "", "", "", fmt.Errorf("missing StudyInstanceUID")
+		return "", "", "", "", "", "", "", "", fmt.Errorf("missing StudyInstanceUID")
 	}
-	return studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate, nil
+	return studyUID, modality, bodyPart, studyDesc, seriesUID, seriesDesc, studyDate, patientID, nil
 }
 
 // getStringTag extracts a string value from a DICOM dataset element.
@@ -446,6 +462,11 @@ func importStudy(ctx context.Context, db *sql.DB, store storage.Storage, project
 		DefacingRequired: defacingRequired,
 		DicomStore:       "raw",
 		Source:           opts.Source,
+	}
+
+	if g.PatientID != "" {
+		pid := g.PatientID
+		study.SubjectID = &pid
 	}
 
 	// Set institution if provided.

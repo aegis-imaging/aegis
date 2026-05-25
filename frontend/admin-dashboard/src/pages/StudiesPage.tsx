@@ -31,6 +31,21 @@ type StudyRow = {
 
 const PAGE_SIZE = 50
 
+// Format a DICOM study date. The importer stores study_date verbatim as
+// captured from DICOM (0008,0020), which is the 8-digit YYYYMMDD form —
+// `new Date('20240115')` returns Invalid Date in every browser, so parse
+// it explicitly. Returns "—" for empty/unparseable input.
+function formatStudyDate(raw?: string): string {
+  if (!raw) return '—'
+  const ymd = raw.match(/^(\d{4})(\d{2})(\d{2})$/)
+  if (ymd) {
+    const [, y, m, d] = ymd
+    return new Date(`${y}-${m}-${d}T00:00:00Z`).toLocaleDateString()
+  }
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleDateString()
+}
+
 export function StudiesPage() {
   const [rows, setRows] = useState<StudyRow[] | null>(null)
   const [total, setTotal] = useState(0)
@@ -131,13 +146,15 @@ export function StudiesPage() {
                 </thead>
                 <tbody>
                   {rows.map(s => {
-                    const target = s.subject_id
-                      ? `/projects/${s.project_id}/subjects/${s.subject_id}/studies/${s.id}`
-                      : null
+                    // StudyPage at /projects/:p/subjects/:s/studies/:study
+                    // doesn't actually use the subject param (it redirects to
+                    // /admin/studies?study_id=…), so a placeholder lets us
+                    // keep every row clickable even for studies imported
+                    // before the importer started capturing PatientID.
+                    const subjectSeg = s.subject_id || 'unknown'
+                    const target = `/projects/${s.project_id}/subjects/${encodeURIComponent(subjectSeg)}/studies/${s.id}`
                     const cell = (content: React.ReactNode) =>
-                      target
-                        ? <Link to={target} style={{ color: 'inherit', textDecoration: 'none' }}>{content}</Link>
-                        : content
+                      <Link to={target} style={{ color: 'inherit', textDecoration: 'none' }}>{content}</Link>
                     return (
                       <tr key={s.id}>
                         <td>
@@ -154,7 +171,7 @@ export function StudiesPage() {
                         </td>
                         <td>{cell(s.modality || '—')}</td>
                         <td>{cell(s.body_part || '—')}</td>
-                        <td>{cell(s.study_date ? new Date(s.study_date).toLocaleDateString() : '—')}</td>
+                        <td>{cell(formatStudyDate(s.study_date))}</td>
                         <td>{cell(<span className="aegis-pill">{s.status}</span>)}</td>
                         <td>{cell(s.instance_count.toLocaleString())}</td>
                       </tr>
