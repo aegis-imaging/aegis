@@ -425,6 +425,7 @@ func (s *Server) EmailDesktopInstallerInvite(w http.ResponseWriter, r *http.Requ
 		RecipientEmail string `json:"recipient_email"`
 		RecipientName  string `json:"recipient_name"`
 		ExpiryDays     int    `json:"expiry_days"`
+		InstitutionID  string `json:"institution_id"` // optional — when set, the invite shows up in the per-institution detail panel
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid JSON")
@@ -438,9 +439,22 @@ func (s *Server) EmailDesktopInstallerInvite(w http.ResponseWriter, r *http.Requ
 	if req.ExpiryDays <= 0 || req.ExpiryDays > 90 {
 		req.ExpiryDays = 7
 	}
+	req.InstitutionID = strings.TrimSpace(req.InstitutionID)
+	if req.InstitutionID != "" {
+		// Validate up front so a typo doesn't produce a 500 from the FK violation.
+		if _, err := model.GetInstitutionByID(r.Context(), s.db, req.InstitutionID); err != nil {
+			if err == sql.ErrNoRows {
+				s.writeError(w, http.StatusBadRequest, "institution_id does not match a known institution")
+				return
+			}
+			s.writeError(w, http.StatusInternalServerError, "institution lookup failed")
+			return
+		}
+	}
 
 	inv, err := model.CreateDesktopInstallerInvite(r.Context(), s.db, model.CreateDesktopInstallerInviteInput{
 		InstallerID:    inst.ID,
+		InstitutionID:  req.InstitutionID,
 		RecipientEmail: req.RecipientEmail,
 		RecipientName:  req.RecipientName,
 		ExpiresAt:      time.Now().UTC().Add(time.Duration(req.ExpiryDays) * 24 * time.Hour),
@@ -483,6 +497,37 @@ func (s *Server) ListDesktopInstallerInvites(w http.ResponseWriter, r *http.Requ
 	out, err := model.ListDesktopInstallerInvites(r.Context(), s.db, 100)
 	if err != nil {
 		log.Printf("list installer invites: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to list invites")
+		return
+	}
+	if out == nil {
+		out = []model.DesktopInstallerInvite{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"invites": out})
+}
+
+// ListInstitutionInstallerInvites GET /api/institutions/{id}/installer-invites
+//
+// Returns recent invites tied to one institution. Used by the per-institution
+// detail panel to show "browser/desktop install invitations" alongside the
+// satellite list and (soon) the browser upload allowlist.
+func (s *Server) ListInstitutionInstallerInvites(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		s.writeError(w, http.StatusBadRequest, "institution id required")
+		return
+	}
+	if _, err := model.GetInstitutionByID(r.Context(), s.db, id); err != nil {
+		if err == sql.ErrNoRows {
+			s.writeError(w, http.StatusNotFound, "institution not found")
+			return
+		}
+		s.writeError(w, http.StatusInternalServerError, "institution lookup failed")
+		return
+	}
+	out, err := model.ListDesktopInstallerInvitesByInstitution(r.Context(), s.db, id, 100)
+	if err != nil {
+		log.Printf("list institution installer invites %s: %v", id, err)
 		s.writeError(w, http.StatusInternalServerError, "failed to list invites")
 		return
 	}

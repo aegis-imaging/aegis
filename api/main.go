@@ -380,6 +380,7 @@ func main() {
 	mux.HandleFunc("GET /api/institutions/{id}/sla", auth(srv.GetInstitutionSLA))
 	mux.HandleFunc("PUT /api/institutions/{id}", adminOnly(srv.UpdateInstitution))
 	mux.HandleFunc("DELETE /api/institutions/{id}", adminOnly(srv.DeleteInstitution))
+	mux.HandleFunc("GET /api/institutions/{id}/installer-invites", auth(srv.ListInstitutionInstallerInvites))
 	mux.HandleFunc("GET /api/institutions/{id}/projects", auth(srv.ListInstitutionProjects))
 	mux.HandleFunc("POST /api/institutions/{id}/projects", adminOnly(srv.AddInstitutionProject))
 	mux.HandleFunc("DELETE /api/institutions/{id}/projects/{projectID}", adminOnly(srv.RemoveInstitutionProject))

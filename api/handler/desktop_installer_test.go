@@ -300,3 +300,88 @@ func TestPairDesktopInstaller_HappyPath(t *testing.T) {
 	srv.PairDesktopInstaller(rr2, req2)
 	assert.Equal(t, http.StatusGone, rr2.Code, "pairing token is single-use")
 }
+
+// TestCreateInvite_WithInstitutionID exercises the new institution_id link:
+// when an admin emails an invite tied to an institution, the row stores the
+// institution_id and the per-institution list returns it.
+func TestCreateInvite_WithInstitutionID(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	id := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+	inst := testutil.CreateTestInstitution(t, db, "uchicago")
+
+	inv, err := model.CreateDesktopInstallerInvite(t.Context(), db, model.CreateDesktopInstallerInviteInput{
+		InstallerID:    id,
+		InstitutionID:  inst.ID,
+		RecipientEmail: "site-admin@uchicago.edu",
+		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour),
+		SentBy:         "admin@example.com",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, inv.InstitutionID)
+	assert.Equal(t, inst.ID, *inv.InstitutionID)
+
+	// Per-institution handler returns this invite.
+	req := httptest.NewRequest("GET", "/api/institutions/"+inst.ID+"/installer-invites", nil)
+	req.SetPathValue("id", inst.ID)
+	rr := httptest.NewRecorder()
+	srv.ListInstitutionInstallerInvites(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	var out struct {
+		Invites []model.DesktopInstallerInvite `json:"invites"`
+	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&out))
+	require.Len(t, out.Invites, 1)
+	assert.Equal(t, inv.ID, out.Invites[0].ID)
+	require.NotNil(t, out.Invites[0].InstitutionName)
+	assert.Equal(t, inst.Name, *out.Invites[0].InstitutionName,
+		"per-institution listing must join the institution name for display")
+}
+
+// TestCreateInvite_WithoutInstitutionID — back-compat: existing invites that
+// don't name an institution still work and don't appear in any
+// per-institution listing.
+func TestCreateInvite_WithoutInstitutionID(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	id := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+	inst := testutil.CreateTestInstitution(t, db, "unrelated-inst")
+
+	inv, err := model.CreateDesktopInstallerInvite(t.Context(), db, model.CreateDesktopInstallerInviteInput{
+		InstallerID:    id,
+		RecipientEmail: "global@example.com",
+		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour),
+		SentBy:         "admin@example.com",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, inv.InstitutionID, "back-compat: institution-less invites store NULL")
+
+	// Per-institution listing for a different institution does not surface it.
+	req := httptest.NewRequest("GET", "/api/institutions/"+inst.ID+"/installer-invites", nil)
+	req.SetPathValue("id", inst.ID)
+	rr := httptest.NewRecorder()
+	srv.ListInstitutionInstallerInvites(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+	var out struct {
+		Invites []model.DesktopInstallerInvite `json:"invites"`
+	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&out))
+	assert.Empty(t, out.Invites,
+		"an institution should only see invites that name it (not all global invites)")
+}
+
+// TestListInstitutionInstallerInvites_UnknownInstitution returns 404 instead
+// of leaking via an empty list — keeps the surface predictable for the UI.
+func TestListInstitutionInstallerInvites_UnknownInstitution(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	req := httptest.NewRequest("GET", "/api/institutions/00000000-0000-0000-0000-000000000000/installer-invites", nil)
+	req.SetPathValue("id", "00000000-0000-0000-0000-000000000000")
+	rr := httptest.NewRecorder()
+	srv.ListInstitutionInstallerInvites(rr, req)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
