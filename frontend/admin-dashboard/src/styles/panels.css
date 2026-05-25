@@ -1,66 +1,4 @@
 /* ── Layout ──────────────────────────────────────────────────────────────── */
-.admin-root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 32px 24px;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-}
-
-.header h1 {
-  margin: 0 0 4px;
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.header p {
-  margin: 0;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.tz-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tz-label {
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.tz-select,
-.tz-input {
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  font-size: 13px;
-  background: #fff;
-  color: #111827;
-}
-
-.tz-input {
-  min-width: 180px;
-}
 
 .tz-warning {
   color: #b45309;
@@ -80,21 +18,7 @@
   font-weight: 500;
 }
 
-.auth-user-badge {
-  font-size: 13px;
-  color: #374151;
-  background: #f3f4f6;
-  padding: 4px 10px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
 /* ── Stats bar ───────────────────────────────────────────────────────────── */
-.stats-bar {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
-}
 
 .stat-card {
   padding: 12px 20px;
@@ -146,55 +70,31 @@
 }
 
 /* Status badges */
-.badge--received { background: #dbeafe; color: #1d4ed8; }
-.badge--defacing { background: #fef9c3; color: #854d0e; }
-.badge--clean    { background: #fef3c7; color: #92400e; }
+
 .badge--approved { background: #ccfbf1; color: #0f766e; }
 .badge--rejected { background: #ffedd5; color: #9a3412; }
 
 /* Source badges */
-.badge--external { background: #dbeafe; color: #1e40af; }
-.badge--internal { background: #f3e8ff; color: #6b21a8; }
 
 /* PHI scan badges */
 .badge--pending  { background: #f3f4f6; color: #6b7280; }
 .badge--scanning { background: #fef9c3; color: #854d0e; }
-.badge--phi-clean    { background: #ccfbf1; color: #0f766e; }
+
 .badge--flagged  { background: #ffedd5; color: #9a3412; }
-.badge--failed   { background: #fef3c7; color: #92400e; }
 
 /* QC check badges */
-.badge--checking { background: #fef9c3; color: #854d0e; }
-.badge--qc-pass  { background: #ccfbf1; color: #0f766e; }
+
 .badge--warn     { background: #fef3c7; color: #92400e; }
-.badge--fail     { background: #ffedd5; color: #9a3412; }
 
 /* BIDS conversion badges */
-.badge--converting    { background: #dbeafe; color: #1e40af; }
-.badge--bids-complete { background: #ccfbf1; color: #0f766e; }
 
 /* Classification badges */
-.badge--classifying         { background: #fef9c3; color: #854d0e; }
-.badge--classify-classified { background: #ccfbf1; color: #0f766e; }
 
 /* Protocol compliance badges */
-.badge--checking                  { background: #dbeafe; color: #1e40af; }
-.badge--protocol-compliant        { background: #ccfbf1; color: #0f766e; }
-.badge--protocol-minor_deviations { background: #fef3c7; color: #92400e; }
-.badge--protocol-non_compliant    { background: #ffedd5; color: #9a3412; }
 
 /* Export status badges */
-.badge--export-pending   { background: #dbeafe; color: #1e40af; }
-.badge--export-exporting { background: #fef3c7; color: #92400e; }
-.badge--export-exported  { background: #ccfbf1; color: #0f766e; }
-.badge--export-failed    { background: #ffedd5; color: #9a3412; }
 
 /* Analytics status badges */
-.badge--analytics-complete  { background: #ccfbf1; color: #0f766e; }
-.badge--analytics-partial   { background: #fef3c7; color: #92400e; }
-.badge--analytics-analyzing { background: #dbeafe; color: #1e40af; }
-.badge--analytics-pending   { background: #f3f4f6; color: #6b7280; }
-.badge--analytics-failed    { background: #ffedd5; color: #9a3412; }
 
 /* Status badges (generic) */
 .status-badge {
@@ -205,9 +105,6 @@
   font-size: 12px;
   font-weight: 600;
 }
-
-.status-badge--clean { background: #ccfbf1; color: #0f766e; }
-.status-badge--failed { background: #ffedd5; color: #9a3412; }
 
 /* ── Pipeline stats banner ───────────────────────────────────────────────── */
 .stats-banner {
@@ -235,22 +132,12 @@
 
 .stats-pill:hover { opacity: 0.85; }
 
-.stats-pill--active {
-  box-shadow: 0 0 0 2px currentColor;
-}
-
 .stats-pill__count {
   font-weight: 700;
   font-size: 13px;
 }
 
 /* Per-status tints */
-.stats-pill--received  { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-.stats-pill--defacing  { background: #fefce8; color: #854d0e; border-color: #fef08a; }
-.stats-pill--clean     { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
-.stats-pill--defaced   { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
-.stats-pill--approved  { background: #ccfbf1; color: #0f766e; border-color: #5eead4; }
-.stats-pill--rejected  { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
 
 .stats-banner__sep {
   width: 1px;
@@ -453,15 +340,6 @@
   padding: 0;
 }
 
-.btn-refresh {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  cursor: pointer;
-  font-size: 14px;
-}
-
 .btn-copy {
   padding: 6px 12px;
   border-radius: 6px;
@@ -622,10 +500,6 @@
 
 .share-row--inactive { opacity: 0.6; }
 
-.share-status--active   { color: #0f766e; font-weight: 600; }
-.share-status--expired  { color: #92400e; font-weight: 600; }
-.share-status--revoked  { color: #9a3412; font-weight: 600; }
-
 .shares-empty {
   color: #9ca3af;
   font-size: 13px;
@@ -653,7 +527,6 @@
   font-weight: 600;
   color: #c4b5fd;
 }
-
 
 .viewer-panel-actions {
   display: flex;
@@ -710,12 +583,6 @@
   color: #9ca3af;
   cursor: pointer;
   letter-spacing: 0.02em;
-}
-
-.deface-yoke-btn--on {
-  background: #0f3a35;
-  border-color: #0d9488;
-  color: #5eead4;
 }
 
 .deface-panel-title {
@@ -819,12 +686,6 @@
 }
 
 /* ── Tab nav ─────────────────────────────────────────────────────────────── */
-.tab-nav {
-  display: flex;
-  gap: 4px;
-  border-bottom: 2px solid #e5e7eb;
-  margin-bottom: 24px;
-}
 
 .tab-btn {
   padding: 8px 20px;
@@ -841,12 +702,6 @@
 
 .tab-btn:hover {
   color: #374151;
-}
-
-.tab-btn--active {
-  color: #2563eb;
-  border-bottom-color: #2563eb;
-  font-weight: 600;
 }
 
 /* ── Audit log ───────────────────────────────────────────────────────────── */
@@ -884,12 +739,6 @@
 
 .audit-filter-btn:hover {
   border-color: #9ca3af;
-}
-
-.audit-filter-btn--active {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #fff;
 }
 
 .audit-table-wrap {
@@ -931,41 +780,9 @@
   white-space: nowrap;
 }
 
-.audit-action {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.audit-action--upload       { background: #dbeafe; color: #1d4ed8; }
-.audit-action--study-ok     { background: #ccfbf1; color: #0f766e; }
-.audit-action--study-err    { background: #ffedd5; color: #9a3412; }
-.audit-action--share        { background: #ede9fe; color: #5b21b6; }
-.audit-action--share-revoked{ background: #f3f4f6; color: #6b7280; }
-.audit-action--deface       { background: #fef9c3; color: #854d0e; }
-.audit-action--deface-err   { background: #ffedd5; color: #9a3412; }
-.audit-action--neutral      { background: #f3f4f6; color: #374151; }
-
 .audit-actor {
   color: #374151;
   font-weight: 500;
-}
-
-.audit-resource {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.audit-resource-type {
-  font-size: 11px;
-  color: #9ca3af;
-  background: #f3f4f6;
-  padding: 1px 6px;
-  border-radius: 4px;
 }
 
 .audit-resource-id {
@@ -974,49 +791,11 @@
   color: #374151;
 }
 
-.audit-ip {
-  font-family: monospace;
-  font-size: 11px;
-  color: #9ca3af;
-}
-
-.audit-detail-toggle {
-  padding: 2px 8px;
-  border-radius: 4px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  cursor: pointer;
-  font-size: 11px;
-  color: #6b7280;
-}
-
 .audit-no-detail {
   color: #d1d5db;
 }
 
-.audit-detail-row td {
-  padding: 0 12px 8px;
-  border-bottom: 1px solid #f3f4f6;
-}
-
-.audit-detail-pre {
-  margin: 0;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #374151;
-  overflow-x: auto;
-}
-
 /* ── Routing Panel ───────────────────────────────────────────────────────── */
-.routing-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 40px;
-  margin-top: 8px;
-}
 
 .routing-section {}
 
@@ -1159,23 +938,9 @@
   font-weight: 600;
 }
 
-.routing-action--route_to          { background: #dbeafe; color: #1d4ed8; }
-.routing-action--require_defacing  { background: #fef9c3; color: #854d0e; }
-.routing-action--auto_approve      { background: #ccfbf1; color: #0f766e; }
-.routing-action--require_qa        { background: #f3f4f6; color: #374151; }
-.routing-action--require_qc_check  { background: #e0e7ff; color: #3730a3; }
-.routing-action--require_bids_conversion   { background: #f5f3ff; color: #6d28d9; }
-.routing-action--require_classification   { background: #fef3c7; color: #92400e; }
-.routing-action--reject            { background: #ffedd5; color: #9a3412; }
-
 .badge--enabled  { background: #ccfbf1; color: #0f766e; }
-.badge--disabled { background: #f3f4f6; color: #9ca3af; }
 
 /* Institution type action colours */
-.routing-action--sender   { background: #dbeafe; color: #1d4ed8; }
-.routing-action--receiver { background: #f3e8ff; color: #6b21a8; }
-.routing-action--both     { background: #fef9c3; color: #854d0e; }
-.routing-action--admin    { background: #ffedd5; color: #9a3412; }
 
 /* ── Institutions Panel ───────────────────────────────────────────────────── */
 .institutions-panel {
@@ -1187,12 +952,6 @@
 
 .inst-row--selected {
   background: #eff6ff;
-}
-
-.inst-slug {
-  font-size: 10px;
-  color: #9ca3af;
-  background: transparent;
 }
 
 .inst-projects-panel {
@@ -1466,9 +1225,7 @@
 .btn-copy-uid--copied {
   opacity: 1;
 }
-.btn-copy-uid--copied {
-  color: #0d9488;
-}
+
 .btn-copy-uid:hover {
   color: #6b7280;
 }
@@ -1487,11 +1244,6 @@
 }
 .btn--toggle-desc {
   font-size: 12px;
-}
-.btn--toggle-desc--on {
-  background: #f0fdf4;
-  border-color: #86efac;
-  color: #166534;
 }
 
 .routing-section-title {
@@ -1614,15 +1366,9 @@
   color: #cbd5e1;
   cursor: default;
 }
-.btn-flag--on {
-  color: #f59e0b;
-}
+
 .btn-flag:hover {
   color: #f59e0b;
-}
-
-.tr--flagged td {
-  background: #fffbeb;
 }
 
 .filter-flagged-label {
@@ -1646,21 +1392,6 @@
   padding: 14px 16px;
   margin-bottom: 16px;
   background: #f9fafb;
-}
-
-.diagnostics-summary--stuck {
-  border-color: #fbbf24;
-  background: #fffbeb;
-}
-
-.diagnostics-summary--terminal {
-  border-color: #d1d5db;
-  background: #f3f4f6;
-}
-
-.diagnostics-summary--ok {
-  border-color: #5eead4;
-  background: #f0fdfa;
 }
 
 .diagnostics-summary__status {
@@ -1697,125 +1428,6 @@
 .diag-badge--terminal { background: #e5e7eb; color: #374151; }
 
 /* ── Quick-search palette ───────────────────────────────────────────────── */
-.btn-palette-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #64748b;
-  cursor: pointer;
-  transition: border-color .15s, background .15s;
-}
-.btn-palette-trigger:hover { background: #f1f5f9; border-color: #cbd5e1; }
-.btn-palette-trigger kbd {
-  font-size: 11px;
-  background: #e2e8f0;
-  border-radius: 3px;
-  padding: 1px 5px;
-  color: #475569;
-  font-family: inherit;
-}
-
-.palette-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15,23,42,.45);
-  z-index: 1000;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 100px;
-}
-.palette-modal {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 24px 60px rgba(0,0,0,.25);
-  width: 560px;
-  max-width: calc(100vw - 32px);
-  overflow: hidden;
-}
-.palette-search-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid #e2e8f0;
-}
-.palette-search-icon {
-  font-size: 18px;
-  color: #94a3b8;
-  line-height: 1;
-}
-.palette-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  font-size: 15px;
-  color: #0f172a;
-  background: transparent;
-}
-.palette-esc-hint {
-  font-size: 11px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  padding: 2px 6px;
-  color: #64748b;
-  font-family: inherit;
-}
-.palette-results {
-  list-style: none;
-  margin: 0;
-  padding: 6px 0;
-  max-height: 380px;
-  overflow-y: auto;
-}
-.palette-group-label {
-  padding: 4px 16px 2px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: #94a3b8;
-}
-.palette-result {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 16px;
-  cursor: pointer;
-  transition: background .1s;
-}
-.palette-result:hover,
-.palette-result--active { background: #eff6ff; }
-.palette-result__icon { font-size: 15px; width: 20px; text-align: center; }
-.palette-result__label { flex: 1; font-size: 14px; color: #1e293b; font-weight: 500; }
-.palette-result__sub { font-size: 12px; color: #64748b; }
-.palette-empty {
-  padding: 18px 16px;
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-}
-.palette-footer {
-  display: flex;
-  gap: 16px;
-  padding: 10px 16px;
-  border-top: 1px solid #f1f5f9;
-  font-size: 11px;
-  color: #94a3b8;
-}
-.palette-footer kbd {
-  background: #f1f5f9;
-  border-radius: 3px;
-  padding: 1px 5px;
-  font-family: inherit;
-  color: #475569;
-}
 
 .diag-last-action {
   font-size: 13px;
@@ -1839,18 +1451,6 @@
 }
 
 /* ── SLA stuck badge (Studies tab) ─────────────────────────────────────── */
-.tab-stuck-badge {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  background: #ea580c;
-  color: #fff;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  vertical-align: middle;
-  line-height: 1.6;
-}
 
 /* ── Pipeline Re-run button ─────────────────────────────────────────────── */
 .btn--rerun {
@@ -1920,9 +1520,6 @@
   font-weight: 600;
   font-size: 0.85em;
 }
-.deface-qa-score--good { background: #ccfbf1; color: #0f766e; }
-.deface-qa-score--warn { background: #fef3c7; color: #92400e; }
-.deface-qa-score--poor { background: #ffedd5; color: #9a3412; }
 
 /* ── DICOM Tag Inspection Panel ──────────────────────────────────────────── */
 .dicom-tags-panel {
@@ -2087,12 +1684,6 @@
   color: #0f766e;
 }
 
-.agent-prompt-chip--active {
-  background: #ccfbf1;
-  border-color: #0d9488;
-  color: #0f766e;
-  font-weight: 500;
-}
 .dicom-tags-table td.dicom-tag-value {
   max-width: 320px;
   overflow: hidden;
