@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,8 @@ type ImportProgress = {
   error?: string
   studies_created?: number
   study_ids?: string[]
+  project_id?: string
+  project_name?: string
 }
 
 type Project = {
@@ -110,11 +113,18 @@ export function TCIAPanel() {
     const toImport = series.filter(s => selected.has(s.series_uid))
     if (toImport.length === 0) return
 
+    // Capture destination project up front. We snapshot the id (not the
+    // slug) because the slug→id mapping at link-render time could drift
+    // if the project list refetches mid-import; the id is stable.
+    const destProject = projects.find(p => p.slug === projectSlug) ?? null
+
     setImporting(true)
     setProgress(toImport.map(s => ({
       series_uid: s.series_uid,
       description: s.description || s.modality || s.series_uid.slice(-12),
       status: 'pending',
+      project_id: destProject?.id,
+      project_name: destProject?.name,
     })))
 
     for (const item of toImport) {
@@ -316,7 +326,14 @@ export function TCIAPanel() {
       {/* Import progress */}
       {progress.length > 0 && (
         <div className="tcia-progress">
-          <h3>Import progress</h3>
+          <h3>
+            Import progress
+            {progress[0]?.project_name && (
+              <span className="aegis-muted" style={{ fontSize: 13, fontWeight: 'normal', marginLeft: 8 }}>
+                → {progress[0].project_name}
+              </span>
+            )}
+          </h3>
           <table className="table tcia-table">
             <thead>
               <tr>
@@ -345,10 +362,29 @@ export function TCIAPanel() {
                   </td>
                   <td>
                     {p.status === 'done' && (
-                      <span>
-                        {p.studies_created ?? 0} {(p.studies_created ?? 0) === 1 ? 'study' : 'studies'} imported
-                        {(p.studies_created ?? 0) === 0 && ' (duplicate — already in AEGIS)'}
-                      </span>
+                      <>
+                        <div>
+                          {p.studies_created ?? 0} {(p.studies_created ?? 0) === 1 ? 'study' : 'studies'} imported
+                          {(p.studies_created ?? 0) === 0 && ' (duplicate — already in AEGIS)'}
+                        </div>
+                        {/* Clickable per-study links. StudyPage redirects to
+                            /admin/studies?study_id=… and ignores the subject
+                            segment, so the 'unknown' placeholder is safe for
+                            TCIA studies before their PatientID is shown. */}
+                        {p.project_id && p.study_ids && p.study_ids.length > 0 && (
+                          <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {p.study_ids.map((sid, i) => (
+                              <Link
+                                key={sid}
+                                to={`/projects/${p.project_id}/subjects/unknown/studies/${sid}`}
+                                style={{ fontSize: 12 }}
+                              >
+                                Open study {p.study_ids!.length > 1 ? i + 1 : ''}→
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                     {p.status === 'error' && (
                       <span className="tcia-error-text">{p.error}</span>
@@ -358,6 +394,17 @@ export function TCIAPanel() {
               ))}
             </tbody>
           </table>
+
+          {/* Bulk "go look at them" CTA — visible once at least one import
+              landed, so the user has a one-click path off the TCIA panel
+              into the Studies list filtered by the destination project. */}
+          {progress.some(p => p.status === 'done' && (p.studies_created ?? 0) > 0) && (
+            <div style={{ marginTop: 12 }}>
+              <Link to="/studies" className="aegis-btn-secondary">
+                View in Studies →
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
