@@ -103,24 +103,11 @@ jobs:
           - service: defacing
             context: defacing
             dockerfile: defacing/Dockerfile
-          - service: phi-detection
-            context: phi-detection
-            dockerfile: phi-detection/Dockerfile
-          - service: qc-service
-            context: qc-service
-            dockerfile: qc-service/Dockerfile
-          - service: bids-service
-            context: bids-service
-            dockerfile: bids-service/Dockerfile
-          - service: classification-service
-            context: classification-service
-            dockerfile: classification-service/Dockerfile
-          - service: protocol-service
-            context: protocol-service
-            dockerfile: protocol-service/Dockerfile
-          - service: synth-service
-            context: synth-service
-            dockerfile: synth-service/Dockerfile
+          # dicom-tools consolidates the six former lightweight sidecars
+          # into one image. See PR #530.
+          - service: dicom-tools
+            context: dicom-tools
+            dockerfile: dicom-tools/Dockerfile
           - service: analytics-service
             context: analytics-service
             dockerfile: analytics-service/Dockerfile
@@ -259,40 +246,10 @@ jobs:
             --image="$REPO/defacing:$IMAGE_TAG" \
             --region="$REGION" --project="$PROJECT_ID" --quiet
 
-      - name: Deploy — phi-detection
+      - name: Deploy — dicom-tools
         run: |
-          gcloud run deploy phi-detection \
-            --image="$REPO/phi-detection:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
-
-      - name: Deploy — qc-service
-        run: |
-          gcloud run deploy qc-service \
-            --image="$REPO/qc-service:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
-
-      - name: Deploy — bids-service
-        run: |
-          gcloud run deploy bids-service \
-            --image="$REPO/bids-service:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
-
-      - name: Deploy — classification-service
-        run: |
-          gcloud run deploy classification-service \
-            --image="$REPO/classification-service:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
-
-      - name: Deploy — protocol-service
-        run: |
-          gcloud run deploy protocol-service \
-            --image="$REPO/protocol-service:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
-
-      - name: Deploy — synth-service
-        run: |
-          gcloud run deploy synth-service \
-            --image="$REPO/synth-service:$IMAGE_TAG" \
+          gcloud run deploy dicom-tools \
+            --image="$REPO/dicom-tools:$IMAGE_TAG" \
             --region="$REGION" --project="$PROJECT_ID" --quiet
 
       - name: Deploy — analytics-service
