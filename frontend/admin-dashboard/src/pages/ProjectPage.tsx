@@ -92,8 +92,23 @@ export function ProjectPage() {
   return (
     <div className="aegis-project">
       <header className="aegis-page-header">
-        <h1>{project?.name ?? 'Project'}</h1>
-        {project?.description && <p className="aegis-muted">{project.description}</p>}
+        <div className="aegis-page-header-row">
+          <div>
+            <h1>{project?.name ?? 'Project'}</h1>
+            {project?.description && <p className="aegis-page-description">{project.description}</p>}
+          </div>
+          {projectId && (
+            <div className="aegis-page-header-actions">
+              <Link
+                to={`/projects/${projectId}/settings`}
+                className="aegis-btn-secondary"
+                style={{ textDecoration: 'none' }}
+              >
+                ⚙ Settings
+              </Link>
+            </div>
+          )}
+        </div>
       </header>
 
       {error && <div className="aegis-error">{error}</div>}
