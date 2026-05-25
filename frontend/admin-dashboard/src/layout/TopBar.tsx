@@ -15,6 +15,7 @@ export function TopBar() {
   const location = useLocation()
   const isHome = location.pathname === '/'
   const inAdmin = location.pathname.startsWith('/admin')
+  const inProfile = location.pathname.startsWith('/profile')
   const [darkMode, toggleDarkMode] = useDarkMode()
 
   return (
@@ -28,6 +29,13 @@ export function TopBar() {
         </a>
         <a href="/admin/studies" className={inAdmin ? 'aegis-active' : ''}>
           Admin
+        </a>
+        {/* Profile is reachable from any page (admin or researcher) so users
+            can always find their own notification prefs + activity feed
+            without going through the sidebar. Full-page nav so transitions
+            between AdminApp and DashboardLayout subtrees work reliably. */}
+        <a href="/profile" className={inProfile ? 'aegis-active' : ''}>
+          Profile
         </a>
       </nav>
       <div className="aegis-search-slot">
