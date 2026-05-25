@@ -47,6 +47,18 @@ func TestGetProjectBySlug(t *testing.T) {
 	assert.NotEmpty(t, p.ID)
 }
 
+func TestGetProjectBySlug_CaseInsensitive(t *testing.T) {
+	db := testutil.TestDB(t)
+	_, err := model.CreateProject(context.Background(), db, "Cohort A", "cohort-a", "")
+	require.NoError(t, err)
+
+	for _, query := range []string{"cohort-a", "Cohort-A", "COHORT-A", "Cohort-a"} {
+		p, err := model.GetProjectBySlug(context.Background(), db, query)
+		require.NoError(t, err, "lookup %q should succeed", query)
+		assert.Equal(t, "cohort-a", p.Slug, "lookup %q should resolve to canonical slug", query)
+	}
+}
+
 func TestGetProjectByID(t *testing.T) {
 	db := testutil.TestDB(t)
 	created, err := model.CreateProject(context.Background(), db, "Find Me", "find-me", "")
