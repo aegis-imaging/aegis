@@ -21,7 +21,6 @@
   color: #c4b5fd;
 }
 
-
 .viewer-panel-actions {
   display: flex;
   align-items: center;
@@ -77,12 +76,6 @@
   color: #9ca3af;
   cursor: pointer;
   letter-spacing: 0.02em;
-}
-
-.deface-yoke-btn--on {
-  background: #0f3a35;
-  border-color: #0d9488;
-  color: #5eead4;
 }
 
 .deface-panel-title {
