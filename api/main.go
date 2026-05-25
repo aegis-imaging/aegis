@@ -365,8 +365,11 @@ func main() {
 	mux.HandleFunc("POST /api/import/batch", adminOnly(srv.BatchImport))
 
 	// TCIA (Cancer Imaging Archive) — browse public brain MRI collections and import series.
+	// Researcher-accessible: TCIA data is already de-identified at the DICOM tag
+	// level by TCIA, so no admin gate on import. Destination project is picked
+	// per-call and validated by the importer.
 	mux.HandleFunc("GET /api/tcia/series", auth(srv.GetTCIASeries))
-	mux.HandleFunc("POST /api/tcia/import", adminOnly(srv.ImportTCIASeries))
+	mux.HandleFunc("POST /api/tcia/import", auth(srv.ImportTCIASeries))
 
 	mux.HandleFunc("GET /api/audit", auth(srv.ListAudit))
 	mux.HandleFunc("GET /api/audit.csv", auth(srv.ExportAuditCSV))
