@@ -69,6 +69,12 @@ export function Breadcrumbs() {
   if (location.pathname === '/agent') {
     crumbs.push({ label: 'Agent' })
   }
+  if (location.pathname === '/studies') {
+    crumbs.push({ label: 'Studies' })
+  }
+  if (location.pathname === '/shares') {
+    crumbs.push({ label: 'Shares' })
+  }
 
   // Admin tree.
   if (location.pathname.startsWith('/admin')) {
