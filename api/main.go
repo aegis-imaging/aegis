@@ -128,6 +128,7 @@ func main() {
 	auth := middleware.RequireAuth(db, cfg)
 	adminOnly := middleware.RequireRole("admin", db, cfg)
 	optionalAuth := middleware.OptionalAuth(db, cfg)
+	requireUploader := middleware.RequireUploaderSession(db)
 
 	// Per-IP rate limiter for public endpoints (upload, ingest, contact).
 	// Enabled via RATE_LIMIT_ENABLED=true; defaults to 20 req/s, burst 50.
@@ -475,6 +476,23 @@ func main() {
 	mux.HandleFunc("GET /api/desktop-installers/invites", auth(srv.ListDesktopInstallerInvites))
 	mux.HandleFunc("GET /install/{token}", srv.InstallLandingPage)
 	mux.HandleFunc("POST /api/install/pair", srv.PairDesktopInstaller)
+
+	// Uploader auth — native password login for outside data contributors
+	// (per-project, separate cookie scope from admin IAP).
+	mux.HandleFunc("POST /api/auth/uploader-login", srv.UploaderLogin)
+	mux.HandleFunc("POST /api/auth/uploader-logout", srv.UploaderLogout)
+	mux.HandleFunc("GET /api/auth/uploader-me", requireUploader(srv.UploaderMe))
+
+	// Uploader invitations — public read + redeem flow.
+	mux.HandleFunc("GET /api/uploader-invites/{token}", srv.GetUploaderInvite)
+	mux.HandleFunc("POST /api/uploader-invites/{token}/redeem", srv.RedeemUploaderInvite)
+
+	// Project uploader management — admin or project-owner researcher only;
+	// handler does the per-project authz check itself so we wrap with just
+	// the baseline auth middleware here.
+	mux.HandleFunc("POST /api/projects/{id}/uploaders", auth(srv.InviteProjectUploader))
+	mux.HandleFunc("GET /api/projects/{id}/uploaders", auth(srv.ListProjectUploaders))
+	mux.HandleFunc("DELETE /api/projects/{id}/uploaders/{userId}", auth(srv.RevokeProjectUploader))
 
 	// API keys — long-lived machine-to-machine credentials.
 	mux.HandleFunc("GET /api/api-keys", auth(srv.ListAPIKeys))
