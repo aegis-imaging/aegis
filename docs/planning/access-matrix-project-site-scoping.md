@@ -144,6 +144,7 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/institutions/{id}/stats` | `GetInstitutionStats` | `project_member_any` |
 | `adminOnly` | `PUT /api/institutions/{id}` | `UpdateInstitution` | `platform_admin` |
 | `adminOnly` | `DELETE /api/institutions/{id}` | `DeleteInstitution` | `platform_admin` |
+| `auth` | `GET /api/institutions/{id}/installer-invites` | `ListInstitutionInstallerInvites` | `project_member_any` |
 | `auth` | `GET /api/institutions/{id}/projects` | `ListInstitutionProjects` | `project_member_any` |
 | `adminOnly` | `POST /api/institutions/{id}/projects` | `AddInstitutionProject` | `platform_admin` |
 | `adminOnly` | `DELETE /api/institutions/{id}/projects/{projectID}` | `RemoveInstitutionProject` | `platform_admin` |
@@ -359,5 +360,5 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `adminOnly` | `POST /api/admin/backfill-study-metadata` | `BackfillStudyMetadata` | `platform_admin` |
 
 ## Coverage
-- Total mapped authenticated/admin routes: **338**
+- Total mapped authenticated/admin routes: **339**
 - Every `auth(...)` and `adminOnly(...)` route registration in `api/main.go` is included above.
