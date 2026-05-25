@@ -12,6 +12,7 @@ import { RootRedirect } from './pages/RootRedirect'
 import { ProfileLanding } from './pages/ProfileLanding'
 import { ProfileNotifications } from './pages/ProfileNotifications'
 import { ProfileActivity } from './pages/ProfileActivity'
+import { AgentPage } from './pages/AgentPage'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -43,6 +44,10 @@ createRoot(document.getElementById('root')!).render(
           <Route path="profile" element={<ProfileLanding />} />
           <Route path="profile/notifications" element={<ProfileNotifications />} />
           <Route path="profile/activity" element={<ProfileActivity />} />
+
+          {/* AI agent — researcher-accessible (not just admin). Same panel
+              that lives at /admin/agent. */}
+          <Route path="agent" element={<AgentPage />} />
         </Route>
 
         {/* Existing 18-tab admin experience under /admin/*. */}

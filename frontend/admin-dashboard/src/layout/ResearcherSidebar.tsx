@@ -50,6 +50,7 @@ export function ResearcherSidebar() {
         {item('Home',     '/',              '\u{1F3E0}')}
         {item('Studies',  '/admin/studies', '\u{1F4CB}')}
         {item('Shares',   '/admin/shares',  '\u{1F517}')}
+        {item('Agent',    '/agent',         '\u{1F916}')}
       </div>
 
       <div className="aegis-sidenav-group">
