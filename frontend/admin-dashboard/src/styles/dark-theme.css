@@ -574,3 +574,108 @@
 [data-theme="dark"] table {
   color: #c9d1d9;
 }
+
+/* ── AI Agent panel ──────────────────────────────────────────────────────────
+   The .agent-* classes in panels.css hardcode light-mode colors (#fff,
+   #f9fafb, #374151, etc.). In dark mode the page background goes dark but
+   those colors don't, so headings/labels/chips/cards turn into low-contrast
+   washes against the dark backdrop (see screenshot in PR description).
+   These overrides translate every agent-* light value to the slate-toned
+   dark palette used by the rest of dark-theme.css. */
+
+[data-theme="dark"] .agent-panel {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .agent-panel__header h2 {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-panel__header p {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .agent-form {
+  background: #0f1117; /* slight inset against the surface */
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .agent-section {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .agent-section h3 {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-muted {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .agent-kv__field {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-kv__value {
+  color: #e6edf3;
+}
+
+[data-theme="dark"] .agent-kv__meta {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .agent-pill {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-pill--blocker {
+  background: #2d2305;
+  border-color: #3d3008;
+  color: #d29922;
+}
+
+[data-theme="dark"] .agent-pill--step {
+  background: #0c3a5b;
+  border-color: #0d4a72;
+  color: #58a6ff;
+}
+
+[data-theme="dark"] .agent-raw {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-raw pre {
+  background: #0f1117;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-prompts__label {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .agent-prompt-chip {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-prompt-chip:hover {
+  background: #0c3a5b;
+  border-color: #0d4a72;
+  color: #58a6ff;
+}
+
+/* The component sets agent-prompt-chip--active when a quick-prompt is
+   selected, but panels.css never defined a rule for that modifier. Light
+   mode picks up the (non-existent) styling via the base chip; dark mode
+   should make the active state actually distinguishable so the user can
+   see which prompt their input mirrors. */
+[data-theme="dark"] .agent-prompt-chip.agent-prompt-chip--active {
+  background: #0d4a72;
+  border-color: #58a6ff;
+  color: #c9d1d9;
+}
