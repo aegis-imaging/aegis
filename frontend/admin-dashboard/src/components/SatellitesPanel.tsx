@@ -3,6 +3,7 @@
 // model that powers /api/satellites and the enrollment-token endpoints.
 
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 type Satellite = {
   institution_id: string
@@ -131,7 +132,16 @@ export function SatellitesPanel({ isAdmin }: { isAdmin: boolean }) {
               return (
                 <tr key={s.institution_id}>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{s.institution_name}</div>
+                    <Link
+                      to={`/admin/institutions/${s.institution_id}`}
+                      style={{
+                        fontWeight: 600,
+                        color: 'var(--aegis-link)',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      {s.institution_name}
+                    </Link>
                     <div style={{ color: '#888', fontSize: 12 }}>{s.institution_slug}</div>
                   </td>
                   <td><StatusBadge status={status} /></td>
