@@ -5865,12 +5865,32 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
     cert_subject_dn: string | null
   }
 
+  type UploadMethod = {
+    id: string
+    label: string
+    description: string
+  }
+  type AllowlistEntry = {
+    method: UploadMethod
+    enabled: boolean
+    is_default: boolean
+    note: string
+    updated_at?: string
+    updated_by?: string
+  }
+
   const [inst, setInst]         = useState<Institution | null>(null)
   const [satellites, setSats]   = useState<SatelliteRow[]>([])
   const [projects, setProjects] = useState<InstitutionProject[]>([])
   const [stats, setStats]       = useState<{ total_studies: number; last_study_at?: string } | null>(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
+  const [allowlist, setAllowlist] = useState<AllowlistEntry[]>([])
+  const [editingMethod, setEditingMethod] = useState<string | null>(null)
+  const [editEnabled, setEditEnabled] = useState(true)
+  const [editNote, setEditNote] = useState('')
+  const [allowlistSaving, setAllowlistSaving] = useState(false)
+  const [allowlistError, setAllowlistError] = useState<string | null>(null)
 
   // Inline "add satellite" workflow — mints an enrollment token scoped to
   // this institution. The token itself is returned only once and must be
@@ -5887,11 +5907,12 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
     setLoading(true)
     setError(null)
     try {
-      const [instRes, satRes, projRes, statsRes] = await Promise.all([
+      const [instRes, satRes, projRes, statsRes, allowRes] = await Promise.all([
         fetch(`/api/institutions`),
         fetch(`/api/satellites`),
         fetch(`/api/institutions/${institutionId}/projects`),
         fetch(`/api/institutions/${institutionId}/stats`),
+        fetch(`/api/institutions/${institutionId}/upload-allowlist`),
       ])
       if (!instRes.ok) throw new Error(`institutions: HTTP ${instRes.status}`)
 
@@ -5907,12 +5928,74 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
       }
       if (projRes.ok) setProjects(await projRes.json())
       if (statsRes.ok) setStats(await statsRes.json())
+      if (allowRes.ok) {
+        const body = await allowRes.json()
+        setAllowlist(body.entries ?? [])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
   }, [institutionId])
+
+  function startEditAllowlist(entry: AllowlistEntry) {
+    setEditingMethod(entry.method.id)
+    setEditEnabled(entry.enabled)
+    setEditNote(entry.note)
+    setAllowlistError(null)
+  }
+
+  function cancelEditAllowlist() {
+    setEditingMethod(null)
+    setAllowlistError(null)
+  }
+
+  async function saveAllowlist(methodID: string) {
+    setAllowlistSaving(true)
+    setAllowlistError(null)
+    try {
+      const res = await fetch(
+        `/api/institutions/${institutionId}/upload-allowlist/${encodeURIComponent(methodID)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: editEnabled, note: editNote }),
+        },
+      )
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(`HTTP ${res.status}: ${body}`)
+      }
+      setEditingMethod(null)
+      void fetchAll()
+    } catch (err) {
+      setAllowlistError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setAllowlistSaving(false)
+    }
+  }
+
+  async function resetAllowlist(methodID: string) {
+    setAllowlistSaving(true)
+    setAllowlistError(null)
+    try {
+      const res = await fetch(
+        `/api/institutions/${institutionId}/upload-allowlist/${encodeURIComponent(methodID)}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok && res.status !== 404) {
+        const body = await res.text()
+        throw new Error(`HTTP ${res.status}: ${body}`)
+      }
+      setEditingMethod(null)
+      void fetchAll()
+    } catch (err) {
+      setAllowlistError(err instanceof Error ? err.message : 'Reset failed')
+    } finally {
+      setAllowlistSaving(false)
+    }
+  }
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
@@ -6174,6 +6257,140 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
                     <td>{s.active_token_count}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Browser upload allowlist — per-institution allow/deny of
+          upload flows. Chunk 1 ships the UI + API + table; chunk 2
+          wires IsUploadMethodAllowed into each handler call site. */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>
+            Browser upload allowlist
+            {' '}
+            <span className="aegis-muted" style={{ fontSize: 12, fontWeight: 'normal' }}>
+              ({allowlist.filter(e => e.enabled).length} of {allowlist.length} methods enabled)
+            </span>
+          </h2>
+          <span className="aegis-muted" style={{ fontSize: 12 }}>
+            UI live; enforcement lands in chunk 2.
+          </span>
+        </div>
+
+        {allowlistError && (
+          <div className="aegis-error" style={{ marginBottom: 8 }}>{allowlistError}</div>
+        )}
+
+        {allowlist.length === 0 ? (
+          <div className="aegis-muted">No upload methods registered.</div>
+        ) : (
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 32 }}></th>
+                  <th>Method</th>
+                  <th>State</th>
+                  <th>Note</th>
+                  {isAdmin && <th style={{ width: 120 }}></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {allowlist.map(entry => {
+                  const isEditing = editingMethod === entry.method.id
+                  return (
+                    <tr key={entry.method.id}>
+                      <td>{entry.enabled ? '☑' : '☐'}</td>
+                      <td>
+                        <div>{entry.method.label}</div>
+                        <div className="aegis-muted" style={{ fontSize: 12 }}>
+                          {entry.method.description}
+                        </div>
+                      </td>
+                      <td>
+                        {entry.is_default
+                          ? <span className="aegis-pill">default</span>
+                          : entry.enabled
+                            ? <span className="aegis-pill">enabled</span>
+                            : <span className="aegis-pill aegis-pill--warn">disabled</span>}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editNote}
+                            onChange={e => setEditNote(e.target.value)}
+                            placeholder="why this is on/off"
+                            style={{ width: '100%' }}
+                          />
+                        ) : (
+                          <span className="aegis-muted">{entry.note || '—'}</span>
+                        )}
+                      </td>
+                      {isAdmin && (
+                        <td>
+                          {isEditing ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <label style={{ fontSize: 12 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={editEnabled}
+                                  onChange={e => setEditEnabled(e.target.checked)}
+                                  disabled={allowlistSaving}
+                                />
+                                {' '}enabled
+                              </label>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button
+                                  type="button"
+                                  className="aegis-btn-primary"
+                                  onClick={() => saveAllowlist(entry.method.id)}
+                                  disabled={allowlistSaving}
+                                  style={{ fontSize: 12 }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="aegis-btn"
+                                  onClick={cancelEditAllowlist}
+                                  disabled={allowlistSaving}
+                                  style={{ fontSize: 12 }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              {!entry.is_default && (
+                                <button
+                                  type="button"
+                                  className="aegis-btn"
+                                  onClick={() => resetAllowlist(entry.method.id)}
+                                  disabled={allowlistSaving}
+                                  style={{ fontSize: 12 }}
+                                  title="Remove explicit row → reverts to default-on"
+                                >
+                                  Reset to default
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="aegis-btn"
+                              onClick={() => startEditAllowlist(entry)}
+                              style={{ fontSize: 12 }}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

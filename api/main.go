@@ -396,6 +396,13 @@ func main() {
 	mux.HandleFunc("POST /api/institutions/{id}/contacts", adminOnly(srv.CreateInstitutionContact))
 	mux.HandleFunc("DELETE /api/institutions/{id}/contacts/{contactID}", adminOnly(srv.DeleteInstitutionContact))
 
+	// Browser upload allowlist — per-institution allow/deny of upload methods.
+	// Chunk 1 ships the table + API; chunk 2 wires IsUploadMethodAllowed
+	// into each upload handler.
+	mux.HandleFunc("GET /api/institutions/{id}/upload-allowlist", auth(srv.ListInstitutionUploadAllowlist))
+	mux.HandleFunc("PUT /api/institutions/{id}/upload-allowlist/{methodID}", adminOnly(srv.PutInstitutionUploadAllowlist))
+	mux.HandleFunc("DELETE /api/institutions/{id}/upload-allowlist/{methodID}", adminOnly(srv.DeleteInstitutionUploadAllowlist))
+
 	// Satellite mTLS — enroll/revoke a client cert for a sender institution so an
 	// AEGIS Router at that satellite can authenticate without an API key.
 	mux.HandleFunc("PUT /api/institutions/{id}/client-cert", adminOnly(srv.SetInstitutionClientCert))
