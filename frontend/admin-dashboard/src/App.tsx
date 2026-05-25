@@ -6387,6 +6387,14 @@ function InstitutionsPanel({ isAdmin, detailInstitutionId }: { isAdmin: boolean;
       <div className="aegis-section-bar">
         <h2>Institutions</h2>
         <div className="aegis-section-controls">
+          <Link
+            to="/admin/satellites"
+            className="aegis-btn-secondary"
+            style={{ textDecoration: 'none' }}
+            title="Fleet-wide satellite view (read-only enrollment status across all institutions)"
+          >
+            Manage satellites
+          </Link>
           <button type="button" className="aegis-icon-btn" onClick={fetchInstitutions}>Refresh</button>
           {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNew}>+ Add institution</button>}
         </div>
@@ -11223,7 +11231,10 @@ export function App() {
 
   const navItem = (label: string, target: AppTab, icon: string, badge?: React.ReactNode) => {
     const path = `/admin/${target}`
-    const isActive = tab === target
+    // Derive active state straight from the URL bar — not from `tab` —
+    // so the highlight is always correct even if some other piece of
+    // state somehow falls out of sync.
+    const isActive = location.pathname === path
     return (
       <NavLink
         to={path}
@@ -11317,7 +11328,10 @@ export function App() {
             <div className="aegis-sidenav-group-label">Config</div>
             {navItem('Projects', 'projects', '\u{1F4C1}')}
             {navItem('Institutions', 'institutions', '\u{1F3E5}')}
-            {navItem('Satellites', 'satellites', '\u{1F4F6}')}
+            {/* Satellites tab retired — they're now a per-institution
+                concern. Manage at /admin/institutions/:id (inline add
+                token, list view). The /admin/satellites URL still works
+                for the fleet-wide view but is no longer in the sidebar. */}
             {navItem('Profiles', 'profiles', '\u{1F6E1}')}
             {navItem('Protocol', 'protocol_templates', '\u{1F4CF}')}
             {navItem('Notifications', 'notifications', '\u{1F514}')}
@@ -11401,8 +11415,14 @@ export function App() {
         {/* Mobile overlay */}
         {sidebarOpen && <div className="aegis-sidenav-overlay" onClick={() => setSidebarOpen(false)} />}
 
-        {/* Main content */}
-        <section className="aegis-admin-content">
+        {/* Main content. The `key` here forces React to fully tear down
+            and re-mount this subtree whenever the URL pathname changes.
+            That's defensive against a class of bugs where the conditional
+            panel renders below ended up out of sync with the URL — the
+            PageHeader / sidebar-active state followed the new URL but
+            the inner panel kept showing the previous tab's content. With
+            this key, each URL change starts from a clean slate. */}
+        <section className="aegis-admin-content" key={location.pathname}>
           {!(tab === 'studies' && selectedStudyId) && (
             <PageHeader
               title={TAB_META[tab].title}
