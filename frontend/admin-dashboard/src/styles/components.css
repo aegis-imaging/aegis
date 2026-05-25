@@ -10,21 +10,7 @@
   font-weight: 500;
 }
 
-.auth-user-badge {
-  font-size: 13px;
-  color: #374151;
-  background: #f3f4f6;
-  padding: 4px 10px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
 /* ── Stats bar ───────────────────────────────────────────────────────────── */
-.stats-bar {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
-}
 
 .stat-card {
   padding: 12px 20px;
@@ -76,55 +62,31 @@
 }
 
 /* Status badges */
-.badge--received { background: #dbeafe; color: #1d4ed8; }
-.badge--defacing { background: #fef9c3; color: #854d0e; }
-.badge--clean    { background: #fef3c7; color: #92400e; }
+
 .badge--approved { background: #ccfbf1; color: #0f766e; }
 .badge--rejected { background: #ffedd5; color: #9a3412; }
 
 /* Source badges */
-.badge--external { background: #dbeafe; color: #1e40af; }
-.badge--internal { background: #f3e8ff; color: #6b21a8; }
 
 /* PHI scan badges */
 .badge--pending  { background: #f3f4f6; color: #6b7280; }
 .badge--scanning { background: #fef9c3; color: #854d0e; }
-.badge--phi-clean    { background: #ccfbf1; color: #0f766e; }
+
 .badge--flagged  { background: #ffedd5; color: #9a3412; }
-.badge--failed   { background: #fef3c7; color: #92400e; }
 
 /* QC check badges */
-.badge--checking { background: #fef9c3; color: #854d0e; }
-.badge--qc-pass  { background: #ccfbf1; color: #0f766e; }
+
 .badge--warn     { background: #fef3c7; color: #92400e; }
-.badge--fail     { background: #ffedd5; color: #9a3412; }
 
 /* BIDS conversion badges */
-.badge--converting    { background: #dbeafe; color: #1e40af; }
-.badge--bids-complete { background: #ccfbf1; color: #0f766e; }
 
 /* Classification badges */
-.badge--classifying         { background: #fef9c3; color: #854d0e; }
-.badge--classify-classified { background: #ccfbf1; color: #0f766e; }
 
 /* Protocol compliance badges */
-.badge--checking                  { background: #dbeafe; color: #1e40af; }
-.badge--protocol-compliant        { background: #ccfbf1; color: #0f766e; }
-.badge--protocol-minor_deviations { background: #fef3c7; color: #92400e; }
-.badge--protocol-non_compliant    { background: #ffedd5; color: #9a3412; }
 
 /* Export status badges */
-.badge--export-pending   { background: #dbeafe; color: #1e40af; }
-.badge--export-exporting { background: #fef3c7; color: #92400e; }
-.badge--export-exported  { background: #ccfbf1; color: #0f766e; }
-.badge--export-failed    { background: #ffedd5; color: #9a3412; }
 
 /* Analytics badges */
-.badge--analytics-complete  { background: #ccfbf1; color: #0f766e; }
-.badge--analytics-partial   { background: #fef3c7; color: #92400e; }
-.badge--analytics-analyzing { background: #dbeafe; color: #1e40af; }
-.badge--analytics-pending   { background: #f3f4f6; color: #6b7280; }
-.badge--analytics-failed    { background: #ffedd5; color: #9a3412; }
 
 /* Status badges (generic) */
 .status-badge {
@@ -135,9 +97,6 @@
   font-size: 12px;
   font-weight: 600;
 }
-
-.status-badge--clean { background: #ccfbf1; color: #0f766e; }
-.status-badge--failed { background: #ffedd5; color: #9a3412; }
 
 /* ── Pipeline stats banner ───────────────────────────────────────────────── */
 .stats-banner {
@@ -165,22 +124,12 @@
 
 .stats-pill:hover { opacity: 0.85; }
 
-.stats-pill--active {
-  box-shadow: 0 0 0 2px currentColor;
-}
-
 .stats-pill__count {
   font-weight: 700;
   font-size: 13px;
 }
 
 /* Per-status tints */
-.stats-pill--received  { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-.stats-pill--defacing  { background: #fefce8; color: #854d0e; border-color: #fef08a; }
-.stats-pill--clean     { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
-.stats-pill--defaced   { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
-.stats-pill--approved  { background: #ccfbf1; color: #0f766e; border-color: #5eead4; }
-.stats-pill--rejected  { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
 
 .stats-banner__sep {
   width: 1px;
@@ -381,15 +330,6 @@
   color: #6b7280;
   line-height: 1;
   padding: 0;
-}
-
-.btn-refresh {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  cursor: pointer;
-  font-size: 14px;
 }
 
 .btn-copy {

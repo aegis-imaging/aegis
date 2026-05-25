@@ -132,10 +132,6 @@
 
 .share-row--inactive { opacity: 0.6; }
 
-.share-status--active   { color: #0f766e; font-weight: 600; }
-.share-status--expired  { color: #92400e; font-weight: 600; }
-.share-status--revoked  { color: #9a3412; font-weight: 600; }
-
 .shares-empty {
   color: #9ca3af;
   font-size: 13px;
