@@ -11292,15 +11292,17 @@ export function App() {
         to={path}
         end
         className={`aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`}
-        onClick={(e) => {
-          // Defensive belt-and-suspenders: NavLink's intercept-and-navigate
-          // is flaky when the location update needs to traverse render
-          // boundaries that don't re-render their children (e.g. a memo'd
-          // parent). Calling navigate() ourselves guarantees the URL flips
-          // AND React re-renders App with the new pathname, which in turn
-          // re-derives `tab` from the URL.
-          e.preventDefault()
-          navigate(path)
+        onClick={() => {
+          // Side-effect only: close the sidebar on narrow screens.
+          // Do NOT preventDefault + navigate() here — that pattern was
+          // added in #529 as a workaround for stale-render issues, but
+          // it makes the click a single point of failure: if navigate()
+          // throws or silently no-ops, preventDefault has already killed
+          // the browser's native <a href> fallback so the click goes
+          // nowhere. By letting NavLink do its native job (and trusting
+          // PR #540's `key={location.pathname}` to force re-mount on
+          // URL change), we get React Router navigation when it works
+          // AND a full-page nav fallback when it doesn't.
           if (window.innerWidth < 900) setSidebarOpen(false)
         }}
         title={!sidebarOpen ? label : undefined}
