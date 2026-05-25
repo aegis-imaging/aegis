@@ -152,6 +152,9 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/institutions/{id}/contacts` | `ListInstitutionContacts` | `project_member_any` |
 | `adminOnly` | `POST /api/institutions/{id}/contacts` | `CreateInstitutionContact` | `platform_admin` |
 | `adminOnly` | `DELETE /api/institutions/{id}/contacts/{contactID}` | `DeleteInstitutionContact` | `platform_admin` |
+| `auth` | `GET /api/institutions/{id}/upload-allowlist` | `ListInstitutionUploadAllowlist` | `project_member_any` |
+| `adminOnly` | `PUT /api/institutions/{id}/upload-allowlist/{methodID}` | `PutInstitutionUploadAllowlist` | `platform_admin` |
+| `adminOnly` | `DELETE /api/institutions/{id}/upload-allowlist/{methodID}` | `DeleteInstitutionUploadAllowlist` | `platform_admin` |
 | `auth` | `GET /api/destinations` | `ListDestinations` | `project_member_any` |
 | `auth` | `GET /api/destinations/health` | `GetAllDestinationsHealth` | `project_member_any` |
 | `adminOnly` | `POST /api/destinations` | `CreateDestination` | `platform_admin` |
