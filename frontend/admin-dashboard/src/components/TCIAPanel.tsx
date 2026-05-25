@@ -36,7 +36,11 @@ const COLLECTIONS = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
+// TCIAPanel is researcher-accessible — TCIA data is already de-identified
+// at the DICOM tag level by TCIA, so there is no PHI-handling reason to
+// gate import behind an admin role. The destination project still needs
+// to exist, which the project picker enforces.
+export function TCIAPanel() {
   const [projects, setProjects] = useState<Project[]>([])
   const [collection, setCollection] = useState(COLLECTIONS[0].value)
   const [minSlices, setMinSlices] = useState(20)
@@ -246,35 +250,31 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
             <span className="tcia-count">
               {series.length} series found in {collection}
             </span>
-            {isAdmin && (
-              <button
-                type="button"
-                className="aegis-btn-primary"
-                onClick={importSelected}
-                disabled={!someChecked || importing}
-              >
-                {importing
-                  ? 'Importing…'
-                  : `Import Selected (${selected.size})`}
-              </button>
-            )}
+            <button
+              type="button"
+              className="aegis-btn-primary"
+              onClick={importSelected}
+              disabled={!someChecked || importing}
+            >
+              {importing
+                ? 'Importing…'
+                : `Import Selected (${selected.size})`}
+            </button>
           </div>
 
           <div className="tcia-table-wrap">
             <table className="table tcia-table">
               <thead>
                 <tr>
-                  {isAdmin && (
-                    <th>
-                      <input
-                        type="checkbox"
-                        checked={allChecked}
-                        onChange={e => toggleAll(e.target.checked)}
-                        disabled={importing}
-                        title="Select all"
-                      />
-                    </th>
-                  )}
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={e => toggleAll(e.target.checked)}
+                      disabled={importing}
+                      title="Select all"
+                    />
+                  </th>
                   <th>Modality</th>
                   <th>Body Part</th>
                   <th>Description</th>
@@ -288,16 +288,14 @@ export function TCIAPanel({ isAdmin }: { isAdmin: boolean }) {
                     key={s.series_uid}
                     className={selected.has(s.series_uid) ? 'tcia-row--selected' : ''}
                   >
-                    {isAdmin && (
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(s.series_uid)}
-                          onChange={() => toggleOne(s.series_uid)}
-                          disabled={importing}
-                        />
-                      </td>
-                    )}
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(s.series_uid)}
+                        onChange={() => toggleOne(s.series_uid)}
+                        disabled={importing}
+                      />
+                    </td>
                     <td>
                       <span className="badge">{s.modality || '—'}</span>
                     </td>

@@ -16,6 +16,7 @@ import { AgentPage } from './pages/AgentPage'
 import { StudiesPage } from './pages/StudiesPage'
 import { SharesPage } from './pages/SharesPage'
 import { ProjectSettingsPage } from './pages/ProjectSettingsPage'
+import { TCIAPanel } from './components/TCIAPanel'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -59,6 +60,12 @@ createRoot(document.getElementById('root')!).render(
               rest of the flow stays inside researcher chrome. */}
           <Route path="studies" element={<StudiesPage />} />
           <Route path="shares" element={<SharesPage />} />
+
+          {/* TCIA collection import — researcher-accessible. TCIA data
+              is already de-identified at the DICOM tag level by TCIA, so
+              there's no PHI reason to gate it behind admin. Top-level
+              route avoids the /admin/* SPA-nav hack. */}
+          <Route path="tcia" element={<TCIAPanel />} />
 
           {/* Legacy /admin/{studies,shares,agent} redirects. The admin-side
               variants used to render their own duplicate views; the sidebar
