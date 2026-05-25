@@ -5874,6 +5874,17 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
 
+  // Inline "add satellite" workflow — mints an enrollment token scoped to
+  // this institution. The token itself is returned only once and must be
+  // handed to the on-prem site admin to run the bootstrap.
+  const [showAddSat, setShowAddSat]   = useState(false)
+  const [satLabel, setSatLabel]       = useState('')
+  const [satTtlHours, setSatTtlHours] = useState(72)
+  const [minting, setMinting]         = useState(false)
+  const [mintError, setMintError]     = useState<string | null>(null)
+  const [mintedToken, setMintedToken] = useState<{ token: string; expires_at: string } | null>(null)
+  const [copied, setCopied]           = useState(false)
+
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -5906,6 +5917,52 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
   }, [institutionId])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  async function mintSatelliteToken() {
+    setMinting(true)
+    setMintError(null)
+    setMintedToken(null)
+    try {
+      const res = await fetch(`/api/institutions/${institutionId}/enrollment-tokens`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: satLabel.trim() || undefined, ttl_hours: satTtlHours }),
+      })
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(`HTTP ${res.status}: ${body}`)
+      }
+      const data = await res.json()
+      setMintedToken({ token: data.token, expires_at: data.expires_at })
+      // Refresh the satellite list so the new pending-token count reflects.
+      void fetchAll()
+    } catch (err) {
+      setMintError(err instanceof Error ? err.message : 'Failed to mint token')
+    } finally {
+      setMinting(false)
+    }
+  }
+
+  function closeAddSat() {
+    setShowAddSat(false)
+    setSatLabel('')
+    setSatTtlHours(72)
+    setMintError(null)
+    setMintedToken(null)
+    setCopied(false)
+  }
+
+  async function copyToken() {
+    if (!mintedToken) return
+    try {
+      await navigator.clipboard.writeText(mintedToken.token)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard API may be unavailable; the token is still visible in the
+      // text box for manual copy.
+    }
+  }
 
   if (loading) return <div className="aegis-muted">Loading institution…</div>
   if (error)   return <div className="aegis-error">{error}</div>
@@ -5958,16 +6015,147 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
       <section className="aegis-section">
         <div className="aegis-section-bar">
           <h2>Satellites ({satellites.length})</h2>
-          <Link to="/admin/satellites" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
-            Manage all
-          </Link>
-        </div>
-        {satellites.length === 0 ? (
-          <div className="aegis-muted">
-            No satellites enrolled at this institution yet.{' '}
-            <Link to="/admin/satellites" style={{ color: 'var(--aegis-link)' }}>Add one →</Link>
+          <div className="aegis-section-controls">
+            {isAdmin && !showAddSat && (
+              <button
+                type="button"
+                className="aegis-btn-primary"
+                onClick={() => setShowAddSat(true)}
+              >
+                + Add satellite
+              </button>
+            )}
+            <Link to="/admin/satellites" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
+              Manage all
+            </Link>
           </div>
-        ) : (
+        </div>
+
+        {/* Inline mint-token form */}
+        {showAddSat && !mintedToken && (
+          <div
+            style={{
+              border: '1px solid var(--aegis-border)',
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 16,
+              background: 'var(--aegis-bg)',
+            }}
+          >
+            <h3 style={{ marginTop: 0, fontSize: 14 }}>Enrollment token</h3>
+            <p className="aegis-muted" style={{ fontSize: 13, marginTop: 4 }}>
+              Mint a one-time token for this institution. Hand it to the on-prem site
+              admin running the satellite bootstrap. Tokens expire automatically.
+            </p>
+            {mintError && <div className="aegis-error">{mintError}</div>}
+            <div className="aegis-form-row">
+              <label htmlFor="sat-label">Label</label>
+              <input
+                id="sat-label"
+                type="text"
+                value={satLabel}
+                onChange={e => setSatLabel(e.target.value)}
+                placeholder="e.g. UMN MRI Lab — primary"
+              />
+              <span className="aegis-form-hint">Free-text identifier for your records.</span>
+            </div>
+            <div className="aegis-form-row">
+              <label htmlFor="sat-ttl">Token TTL (hours)</label>
+              <input
+                id="sat-ttl"
+                type="number"
+                min={1}
+                max={720}
+                value={satTtlHours}
+                onChange={e => setSatTtlHours(parseInt(e.target.value, 10) || 72)}
+              />
+              <span className="aegis-form-hint">Default 72 (3 days). Maximum 720 (30 days).</span>
+            </div>
+            <div className="aegis-form-actions">
+              <button
+                type="button"
+                className="aegis-btn-primary"
+                onClick={mintSatelliteToken}
+                disabled={minting}
+              >
+                {minting ? 'Minting…' : 'Mint token'}
+              </button>
+              <button type="button" className="aegis-btn-secondary" onClick={closeAddSat}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Show minted token once — copy-paste UI */}
+        {mintedToken && (
+          <div
+            style={{
+              border: '1px solid var(--aegis-link)',
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 16,
+              background: 'var(--aegis-active-bg)',
+            }}
+          >
+            <h3 style={{ marginTop: 0, fontSize: 14, color: 'var(--aegis-link-hover)' }}>
+              Token minted — copy it now
+            </h3>
+            <p className="aegis-muted" style={{ fontSize: 13, marginTop: 4 }}>
+              This token is shown <strong>once</strong>. AEGIS only stores its hash — if you
+              lose it, mint another. Expires {new Date(mintedToken.expires_at).toLocaleString()}.
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <input
+                readOnly
+                value={mintedToken.token}
+                onFocus={e => e.currentTarget.select()}
+                style={{
+                  flex: 1,
+                  padding: '8px 10px',
+                  fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+                  fontSize: 13,
+                  border: '1px solid var(--aegis-border)',
+                  borderRadius: 6,
+                  background: 'var(--aegis-surface)',
+                  color: 'var(--aegis-text)',
+                }}
+              />
+              <button type="button" className="aegis-btn-primary" onClick={copyToken}>
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="aegis-form-actions" style={{ marginTop: 12 }}>
+              <button type="button" className="aegis-btn-secondary" onClick={closeAddSat}>
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {satellites.length === 0 && !showAddSat ? (
+          <div className="aegis-muted">
+            No satellites enrolled at this institution yet.
+            {isAdmin && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  onClick={() => setShowAddSat(true)}
+                  style={{
+                    background: 'none',
+                    border: 0,
+                    padding: 0,
+                    color: 'var(--aegis-link)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Mint a token →
+                </button>
+              </>
+            )}
+          </div>
+        ) : satellites.length > 0 && (
           <div className="aegis-table-wrap">
             <table className="aegis-table">
               <thead>
