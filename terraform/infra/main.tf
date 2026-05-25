@@ -475,7 +475,7 @@ locals {
       dicom-tools = var.dicom_tools_image
       # Heavy sidecars stay separate because their system-level toolchains
       # (FreeSurfer, FSL, ANTs, scikit-image with native deps) don't share an image.
-      defacing    = var.defacing_image
+      defacing = var.defacing_image
     },
     var.sct_service_image != "" ? { sct-service = var.sct_service_image } : {},
     var.analytics_service_image != "" ? { analytics-service = var.analytics_service_image } : {}
