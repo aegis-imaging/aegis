@@ -11315,168 +11315,13 @@ export function App() {
   }
 
   return (
-    <div className="aegis-shell">
-
+    <>
       {authError && (
         <div className="auth-error-banner">
           Access denied: {authError}
         </div>
       )}
 
-      <TopBar />
-      <Breadcrumbs />
-
-      <div className={`aegis-admin-body${sidebarOpen ? '' : ' aegis-admin-body--collapsed'}`}>
-        {/* Sidebar nav */}
-        <aside className="aegis-sidenav">
-          {/* Sidebar toolbar: theme toggle + refresh + collapse.
-              The search palette button was retired with the ⌘K palette
-              (cross-entity search is the global TopBarSearch in the topbar). */}
-          <div className="aegis-sidenav-toolbar">
-            <button
-              type="button"
-              className="aegis-sidenav-iconbtn"
-              onClick={toggleDarkMode}
-              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {darkMode ? '\u2600' : '\u263E'}
-            </button>
-            {tab === 'studies' && (
-              <button
-                type="button"
-                className="aegis-sidenav-iconbtn"
-                onClick={() => setRefreshTick(t => t + 1)}
-                title="Refresh studies"
-                aria-label="Refresh studies"
-              >
-                {'\u21BB'}
-              </button>
-            )}
-            <button
-              type="button"
-              className="aegis-sidenav-iconbtn"
-              onClick={toggleSidebar}
-              title={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
-              aria-label={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
-            >
-              {sidebarOpen ? '\u00AB' : '\u00BB'}
-            </button>
-          </div>
-
-          <div className="aegis-sidenav-group">
-            <div className="aegis-sidenav-group-label">Overview</div>
-            {navItem('Studies', 'studies', '\u{1F4CB}', stuckCount > 0 ? <span className="aegis-sidenav-badge">{stuckCount}</span> : undefined)}
-            {navItem('Audit Log', 'audit', '\u{1F4DC}')}
-            {navItem('Agent', 'agent', '\u{1F916}')}
-          </div>
-
-          <div className="aegis-sidenav-group">
-            <div className="aegis-sidenav-group-label">Data</div>
-            {navItem('Shares', 'shares', '\u{1F517}')}
-            {navItem('Routing', 'routing', '\u{1F6E4}')}
-            {isAdmin && navItem('DIMSE Ops', 'dimse_ops', '\u{1F4E1}')}
-          </div>
-
-          <div className="aegis-sidenav-group">
-            <div className="aegis-sidenav-group-label">Config</div>
-            {navItem('Projects', 'projects', '\u{1F4C1}')}
-            {navItem('Institutions', 'institutions', '\u{1F3E5}')}
-            {/* Satellites tab retired — they're now a per-institution
-                concern. Manage at /admin/institutions/:id (inline add
-                token, list view). The /admin/satellites URL still works
-                for the fleet-wide view but is no longer in the sidebar. */}
-            {navItem('Profiles', 'profiles', '\u{1F6E1}')}
-            {navItem('Protocol', 'protocol_templates', '\u{1F4CF}')}
-            {navItem('Notifications', 'notifications', '\u{1F514}')}
-          </div>
-
-          <div className="aegis-sidenav-group">
-            <div className="aegis-sidenav-group-label">Advanced</div>
-            {navItem('Federation', 'federation', '\u{1F310}')}
-            {navItem('TCIA Import', 'tcia_import', '\u{1F4E5}')}
-            {navItem('System', 'system', '\u{2699}')}
-          </div>
-
-          {isAdmin && (
-            <div className="aegis-sidenav-group">
-              <div className="aegis-sidenav-group-label">Admin</div>
-              {navItem('Users', 'users', '\u{1F464}')}
-              {navItem('API Keys', 'api_keys', '\u{1F511}')}
-              {navItem('Invite Codes', 'invite_codes', '\u{1F3AB}')}
-              {navItem('Downloads', 'downloads', '\u{1F4BE}')}
-            </div>
-          )}
-
-          <div className="aegis-sidenav-footer">
-            {projects.length > 1 && (
-              <div className="aegis-sidenav-footer-row">
-                <label className="aegis-sidenav-footer-label" htmlFor="global-project-select">Project</label>
-                <select
-                  id="global-project-select"
-                  value={globalProjectId}
-                  onChange={e => {
-                    const next = e.target.value
-                    if (!canUseAllProjectsMode && !next) return
-                    setGlobalProjectId(next)
-                  }}
-                >
-                  {canUseAllProjectsMode ? (
-                    <option value="">All projects</option>
-                  ) : !globalProjectId ? (
-                    <option value="">Select project…</option>
-                  ) : null}
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-            )}
-            <div className="aegis-sidenav-footer-row">
-              <label className="aegis-sidenav-footer-label" htmlFor="display-timezone-mode">Timezone</label>
-              <select
-                id="display-timezone-mode"
-                value={displayTimezoneMode}
-                onChange={(e) => setDisplayTimezoneMode(e.target.value as DisplayTimezoneMode)}
-              >
-                <option value="utc">UTC</option>
-                <option value="local">Local ({localTimeZone})</option>
-                <option value="custom">Custom</option>
-              </select>
-              {displayTimezoneMode === 'custom' && (
-                <>
-                  <input
-                    type="text"
-                    placeholder="America/Chicago"
-                    value={displayTimezoneCustom}
-                    onChange={(e) => setDisplayTimezoneCustom(e.target.value)}
-                  />
-                  {!validCustomTimeZone && displayTimezoneCustom.trim() && (
-                    <span className="tz-warning">Invalid IANA time zone</span>
-                  )}
-                </>
-              )}
-            </div>
-            <span className="aegis-sidenav-footer-badge" title="Active project/scope">
-              {scopeLabel}{researcherSiteScopedOnly ? ' (site-scoped)' : ''}
-            </span>
-            {currentUser && (
-              <span className="aegis-sidenav-footer-badge">
-                {currentUser.name || currentUser.email} ({currentUser.role})
-              </span>
-            )}
-          </div>
-        </aside>
-
-        {/* Mobile overlay */}
-        {sidebarOpen && <div className="aegis-sidenav-overlay" onClick={() => setSidebarOpen(false)} />}
-
-        {/* Main content. The `key` here forces React to fully tear down
-            and re-mount this subtree whenever the URL pathname changes.
-            That's defensive against a class of bugs where the conditional
-            panel renders below ended up out of sync with the URL — the
-            PageHeader / sidebar-active state followed the new URL but
-            the inner panel kept showing the previous tab's content. With
-            this key, each URL change starts from a clean slate. */}
-        <section className="aegis-admin-content" key={location.pathname}>
           {!(tab === 'studies' && selectedStudyId) && (
             <PageHeader
               title={TAB_META[tab].title}
@@ -12868,8 +12713,6 @@ export function App() {
 
       {/* System Health tab */}
       {tab === 'system' && <SystemHealthPanel />}
-        </section>
-      </div>{/* end aegis-admin-body */}
 
       {/* Upload Study Modal */}
       {showUploadModal && (
@@ -12879,6 +12722,6 @@ export function App() {
           onUploaded={() => { setRefreshTick(t => t + 1); setShowUploadModal(false) }}
         />
       )}
-    </div>
+    </>
   )
 }
