@@ -79,10 +79,11 @@ export function ResearcherSidebar() {
           richer admin views via the Operations group below. */}
       <div className="aegis-sidenav-group">
         <div className="aegis-sidenav-group-label">Workspace</div>
-        {item('Home',    '/',        '\u{1F3E0}')}
-        {item('Studies', '/studies', '\u{1F4CB}')}
-        {item('Shares',  '/shares',  '\u{1F517}')}
-        {item('Agent',   '/agent',   '\u{1F916}')}
+        {item('Home',         '/',        '\u{1F3E0}')}
+        {item('Studies',      '/studies', '\u{1F4CB}')}
+        {item('Shares',       '/shares',  '\u{1F517}')}
+        {item('Agent',        '/agent',   '\u{1F916}')}
+        {item('TCIA import',  '/tcia',    '\u{1F4E5}')}
       </div>
 
       <div className="aegis-sidenav-group">

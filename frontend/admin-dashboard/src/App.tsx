@@ -12,7 +12,6 @@ import './styles/dark-theme.css'
 import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
 import { NiivueViewer } from './components/NiivueViewer'
-import { TCIAPanel } from './components/TCIAPanel'
 import { SatellitesPanel } from './components/SatellitesPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
@@ -66,7 +65,6 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   protocol_templates: { title: 'Protocol Templates', description: 'Expected MRI/CT acquisition parameters used for protocol compliance checks.' },
   notifications: { title: 'Notifications', description: 'Digest email subscriptions and webhook delivery configuration.' },
   federation: { title: 'Federation', description: 'Peer AEGIS instance registry for cross-site exchange.' },
-  tcia_import: { title: 'TCIA Import', description: 'Bulk import from the Cancer Imaging Archive.' },
   system: { title: 'System', description: 'Infrastructure health, service status, and pipeline configuration.' },
   users: { title: 'Users', description: 'Global user registry, roles, and access.' },
   api_keys: { title: 'API Keys', description: 'Programmatic access tokens for the AEGIS API.' },
@@ -76,12 +74,12 @@ const TAB_META: Record<string, { title: string; description: string }> = {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'satellites' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'downloads' | 'system'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'satellites' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'users' | 'api_keys' | 'invite_codes' | 'downloads' | 'system'
 
 const ADMIN_TABS: AppTab[] = [
   'studies', 'agent', 'audit', 'shares', 'routing', 'dimse_ops',
   'institutions', 'satellites', 'profiles', 'protocol_templates', 'notifications',
-  'projects', 'federation', 'tcia_import', 'users', 'api_keys', 'invite_codes',
+  'projects', 'federation', 'users', 'api_keys', 'invite_codes',
   'downloads', 'system',
 ]
 
@@ -12695,9 +12693,6 @@ export function App() {
 
       {/* Federation tab */}
       {tab === 'federation' && <FederationPanel isAdmin={isAdmin} />}
-
-      {/* TCIA Import tab */}
-      {tab === 'tcia_import' && <TCIAPanel isAdmin={isAdmin} />}
 
       {/* Users tab — admin only */}
       {tab === 'users' && isAdmin && <UsersPanel />}
