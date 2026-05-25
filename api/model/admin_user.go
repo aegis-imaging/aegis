@@ -11,17 +11,29 @@ type AdminUser struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
-	Role      string    `json:"role"` // admin | viewer
+	Role      string    `json:"role"` // admin | viewer | researcher | uploader
 	Enabled   bool      `json:"enabled"`
 	Notes     string    `json:"notes"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// PasswordHash is set only for native-login users (role=uploader). IAP/Azure/
+	// AWS users have NULL hash. Never serialised to JSON.
+	PasswordHash *string `json:"-"`
 }
 
-const adminUserColumns = `id, email, name, role, enabled, notes, created_at, updated_at`
+const adminUserColumns = `id, email, name, role, enabled, notes, created_at, updated_at, password_hash`
 
 func scanAdminUser(row scannable, u *AdminUser) error {
-	return row.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Enabled, &u.Notes, &u.CreatedAt, &u.UpdatedAt)
+	return row.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Enabled, &u.Notes, &u.CreatedAt, &u.UpdatedAt, &u.PasswordHash)
+}
+
+// SetAdminUserPasswordHash stores a pre-hashed (e.g. bcrypt) password for the
+// given user. Callers must hash before calling — this function only persists.
+func SetAdminUserPasswordHash(ctx context.Context, db *sql.DB, userID, hash string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE admin_users SET password_hash = $2, updated_at = now() WHERE id = $1`,
+		userID, hash)
+	return err
 }
 
 func ListAdminUsers(ctx context.Context, db *sql.DB) ([]AdminUser, error) {
