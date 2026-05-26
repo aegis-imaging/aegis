@@ -12,11 +12,20 @@ import { RootRedirect } from './pages/RootRedirect'
 import { ProfileLanding } from './pages/ProfileLanding'
 import { ProfileNotifications } from './pages/ProfileNotifications'
 import { ProfileActivity } from './pages/ProfileActivity'
-import { AgentPage } from './pages/AgentPage'
-import { StudiesPage } from './pages/StudiesPage'
-import { SharesPage } from './pages/SharesPage'
 import { ProjectSettingsPage } from './pages/ProjectSettingsPage'
-import { TCIAPanel } from './components/TCIAPanel'
+import { AdminTabRedirect } from './pages/AdminTabRedirect'
+
+// Canonical admin-tab slugs. Each renders the same AdminApp dispatcher which
+// reads location.pathname via parseAdminTab to pick the right tab. Keeping
+// the list here (not imported from App.tsx) so main.tsx doesn't pull the
+// 12k-line App module into the root bundle's critical path — but the names
+// must stay in sync with ADMIN_TABS in App.tsx.
+const ADMIN_TAB_SLUGS = [
+  'studies', 'audit', 'shares', 'routing', 'dimse_ops', 'institutions',
+  'satellites', 'profiles', 'protocol_templates', 'notifications',
+  'federation', 'tcia_import', 'users', 'api_keys', 'invite_codes',
+  'downloads', 'system', 'agent',
+] as const
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -29,63 +38,54 @@ createRoot(document.getElementById('root')!).render(
           <Route index element={<AboutPage />} />
         </Route>
 
-        {/* Authenticated researcher UI — XNAT-style Project → Subject → Study. */}
+        {/* Authenticated app — every page mounts under DashboardLayout so
+            the topbar / breadcrumbs / sidebar stay stable across nav,
+            and clicking sidebar items triggers a clean Outlet swap.
+
+            Critical: each admin tab gets its OWN <Route> entry. Earlier
+            versions had a single `<Route path="admin/*" element={<AdminApp />} />`
+            catch-all, which meant clicking /admin/audit → /admin/routing
+            matched the SAME route, so React reused the AdminApp instance
+            and the conditional renders inside App kept stale state — the
+            recurring "dead admin links" symptom. With one Route per tab,
+            React sees each click as a route swap, mounts a fresh element,
+            and the conditional renders re-evaluate cleanly. */}
         <Route element={<DashboardLayout />}>
           <Route index element={<RootRedirect />} />
+
+          {/* Researcher project tree. /projects (no param) is the admin
+              projects list; /projects/:id is the researcher detail page.
+              React Router matches the more specific :id route first, so
+              the two coexist without collision. */}
+          <Route path="projects" element={<AdminApp />} />
           <Route path="projects/:projectId" element={<ProjectPage />} />
           <Route path="projects/:projectId/settings" element={<ProjectSettingsPage />} />
-          <Route
-            path="projects/:projectId/subjects/:subjectId"
-            element={<SubjectPage />}
-          />
-          <Route
-            path="projects/:projectId/subjects/:subjectId/studies/:studyId"
-            element={<StudyPage />}
-          />
-          {/* Self-service profile pages. Backed by existing admin endpoints
-              for now (only admin users have write access); a follow-up will
-              relax the Go auth to allow non-admin users to manage their own
-              row at these routes. */}
+          <Route path="projects/:projectId/subjects/:subjectId" element={<SubjectPage />} />
+          <Route path="projects/:projectId/subjects/:subjectId/studies/:studyId" element={<StudyPage />} />
+
+          {/* Self-service profile pages. */}
           <Route path="profile" element={<ProfileLanding />} />
           <Route path="profile/notifications" element={<ProfileNotifications />} />
           <Route path="profile/activity" element={<ProfileActivity />} />
 
-          {/* AI agent — researcher-accessible (not just admin). Same panel
-              that lives at /admin/agent. */}
-          <Route path="agent" element={<AgentPage />} />
+          {/* Every admin tab at root. Single source of truth: ADMIN_TAB_SLUGS. */}
+          {ADMIN_TAB_SLUGS.map(slug => (
+            <Route key={slug} path={slug} element={<AdminApp />} />
+          ))}
 
-          {/* Researcher-facing browse views — simpler than the admin
-              triage panels. Click-through goes to the existing
-              /projects/:p/subjects/:s/studies/:study detail route so the
-              rest of the flow stays inside researcher chrome. */}
-          <Route path="studies" element={<StudiesPage />} />
-          <Route path="shares" element={<SharesPage />} />
+          {/* Sub-route for institution detail. /institutions/:id resolves to
+              the same AdminApp; the admin panel reads the id from the URL. */}
+          <Route path="institutions/:id" element={<AdminApp />} />
 
-          {/* TCIA collection import — researcher-accessible. TCIA data
-              is already de-identified at the DICOM tag level by TCIA, so
-              there's no PHI reason to gate it behind admin. Top-level
-              route avoids the /admin/* SPA-nav hack. */}
-          <Route path="tcia" element={<TCIAPanel />} />
+          {/* /tcia → /tcia_import (existing user-facing shorter URL). */}
+          <Route path="tcia" element={<Navigate to="/tcia_import" replace />} />
 
-          {/* Legacy /admin/{studies,shares,agent} redirects. The admin-side
-              variants used to render their own duplicate views; the sidebar
-              now points everyone at the top-level researcher routes, so
-              keep the old URLs working for bookmarks and any in-flight
-              tabs/links rather than breaking them. */}
-          <Route path="admin/studies" element={<Navigate to="/studies" replace />} />
-          <Route path="admin/shares"  element={<Navigate to="/shares"  replace />} />
-          <Route path="admin/agent"   element={<Navigate to="/agent"   replace />} />
-
-          {/* Admin tabs now live INSIDE the DashboardLayout so they share
-              the researcher sidebar (Workspace / You / Operations / Configure
-              / Admin groups in ResearcherSidebar). This is the architectural
-              fix for the long-running "click admin nav → URL updates but
-              content stays blank/stale" bug: the sidebar stays mounted
-              across admin tab clicks, only App remounts via the key in
-              AdminApp. Crossing the DashboardLayout ↔ AdminApp subtree
-              boundary used to silently no-op clicks; now there is no
-              boundary to cross. */}
-          <Route path="admin/*" element={<AdminApp />} />
+          {/* Back-compat: every legacy /admin/* URL redirects to the root
+              variant. Audit records, email links, external bookmarks, and
+              in-flight tabs all keep resolving without breakage. */}
+          <Route path="admin" element={<Navigate to="/studies" replace />} />
+          <Route path="admin/:tab" element={<AdminTabRedirect />} />
+          <Route path="admin/:tab/:detail" element={<AdminTabRedirect />} />
         </Route>
 
         {/* Anything unmatched falls back to the auth-aware root. */}

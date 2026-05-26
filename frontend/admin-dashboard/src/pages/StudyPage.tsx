@@ -1,29 +1,16 @@
-import { useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 
-// StudyPage is a v1 placeholder that deep-links into the existing admin
-// dashboard's study detail panel. The richer StudyDetailPanel (~1500 lines,
-// lives inside App.tsx) is reused untouched in this PR to keep the diff
-// small; extracting it into a routed component is a follow-up.
+// StudyPage bridges the researcher-tree URL /projects/:p/subjects/:s/studies/:st
+// to the canonical study-detail location at /studies?study_id=<id>. App.tsx
+// reads the query param on mount and opens the StudyDetailPanel with every
+// action surface visible (gated by role inside the panel itself).
+//
+// React Router's <Navigate> is used instead of window.location.replace so
+// the redirect stays inside the SPA — no full-page reload, no flash.
 export function StudyPage() {
   const { studyId } = useParams<{ studyId: string }>()
-
-  useEffect(() => {
-    if (!studyId) return
-    window.location.replace(`/admin/studies?study_id=${encodeURIComponent(studyId)}`)
-  }, [studyId])
-
   if (!studyId) {
     return <div className="aegis-error">Missing study ID.</div>
   }
-
-  const target = `/admin/studies?study_id=${encodeURIComponent(studyId)}`
-  return (
-    <div className="aegis-study">
-      <p>
-        Opening study detail… If you aren't redirected,{' '}
-        <a href={target}>click here</a>.
-      </p>
-    </div>
-  )
+  return <Navigate to={`/studies?study_id=${encodeURIComponent(studyId)}`} replace />
 }
