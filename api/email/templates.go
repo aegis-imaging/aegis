@@ -375,3 +375,42 @@ func DigestSummary(projectName, frequency, periodLabel string, received, approve
 	}{freqTitle, projectName, periodLabel, received, approved, rejected, pending, sharesCreated})
 	return subject, buf.String()
 }
+
+var uploaderInviteTmpl = template.Must(template.New("uploader_invite").Parse(
+	`Hi {{ .Name }},
+
+You've been invited to contribute imaging studies to the project
+"{{ .ProjectName }}" in AEGIS.
+
+Click the link below to set a password and start uploading:
+
+  {{ .RedeemURL }}
+
+This invitation expires on {{ .ExpiresAt }}.
+
+After you set your password you'll be able to sign in at the upload
+portal whenever you have new data to contribute. You'll only have
+access to upload to "{{ .ProjectName }}" — nothing else.
+
+--
+This is an automated message from AEGIS. Do not reply to this email.
+`))
+
+// UploaderInvite renders the email sent to an outside contributor when an
+// admin or researcher invites them to upload to a specific project. The body
+// includes the time-limited redeem URL — never the raw token alone.
+func UploaderInvite(name, projectName, redeemURL string, expiresAt time.Time) (subject, body string) {
+	if name == "" {
+		name = "there"
+	}
+	subject = "[AEGIS] Invitation to upload to " + projectName
+	var buf bytes.Buffer
+	uploaderInviteTmpl.Execute(&buf, struct {
+		Name        string
+		ProjectName string
+		RedeemURL   string
+		ExpiresAt   string
+	}{name, projectName, redeemURL,
+		expiresAt.UTC().Format("2006-01-02 15:04 UTC")})
+	return subject, buf.String()
+}
