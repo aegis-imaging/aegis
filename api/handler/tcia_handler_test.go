@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ─── GetTCIASeries (validation-only; external HTTP call not made) ─────────────
@@ -147,6 +150,48 @@ func TestImportTCIASeries_DefaultProjectSlug(t *testing.T) {
 	// Should get a bad gateway (can't reach TCIA in test) rather than a
 	// validation error — proving the default project slug handling worked.
 	assert.Equal(t, http.StatusBadGateway, rr.Code)
+}
+
+// TestImportTCIASeries_AllowlistDenyShortCircuits verifies the
+// allowlist short-circuit: when any institution linked to the
+// destination project has browser.tcia-import disabled, the import
+// returns 403 BEFORE attempting the TCIA download. This is the
+// per-handler half of upload-allowlist chunk 2.
+func TestImportTCIASeries_AllowlistDenyShortCircuits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	// Build an institution → link to the default project → deny TCIA imports.
+	inst := testutil.CreateTestInstitution(t, db, "tcia-deny")
+	defaultProject, err := model.GetProjectBySlug(context.Background(), db, "default")
+	require.NoError(t, err)
+	require.NoError(t, model.AddInstitutionToProject(context.Background(), db,
+		&model.InstitutionProject{InstitutionID: inst.ID, ProjectID: defaultProject.ID, Role: "sender"}))
+	require.NoError(t, model.UpsertUploadAllowlistRow(context.Background(), db,
+		&model.InstitutionUploadAllowlistRow{
+			InstitutionID: inst.ID,
+			MethodID:      "browser.tcia-import",
+			Enabled:       false,
+			Note:          "denied for the test",
+			UpdatedBy:     "test@example.com",
+		}))
+
+	body, _ := json.Marshal(map[string]any{
+		"series_uid":   fmt.Sprintf("1.2.3.tcia.deny.%d", time.Now().UnixNano()),
+		"project_slug": "default",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/tcia/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.ImportTCIASeries(rr, req)
+
+	// Should be 403, NOT 502 — proves we short-circuited before the TCIA
+	// download attempt.
+	assert.Equal(t, http.StatusForbidden, rr.Code, "body: %s", rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "disabled for your institution")
 }
 
 func TestImportTCIASeries_InvalidJSON(t *testing.T) {
