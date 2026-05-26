@@ -10,17 +10,17 @@ import { apiGetProject } from '../api/subjects'
 //   /profile                               → Home > Profile
 //   /profile/notifications                 → Home > Profile > Notifications
 //   /profile/activity                      → Home > Profile > Activity
-//   /agent                                 → Home > Agent
-//   /admin                                 → Home > Admin
-//   /admin/<tab>                           → Home > Admin > Tab name
-//   /admin/institutions/:id                → Home > Admin > Institutions > Institution name
+//   /<tab>                                 → Home > Tab name        (root-level admin tabs)
+//   /institutions/:id                      → Home > Institutions > Institution name
 //
 // Each segment links upward so users can pop back without using the browser
 // back button. The deepest segment is rendered as plain text with
 // aria-current="page" for screen readers.
 //
-// XNAT itself does not consistently expose a breadcrumb strip — this is one
-// place we explicitly diverge to improve on the source pattern.
+// All admin tabs now live at root URLs (no /admin/ prefix) — the
+// "Home > Admin > X" trail collapsed to "Home > X" since the audience
+// distinction (admin vs researcher) is enforced by visibility in the
+// sidebar, not by URL nesting.
 export function Breadcrumbs() {
   const params = useParams()
   const location = useLocation()
@@ -28,8 +28,8 @@ export function Breadcrumbs() {
   // Fetch project name when a projectId param is present.
   const projectName = useProjectName(params.projectId)
 
-  // Fetch institution name when on /admin/institutions/:id.
-  const adminInstitutionId = useAdminInstitutionId(location.pathname)
+  // Fetch institution name when on /institutions/:id (or legacy /admin/institutions/:id).
+  const adminInstitutionId = useInstitutionIdFromPath(location.pathname)
   const institutionName = useInstitutionName(adminInstitutionId)
 
   const crumbs: Array<{ label: string; to?: string }> = []
@@ -70,37 +70,19 @@ export function Breadcrumbs() {
       crumbs.push({ label: 'Activity' })
     }
   }
-  if (location.pathname === '/agent') {
-    crumbs.push({ label: 'Agent' })
-  }
-  if (location.pathname === '/studies') {
-    crumbs.push({ label: 'Studies' })
-  }
-  if (location.pathname === '/shares') {
-    crumbs.push({ label: 'Shares' })
-  }
-
-  // Admin tree.
-  if (location.pathname.startsWith('/admin')) {
-    const adminTabMatch = location.pathname.match(/^\/admin\/([^/]+)/)
-    const adminTab = adminTabMatch?.[1]
-    const isAdminRoot = !adminTab
-    crumbs.push(
-      isAdminRoot
-        ? { label: 'Admin' }
-        : { label: 'Admin', to: '/admin/studies' },
-    )
-
-    if (adminTab) {
-      const tabLabel = ADMIN_TAB_LABELS[adminTab] ?? adminTab
-      const tabPath = `/admin/${adminTab}`
+  // Root-level admin tabs (/audit, /routing, /institutions, etc.). Only
+  // fires when we haven't already pushed researcher-tree crumbs above —
+  // /projects/:id renders ProjectPage and never reaches App / admin tabs.
+  if (!params.projectId && !location.pathname.startsWith('/profile')) {
+    const rootTabMatch = location.pathname.match(/^\/([^/]+)/)
+    const tabSlug = rootTabMatch?.[1]
+    if (tabSlug && ADMIN_TAB_LABELS[tabSlug]) {
+      const tabPath = `/${tabSlug}`
       const isLeaf = location.pathname === tabPath
-      crumbs.push(isLeaf ? { label: tabLabel } : { label: tabLabel, to: tabPath })
+      crumbs.push(isLeaf ? { label: ADMIN_TAB_LABELS[tabSlug] } : { label: ADMIN_TAB_LABELS[tabSlug], to: tabPath })
 
-      // Per-tab leaf crumbs. Today only institutions has a detail URL;
-      // future per-project / per-routing-rule detail URLs would add
-      // similar branches here.
-      if (adminTab === 'institutions' && adminInstitutionId) {
+      // Per-tab leaf crumbs. Today only institutions has a detail URL.
+      if (tabSlug === 'institutions' && adminInstitutionId) {
         crumbs.push({
           label: institutionName ?? shortenId(adminInstitutionId, 'Institution'),
         })
@@ -150,6 +132,7 @@ const ADMIN_TAB_LABELS: Record<string, string> = {
   api_keys: 'API Keys',
   invite_codes: 'Invite Codes',
   downloads: 'Downloads',
+  tcia_import: 'TCIA Import',
 }
 
 // useProjectName fetches the project by ID and returns its display name.
@@ -171,11 +154,12 @@ function useProjectName(projectId: string | undefined): string | null {
   return name
 }
 
-// useAdminInstitutionId extracts the institution UUID from the pathname
-// when on /admin/institutions/:id, returns null otherwise.
-function useAdminInstitutionId(pathname: string): string | null {
-  const match = pathname.match(/^\/admin\/institutions\/([^/]+)/)
-  return match?.[1] ?? null
+// useInstitutionIdFromPath extracts the institution UUID from the pathname
+// when on /institutions/:id (or legacy /admin/institutions/:id), returns
+// null otherwise.
+function useInstitutionIdFromPath(pathname: string): string | null {
+  const m = pathname.match(/^\/(?:admin\/)?institutions\/([^/]+)/)
+  return m?.[1] ?? null
 }
 
 // useInstitutionName fetches the named institution and returns its
