@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/importer"
+	"github.com/aegis-imaging/aegis/api/model"
 )
 
 const tciaBaseURL = "https://services.cancerimagingarchive.net/nbia-api/services/v1"
@@ -151,6 +152,30 @@ func (s *Server) ImportTCIASeries(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ProjectSlug == "" {
 		req.ProjectSlug = "default"
+	}
+
+	// Browser upload allowlist enforcement. TCIA imports are an admin
+	// op that don't carry a per-caller institution, so attribute via
+	// the destination project's linked institutions. If ANY linked
+	// institution has explicitly disabled browser.tcia-import, we
+	// short-circuit before the (potentially multi-minute) ZIP
+	// download. Projects with no linked institutions fall through to
+	// default-on. The importer will validate the project_slug again
+	// later — the early lookup here is purely for the allowlist.
+	project, err := model.GetProjectBySlug(r.Context(), s.db, req.ProjectSlug)
+	if err == nil && project != nil {
+		links, err := model.ListInstitutionsForProject(r.Context(), s.db, project.ID)
+		if err != nil {
+			log.Printf("tcia-import: list project institutions: %v", err)
+			s.writeError(w, http.StatusInternalServerError, "failed to check upload allowlist")
+			return
+		}
+		for _, link := range links {
+			instID := link.InstitutionID
+			if !s.enforceUploadMethod(w, r, &instID, "browser.tcia-import") {
+				return
+			}
+		}
 	}
 
 	log.Printf("tcia-import: downloading series %s (collection: %s)", req.SeriesUID, req.Collection)
