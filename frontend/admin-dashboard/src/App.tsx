@@ -18,7 +18,7 @@ import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
 import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { useStudyEvents } from './hooks/useStudyEvents'
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useDarkMode } from './hooks/useDarkMode'
 import { TopBar } from './layout/TopBar'
 import { Breadcrumbs } from './layout/Breadcrumbs'
@@ -83,13 +83,22 @@ const ADMIN_TABS: AppTab[] = [
   'downloads', 'system',
 ]
 
-// parseAdminTab pulls the tab segment out of the pathname (e.g. /admin/audit
-// → 'audit'). Unknown or missing segments fall through to 'studies' so the
-// app always has a coherent active tab.
+// parseAdminTab pulls the tab segment out of the pathname (e.g. /audit →
+// 'audit', /institutions/abc123 → 'institutions'). Unknown or missing
+// segments fall through to 'studies' so the app always has a coherent
+// active tab.
+//
+// Legacy /admin/<tab> URLs are handled by AdminTabRedirect before App
+// renders, so by the time this function runs the pathname is always
+// in root form (/<tab>). The /admin/ fallback below is defence-in-depth
+// in case some code path slips a /admin/* pathname through.
 function parseAdminTab(pathname: string): AppTab {
-  const match = pathname.match(/^\/admin\/([^/]+)/)
-  const candidate = match?.[1] as AppTab | undefined
-  return candidate && ADMIN_TABS.includes(candidate) ? candidate : 'studies'
+  const rootMatch = pathname.match(/^\/([^/]+)/)
+  const rootCandidate = rootMatch?.[1] as AppTab | undefined
+  if (rootCandidate && ADMIN_TABS.includes(rootCandidate)) return rootCandidate
+  const adminMatch = pathname.match(/^\/admin\/([^/]+)/)
+  const adminCandidate = adminMatch?.[1] as AppTab | undefined
+  return adminCandidate && ADMIN_TABS.includes(adminCandidate) ? adminCandidate : 'studies'
 }
 
 type APIKey = {
@@ -6054,7 +6063,7 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
       {/* Back link + heading */}
       <div style={{ marginBottom: 16 }}>
         <Link
-          to="/admin/institutions"
+          to="/institutions"
           style={{ color: 'var(--aegis-link)', fontSize: 13, textDecoration: 'none' }}
         >
           ← All institutions
@@ -6074,7 +6083,7 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
           </div>
           {isAdmin && (
             <Link
-              to="/admin/institutions"
+              to="/institutions"
               className="aegis-btn-secondary"
               style={{ textDecoration: 'none' }}
             >
@@ -6106,7 +6115,7 @@ function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: str
                 + Add satellite
               </button>
             )}
-            <Link to="/admin/satellites" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
+            <Link to="/satellites" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
               Manage all
             </Link>
           </div>
@@ -6603,7 +6612,7 @@ function InstitutionsPanel({ isAdmin, detailInstitutionId }: { isAdmin: boolean;
         <h2>Institutions</h2>
         <div className="aegis-section-controls">
           <Link
-            to="/admin/satellites"
+            to="/satellites"
             className="aegis-btn-secondary"
             style={{ textDecoration: 'none' }}
             title="Fleet-wide satellite view (read-only enrollment status across all institutions)"
@@ -10658,27 +10667,23 @@ export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
   const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
 
-  // The active tab is derived from the URL — /admin/<tab> — so deep-linking,
+  // The active tab is derived from the URL — /<tab> at root — so deep-linking,
   // back/forward, and bookmarking all work. setTab(next) navigates to the
-  // matching URL; useEffect below redirects /admin → /admin/studies.
+  // matching URL. Legacy /admin/<tab> URLs are redirected at the router
+  // layer (see main.tsx AdminTabRedirect), so this code only sees root URLs.
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const tab: AppTab = parseAdminTab(location.pathname)
   const setTab = useCallback((next: AppTab) => {
-    navigate(`/admin/${next}`)
+    navigate(`/${next}`)
   }, [navigate])
 
-  // Sub-tab routing: /admin/institutions/:id renders InstitutionsPanel in
-  // detail mode. Other tabs can follow this pattern as the
-  // Institution-as-parent UX restructure rolls out.
-  const detailMatch = location.pathname.match(/^\/admin\/(institutions|projects)\/([^/]+)/)
+  // Sub-tab routing: /institutions/:id renders InstitutionsPanel in detail
+  // mode. /projects/:id is handled outside App by ProjectPage so the
+  // regex here only fires for institutions today.
+  const detailMatch = location.pathname.match(/^\/(institutions)\/([^/]+)/)
   const institutionId = detailMatch?.[1] === 'institutions' ? (detailMatch[2] ?? null) : null
-
-  useEffect(() => {
-    if (location.pathname === '/admin' || location.pathname === '/admin/') {
-      navigate('/admin/studies', { replace: true })
-    }
-  }, [location.pathname, navigate])
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('aegis_sidebar_open')
     return saved !== null ? saved === 'true' : true
@@ -10699,6 +10704,21 @@ export function App() {
       fetch(`/api/studies/${id}/viewed`, { method: 'POST' }).catch(() => {/* best-effort */})
     }
   }
+
+  // Deep-link: /studies?study_id=<id> opens the StudyDetailPanel. Used by
+  // StudyPage when a researcher clicks through from a per-subject URL,
+  // and by audit / share / email links that carry the study id in the
+  // query string. We clear the param from the URL once consumed so
+  // back/forward history doesn't accumulate stale state.
+  useEffect(() => {
+    const sid = searchParams.get('study_id')
+    if (sid && !selectedStudyId) {
+      setSelectedStudyId(sid)
+      const next = new URLSearchParams(searchParams)
+      next.delete('study_id')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, selectedStudyId, setSearchParams])
   const [agentPrefill, setAgentPrefill] = useState<{ studyId: string; studyUid: string } | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)

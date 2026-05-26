@@ -220,7 +220,7 @@ export function ProjectSettingsPage() {
       <section className="aegis-section">
         <div className="aegis-section-bar">
           <h2>Anonymization profiles ({profiles.length})</h2>
-          <Link to="/admin/profiles" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
+          <Link to="/profiles" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
             Manage profiles
           </Link>
         </div>
@@ -251,7 +251,7 @@ export function ProjectSettingsPage() {
       <section className="aegis-section">
         <div className="aegis-section-bar">
           <h2>Protocol templates ({templates.length})</h2>
-          <Link to="/admin/protocol_templates" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
+          <Link to="/protocol_templates" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
             Manage templates
           </Link>
         </div>
