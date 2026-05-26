@@ -19,14 +19,29 @@
   --aegis-error-text: #9a3412;
 }
 
+/* Document-level overflow guard. Without this, any wide child (long
+   table, search input at 360px, etc.) on a narrow viewport makes
+   <html> wider than the device. iOS Safari then applies its
+   "shrink-to-fit" heuristic and renders the WHOLE page zoomed out —
+   our @media (max-width: 768px) rules stop matching because the
+   computed viewport is wider than the physical screen, and the user
+   has to pinch-zoom to read anything. Pinning html/body to 100% and
+   hiding horizontal overflow keeps the mobile breakpoint active. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 .aegis-shell {
   min-height: 100vh;
   background: var(--aegis-bg);
   color: var(--aegis-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  /* Hard cap on horizontal width — prevents any one overflowing child
-     (long table, wide pre block, etc.) from making the entire viewport
-     scroll horizontally on mobile. */
+  /* Belt-and-suspenders with the html/body rule above — keeps the
+     shell from getting wider than viewport even if a child uses
+     position: absolute or similar to escape the body's overflow
+     hidden. */
   max-width: 100vw;
   overflow-x: hidden;
 }
