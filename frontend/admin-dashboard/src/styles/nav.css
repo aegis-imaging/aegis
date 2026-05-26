@@ -764,14 +764,22 @@
   .aegis-admin-body.aegis-admin-body--collapsed {
     grid-template-columns: 1fr;
   }
+  /* On mobile the sidebar is a slide-in drawer: hidden by default,
+     pushed into view only when DashboardLayout sets the
+     --mobile-nav-open class. Pre-fix, it was permanently visible and
+     covered the entire viewport, leaving the page underneath
+     unreachable on iPhone Safari. */
   .aegis-sidenav {
     position: fixed;
     inset: 53px 0 0 0;
     z-index: 15;
+    width: 80vw;
+    max-width: 320px;
+    border-right: 1px solid var(--aegis-border);
     transform: translateX(-100%);
     transition: transform 180ms ease;
   }
-  .aegis-admin-body:not(.aegis-admin-body--collapsed) .aegis-sidenav {
+  .aegis-admin-body--mobile-nav-open .aegis-sidenav {
     transform: translateX(0);
   }
 }
@@ -1040,7 +1048,44 @@
 }
 
 @media (max-width: 768px) {
-  .aegis-admin-body:not(.aegis-admin-body--collapsed) .aegis-sidenav-overlay {
+  .aegis-admin-body--mobile-nav-open .aegis-sidenav-overlay {
     display: block;
+  }
+}
+
+/* Hamburger toggle — hidden on desktop, fixed-positioned on mobile so it
+   stays reachable as the user scrolls the content area. Pinned to the
+   top-left corner just below the topbar. */
+.aegis-mobile-nav-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .aegis-mobile-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: fixed;
+    top: 60px;
+    left: 12px;
+    z-index: 16;
+    padding: 8px 12px;
+    font-size: 16px;
+    line-height: 1;
+    background: var(--aegis-surface);
+    color: var(--aegis-text);
+    border: 1px solid var(--aegis-border);
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+  }
+  .aegis-mobile-nav-toggle-label {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  /* Push content down a touch so the fixed hamburger doesn't sit on top
+     of the first row of body content. */
+  .aegis-admin-content {
+    padding-top: 56px;
   }
 }
