@@ -24,6 +24,11 @@
   background: var(--aegis-bg);
   color: var(--aegis-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Hard cap on horizontal width — prevents any one overflowing child
+     (long table, wide pre block, etc.) from making the entire viewport
+     scroll horizontally on mobile. */
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* ── Top bar ─────────────────────────────────────────────────────────── */
@@ -38,6 +43,24 @@
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+/* On mobile the topbar has to share a 393px viewport with no room
+   for a 360px search input plus three nav links — the overflow
+   forced the whole page wider than viewport, leaving every page's
+   content squished into the left edge with a black gutter on the
+   right. Hide the search + nav links: the same destinations are
+   reachable from the hamburger drawer, and the topbar keeps just
+   the brand + theme toggle (a sliver wide). */
+@media (max-width: 768px) {
+  .aegis-topbar {
+    gap: 12px;
+    padding: 10px 14px;
+  }
+  .aegis-topnav,
+  .aegis-search-slot {
+    display: none;
+  }
 }
 
 .aegis-brand {
@@ -1084,8 +1107,9 @@
     font-weight: 500;
   }
   /* Push content down a touch so the fixed hamburger doesn't sit on top
-     of the first row of body content. */
+     of the first row of body content. Also tighten horizontal padding
+     so cards have breathing room at iPhone widths. */
   .aegis-admin-content {
-    padding-top: 56px;
+    padding: 56px 14px 32px;
   }
 }
