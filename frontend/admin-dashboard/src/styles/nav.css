@@ -60,24 +60,6 @@ body {
   z-index: 10;
 }
 
-/* On mobile the topbar has to share a 393px viewport with no room
-   for a 360px search input plus three nav links — the overflow
-   forced the whole page wider than viewport, leaving every page's
-   content squished into the left edge with a black gutter on the
-   right. Hide the search + nav links: the same destinations are
-   reachable from the hamburger drawer, and the topbar keeps just
-   the brand + theme toggle (a sliver wide). */
-@media (max-width: 768px) {
-  .aegis-topbar {
-    gap: 12px;
-    padding: 10px 14px;
-  }
-  .aegis-topnav,
-  .aegis-search-slot {
-    display: none;
-  }
-}
-
 .aegis-brand {
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -117,6 +99,22 @@ body {
   position: relative;
   width: 360px;
   max-width: 100%;
+}
+
+/* Mobile topbar: hide search and primary nav links so the topbar can
+   fit a 393px viewport. Same destinations are reachable from the
+   hamburger drawer; topbar keeps brand + theme toggle. Placed AFTER
+   the base .aegis-topnav / .aegis-search-slot rules so source-order
+   tie-breaks favor the mobile override at equal specificity. */
+@media (max-width: 768px) {
+  .aegis-topbar {
+    gap: 12px;
+    padding: 10px 14px;
+  }
+  .aegis-topnav,
+  .aegis-search-slot {
+    display: none;
+  }
 }
 
 .aegis-search-input {
@@ -797,31 +795,6 @@ body {
   min-width: 0;
 }
 
-@media (max-width: 768px) {
-  .aegis-admin-body,
-  .aegis-admin-body.aegis-admin-body--collapsed {
-    grid-template-columns: 1fr;
-  }
-  /* On mobile the sidebar is a slide-in drawer: hidden by default,
-     pushed into view only when DashboardLayout sets the
-     --mobile-nav-open class. Pre-fix, it was permanently visible and
-     covered the entire viewport, leaving the page underneath
-     unreachable on iPhone Safari. */
-  .aegis-sidenav {
-    position: fixed;
-    inset: 53px 0 0 0;
-    z-index: 15;
-    width: 80vw;
-    max-width: 320px;
-    border-right: 1px solid var(--aegis-border);
-    transform: translateX(-100%);
-    transition: transform 180ms ease;
-  }
-  .aegis-admin-body--mobile-nav-open .aegis-sidenav {
-    transform: translateX(0);
-  }
-}
-
 /* ── Sidebar nav ─────────────────────────────────────────────────────── */
 
 .aegis-sidenav {
@@ -836,6 +809,34 @@ body {
   flex-direction: column;
   padding: 10px 8px 16px;
   gap: 4px;
+}
+
+/* Mobile sidebar: turn it into a slide-in drawer (hidden by default,
+   pushed in only when DashboardLayout sets --mobile-nav-open). Placed
+   AFTER the desktop .aegis-sidenav rule so source-order tie-breaks
+   favor the mobile override at equal specificity. The previous
+   placement (above the base rule) silently lost on every selector,
+   leaving the sidebar in desktop sticky mode on mobile and taking
+   up grid space below the topbar — which the user saw as a big
+   empty block above the content. */
+@media (max-width: 768px) {
+  .aegis-admin-body,
+  .aegis-admin-body.aegis-admin-body--collapsed {
+    grid-template-columns: 1fr;
+  }
+  .aegis-sidenav {
+    position: fixed;
+    inset: 53px 0 0 0;
+    z-index: 15;
+    width: 80vw;
+    max-width: 320px;
+    border-right: 1px solid var(--aegis-border);
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+  }
+  .aegis-admin-body--mobile-nav-open .aegis-sidenav {
+    transform: translateX(0);
+  }
 }
 
 .aegis-sidenav-toolbar {
