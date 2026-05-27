@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Outlet } from 'react-router-dom'
 import { Breadcrumbs } from './Breadcrumbs'
 import { TopBar } from './TopBar'
 import { ResearcherSidebar } from './ResearcherSidebar'
@@ -8,25 +8,17 @@ import '../styles/nav.css'
 // DashboardLayout is the chrome around every routed page in the XNAT-style
 // hierarchy: shared top bar + breadcrumb strip + sidebar + the active page.
 //
-// Mobile drawer: on narrow viewports (<= 768px) the sidebar becomes a slide-in
-// drawer because there isn't horizontal room for a permanent 240px rail. A
-// hamburger button in this layout (NOT inside TopBar so it can be sized and
-// positioned without competing with the topbar's search slot) toggles it. The
-// drawer auto-closes on route change so a sidebar tap doesn't leave the
-// drawer open over the destination page.
-//
-// Prior to this layout the sidebar was always `position: fixed` covering the
-// whole mobile viewport, which made the rest of the app effectively
-// unreachable on iPhone Safari — taps appeared to "do nothing" because the
-// page underneath was never visible.
+// Mobile drawer: on narrow viewports (<= 768px) the sidebar becomes a
+// slide-in drawer with a hamburger toggle. Closing the drawer is wired
+// SYNCHRONOUSLY on each sidebar tap via onItemClick — earlier versions
+// used a useEffect on location.pathname to auto-close, but iOS Safari
+// dropped every NavLink tap after the first one. The exact race
+// wasn't easy to nail (stale focus + the auto-close re-render in the
+// same tick as the navigate() call seems to be involved), but
+// synchronous close on tap removes the race entirely.
 export function DashboardLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const location = useLocation()
-
-  // Auto-close on route change so the destination page is visible.
-  useEffect(() => {
-    setMobileNavOpen(false)
-  }, [location.pathname])
+  const closeMobileNav = () => setMobileNavOpen(false)
 
   return (
     <div className="aegis-shell">
@@ -45,11 +37,11 @@ export function DashboardLayout() {
             {mobileNavOpen ? 'Close' : 'Menu'}
           </span>
         </button>
-        <ResearcherSidebar />
+        <ResearcherSidebar onItemClick={closeMobileNav} />
         {mobileNavOpen && (
           <div
             className="aegis-sidenav-overlay"
-            onClick={() => setMobileNavOpen(false)}
+            onClick={closeMobileNav}
             aria-hidden="true"
           />
         )}
