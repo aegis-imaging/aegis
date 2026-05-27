@@ -9,16 +9,37 @@ import '../styles/nav.css'
 // hierarchy: shared top bar + breadcrumb strip + sidebar + the active page.
 //
 // Mobile drawer: on narrow viewports (<= 768px) the sidebar becomes a
-// slide-in drawer with a hamburger toggle. Closing the drawer is wired
-// SYNCHRONOUSLY on each sidebar tap via onItemClick — earlier versions
-// used a useEffect on location.pathname to auto-close, but iOS Safari
-// dropped every NavLink tap after the first one. The exact race
-// wasn't easy to nail (stale focus + the auto-close re-render in the
-// same tick as the navigate() call seems to be involved), but
-// synchronous close on tap removes the race entirely.
+// slide-in drawer with a hamburger toggle.
+//
+// Closing the drawer on sidebar tap requires deferring the close one
+// animation frame past the synthesized click event. Two iOS Safari
+// quirks pile up otherwise:
+//
+//   1. The useEffect-on-location approach (drawer closes after
+//      navigate finishes reconciling) leaves the first tap working
+//      and every subsequent one dead — focus rewind on overlay
+//      unmount during the effect-after-paint window swallows the
+//      next click target.
+//   2. The synchronous-onItemClick approach starts the drawer's
+//      CSS transform animation while the synthesized click is still
+//      pending. iOS Safari cancels the click whenever its target
+//      element MOVES between touchstart and click — the NavLink is
+//      mid-translateX(-100%) so navigate() never fires. The drawer
+//      closes (because setState already ran) but the URL doesn't
+//      change.
+//
+// requestAnimationFrame defers the state update to after the click
+// event has fully dispatched, so navigate() runs first and the
+// element-moved cancellation can't trigger.
 export function DashboardLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const closeMobileNav = () => setMobileNavOpen(false)
+  const closeMobileNav = () => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => setMobileNavOpen(false))
+    } else {
+      setMobileNavOpen(false)
+    }
+  }
 
   return (
     <div className="aegis-shell">
