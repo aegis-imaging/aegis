@@ -928,8 +928,15 @@ body {
   font-weight: 500;
   cursor: pointer;
   text-align: left;
+  text-decoration: none;
   width: calc(100% - 4px);
   position: relative;
+  /* iOS Safari fires a "click" 300ms after touchend by default. During
+     that window the tap state is held and a second tap can get
+     suppressed — contributed to "links die after one navigation" in
+     the mobile drawer. manipulation = pan + pinch-zoom only, no
+     double-tap-zoom, no synthetic delay. */
+  touch-action: manipulation;
   transition: background 120ms ease, color 120ms ease;
 }
 

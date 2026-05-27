@@ -11,7 +11,15 @@ import { apiGetMe, type CurrentUser } from '../api/subjects'
 //   - Workspace / You: visible to everyone authed.
 //   - Operations / Configure / Admin: rendered only when apiGetMe()
 //     returns role === 'admin'.
-export function ResearcherSidebar() {
+//
+// onItemClick fires immediately on tap of any sidebar item. The mobile
+// drawer (DashboardLayout) uses this to close itself synchronously
+// instead of relying on a location-change useEffect — iOS Safari was
+// dropping every NavLink tap after the first one when the close ran
+// async via the effect, because some combination of stale focus,
+// overlay z-index, and the auto-close re-render race left the second
+// tap landing in dead space.
+export function ResearcherSidebar({ onItemClick }: { onItemClick?: () => void } = {}) {
   const [me, setMe] = useState<CurrentUser | null>(null)
 
   useEffect(() => {
@@ -24,6 +32,7 @@ export function ResearcherSidebar() {
     <NavLink
       to={to}
       end={to === '/'}
+      onClick={onItemClick}
       className={({ isActive }) =>
         `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
       }
