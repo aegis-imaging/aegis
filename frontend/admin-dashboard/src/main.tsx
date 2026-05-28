@@ -14,16 +14,24 @@ import { ProfileNotifications } from './pages/ProfileNotifications'
 import { ProfileActivity } from './pages/ProfileActivity'
 import { ProjectSettingsPage } from './pages/ProjectSettingsPage'
 import { AdminTabRedirect } from './pages/AdminTabRedirect'
+import { TCIAPanel } from './components/TCIAPanel'
 
 // Canonical admin-tab slugs. Each renders the same AdminApp dispatcher which
 // reads location.pathname via parseAdminTab to pick the right tab. Keeping
 // the list here (not imported from App.tsx) so main.tsx doesn't pull the
 // 12k-line App module into the root bundle's critical path — but the names
 // must stay in sync with ADMIN_TABS in App.tsx.
+//
+// tcia_import is intentionally NOT in this list — it renders TCIAPanel
+// directly (researcher-facing, not an admin tab dispatcher entry).
+// Including it here would route /tcia_import through AdminApp, whose
+// parseAdminTab can't find tcia_import in ADMIN_TABS and silently falls
+// through to 'studies'. Net effect: TCIA Import breadcrumb above the
+// Studies panel.
 const ADMIN_TAB_SLUGS = [
   'studies', 'audit', 'shares', 'routing', 'dimse_ops', 'institutions',
   'satellites', 'profiles', 'protocol_templates', 'notifications',
-  'federation', 'tcia_import', 'users', 'api_keys', 'invite_codes',
+  'federation', 'users', 'api_keys', 'invite_codes',
   'downloads', 'system', 'agent',
 ] as const
 
@@ -77,7 +85,9 @@ createRoot(document.getElementById('root')!).render(
               the same AdminApp; the admin panel reads the id from the URL. */}
           <Route path="institutions/:id" element={<AdminApp />} />
 
-          {/* /tcia → /tcia_import (existing user-facing shorter URL). */}
+          {/* TCIA collection import — researcher-facing, renders the panel
+              directly (not via AdminApp). /tcia is the legacy short URL. */}
+          <Route path="tcia_import" element={<TCIAPanel />} />
           <Route path="tcia" element={<Navigate to="/tcia_import" replace />} />
 
           {/* Back-compat: every legacy /admin/* URL redirects to the root
