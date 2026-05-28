@@ -5,6 +5,23 @@ const studyUID = params.get('studyUID')
 const store = params.get('store') || 'clean'   // 'raw' = pre-defacing store, 'clean' = defaced store
 const apiBase = store === 'raw' ? '/dicomweb-raw' : '/dicomweb'
 
+// Cap concurrently-loaded DICOM instances so we don't blow past iOS
+// Safari's per-host connection limit (6-8) or its tighter per-tab
+// memory ceiling. A study with 192 slices × ~256 KB pixel data after
+// DWV decode = ~49 MB just for buffers, plus DWV's internal canvas
+// state — iPhone Safari was failing partway through ("Loading 50 /
+// 100… Could not load DICOM images") when we loaded all 192 at once.
+//
+// On phone-sized viewports we cap at 100 and show a banner so the
+// user knows the rest exists. ?max=N overrides for advanced users on
+// desktop; ?max=0 disables the cap entirely.
+const explicitMax = parseInt(params.get('max') || '', 10)
+const isPhoneViewport = window.matchMedia('(max-width: 900px)').matches
+const DEFAULT_MOBILE_MAX = 100
+const instanceCap = Number.isFinite(explicitMax)
+  ? (explicitMax > 0 ? explicitMax : Infinity)
+  : (isPhoneViewport ? DEFAULT_MOBILE_MAX : Infinity)
+
 const statusEl = document.getElementById('status')
 
 function setStatus(msg, cls = 'loading') {
@@ -230,10 +247,23 @@ if (!studyUID) {
       if (!instances.length) throw new Error('No instances found in this series.')
 
       const seriesUID = instances[0]['0020000E']?.Value?.[0]
-      const urls = instances.map((inst) => {
+      const allUrls = instances.map((inst) => {
         const sopUID = inst['00080018']?.Value?.[0]
         return `${apiBase}/studies/${studyUID}/series/${seriesUID}/instances/${sopUID}`
       })
+
+      // Apply the iOS-Safari-friendly cap.
+      const urls = Number.isFinite(instanceCap) ? allUrls.slice(0, instanceCap) : allUrls
+      const truncated = urls.length < allUrls.length
+      if (truncated) {
+        const banner = document.getElementById('cap-banner')
+        if (banner) {
+          banner.style.display = 'block'
+          banner.textContent =
+            `Showing first ${urls.length} of ${allUrls.length} slices for mobile performance. ` +
+            `Open in a desktop browser or add ?max=0 to the URL to load all.`
+        }
+      }
 
       setStatus(`Loading ${urls.length} image${urls.length !== 1 ? 's' : ''}…`)
       app.loadURLs(urls)
