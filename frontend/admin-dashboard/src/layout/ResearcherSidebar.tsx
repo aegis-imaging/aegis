@@ -1,26 +1,38 @@
 import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { apiGetMe, type CurrentUser } from '../api/subjects'
 
-// ResearcherSidebar renders on every routed page. All admin tabs now live
-// at root-level URLs (no /admin/ prefix), so every click is a same-subtree
-// SPA navigation handled by NavLink — no more cross-boundary <a href>
-// escape hatch needed.
+// ResearcherSidebar renders on every routed page.
+//
+// Two render modes per item:
+//
+//   Desktop (>768px): NavLink/SPA nav. Fast, no full reload.
+//
+//   Mobile (≤768px, signaled by DashboardLayout passing onItemClick):
+//   plain <a href>. Three iterations of SPA-nav-in-mobile-drawer
+//   (#571 / #572 / etc.) each broke differently on iOS Safari:
+//     - useEffect close on location change → first tap works, rest die.
+//     - Synchronous onClick close → tap navigates but iOS cancels the
+//       synthesized click because the drawer started animating during
+//       dispatch (target moved → click discarded).
+//     - requestAnimationFrame-deferred close → same "first tap works,
+//       rest die" pattern as the useEffect approach.
+//   The common cause is some interaction between React Router's
+//   synthetic-event nav and the drawer's open/close state machine
+//   that we can't reliably reason about without a live iOS Safari
+//   debugger. Plain anchors sidestep the entire React-event surface
+//   — iOS Safari handles them as ordinary navigation, the browser
+//   does a full page load, the drawer state resets on the next page
+//   boot. A few hundred ms slower than SPA but reliable.
 //
 // Items are grouped by audience for visual organisation:
 //   - Workspace / You: visible to everyone authed.
-//   - Operations / Configure / Admin: rendered only when apiGetMe()
-//     returns role === 'admin'.
-//
-// onItemClick fires immediately on tap of any sidebar item. The mobile
-// drawer (DashboardLayout) uses this to close itself synchronously
-// instead of relying on a location-change useEffect — iOS Safari was
-// dropping every NavLink tap after the first one when the close ran
-// async via the effect, because some combination of stale focus,
-// overlay z-index, and the auto-close re-render race left the second
-// tap landing in dead space.
+//   - Operations / Configure / Admin: only when apiGetMe() returns
+//     role === 'admin'.
 export function ResearcherSidebar({ onItemClick }: { onItemClick?: () => void } = {}) {
   const [me, setMe] = useState<CurrentUser | null>(null)
+  const location = useLocation()
+  const mobileMode = !!onItemClick
 
   useEffect(() => {
     apiGetMe().then(setMe).catch(() => setMe(null))
@@ -28,19 +40,37 @@ export function ResearcherSidebar({ onItemClick }: { onItemClick?: () => void } 
 
   const isAdmin = me?.role === 'admin'
 
-  const item = (label: string, to: string, icon: string) => (
-    <NavLink
-      to={to}
-      end={to === '/'}
-      onClick={onItemClick}
-      className={({ isActive }) =>
-        `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
-      }
-    >
-      <span className="aegis-sidenav-icon">{icon}</span>
-      <span className="aegis-sidenav-label">{label}</span>
-    </NavLink>
-  )
+  const item = (label: string, to: string, icon: string) => {
+    if (mobileMode) {
+      // Active-class logic mirrors NavLink's, since the plain anchor
+      // loses NavLink's built-in isActive prop.
+      const isActive =
+        to === '/'
+          ? location.pathname === '/'
+          : location.pathname === to || location.pathname.startsWith(to + '/')
+      return (
+        <a
+          href={to}
+          className={`aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`}
+        >
+          <span className="aegis-sidenav-icon">{icon}</span>
+          <span className="aegis-sidenav-label">{label}</span>
+        </a>
+      )
+    }
+    return (
+      <NavLink
+        to={to}
+        end={to === '/'}
+        className={({ isActive }) =>
+          `aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`
+        }
+      >
+        <span className="aegis-sidenav-icon">{icon}</span>
+        <span className="aegis-sidenav-label">{label}</span>
+      </NavLink>
+    )
+  }
 
   return (
     <aside className="aegis-sidenav">
