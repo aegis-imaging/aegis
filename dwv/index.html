@@ -145,6 +145,18 @@
       color: #ea580c;
       display: none;
     }
+
+    /* Mobile-cap notice: shown when the instance list is truncated
+       for performance on a narrow viewport. */
+    #cap-banner {
+      padding: 8px 16px;
+      font-size: 12px;
+      color: #92400e;
+      background: #fef3c7;
+      border-bottom: 1px solid #fcd34d;
+      flex-shrink: 0;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -162,6 +174,7 @@
     <button class="slice-btn" id="slice-next" title="Next slice">&#9654;</button>
   </div>
   <div id="hint"><span>Scroll: wheel · Zoom: drag / wheel · W/L: drag · Slices: ◀ ▶ buttons or wheel in Scroll mode</span></div>
+  <div id="cap-banner"></div>
   <div id="dwv-container"></div>
   <p id="error-message"></p>
   <script type="module" src="/src/main.js"></script>
