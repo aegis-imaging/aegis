@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -162,6 +163,18 @@ func (s *Server) runDefacing(study *model.Study) {
 	// is flipped to "clean" but the cloud bucket never receives the files —
 	// causing 404s on every instance retrieve in production (Cloud Run's
 	// container filesystem is ephemeral).
+	//
+	// Read each output via io.ReadAll(f) into memory before uploading. The
+	// defacing service writes to /app/data via a shared GCS FUSE mount, and
+	// GCS FUSE has a documented stale-metadata bug where freshly-written
+	// files report size=0 from Stat() / Seek(SEEK_END) for a brief window
+	// — long enough that io.Copy(gcsWriter, f) reads zero bytes and
+	// overwrites the real DICOM with an empty object. (Same bug the
+	// importer dodges; see api/importer/importer.go parseDICOMHeaders.)
+	// Net effect of the old code: status flips to defaced + QA score is
+	// set, but every clean-store WADO-RS retrieve returns an empty body
+	// the DICOM viewer can't parse. io.ReadAll loops on Read() until EOF,
+	// which returns the actual bytes regardless of the stale metadata.
 	for i, outPath := range svcResp.OutputPaths {
 		f, err := os.Open(outPath)
 		if err != nil {
@@ -171,16 +184,33 @@ func (s *Server) runDefacing(study *model.Study) {
 				fmt.Sprintf("upload prep failed: %v", err))
 			return
 		}
+		data, readErr := io.ReadAll(f)
+		f.Close()
+		if readErr != nil {
+			log.Printf("deface: read output %s: %v", outPath, readErr)
+			model.UpdateStudyStatus(ctx, s.db, study.ID, "received")
+			s.notifyPipelineFailure(ctx, studyUID, "defacing",
+				fmt.Sprintf("read clean output failed: %v", readErr))
+			return
+		}
+		if len(data) == 0 {
+			// Defacing service wrote a real file but FUSE handed us zero
+			// bytes anyway. Don't poison the clean store with an empty
+			// object — bail to "received" so the user can retry.
+			log.Printf("deface: zero-byte read for %s — refusing to upload empty clean object", outPath)
+			model.UpdateStudyStatus(ctx, s.db, study.ID, "received")
+			s.notifyPipelineFailure(ctx, studyUID, "defacing",
+				fmt.Sprintf("clean output %s read as zero bytes (FUSE staleness)", outPath))
+			return
+		}
 		key := fmt.Sprintf("dicom/clean/%s/%d.dcm", studyUID, i)
-		if err := s.store.Store(ctx, key, f); err != nil {
-			f.Close()
+		if err := s.store.Store(ctx, key, bytes.NewReader(data)); err != nil {
 			log.Printf("deface: upload %s to store: %v", key, err)
 			model.UpdateStudyStatus(ctx, s.db, study.ID, "received")
 			s.notifyPipelineFailure(ctx, studyUID, "defacing",
 				fmt.Sprintf("clean-store upload failed: %v", err))
 			return
 		}
-		f.Close()
 	}
 
 	if err := model.UpdateStudyDefaced(ctx, s.db, study.ID); err != nil {
