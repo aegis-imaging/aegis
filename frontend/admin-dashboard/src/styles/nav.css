@@ -221,6 +221,17 @@ body {
   color: var(--aegis-border);
 }
 
+/* Hide breadcrumbs on mobile — the hamburger Menu button sits at the
+   same vertical band and overlapped the crumb text on iPhone. The
+   drawer already shows where you are (active group + active item),
+   and the page header below carries the current title, so the
+   breadcrumb is redundant in the narrow layout. */
+@media (max-width: 768px) {
+  .aegis-breadcrumbs {
+    display: none;
+  }
+}
+
 /* ── Main content ────────────────────────────────────────────────────── */
 
 .aegis-main {
