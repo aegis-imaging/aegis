@@ -134,7 +134,7 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `adminOnly` | `POST /api/ingest` | `InternalIngest` | `platform_admin` |
 | `adminOnly` | `POST /api/import/batch` | `BatchImport` | `platform_admin` |
 | `auth` | `GET /api/tcia/series` | `GetTCIASeries` | `project_member_any` |
-| `adminOnly` | `POST /api/tcia/import` | `ImportTCIASeries` | `platform_admin` |
+| `auth` | `POST /api/tcia/import` | `ImportTCIASeries` | `project_member_any` |
 | `auth` | `GET /api/audit` | `ListAudit` | `project_member_any` |
 | `auth` | `GET /api/audit.csv` | `ExportAuditCSV` | `project_member_any` |
 | `auth` | `GET /api/audit/actors` | `GetAuditActors` | `project_member_any` |
@@ -329,6 +329,9 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `auth` | `GET /api/projects/{id}/acl` | `ListProjectACL` | `project_member_any` |
 | `adminOnly` | `POST /api/projects/{id}/acl` | `SetProjectACL` | `platform_admin` |
 | `adminOnly` | `DELETE /api/projects/{id}/acl/{aclID}` | `DeleteProjectACL` | `platform_admin` |
+| `auth` | `GET /api/projects/{id}/uploaders` | `ListProjectUploaders` | `project_member_any` |
+| `auth` | `POST /api/projects/{id}/uploaders` | `InviteProjectUploader` | `project_member_any` |
+| `auth` | `DELETE /api/projects/{id}/uploaders/{userId}` | `RevokeProjectUploader` | `project_member_any` |
 | `auth` | `GET /api/studies/{id}/files` | `GetStudyFileManifest` | `project_member_site_scoped` |
 | `adminOnly` | `POST /api/studies/bulk-status` | `BulkStatusUpdate` | `platform_admin` |
 | `auth` | `GET /api/institutions/{id}/sla` | `GetInstitutionSLA` | `project_member_any` |
