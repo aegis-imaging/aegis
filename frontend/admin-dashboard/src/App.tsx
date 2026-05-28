@@ -2455,6 +2455,28 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
             <button type="button" className="btn btn--export" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/trigger-export`)}>Export</button>
           )}
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
+          {/* Re-run defacing — the tiny ↺ icon on the pipeline node above
+              is hard to find on mobile, so duplicate the action here
+              where users actually look. Only meaningful when defacing
+              has already completed AND the user has write access. */}
+          {projectCaps.canStudyMutation && study.defacing_required && ['defaced', 'received', 'rejected'].includes(study.status) && (
+            <button
+              type="button"
+              className="aegis-btn-secondary"
+              onClick={async () => {
+                await fetch(`/api/studies/${study.id}/reset-pipeline-step`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ step: 'deface' }),
+                })
+                loadData()
+                onAction()
+              }}
+              title="Reset the defacing step and re-run the pipeline. Useful when the clean store has empty / corrupt files from an earlier run."
+            >
+              ↺ Re-run defacing
+            </button>
+          )}
           <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View'}</button>
           <button type="button" className="aegis-btn-secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
           <button type="button" className="aegis-btn-secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
