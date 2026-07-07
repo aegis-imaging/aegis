@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -131,7 +132,8 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 			model.CreateAuditEntry(r.Context(), s.db, "study.soft_deleted", actor, "study", id, ip, map[string]any{
 				"study_instance_uid": study.StudyInstanceUID,
 			})
-			go webhook.Deliver(r.Context(), s.db, "study.soft_deleted", study)
+			// Detach cancellation: the goroutine outlives the request (values kept).
+			go webhook.Deliver(context.WithoutCancel(r.Context()), s.db, "study.soft_deleted", study)
 
 		case "restore":
 			if study.DeletedAt == nil {
@@ -145,7 +147,8 @@ func (s *Server) BulkStudyAction(w http.ResponseWriter, r *http.Request) {
 			model.CreateAuditEntry(r.Context(), s.db, "study.restored", actor, "study", id, ip, map[string]any{
 				"study_instance_uid": study.StudyInstanceUID,
 			})
-			go webhook.Deliver(r.Context(), s.db, "study.restored", study)
+			// Detach cancellation: the goroutine outlives the request (values kept).
+			go webhook.Deliver(context.WithoutCancel(r.Context()), s.db, "study.restored", study)
 		}
 
 		resp.Processed++
