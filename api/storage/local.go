@@ -20,7 +20,13 @@ func NewLocal(baseDir, apiBase string) *Local {
 }
 
 func (l *Local) GenerateUploadURL(_ context.Context, key string, _ time.Duration) (string, error) {
-	return fmt.Sprintf("%s/api/upload/file/%s", l.apiBase, key), nil
+	// The only staging key shape is uploads/{sessionID}/{index}.dcm (see
+	// UploadInit), and the local-dev receiving endpoint is
+	// PUT /api/upload/file/{sessionID}/{index} — exactly two path segments.
+	// Emit that shape; the raw key form (/api/upload/file/uploads/{id}/{i}.dcm)
+	// has three segments and can never match the route (mux 404s).
+	trimmed := strings.TrimSuffix(strings.TrimPrefix(key, "uploads/"), ".dcm")
+	return fmt.Sprintf("%s/api/upload/file/%s", l.apiBase, trimmed), nil
 }
 
 func (l *Local) GenerateDownloadURL(_ context.Context, key string, _ time.Duration) (string, error) {

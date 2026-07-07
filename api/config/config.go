@@ -15,6 +15,7 @@ type Config struct {
 	LocalStorageDir string
 	APIBaseURL          string // for generating local upload URLs
 	ExportPortalBaseURL string // base URL of the export portal UI — used in share email links
+	UploadPortalBaseURL string // UPLOAD_PORTAL_BASE_URL — base URL of the upload portal UI; used in uploader-invite redeem links (empty = fall back to LandingBaseURL path)
 	AppTimezone         string // database session + server log timezone (default UTC)
 
 	// GCP (only used when StorageMode = "gcs")
@@ -177,6 +178,7 @@ func Load() *Config {
 		LocalStorageDir: envOr("LOCAL_STORAGE_DIR", "./data"),
 		APIBaseURL:          envOr("API_BASE_URL", "http://localhost:8080"),
 		ExportPortalBaseURL: os.Getenv("EXPORT_PORTAL_BASE_URL"), // e.g. https://export.aegisimaging.ai
+		UploadPortalBaseURL: os.Getenv("UPLOAD_PORTAL_BASE_URL"), // e.g. https://upload.aegisimaging.ai
 		AppTimezone:         envOr("APP_TIMEZONE", "UTC"),
 
 		GCPProject:      os.Getenv("GCP_PROJECT"),
