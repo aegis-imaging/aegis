@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/email"
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -400,17 +401,59 @@ func (s *Server) DownloadDesktopInstaller(w http.ResponseWriter, r *http.Request
 
 // EmailDesktopInstallerInvite POST /api/desktop-installers/{id}/email
 //
-// Body: { recipient_email, recipient_name?, expiry_days? }
+// Body: { recipient_email, recipient_name?, expiry_days?, institution_id?, project_id? }
 // Creates a one-time invite row + sends an email containing the install link.
-// Admin-only.
+//
+// Authorization: unscoped invites (no project_id) are admin-only. Project-
+// scoped invites follow the uploader-management rule — platform admin OR
+// role='owner' researcher on THAT project — because pairing such an invite
+// provisions uploader access to the project (see PairDesktopInstaller).
+// The route is wrapped in auth() (not adminOnly) so the per-project check
+// here is the effective gate.
 func (s *Server) EmailDesktopInstallerInvite(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var req struct {
+		RecipientEmail string `json:"recipient_email"`
+		RecipientName  string `json:"recipient_name"`
+		ExpiryDays     int    `json:"expiry_days"`
+		InstitutionID  string `json:"institution_id"` // optional — when set, the invite shows up in the per-institution detail panel
+		ProjectID      string `json:"project_id"`     // optional — when set, pairing provisions uploader access to this project
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+
+	req.ProjectID = strings.TrimSpace(req.ProjectID)
+	if req.ProjectID != "" {
+		if _, err := model.GetProjectByID(r.Context(), s.db, req.ProjectID); err != nil {
+			if err == sql.ErrNoRows {
+				s.writeError(w, http.StatusBadRequest, "project_id does not match a known project")
+				return
+			}
+			s.writeError(w, http.StatusInternalServerError, "project lookup failed")
+			return
+		}
+		if !s.canManageProjectUploaders(r, req.ProjectID) {
+			s.writeError(w, http.StatusForbidden,
+				"only project owners and platform admins can send project-scoped install invites")
+			return
+		}
+	} else {
+		user := middleware.UserFromContext(r.Context())
+		if user == nil || user.Role != "admin" {
+			s.writeError(w, http.StatusForbidden, "admin role required")
+			return
+		}
+	}
+
 	if s.cfg.SMTPHost == "" {
 		s.writeError(w, http.StatusServiceUnavailable,
 			"email is not configured on this server (set SMTP_HOST)")
 		return
 	}
 
-	id := r.PathValue("id")
 	inst, err := model.GetDesktopInstaller(r.Context(), s.db, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -421,16 +464,6 @@ func (s *Server) EmailDesktopInstallerInvite(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var req struct {
-		RecipientEmail string `json:"recipient_email"`
-		RecipientName  string `json:"recipient_name"`
-		ExpiryDays     int    `json:"expiry_days"`
-		InstitutionID  string `json:"institution_id"` // optional — when set, the invite shows up in the per-institution detail panel
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
 	req.RecipientEmail = strings.TrimSpace(req.RecipientEmail)
 	if req.RecipientEmail == "" || !strings.Contains(req.RecipientEmail, "@") {
 		s.writeError(w, http.StatusBadRequest, "valid recipient_email required")
@@ -455,6 +488,7 @@ func (s *Server) EmailDesktopInstallerInvite(w http.ResponseWriter, r *http.Requ
 	inv, err := model.CreateDesktopInstallerInvite(r.Context(), s.db, model.CreateDesktopInstallerInviteInput{
 		InstallerID:    inst.ID,
 		InstitutionID:  req.InstitutionID,
+		ProjectID:      req.ProjectID,
 		RecipientEmail: req.RecipientEmail,
 		RecipientName:  req.RecipientName,
 		ExpiresAt:      time.Now().UTC().Add(time.Duration(req.ExpiryDays) * 24 * time.Hour),
@@ -477,10 +511,14 @@ func (s *Server) EmailDesktopInstallerInvite(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	auditMeta := map[string]any{
+		"to": inv.RecipientEmail, "expiry_days": req.ExpiryDays,
+	}
+	if req.ProjectID != "" {
+		auditMeta["project_id"] = req.ProjectID
+	}
 	model.CreateAuditEntry(r.Context(), s.db, "desktop_installer.invite_sent", actorEmail(r),
-		"desktop_installer", inst.ID, clientIP(r), map[string]any{
-			"to": inv.RecipientEmail, "expiry_days": req.ExpiryDays,
-		})
+		"desktop_installer", inst.ID, clientIP(r), auditMeta)
 
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"status":      "sent",
@@ -657,22 +695,110 @@ func (s *Server) PairDesktopInstaller(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Project-scoped invites (uploader PR 4): pairing provisions the recipient
+	// as an uploader on the invite's project, mirroring the browser uploader
+	// invite redeem flow. On failure we delete the key AND release the claim
+	// so the recipient can retry the same download.
+	var provisionedUserID string
+	if inv.ProjectID != nil {
+		userID, err := s.provisionInstallerProjectAccess(r, inv, apiKey.ID)
+		if err != nil {
+			log.Printf("provision project access for pairing %s: %v", inv.ID, err)
+			_ = model.DeleteAPIKey(r.Context(), s.db, apiKey.ID)
+			if uErr := model.UnclaimDesktopInstallerInvitePairing(r.Context(), s.db, inv.ID); uErr != nil {
+				log.Printf("unclaim pairing %s after provisioning failure: %v", inv.ID, uErr)
+			}
+			s.writeError(w, http.StatusInternalServerError, "failed to provision project access")
+			return
+		}
+		provisionedUserID = userID
+
+		model.CreateAuditEntry(r.Context(), s.db, "project.uploader_provisioned", inv.RecipientEmail,
+			"project", *inv.ProjectID, clientIP(r), map[string]any{
+				"user_id": userID, "invite_id": inv.ID, "via": "desktop-installer-pairing",
+			})
+	}
+
 	// Now that the claim succeeded, rename the key so audit reads make sense.
 	if err := s.renameAPIKey(r, apiKey.ID, inv); err != nil {
 		log.Printf("rename paired api key: %v", err)
 	}
 
+	pairedMeta := map[string]any{
+		"recipient":   inv.RecipientEmail,
+		"invite_id":   inv.ID,
+		"api_key_id":  apiKey.ID,
+	}
+	if inv.ProjectID != nil {
+		pairedMeta["project_id"] = *inv.ProjectID
+		pairedMeta["user_id"] = provisionedUserID
+	}
 	model.CreateAuditEntry(r.Context(), s.db, "desktop_installer.paired", inv.RecipientEmail,
-		"desktop_installer", inv.InstallerID, clientIP(r), map[string]any{
-			"recipient":   inv.RecipientEmail,
-			"invite_id":   inv.ID,
-			"api_key_id":  apiKey.ID,
-		})
+		"desktop_installer", inv.InstallerID, clientIP(r), pairedMeta)
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"api_key":    rawKey,
 		"server_url": s.cfg.LandingBaseURL,
 	})
+}
+
+// provisionInstallerProjectAccess makes a paired desktop app usable for
+// project uploads (project-scoped invites only):
+//  1. Ensures an admin_users row exists for the recipient email — created with
+//     role='uploader' + enabled when missing. An existing row with a DIFFERENT
+//     role is left untouched (the email may belong to an admin or researcher
+//     who also runs the desktop app).
+//  2. Ensures a project_members row (role='uploader'), tolerating the unique
+//     constraint like the browser uploader redeem flow does.
+//  3. Points the freshly minted API key's created_by at the recipient so
+//     Bearer-key requests resolve to that admin_users identity (apiKeyUser in
+//     the auth middleware looks up created_by → admin_users). Without this the
+//     key would authenticate as the placeholder "install-pair" and fail.
+//
+// Returns the admin_users ID of the provisioned/reused user.
+func (s *Server) provisionInstallerProjectAccess(r *http.Request, inv *model.DesktopInstallerInvite, apiKeyID string) (string, error) {
+	ctx := r.Context()
+	recipient := strings.ToLower(strings.TrimSpace(inv.RecipientEmail))
+
+	var userID string
+	existing, err := model.GetAdminUserByEmail(ctx, s.db, recipient)
+	switch {
+	case err == nil:
+		userID = existing.ID
+	case err == sql.ErrNoRows:
+		u := &model.AdminUser{
+			Email:   recipient,
+			Name:    inv.RecipientName,
+			Role:    "uploader",
+			Enabled: true,
+			Notes:   "Provisioned via desktop-installer pairing",
+		}
+		if err := model.CreateAdminUser(ctx, s.db, u); err != nil {
+			return "", fmt.Errorf("create uploader user: %w", err)
+		}
+		userID = u.ID
+	default:
+		return "", fmt.Errorf("lookup user: %w", err)
+	}
+
+	if err := model.CreateProjectMember(ctx, s.db, &model.ProjectMember{
+		ProjectID:     *inv.ProjectID,
+		AdminUserID:   userID,
+		Role:          "uploader",
+		InstitutionID: inv.InstitutionID,
+	}); err != nil {
+		if !strings.Contains(err.Error(), "unique") && !strings.Contains(err.Error(), "duplicate") {
+			return "", fmt.Errorf("create project membership: %w", err)
+		}
+		// Already a member (e.g. re-invite after a lost laptop) — fine.
+	}
+
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE api_keys SET created_by = $1, updated_at = now() WHERE id = $2`,
+		recipient, apiKeyID); err != nil {
+		return "", fmt.Errorf("bind api key to user: %w", err)
+	}
+	return userID, nil
 }
 
 // renameAPIKey best-effort updates the freshly-created API key name from the

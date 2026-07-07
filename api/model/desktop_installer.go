@@ -161,6 +161,7 @@ type DesktopInstallerInvite struct {
 	ID              string     `json:"id"`
 	InstallerID     string     `json:"installer_id"`
 	InstitutionID   *string    `json:"institution_id,omitempty"` // nil = institution-less invite (legacy / global)
+	ProjectID       *string    `json:"project_id,omitempty"`     // nil = unscoped; set = pairing provisions uploader access to this project
 	RecipientEmail  string     `json:"recipient_email"`
 	RecipientName   string     `json:"recipient_name,omitempty"`
 	Token           string     `json:"token"`
@@ -178,6 +179,7 @@ type DesktopInstallerInvite struct {
 	Platform        string  `json:"platform,omitempty"`
 	Version         string  `json:"version,omitempty"`
 	InstitutionName *string `json:"institution_name,omitempty"` // joined from institutions when InstitutionID is set
+	ProjectName     *string `json:"project_name,omitempty"`     // joined from projects when ProjectID is set
 
 	// pairing carries the single-use pairing token only on the in-memory invite
 	// returned from CreateDesktopInstallerInvite. Unexported so it never reaches
@@ -199,6 +201,7 @@ func generateInstallerToken() (string, error) {
 type CreateDesktopInstallerInviteInput struct {
 	InstallerID    string
 	InstitutionID  string // optional — when set, ties the invite to one institution for the per-institution panel
+	ProjectID      string // optional — when set, pairing provisions uploader access to this project
 	RecipientEmail string
 	RecipientName  string
 	ExpiresAt      time.Time
@@ -228,20 +231,26 @@ func CreateDesktopInstallerInvite(ctx context.Context, db *sql.DB, in CreateDesk
 	if instID := strings.TrimSpace(in.InstitutionID); instID != "" {
 		inv.InstitutionID = &instID
 	}
-	var nameArg, instArg, pairedID interface{}
+	if projID := strings.TrimSpace(in.ProjectID); projID != "" {
+		inv.ProjectID = &projID
+	}
+	var nameArg, instArg, projArg, pairedID interface{}
 	if inv.RecipientName != "" {
 		nameArg = inv.RecipientName
 	}
 	if inv.InstitutionID != nil {
 		instArg = *inv.InstitutionID
 	}
+	if inv.ProjectID != nil {
+		projArg = *inv.ProjectID
+	}
 
 	err = db.QueryRowContext(ctx,
 		`INSERT INTO desktop_installer_invites
-		   (installer_id, institution_id, recipient_email, recipient_name, token, pairing_token, expires_at, sent_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		   (installer_id, institution_id, project_id, recipient_email, recipient_name, token, pairing_token, expires_at, sent_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		 RETURNING id, sent_at, paired_api_key_id`,
-		inv.InstallerID, instArg, inv.RecipientEmail, nameArg,
+		inv.InstallerID, instArg, projArg, inv.RecipientEmail, nameArg,
 		token, pairing, inv.ExpiresAt.UTC(), inv.SentBy,
 	).Scan(&inv.ID, &inv.SentAt, &pairedID)
 	if err != nil {
@@ -284,16 +293,17 @@ func listInstallerInvites(ctx context.Context, db *sql.DB, institutionID string,
 		limit = 100
 	}
 	q := `
-		SELECT inv.id, inv.installer_id, inv.institution_id, inv.recipient_email,
+		SELECT inv.id, inv.installer_id, inv.institution_id, inv.project_id, inv.recipient_email,
 		       COALESCE(inv.recipient_name, ''), inv.token,
 		       inv.expires_at, inv.sent_at, inv.sent_by,
 		       inv.first_clicked_at, inv.last_clicked_at, inv.click_count,
 		       inv.paired_at, inv.paired_api_key_id,
 		       di.product, di.platform, di.version,
-		       inst.name
+		       inst.name, proj.name
 		  FROM desktop_installer_invites inv
 		  JOIN desktop_installers di ON di.id = inv.installer_id
-		  LEFT JOIN institutions inst ON inst.id = inv.institution_id`
+		  LEFT JOIN institutions inst ON inst.id = inv.institution_id
+		  LEFT JOIN projects proj ON proj.id = inv.project_id`
 	var rows *sql.Rows
 	var err error
 	if institutionID != "" {
@@ -310,12 +320,12 @@ func listInstallerInvites(ctx context.Context, db *sql.DB, institutionID string,
 	var out []DesktopInstallerInvite
 	for rows.Next() {
 		var i DesktopInstallerInvite
-		if err := rows.Scan(&i.ID, &i.InstallerID, &i.InstitutionID, &i.RecipientEmail, &i.RecipientName,
+		if err := rows.Scan(&i.ID, &i.InstallerID, &i.InstitutionID, &i.ProjectID, &i.RecipientEmail, &i.RecipientName,
 			&i.Token, &i.ExpiresAt, &i.SentAt, &i.SentBy,
 			&i.FirstClickedAt, &i.LastClickedAt, &i.ClickCount,
 			&i.PairedAt, &i.PairedAPIKeyID,
 			&i.Product, &i.Platform, &i.Version,
-			&i.InstitutionName,
+			&i.InstitutionName, &i.ProjectName,
 		); err != nil {
 			return nil, err
 		}
@@ -330,7 +340,7 @@ func GetDesktopInstallerInviteByToken(ctx context.Context, db *sql.DB, token str
 	var i DesktopInstallerInvite
 	var inst DesktopInstaller
 	err := db.QueryRowContext(ctx, `
-		SELECT inv.id, inv.installer_id, inv.institution_id, inv.recipient_email,
+		SELECT inv.id, inv.installer_id, inv.institution_id, inv.project_id, inv.recipient_email,
 		       COALESCE(inv.recipient_name, ''), inv.token,
 		       inv.expires_at, inv.sent_at, inv.sent_by,
 		       inv.first_clicked_at, inv.last_clicked_at, inv.click_count,
@@ -342,7 +352,7 @@ func GetDesktopInstallerInviteByToken(ctx context.Context, db *sql.DB, token str
 		  FROM desktop_installer_invites inv
 		  JOIN desktop_installers di ON di.id = inv.installer_id
 		 WHERE inv.token = $1`, token).Scan(
-		&i.ID, &i.InstallerID, &i.InstitutionID, &i.RecipientEmail, &i.RecipientName,
+		&i.ID, &i.InstallerID, &i.InstitutionID, &i.ProjectID, &i.RecipientEmail, &i.RecipientName,
 		&i.Token, &i.ExpiresAt, &i.SentAt, &i.SentBy,
 		&i.FirstClickedAt, &i.LastClickedAt, &i.ClickCount,
 		&i.PairedAt, &i.PairedAPIKeyID,
@@ -385,12 +395,12 @@ func ClaimDesktopInstallerInvitePairing(ctx context.Context, db *sql.DB, pairing
 		 WHERE pairing_token = $1
 		   AND paired_at IS NULL
 		   AND expires_at > NOW()
-		 RETURNING id, installer_id, institution_id, recipient_email, COALESCE(recipient_name, ''),
+		 RETURNING id, installer_id, institution_id, project_id, recipient_email, COALESCE(recipient_name, ''),
 		           token, expires_at, sent_at, sent_by,
 		           first_clicked_at, last_clicked_at, click_count,
 		           paired_at, paired_api_key_id`,
 		pairingToken, apiKeyID,
-	).Scan(&inv.ID, &inv.InstallerID, &inv.InstitutionID, &inv.RecipientEmail, &inv.RecipientName,
+	).Scan(&inv.ID, &inv.InstallerID, &inv.InstitutionID, &inv.ProjectID, &inv.RecipientEmail, &inv.RecipientName,
 		&inv.Token, &inv.ExpiresAt, &inv.SentAt, &inv.SentBy,
 		&inv.FirstClickedAt, &inv.LastClickedAt, &inv.ClickCount,
 		&inv.PairedAt, &inv.PairedAPIKeyID)
@@ -401,4 +411,16 @@ func ClaimDesktopInstallerInvitePairing(ctx context.Context, db *sql.DB, pairing
 		return nil, false, err
 	}
 	return &inv, true, nil
+}
+
+// UnclaimDesktopInstallerInvitePairing releases a pairing claim after a
+// downstream provisioning failure, so the recipient can retry the same
+// download instead of needing a fresh invite. Mirrors UnclaimUploaderInvite.
+func UnclaimDesktopInstallerInvitePairing(ctx context.Context, db *sql.DB, id string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE desktop_installer_invites
+		   SET paired_at         = NULL,
+		       paired_api_key_id = NULL
+		 WHERE id = $1`, id)
+	return err
 }
