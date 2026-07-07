@@ -2278,7 +2278,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
                 setSubjectEdit(false)
                 loadData()
               }}>Save</button>
-              <button type="button" className="btn btn--sm" onClick={() => setSubjectEdit(false)}>✕</button>
+              <button type="button" className="btn btn--sm" onClick={() => setSubjectEdit(false)} aria-label="Cancel subject edit">✕</button>
             </span>
           ) : (
             <span>
@@ -3271,7 +3271,7 @@ function AnalyticsResultsPanel({ studyId, studyUID }: { studyId: string; studyUI
     setRoiOpen(true)
   }
 
-  if (loading) return <div style={{ padding: 24, color: '#888' }}>Loading analytics results…</div>
+  if (loading) return <div className="aegis-muted" style={{ padding: 24 }}>Loading analytics results…</div>
 
   return (
     <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -4523,7 +4523,15 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
 
       {/* ── Rule Analytics ── */}
       <section className="aegis-section">
-        <div className="aegis-section-bar" style={{ cursor: 'pointer' }} onClick={() => setRuleStatsOpen(o => !o)}>
+        <div
+          className="aegis-section-bar"
+          style={{ cursor: 'pointer' }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={ruleStatsOpen}
+          onClick={() => setRuleStatsOpen(o => !o)}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); setRuleStatsOpen(o => !o) } }}
+        >
           <h2>Rule Analytics {ruleStatsOpen ? '▲' : '▼'}</h2>
           <select
             className=""
@@ -4620,7 +4628,15 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
 
       {/* ── Routing Health ── */}
       <section className="aegis-section">
-        <div className="aegis-section-bar" style={{ cursor: 'pointer' }} onClick={() => setHealthOpen(o => !o)}>
+        <div
+          className="aegis-section-bar"
+          style={{ cursor: 'pointer' }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={healthOpen}
+          onClick={() => setHealthOpen(o => !o)}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); setHealthOpen(o => !o) } }}
+        >
           <h2>Routing Health {healthOpen ? '▲' : '▼'}</h2>
           <select
             className=""
@@ -4732,7 +4748,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               </button>
             </div>
             {simError && (
-              <div style={{ background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 5, padding: '8px 12px', color: '#9a3412', fontSize: 12, marginBottom: 10 }}>
+              <div className="aegis-warning-banner" style={{ marginBottom: 10 }}>
                 {simError}
               </div>
             )}
@@ -7696,7 +7712,7 @@ function ProjectMembersPanel({ projectId, projectName, onClose }: { projectId: s
       <div className="modal-panel" style={{ maxWidth: '780px' }}>
         <div className="modal-header">
           <h2>Project Members — {projectName}</h2>
-          <button type="button" className="modal-close" onClick={onClose}>✕</button>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close panel">✕</button>
         </div>
 
         <div className="modal-body">
@@ -8349,6 +8365,7 @@ function InviteCodesPanel() {
                                 className="aegis-btn-secondary"
                                 style={{ marginLeft: 8, fontSize: '0.65rem', padding: '1px 5px' }}
                                 onClick={() => setActivityId(null)}
+                                aria-label="Close activity view"
                               >✕</button>
                             </div>
                             {activityData.entries.length === 0
@@ -9218,7 +9235,12 @@ function PACSQueryPanel() {
     <div className="routing-section">
       <div className="routing-section-header" style={{ cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
         <div className="routing-section-title">PACS Query (C-FIND / C-MOVE)</div>
-        <button className="btn btn-sm" type="button">{open ? '▲ Hide' : '▼ Show'}</button>
+        <button
+          className="btn btn-sm"
+          type="button"
+          aria-expanded={open}
+          onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+        >{open ? '▲ Hide' : '▼ Show'}</button>
       </div>
 
       {open && (
@@ -9257,7 +9279,7 @@ function PACSQueryPanel() {
             {extraParams.map((ep, idx) => (
               <div key={idx} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', background: '#f0faf8', borderRadius: 4, padding: '2px 8px', marginRight: 6, marginBottom: 4, fontSize: 12 }}>
                 <code>{ep.key}</code>{ep.value ? <span>= <code>{ep.value}</code></span> : <span style={{ color: '#6b7280' }}> (wildcard)</span>}
-                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ea580c', padding: '0 2px' }} onClick={() => removeParam(idx)}>✕</button>
+                <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ea580c', padding: '0 2px' }} onClick={() => removeParam(idx)} aria-label={`Remove filter ${ep.key}`}>✕</button>
               </div>
             ))}
           </div>
@@ -11622,11 +11644,8 @@ export function App() {
 
           {/* Expiring soon warning */}
           {expiringStudies.length > 0 && (
-            <div style={{
-              background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6,
-              padding: '8px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10
-            }}>
-              <span style={{fontSize: 13, color: '#9a3412', fontWeight: 600}}>
+            <div className="aegis-warning-banner" style={{ marginBottom: 10 }}>
+              <span>
                 {expiringStudies.length} approved {expiringStudies.length === 1 ? 'study' : 'studies'} expiring within 7 days
               </span>
               <button type="button"
@@ -12071,7 +12090,7 @@ export function App() {
                   style={{ width: 130 }}
                 />
                 <button type="button" className="aegis-btn-secondary" onClick={saveCurrentFilter} disabled={!saveFilterName.trim()}>Save</button>
-                <button type="button" className="aegis-btn-secondary" onClick={() => setShowSaveFilterPrompt(false)}>✕</button>
+                <button type="button" className="aegis-btn-secondary" onClick={() => setShowSaveFilterPrompt(false)} aria-label="Cancel saving filter">✕</button>
               </span>
             )}
             {/* Load saved filter presets dropdown */}
@@ -12110,6 +12129,7 @@ export function App() {
                           onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                           onClick={() => deleteSavedFilter(f.name)}
                           title="Delete this preset"
+                          aria-label={`Delete preset ${f.name}`}
                         >
                           ✕
                         </button>

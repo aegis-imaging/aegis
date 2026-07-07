@@ -15,6 +15,9 @@ import {
 export function HomePage() {
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [me, setMe] = useState<CurrentUser | null>(null)
+  // Distinguishes "apiGetMe failed" (transient auth blip) from "user is not
+  // an admin" so admins don't see the non-admin empty state on a blip.
+  const [meError, setMeError] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
@@ -25,6 +28,7 @@ export function HomePage() {
         if (cancelled) return
         setProjects(ps.filter((p) => !p.archived))
         setMe(user)
+        setMeError(user === null)
       })
       .catch((e) => !cancelled && setError(String(e)))
     return () => {
@@ -112,9 +116,11 @@ export function HomePage() {
         {!projects && !error && <div className="aegis-muted">Loading…</div>}
         {projects && projects.length === 0 && !creating && (
           <div className="aegis-muted">
-            {isAdmin
-              ? 'No projects yet. Click "+ New project" above to create one.'
-              : "You don't have access to any projects yet. Ask a project owner to invite you."}
+            {meError
+              ? "Couldn't verify your account — reload the page to retry."
+              : isAdmin
+                ? 'No projects yet. Click "+ New project" above to create one.'
+                : "You don't have access to any projects yet. Ask a project owner to invite you."}
           </div>
         )}
         {projects && projects.length > 0 && (

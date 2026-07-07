@@ -259,6 +259,26 @@ body {
   font-size: 14px;
 }
 
+/* Orange warning banner (colorblind-safe: orange, never red/green). */
+.aegis-warning-banner {
+  background: #ffedd5;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  padding: 8px 14px;
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+:root[data-theme="dark"] .aegis-warning-banner {
+  background: rgba(251, 146, 60, 0.12);
+  border-color: rgba(251, 146, 60, 0.35);
+  color: #fdba74;
+}
+
 /* ── Home page cards ─────────────────────────────────────────────────── */
 
 .aegis-home-greeting h1 {
