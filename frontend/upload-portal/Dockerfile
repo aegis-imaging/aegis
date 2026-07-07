@@ -20,12 +20,6 @@ COPY frontend/upload-portal/ frontend/upload-portal/
 # npm ci resolves @aegis/client via the workspace symlink (client/ above).
 RUN npm ci --workspace=@aegis/upload-portal --ignore-scripts
 
-# VITE_INVITE_GATE_ENABLED controls the invite code gate at build time.
-# Set to "true" in production to require an invite code before showing the portal.
-# Default is "false" (open access for local dev).
-ARG VITE_INVITE_GATE_ENABLED
-ENV VITE_INVITE_GATE_ENABLED=$VITE_INVITE_GATE_ENABLED
-
 WORKDIR /app/frontend/upload-portal
 RUN npm run build
 

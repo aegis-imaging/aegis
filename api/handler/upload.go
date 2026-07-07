@@ -3,7 +3,9 @@ package handler
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -83,6 +85,26 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per-project authorization for signed-in upload-portal users. Only applies
+	// when auth is enabled and the caller authenticated via the uploader session
+	// cookie — satellites are attributed by cert (project link is checked at
+	// routing time) and API keys are platform-scoped. Any project_members role
+	// qualifies; the dedicated upload role is 'uploader'.
+	if s.cfg.AuthEnabled && middleware.SatelliteFromContext(r.Context()) == nil {
+		if sess := middleware.UploaderSessionFromContext(r.Context()); sess != nil {
+			user := middleware.UserFromContext(r.Context())
+			if _, err := loadProjectMemberRoleForUploader(r, s.db, project.ID, user.ID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					s.writeError(w, http.StatusForbidden, "you don't have upload access to this project")
+					return
+				}
+				log.Printf("upload init: project access check for %s on %s: %v", user.ID, project.ID, err)
+				s.writeError(w, http.StatusInternalServerError, "failed to verify project access")
+				return
+			}
+		}
+	}
+
 	var institutionID *string
 	// Satellite-mTLS attribution wins over body selectors and IP allowlist — the
 	// cert is the strongest identity signal we have.
@@ -159,7 +181,7 @@ func (s *Server) UploadInit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Audit
-	model.CreateAuditEntry(r.Context(), s.db, "upload.init", "anonymous", "upload_session", session.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "upload.init", uploadActor(r), "upload_session", session.ID, clientIP(r), map[string]any{
 		"file_count":     req.FileCount,
 		"project":        slug,
 		"institution_id": institutionID,
@@ -295,7 +317,7 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Audit
-	model.CreateAuditEntry(r.Context(), s.db, "upload.complete", "anonymous", "study", study.ID, clientIP(r), map[string]any{
+	model.CreateAuditEntry(r.Context(), s.db, "upload.complete", uploadActor(r), "study", study.ID, clientIP(r), map[string]any{
 		"session_id":        session.ID,
 		"study_uid":         study.StudyInstanceUID,
 		"modality":          study.Modality,
@@ -477,6 +499,16 @@ func readSeriesUIDAndDataset(ctx context.Context, store storage.Storage, key str
 		return "", dicomlib.Dataset{}, false
 	}
 	return getStringTag(dataset, tag.SeriesInstanceUID), dataset, true
+}
+
+// uploadActor names the audit actor for upload events: the authenticated
+// user's email when the request carried a session/API key, otherwise
+// "anonymous" (open local-dev mode and satellite-cert uploads).
+func uploadActor(r *http.Request) string {
+	if u := middleware.UserFromContext(r.Context()); u != nil {
+		return u.Email
+	}
+	return "anonymous"
 }
 
 func clientIP(r *http.Request) string {

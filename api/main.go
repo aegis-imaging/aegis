@@ -164,13 +164,17 @@ func main() {
 	// tokens, with activity stats. Powers the admin-dashboard Satellites tab.
 	mux.HandleFunc("GET /api/satellites", auth(srv.ListSatellites))
 
-	// Upload portal — public-facing, rate-limited.
+	// Upload portal — rate-limited; open when AUTH_ENABLED=false (local dev).
 	// Wrapped with satellite-mTLS so AEGIS Routers presenting a known client cert
 	// get their SatelliteIdentity attached to ctx (passive — never rejects).
+	// uploadAuth then requires ONE of: satellite identity, an uploader session
+	// cookie, or an Authorization: Bearer API key. UploadInit additionally
+	// checks project membership for session users (in the handler).
 	satelliteMTLS := middleware.WithSatelliteMTLS(db)
-	mux.Handle("POST /api/upload/init", rateLimit(satelliteMTLS(srv.UploadInit)))
-	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(satelliteMTLS(srv.UploadFile)))
-	mux.Handle("POST /api/upload/complete", rateLimit(satelliteMTLS(srv.UploadComplete)))
+	uploadAuth := middleware.RequireUploadAuth(db, cfg)
+	mux.Handle("POST /api/upload/init", rateLimit(satelliteMTLS(uploadAuth(srv.UploadInit))))
+	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(satelliteMTLS(uploadAuth(srv.UploadFile))))
+	mux.Handle("POST /api/upload/complete", rateLimit(satelliteMTLS(uploadAuth(srv.UploadComplete))))
 
 	// Contact form — public, rate-limited.
 	mux.Handle("POST /api/contact", rateLimit(srv.ContactForm))

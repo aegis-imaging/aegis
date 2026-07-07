@@ -40,3 +40,204 @@
   font-size: 12px;
   font-weight: 600;
 }
+
+/* ── Auth surface (login + invite redeem) ──────────────────────────────
+   Colorblind-safe palette: teal = primary/success, orange = error.
+   Never pair red/green to distinguish semantic states. */
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  box-sizing: border-box;
+}
+
+.auth-brand {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-brand h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.auth-brand p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  box-sizing: border-box;
+}
+
+.auth-card h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.auth-card .auth-subtitle {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.auth-field {
+  margin-bottom: 14px;
+}
+
+.auth-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 5px;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+}
+
+.auth-input[aria-invalid='true'] {
+  border-color: #ea580c;
+}
+
+.auth-hint {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.auth-field-error {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #9a3412;
+}
+
+.auth-error {
+  padding: 10px 14px;
+  background: #ffedd5;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #9a3412;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.auth-info {
+  padding: 10px 14px;
+  background: #ccfbf1;
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  color: #0f766e;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.auth-btn {
+  width: 100%;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  background: #0d9488;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-btn:hover:not(:disabled) {
+  background: #0f766e;
+}
+
+.auth-btn:disabled {
+  background: #99f6e4;
+  color: #134e4a;
+  cursor: not-allowed;
+}
+
+.auth-footnote {
+  margin-top: 18px;
+  font-size: 13px;
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.auth-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid rgba(13, 148, 136, 0.2);
+  border-top-color: #0d9488;
+  animation: auth-spin 0.9s linear infinite;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Header bar for the signed-in app */
+.session-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.session-bar .session-user {
+  font-weight: 600;
+}
+
+.session-signout {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.session-signout:hover {
+  border-color: #0d9488;
+  color: #0f766e;
+}
+
+.open-mode-note {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
