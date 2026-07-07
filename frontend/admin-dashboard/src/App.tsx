@@ -2146,6 +2146,9 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
   const canClassify = study.classification_required && study.classification_status === 'pending'
   const canProtocolCheck = study.protocol_required && study.protocol_status === 'pending'
   const projectCaps = isAdmin ? { canStudyMutation: true, canApproveReject: true, canManageProject: true } : capabilitiesForProjectRole(projectRole)
+  // Downloads are role-gated server-side: non-members (no project role and
+  // not admin) get a 403 — hide the buttons instead of surfacing dead links.
+  const canDownloadFiles = isAdmin || projectRole !== null
 
   const doAction = async (url: string) => {
     await fetch(url, { method: 'POST' })
@@ -2380,7 +2383,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
           {isAdmin && canProtocolCheck && <button type="button" className="btn btn--protocol-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/protocol-check`)}>Check Protocol</button>}
           {isAdmin && canQcCheck && <button type="button" className="btn btn--qc-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/qc-check`)}>Run QC</button>}
           {isAdmin && canBidsConvert && <button type="button" className="btn btn--bids-convert" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/bids-convert`)}>Convert to BIDS</button>}
-          {canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
+          {canDownloadFiles && canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
           {isAdmin && study.bids_status === 'complete' && study.analytics_status !== 'analyzing' && (
             <button type="button" className="aegis-btn-secondary" onClick={() => setLongAnalyticsOpen(o => !o)}>{longAnalyticsOpen ? 'Cancel' : 'Longitudinal Analytics'}</button>
           )}
@@ -2445,12 +2448,12 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
               )}
             </div>
           )}
-          {(study.analytics_status === 'complete' || study.analytics_status === 'partial') && (
+          {canDownloadFiles && (study.analytics_status === 'complete' || study.analytics_status === 'partial') && (
             <a href={`/api/studies/${study.id}/analytics-download`} className="btn btn--bids-download" download title="Download all analytics output files as a ZIP archive">
               Download Analytics
             </a>
           )}
-          {study.status === 'approved' && <a href={`/api/studies/${study.study_instance_uid}/dicom-download`} className="btn btn--dicom-download" download>Download DICOM</a>}
+          {canDownloadFiles && study.status === 'approved' && <a href={`/api/studies/${study.study_instance_uid}/dicom-download`} className="btn btn--dicom-download" download>Download DICOM</a>}
           {isAdmin && study.export_required && (study.export_status === 'pending' || study.export_status === 'failed') && study.status === 'approved' && (
             <button type="button" className="btn btn--export" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/trigger-export`)}>Export</button>
           )}
@@ -10731,7 +10734,9 @@ export function App() {
   useEffect(() => {
     const sid = searchParams.get('study_id')
     if (sid && !selectedStudyId) {
-      setSelectedStudyId(sid)
+      // Use selectStudy (not setSelectedStudyId) so deep-linked opens are
+      // recorded in the HIPAA access audit just like in-page clicks.
+      selectStudy(sid)
       const next = new URLSearchParams(searchParams)
       next.delete('study_id')
       setSearchParams(next, { replace: true })
@@ -11069,7 +11074,7 @@ export function App() {
 
   // Real-time SSE updates — bump refreshTick on any study change so the list
   // re-fetches automatically without requiring a manual refresh.
-  useStudyEvents({
+  const { connected: sseConnected } = useStudyEvents({
     projectId: globalProjectId || undefined,
     onEvent: () => setRefreshTick(t => t + 1),
   })
@@ -12122,6 +12127,9 @@ export function App() {
                     ? `${studiesTotal} matching`
                     : `${studiesTotal} total`}
               </span>
+            )}
+            {!sseConnected && (
+              <span className="aegis-muted" style={{ fontSize: '0.75rem' }}>live updates paused — retrying</span>
             )}
             {state === 'loaded' && studiesTotal > 0 && (
               <a href={csvUrl} download="studies.csv" className="aegis-btn-secondary">Export CSV</a>
