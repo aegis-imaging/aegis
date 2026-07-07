@@ -34,34 +34,83 @@ class BasicBackend(QCBackend):
     def check(self, dicom_paths: list[str]) -> QCResult:
         import pydicom
 
-        datasets = []
+        # Single pass: hold ONE dataset at a time and accumulate only scalars
+        # and small lists so whole studies never sit in memory at once.
         parse_errors: list[dict] = []
+        parsed_count = 0
+        missing_tag_files: list[dict] = []
+        required_tags = ["Rows", "Columns", "BitsAllocated", "Modality"]
+
+        rows_set: set[int] = set()
+        cols_set: set[int] = set()
+        spacings: set[tuple] = set()
+        snr_values: list[float] = []
+        body_part = ""
+        positions: list[float] = []
+
         for path in dicom_paths:
             try:
                 ds = pydicom.dcmread(path)
-                datasets.append((path, ds))
             except Exception as e:
                 parse_errors.append({"file": Path(path).name, "error": str(e)})
+                continue
+            parsed_count += 1
+
+            # File integrity: required tags
+            missing = [t for t in required_tags if not hasattr(ds, t)]
+            if missing:
+                missing_tag_files.append({"file": Path(path).name, "missing_tags": missing})
+
+            # Slice consistency accumulators
+            if hasattr(ds, "Rows"):
+                rows_set.add(int(ds.Rows))
+            if hasattr(ds, "Columns"):
+                cols_set.add(int(ds.Columns))
+            if hasattr(ds, "PixelSpacing"):
+                ps = ds.PixelSpacing
+                spacings.add((round(float(ps[0]), 4), round(float(ps[1]), 4)))
+
+            # SNR: per-slice scalar
+            snr = self._slice_snr(ds)
+            if snr is not None:
+                snr_values.append(snr)
+
+            # Coverage: first non-empty body part wins
+            if not body_part:
+                bp = getattr(ds, "BodyPartExamined", "")
+                if bp:
+                    body_part = str(bp).upper()
+
+            # Missing slices: slice position scalars
+            if hasattr(ds, "ImagePositionPatient"):
+                pos = ds.ImagePositionPatient
+                positions.append(float(pos[2]))
+            elif hasattr(ds, "SliceLocation"):
+                positions.append(float(ds.SliceLocation))
+
+            del ds  # release pixel data before reading the next file
 
         checks: list[CheckResult] = []
 
         # 1. File integrity
-        checks.append(self._check_file_integrity(dicom_paths, datasets, parse_errors))
+        checks.append(
+            self._check_file_integrity(dicom_paths, parsed_count, parse_errors, missing_tag_files)
+        )
 
-        if len(datasets) == 0:
+        if parsed_count == 0:
             return QCResult(checks=checks, overall="fail")
 
         # 2. Slice consistency
-        checks.append(self._check_slice_consistency(datasets))
+        checks.append(self._check_slice_consistency(rows_set, cols_set, spacings))
 
         # 3. SNR estimation
-        checks.append(self._check_snr(datasets))
+        checks.append(self._check_snr(snr_values))
 
         # 4. Coverage completeness
-        checks.append(self._check_coverage(datasets))
+        checks.append(self._check_coverage(parsed_count, body_part))
 
         # 5. Missing slices
-        checks.append(self._check_missing_slices(datasets))
+        checks.append(self._check_missing_slices(positions))
 
         statuses = [c.status for c in checks]
         if "fail" in statuses:
@@ -75,17 +124,10 @@ class BasicBackend(QCBackend):
 
     # ── Individual checks ──────────────────────────────────────────────────
 
-    def _check_file_integrity(self, all_paths, parsed, errors) -> CheckResult:
+    def _check_file_integrity(self, all_paths, parsed_count, errors, missing_tag_files) -> CheckResult:
         total = len(all_paths)
-        ok = len(parsed)
+        ok = parsed_count
         failed = len(errors)
-
-        required_tags = ["Rows", "Columns", "BitsAllocated", "Modality"]
-        missing_tag_files = []
-        for path, ds in parsed:
-            missing = [t for t in required_tags if not hasattr(ds, t)]
-            if missing:
-                missing_tag_files.append({"file": Path(path).name, "missing_tags": missing})
 
         details: dict = {
             "total_files": total,
@@ -108,20 +150,7 @@ class BasicBackend(QCBackend):
 
         return CheckResult(name="file_integrity", status=status, message=msg, details=details)
 
-    def _check_slice_consistency(self, datasets) -> CheckResult:
-        rows_set: set[int] = set()
-        cols_set: set[int] = set()
-        spacings: set[tuple] = set()
-
-        for _path, ds in datasets:
-            if hasattr(ds, "Rows"):
-                rows_set.add(int(ds.Rows))
-            if hasattr(ds, "Columns"):
-                cols_set.add(int(ds.Columns))
-            if hasattr(ds, "PixelSpacing"):
-                ps = ds.PixelSpacing
-                spacings.add((round(float(ps[0]), 4), round(float(ps[1]), 4)))
-
+    def _check_slice_consistency(self, rows_set, cols_set, spacings) -> CheckResult:
         details = {
             "unique_rows": sorted(rows_set),
             "unique_columns": sorted(cols_set),
@@ -150,31 +179,32 @@ class BasicBackend(QCBackend):
             details=details,
         )
 
-    def _check_snr(self, datasets) -> CheckResult:
-        snr_values = []
-        for _path, ds in datasets:
-            if not hasattr(ds, "PixelData"):
-                continue
-            try:
-                arr = ds.pixel_array.astype(np.float64)
-            except Exception:
-                continue
+    def _slice_snr(self, ds) -> float | None:
+        """Return the SNR estimate for a single slice, or None if unavailable."""
+        if not hasattr(ds, "PixelData"):
+            return None
+        try:
+            arr = ds.pixel_array.astype(np.float64)
+        except Exception:
+            return None
 
-            # Handle multi-frame or RGB
-            if arr.ndim == 3:
-                arr = arr[0]
+        # Handle multi-frame or RGB
+        if arr.ndim == 3:
+            arr = arr[0]
 
-            h, w = arr.shape[:2]
-            corner_h = max(1, h // 10)
-            corner_w = max(1, w // 10)
-            corner = arr[:corner_h, :corner_w]
+        h, w = arr.shape[:2]
+        corner_h = max(1, h // 10)
+        corner_w = max(1, w // 10)
+        corner = arr[:corner_h, :corner_w]
 
-            noise_std = np.std(corner)
-            signal_mean = np.mean(arr)
+        noise_std = np.std(corner)
+        signal_mean = np.mean(arr)
 
-            if noise_std > 0:
-                snr_values.append(signal_mean / noise_std)
+        if noise_std > 0:
+            return float(signal_mean / noise_std)
+        return None
 
+    def _check_snr(self, snr_values) -> CheckResult:
         if not snr_values:
             return CheckResult(
                 name="snr",
@@ -214,7 +244,7 @@ class BasicBackend(QCBackend):
             details=details,
         )
 
-    def _check_coverage(self, datasets) -> CheckResult:
+    def _check_coverage(self, count, body_part) -> CheckResult:
         expected_counts = {
             "HEAD": 100,
             "BRAIN": 100,
@@ -224,14 +254,6 @@ class BasicBackend(QCBackend):
             "SPINE": 20,
         }
 
-        body_part = ""
-        for _, ds in datasets:
-            bp = getattr(ds, "BodyPartExamined", "")
-            if bp:
-                body_part = str(bp).upper()
-                break
-
-        count = len(datasets)
         details: dict = {"slice_count": count, "body_part": body_part}
 
         if body_part and body_part in expected_counts:
@@ -261,15 +283,7 @@ class BasicBackend(QCBackend):
             details=details,
         )
 
-    def _check_missing_slices(self, datasets) -> CheckResult:
-        positions = []
-        for _path, ds in datasets:
-            if hasattr(ds, "ImagePositionPatient"):
-                pos = ds.ImagePositionPatient
-                positions.append(float(pos[2]))
-            elif hasattr(ds, "SliceLocation"):
-                positions.append(float(ds.SliceLocation))
-
+    def _check_missing_slices(self, positions) -> CheckResult:
         if len(positions) < 3:
             return CheckResult(
                 name="missing_slices",
@@ -278,7 +292,7 @@ class BasicBackend(QCBackend):
                 details={"positions_found": len(positions)},
             )
 
-        positions.sort()
+        positions = sorted(positions)
         spacings = np.diff(positions)
 
         if len(spacings) == 0:
