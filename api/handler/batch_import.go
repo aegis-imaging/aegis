@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -38,7 +39,8 @@ func (s *Server) BatchImport(w http.ResponseWriter, r *http.Request) {
 	for _, studyID := range result.StudyIDs {
 		s.AdvancePipeline(r.Context(), studyID)
 		if study, err := model.GetStudyByID(r.Context(), s.db, studyID); err == nil {
-			go webhook.Deliver(r.Context(), s.db, "study.created", study)
+			// Detach cancellation: the goroutine outlives the request (values kept).
+			go webhook.Deliver(context.WithoutCancel(r.Context()), s.db, "study.created", study)
 		}
 	}
 

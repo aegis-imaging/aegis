@@ -70,6 +70,24 @@ func UpdateUploadSessionStatus(ctx context.Context, db *sql.DB, id, status strin
 	return err
 }
 
+// MarkUploadSessionIngesting atomically transitions a session from 'initiated'
+// to 'ingesting'. Returns true when this caller won the transition; false when
+// the session was already being (or had been) processed. Guards UploadComplete
+// against two concurrent completes both ingesting the same staging files.
+func MarkUploadSessionIngesting(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE upload_sessions SET status = 'ingesting', updated_at = now()
+		 WHERE id = $1 AND status = 'initiated'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 func UpdateUploadSessionMetadata(ctx context.Context, db *sql.DB, id string, modality, bodyPart, studyDate *string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE upload_sessions SET modality = $1, body_part = $2, study_date = $3, updated_at = now() WHERE id = $4`,

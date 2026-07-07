@@ -31,6 +31,11 @@ func (s *Server) StudyEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SSE: stream indefinitely. Without this, the http.Server's WriteTimeout
+	// (5 min) would kill the connection mid-stream.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+
 	projectFilter := r.URL.Query().Get("project_id")
 
 	w.Header().Set("Content-Type", "text/event-stream")

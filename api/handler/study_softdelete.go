@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net/http"
@@ -45,7 +46,8 @@ func (s *Server) SoftDeleteStudy(w http.ResponseWriter, r *http.Request) {
 		"study_instance_uid": study.StudyInstanceUID,
 		"status":             study.Status,
 	})
-	go webhook.Deliver(r.Context(), s.db, "study.soft_deleted", study)
+	// Detach cancellation: the goroutine outlives the request (values kept).
+	go webhook.Deliver(context.WithoutCancel(r.Context()), s.db, "study.soft_deleted", study)
 
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": id})
 }
@@ -83,7 +85,8 @@ func (s *Server) RestoreStudy(w http.ResponseWriter, r *http.Request) {
 	model.CreateAuditEntry(r.Context(), s.db, "study.restored", actor, "study", id, clientIP(r), map[string]any{
 		"study_instance_uid": study.StudyInstanceUID,
 	})
-	go webhook.Deliver(r.Context(), s.db, "study.restored", study)
+	// Detach cancellation: the goroutine outlives the request (values kept).
+	go webhook.Deliver(context.WithoutCancel(r.Context()), s.db, "study.restored", study)
 
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "restored", "id": id})
 }
