@@ -97,12 +97,42 @@ func GetUploaderInviteByToken(ctx context.Context, db *sql.DB, token string) (*U
 	return inv, nil
 }
 
-// MarkUploaderInviteRedeemed finalises the invite after the recipient set a
-// password and the matching admin_users row was created.
-func MarkUploaderInviteRedeemed(ctx context.Context, db *sql.DB, inviteID, userID string) error {
+// ClaimUploaderInvite atomically marks the invite redeemed, but only if it has
+// not been redeemed yet. Returns true when this caller won the claim. Two
+// concurrent redeems of the same token therefore race on a single UPDATE and
+// exactly one proceeds — the TOCTOU guard for the redeem flow.
+func ClaimUploaderInvite(ctx context.Context, db *sql.DB, inviteID string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE uploader_invites
+		   SET redeemed_at = now()
+		 WHERE id = $1 AND redeemed_at IS NULL`, inviteID)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
+// UnclaimUploaderInvite reverses ClaimUploaderInvite after provisioning failed,
+// so the recipient can retry the link instead of losing the invitation.
+func UnclaimUploaderInvite(ctx context.Context, db *sql.DB, inviteID string) error {
 	_, err := db.ExecContext(ctx, `
 		UPDATE uploader_invites
-		   SET redeemed_at = now(), redeemed_user_id = $2
+		   SET redeemed_at = NULL, redeemed_user_id = NULL
+		 WHERE id = $1`, inviteID)
+	return err
+}
+
+// SetUploaderInviteRedeemedUser records which admin_users row the redeemed
+// invite produced. Called after provisioning succeeds; redeemed_at was already
+// set by ClaimUploaderInvite.
+func SetUploaderInviteRedeemedUser(ctx context.Context, db *sql.DB, inviteID, userID string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE uploader_invites
+		   SET redeemed_user_id = $2
 		 WHERE id = $1`, inviteID, userID)
 	return err
 }
