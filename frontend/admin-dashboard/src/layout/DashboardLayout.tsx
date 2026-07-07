@@ -9,28 +9,19 @@ import '../styles/nav.css'
 // hierarchy: shared top bar + breadcrumb strip + sidebar + the active page.
 //
 // Mobile drawer: on narrow viewports (<= 768px) the sidebar becomes a
-// slide-in drawer with a hamburger toggle.
+// slide-in drawer with a hamburger toggle. On mobile, sidebar items are
+// plain <a href> anchors (see ResearcherSidebar) so tapping one does a
+// full page load — the drawer state resets on the next page boot and
+// onItemClick never fires for them. onItemClick is wired to the DESKTOP
+// NavLink branch (harmless no-op while the drawer is closed; closes it
+// if the viewport was resized across the breakpoint with the drawer
+// open) and to the backdrop overlay below.
 //
-// Closing the drawer on sidebar tap requires deferring the close one
-// animation frame past the synthesized click event. Two iOS Safari
-// quirks pile up otherwise:
-//
-//   1. The useEffect-on-location approach (drawer closes after
-//      navigate finishes reconciling) leaves the first tap working
-//      and every subsequent one dead — focus rewind on overlay
-//      unmount during the effect-after-paint window swallows the
-//      next click target.
-//   2. The synchronous-onItemClick approach starts the drawer's
-//      CSS transform animation while the synthesized click is still
-//      pending. iOS Safari cancels the click whenever its target
-//      element MOVES between touchstart and click — the NavLink is
-//      mid-translateX(-100%) so navigate() never fires. The drawer
-//      closes (because setState already ran) but the URL doesn't
-//      change.
-//
-// requestAnimationFrame defers the state update to after the click
-// event has fully dispatched, so navigate() runs first and the
-// element-moved cancellation can't trigger.
+// The requestAnimationFrame deferral matters for the overlay path on
+// iOS Safari: closing synchronously starts the drawer's CSS transform
+// while the synthesized click is still dispatching, and iOS cancels
+// clicks whose target moves between touchstart and click. Deferring one
+// frame lets the click complete before the animation starts.
 export function DashboardLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const closeMobileNav = () => {
