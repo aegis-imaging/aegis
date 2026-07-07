@@ -73,11 +73,12 @@ def forward_study(
     AE = _load_pynetdicom_ae()
     ae = AE(ae_title=config.DIMSE_AE_TITLE)
 
-    datasets = []
+    # First pass: header-only reads (stop_before_pixels) to collect the
+    # presentation contexts. Full datasets are read one at a time during the
+    # send loop so the whole study is never held in memory at once.
     added_contexts: set[tuple[str, str]] = set()
     for path in files:
-        ds = pydicom.dcmread(path, force=True)
-        datasets.append(ds)
+        ds = pydicom.dcmread(path, stop_before_pixels=True, force=True)
         sop_uid = str(getattr(ds, "SOPClassUID", ""))
         ts_uid = str(getattr(getattr(ds, "file_meta", None), "TransferSyntaxUID", ""))
         if not sop_uid:
@@ -100,8 +101,10 @@ def forward_study(
     sent = 0
     failed = 0
     try:
-        for ds in datasets:
+        for path in files:
+            ds = pydicom.dcmread(path, force=True)
             status = assoc.send_c_store(ds)
+            del ds  # release pixel data before reading the next file
             if _status_ok(status):
                 sent += 1
             else:
@@ -123,7 +126,7 @@ def forward_study(
         port,
         ae_title,
     )
-    return {"files_total": len(datasets), "files_sent": sent, "files_failed": failed}
+    return {"files_total": len(files), "files_sent": sent, "files_failed": failed}
 
 
 def send_cfind(

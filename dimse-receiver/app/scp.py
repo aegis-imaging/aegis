@@ -5,12 +5,11 @@ from __future__ import annotations
 import io
 import logging
 import threading
-from pathlib import Path
 from typing import Any
 
 from app import config
 from app.ingest import StudyAccumulator, submit_ingest
-from app.storage_backend import next_file_index, write_dicom
+from app.storage_backend import write_dicom
 
 log = logging.getLogger(__name__)
 
@@ -50,16 +49,6 @@ ACCEPTED_TRANSFER_SYNTAXES = [
 ]
 
 
-def _get_file_index(study_dir: Path) -> int:
-    """Return the next 0-based file index for a study directory.
-
-    Counts existing .dcm files so re-sends don't overwrite.
-    """
-    if not study_dir.exists():
-        return 0
-    return len(list(study_dir.glob("*.dcm")))
-
-
 def handle_echo(event: Any) -> int:
     """Handle C-ECHO (verification) requests."""
     log.debug("C-ECHO from %s", event.assoc.requestor.ae_title)
@@ -78,6 +67,13 @@ def handle_store(event: Any) -> int:
 
     study_uid = str(study_uid)
 
+    sop_instance_uid = getattr(ds, "SOPInstanceUID", None)
+    if not sop_instance_uid:
+        log.warning("C-STORE: missing SOPInstanceUID for study %s, rejecting", study_uid)
+        return 0xC000  # Failure
+
+    sop_instance_uid = str(sop_instance_uid)
+
     # Extract metadata
     modality = str(getattr(ds, "Modality", ""))
     body_part = str(getattr(ds, "BodyPartExamined", ""))
@@ -87,16 +83,18 @@ def handle_store(event: Any) -> int:
     calling_ae = str(getattr(event.assoc.requestor, "ae_title", ""))
 
     # Write file to configured storage backend (local filesystem or S3).
+    # Files are named by SOP Instance UID (unique per instance) so concurrent
+    # associations receiving the same study cannot overwrite each other's
+    # slices, and re-sent instances overwrite themselves idempotently.
     try:
-        file_index = next_file_index(study_uid)
         buf = io.BytesIO()
         ds.save_as(buf, write_like_original=False)
-        write_dicom(study_uid, file_index, buf.getvalue())
+        write_dicom(study_uid, sop_instance_uid, buf.getvalue())
     except Exception as e:
         log.error("Failed to save DICOM file for study %s: %s", study_uid, e)
         return 0xC000  # Failure
 
-    log.debug("Saved file %d for study %s", file_index, study_uid)
+    log.debug("Saved instance %s for study %s", sop_instance_uid, study_uid)
 
     # Update per-association accumulator
     assoc_id = id(event.assoc)
@@ -126,20 +124,24 @@ def handle_store(event: Any) -> int:
     return 0x0000  # Success
 
 
-def handle_release(event: Any) -> None:
-    """Handle association release — trigger ingest for each received study."""
-    assoc_id = id(event.assoc)
+def _ingest_association_studies(assoc_id: int, reason: str) -> None:
+    """Pop association state and trigger ingest for each received study.
 
+    Pop-and-check makes this safe to call from multiple teardown events
+    (e.g. EVT_RELEASED followed by EVT_CONN_CLOSE): whichever fires first
+    takes the state; later calls find nothing and are no-ops.
+    """
     with _state_lock:
         studies = _association_state.pop(assoc_id, {})
 
     if not studies:
-        log.debug("Association released with no stored files")
+        log.debug("Association %s with no stored files pending ingest", reason)
         return
 
     for study_uid, acc in studies.items():
         log.info(
-            "Association released — ingesting study %s (%d files, %d series, AE: %s)",
+            "Association %s — ingesting study %s (%d files, %d series, AE: %s)",
+            reason,
             study_uid,
             acc.file_count,
             len(acc.series_uids),
@@ -149,6 +151,29 @@ def handle_release(event: Any) -> None:
             submit_ingest(acc)
         except Exception as e:
             log.error("Ingest trigger failed for %s: %s", study_uid, e)
+
+
+def handle_release(event: Any) -> None:
+    """Handle association release — trigger ingest for each received study."""
+    _ingest_association_studies(id(event.assoc), reason="released")
+
+
+def handle_abort(event: Any) -> None:
+    """Handle A-ABORT — ingest whatever was received before the abort.
+
+    Files are already durably written by handle_store, so a partial study
+    is still worth ingesting rather than leaving orphaned on disk.
+    """
+    _ingest_association_studies(id(event.assoc), reason="aborted")
+
+
+def handle_conn_close(event: Any) -> None:
+    """Handle TCP connection close — ingest anything not already ingested.
+
+    Fires after normal release too; the pop-and-check in
+    _ingest_association_studies prevents double ingest.
+    """
+    _ingest_association_studies(id(event.assoc), reason="connection closed")
 
 
 def create_scp():
@@ -182,6 +207,8 @@ def _get_scp_handlers() -> list[tuple[Any, Any]]:
         (evt.EVT_C_ECHO, handle_echo),
         (evt.EVT_C_STORE, handle_store),
         (evt.EVT_RELEASED, handle_release),
+        (evt.EVT_ABORTED, handle_abort),
+        (evt.EVT_CONN_CLOSE, handle_conn_close),
     ]
 
 
