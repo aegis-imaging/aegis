@@ -234,9 +234,16 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update status to ingesting
-	if err := model.UpdateUploadSessionStatus(r.Context(), s.db, session.ID, "ingesting"); err != nil {
+	// Atomically claim the session (initiated -> ingesting). Two concurrent
+	// completes race on this single UPDATE; the loser gets 409 instead of
+	// double-ingesting the same staging files.
+	claimed, err := model.MarkUploadSessionIngesting(r.Context(), s.db, session.ID)
+	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to update session status")
+		return
+	}
+	if !claimed {
+		s.writeError(w, http.StatusConflict, "upload session already completed or completing")
 		return
 	}
 
@@ -295,7 +302,9 @@ func (s *Server) UploadComplete(w http.ResponseWriter, r *http.Request) {
 		"instance_count":    len(files),
 		"defacing_required": study.DefacingRequired,
 	})
-	go webhook.Deliver(r.Context(), s.db, "study.created", study)
+	// Detach cancellation: the goroutine outlives the request, and a cancelled
+	// context would fail the delivery's own DB queries. Values (tenant ctx) kept.
+	go webhook.Deliver(context.WithoutCancel(r.Context()), s.db, "study.created", study)
 
 	s.writeJSON(w, http.StatusOK, uploadCompleteResponse{
 		SessionID: session.ID,

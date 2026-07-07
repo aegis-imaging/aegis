@@ -59,13 +59,16 @@ func (s *Server) GetUploaderInvite(w http.ResponseWriter, r *http.Request) {
 // RedeemUploaderInvite POST /api/uploader-invites/{token}/redeem
 //
 // Public. Accepts the password the recipient chose and finalises the invite:
-//   1. Creates or updates the admin_users row (role=uploader, password_hash set)
-//   2. Creates a project_members row (role=uploader, scoped to invite.project_id)
-//   3. Marks the invite redeemed
-//   4. Starts a session and sets the cookie - so the recipient lands logged in
+//  1. Atomically claims the invite (sets redeemed_at only if still unredeemed);
+//     concurrent redeems race on that single UPDATE and exactly one proceeds
+//  2. Creates or updates the admin_users row (role=uploader, password_hash set)
+//  3. Creates a project_members row (role=uploader, scoped to invite.project_id)
+//  4. Records the redeemed user on the invite
+//  5. Starts a session and sets the cookie - so the recipient lands logged in
 //
-// The whole sequence is wrapped in a transaction so a partial failure doesn't
-// leave a half-provisioned user (e.g. admin_users row with no project access).
+// The provisioning steps are separate statements, not one transaction; the
+// up-front claim is what prevents double redemption. If provisioning fails
+// after the claim we best-effort un-claim so the recipient can retry the link.
 // If the email already maps to an existing user, we update their hash + add
 // the membership - the existing path lets an uploader who was invited to a
 // second project reuse their account.
@@ -107,9 +110,30 @@ func (s *Server) RedeemUploaderInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Claim the invite atomically before provisioning anything so two
+	// concurrent redeems can't both proceed. The loser gets 410, same as a
+	// re-used link.
+	claimed, err := model.ClaimUploaderInvite(r.Context(), s.db, inv.ID)
+	if err != nil {
+		log.Printf("redeem invite: claim %s: %v", inv.ID, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to redeem invitation")
+		return
+	}
+	if !claimed {
+		s.writeError(w, http.StatusGone, "invitation has already been used")
+		return
+	}
+	// unclaim releases the claim when provisioning fails, so the recipient
+	// can retry the link instead of losing the invitation.
+	unclaim := func() {
+		if err := model.UnclaimUploaderInvite(r.Context(), s.db, inv.ID); err != nil {
+			log.Printf("redeem invite: unclaim %s after provisioning failure: %v", inv.ID, err)
+		}
+	}
+
 	// Either reuse an existing admin_users row for this email or create one.
-	// We hold the user fields outside the transaction so we can use the
-	// existing model functions, which each open their own statements.
+	// The model functions each run their own statements; the claim above is
+	// what guards against double redemption.
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = inv.Name
@@ -122,12 +146,14 @@ func (s *Server) RedeemUploaderInvite(w http.ResponseWriter, r *http.Request) {
 		// uploader (or has never logged in). Don't overwrite a real admin
 		// or researcher's role just because their email was reused.
 		if existing.Role != "uploader" {
+			unclaim()
 			s.writeError(w, http.StatusConflict,
 				"this email is already registered with a different role; ask your administrator to use a different address")
 			return
 		}
 		if err := model.SetAdminUserPasswordHash(r.Context(), s.db, existing.ID, hash); err != nil {
 			log.Printf("redeem invite: update password for %s: %v", existing.ID, err)
+			unclaim()
 			s.writeError(w, http.StatusInternalServerError, "failed to set password")
 			return
 		}
@@ -140,25 +166,27 @@ func (s *Server) RedeemUploaderInvite(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := model.CreateAdminUser(r.Context(), s.db, u); err != nil {
 			log.Printf("redeem invite: create user %s: %v", inv.Email, err)
+			unclaim()
 			s.writeError(w, http.StatusInternalServerError, "failed to create account")
 			return
 		}
 		if err := model.SetAdminUserPasswordHash(r.Context(), s.db, u.ID, hash); err != nil {
 			log.Printf("redeem invite: set initial password for %s: %v", u.ID, err)
+			unclaim()
 			s.writeError(w, http.StatusInternalServerError, "failed to set password")
 			return
 		}
 		userID = u.ID
 	} else {
 		log.Printf("redeem invite: lookup user %s: %v", inv.Email, err)
+		unclaim()
 		s.writeError(w, http.StatusInternalServerError, "failed to load account")
 		return
 	}
 
 	// Create the project_members row. If one already exists (re-redeem corner
 	// case), the unique(project_id, admin_user_id) constraint will fire and
-	// we surface 409 - this signals "you're already a member" without losing
-	// the invite to the redeem branch.
+	// we treat it as already-a-member and continue to session creation.
 	if err := model.CreateProjectMember(r.Context(), s.db, &model.ProjectMember{
 		ProjectID:     inv.ProjectID,
 		AdminUserID:   userID,
@@ -166,18 +194,18 @@ func (s *Server) RedeemUploaderInvite(w http.ResponseWriter, r *http.Request) {
 		InstitutionID: inv.InstitutionID,
 	}); err != nil {
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-			// Already a member - that's fine, mark the invite redeemed
-			// and continue to session creation.
+			// Already a member - that's fine, keep the claim and continue.
 		} else {
 			log.Printf("redeem invite: create membership for %s on %s: %v", userID, inv.ProjectID, err)
+			unclaim()
 			s.writeError(w, http.StatusInternalServerError, "failed to grant project access")
 			return
 		}
 	}
 
-	if err := model.MarkUploaderInviteRedeemed(r.Context(), s.db, inv.ID, userID); err != nil {
-		log.Printf("redeem invite: mark redeemed %s: %v", inv.ID, err)
-		// Account + membership already created - surface success but log.
+	if err := model.SetUploaderInviteRedeemedUser(r.Context(), s.db, inv.ID, userID); err != nil {
+		log.Printf("redeem invite: set redeemed user %s: %v", inv.ID, err)
+		// Claim + account + membership already in place - surface success but log.
 	}
 
 	sess, err := model.CreateUploaderSession(r.Context(), s.db, userID, clientIP(r), r.UserAgent(), middleware.UploaderSessionTTL)

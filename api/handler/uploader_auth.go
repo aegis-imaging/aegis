@@ -21,6 +21,16 @@ type UploaderLoginRequest struct {
 	Password string `json:"password"`
 }
 
+// dummyBcryptHash is compared against on every login failure path that would
+// otherwise return before doing bcrypt work (unknown email, disabled account,
+// wrong role, no hash). Without it, those paths respond noticeably faster than
+// a wrong-password attempt, letting an attacker distinguish valid emails by
+// latency alone.
+var dummyBcryptHash = func() []byte {
+	h, _ := bcrypt.GenerateFromPassword([]byte("aegis-timing-equalizer"), bcrypt.DefaultCost)
+	return h
+}()
+
 // UploaderLogin POST /api/auth/uploader-login
 //
 // Public. Validates email+password against admin_users where role='uploader',
@@ -46,22 +56,27 @@ func (s *Server) UploaderLogin(w http.ResponseWriter, r *http.Request) {
 
 	u, err := model.GetAdminUserByEmail(r.Context(), s.db, req.Email)
 	if err != nil {
-		// Unknown email - generic failure.
+		// Unknown email - generic failure. Burn bcrypt time so the response
+		// latency matches a wrong-password attempt (no email enumeration).
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(req.Password))
 		s.writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
 	if !u.Enabled {
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(req.Password))
 		s.writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
 	if u.Role != "uploader" {
 		// Wrong account type - generic failure (don't leak that the email
 		// belongs to an admin/researcher).
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(req.Password))
 		s.writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
 	if u.PasswordHash == nil || *u.PasswordHash == "" {
 		// Account created but never finished invite redemption.
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(req.Password))
 		s.writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -200,10 +215,10 @@ func hashPassword(plain string) (string, error) {
 	if len(plain) < 8 {
 		return "", errors.New("password must be at least 8 characters")
 	}
-	if len(plain) > 256 {
-		// bcrypt itself caps input at 72 bytes; reject anything wild here so
-		// we don't silently truncate user-provided passphrases past the limit.
-		return "", errors.New("password too long")
+	if len(plain) > 72 {
+		// bcrypt caps input at 72 bytes and (x/crypto >= 0.33) errors above
+		// that rather than truncating; reject up front with a clear message.
+		return "", errors.New("password must be at most 72 characters")
 	}
 	h, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
 	if err != nil {

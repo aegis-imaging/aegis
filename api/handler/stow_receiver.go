@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,6 +21,10 @@ import (
 	"github.com/aegis-imaging/aegis/api/routing"
 )
 
+// maxStowBytes caps a single STOW-RS request body. DICOM studies are large;
+// the cap is anti-OOM protection, not a quota.
+const maxStowBytes = 4 << 30 // 4 GiB
+
 // StowReceiver implements DICOMweb STOW-RS (PS3.18 §10.5).
 // POST /api/stow
 //
@@ -29,6 +34,8 @@ import (
 //
 // Optional query param: ?project=<slug> (defaults to "default")
 func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxStowBytes)
+
 	// ── API key auth ────────────────────────────────────────────────
 	rawKey := ""
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
@@ -118,6 +125,12 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				s.writeError(w, http.StatusRequestEntityTooLarge,
+					fmt.Sprintf("request body too large (max %d bytes)", maxErr.Limit))
+				return
+			}
 			log.Printf("stow_receiver: read part %d: %v", partIndex, err)
 			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to read part %d: %v", partIndex, err))
 			return
@@ -134,6 +147,12 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		data, err := io.ReadAll(part)
 		part.Close()
 		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				s.writeError(w, http.StatusRequestEntityTooLarge,
+					fmt.Sprintf("request body too large (max %d bytes)", maxErr.Limit))
+				return
+			}
 			log.Printf("stow_receiver: read part %d body: %v", partIndex, err)
 			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to read part %d body: %v", partIndex, err))
 			return

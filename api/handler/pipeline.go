@@ -118,8 +118,11 @@ func (s *Server) maybeFireProcessingComplete(ctx context.Context, studyID string
 		fresh.ExportStatus == "exported" || fresh.ExportStatus == "failed"
 
 	if classOK && phiOK && pixelRedactOK && protocolOK && defacingOK && qcOK && bidsOK && analyticsOK && sctOK && exportOK {
-		go webhook.Deliver(ctx, s.db, "study.processing_complete", fresh)
-		go s.createAutoShareURL(ctx, fresh)
+		// Detach cancellation: these goroutines outlive the triggering request
+		// (values, e.g. tenant ctx, are kept).
+		bg := context.WithoutCancel(ctx)
+		go webhook.Deliver(bg, s.db, "study.processing_complete", fresh)
+		go s.createAutoShareURL(bg, fresh)
 	}
 }
 

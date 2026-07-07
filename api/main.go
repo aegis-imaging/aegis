@@ -479,13 +479,15 @@ func main() {
 
 	// Uploader auth — native password login for outside data contributors
 	// (per-project, separate cookie scope from admin IAP).
-	mux.HandleFunc("POST /api/auth/uploader-login", srv.UploaderLogin)
+	// Rate-limited: login is a password oracle, so slow down credential stuffing.
+	mux.Handle("POST /api/auth/uploader-login", rateLimit(srv.UploaderLogin))
 	mux.HandleFunc("POST /api/auth/uploader-logout", srv.UploaderLogout)
 	mux.HandleFunc("GET /api/auth/uploader-me", requireUploader(srv.UploaderMe))
 
 	// Uploader invitations — public read + redeem flow.
-	mux.HandleFunc("GET /api/uploader-invites/{token}", srv.GetUploaderInvite)
-	mux.HandleFunc("POST /api/uploader-invites/{token}/redeem", srv.RedeemUploaderInvite)
+	// Rate-limited to slow down brute-force token guessing.
+	mux.Handle("GET /api/uploader-invites/{token}", rateLimit(srv.GetUploaderInvite))
+	mux.Handle("POST /api/uploader-invites/{token}/redeem", rateLimit(srv.RedeemUploaderInvite))
 
 	// Project uploader management — admin or project-owner researcher only;
 	// handler does the per-project authz check itself so we wrap with just
