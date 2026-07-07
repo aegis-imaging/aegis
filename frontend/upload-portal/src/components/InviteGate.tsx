@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useInviteCode } from '../hooks/useInviteCode'
 
 interface InviteGateProps {
@@ -15,11 +15,17 @@ interface InviteGateProps {
  * (no CSS variable dependencies from the landing page theme).
  */
 export function InviteGate({ children }: InviteGateProps) {
-  const { admitted, gatingEnabled, autoSubmitting, submitCode } = useInviteCode()
+  const { admitted, gatingEnabled, autoSubmitting, autoSubmitError, submitCode } = useInviteCode()
   const [code, setCode] = useState('')
   const [error, setError] = useState(false)
   const [shaking, setShaking] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // Surface a failed ?invite=<code> auto-submit in the same error state used
+  // for manual submissions (typing a new code clears it as usual).
+  useEffect(() => {
+    if (autoSubmitError) setError(true)
+  }, [autoSubmitError])
 
   if (!gatingEnabled || admitted) return <>{children}</>
 

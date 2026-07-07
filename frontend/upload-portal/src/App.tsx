@@ -130,6 +130,7 @@ export function App() {
   const [currentFile, setCurrentFile] = useState('')
   const [currentStudyIndex, setCurrentStudyIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false)
   const [totalSize, setTotalSize] = useState(0)
 
   // Auth state — fire-and-forget; non-blocking (auth is handled at infra level)
@@ -313,6 +314,7 @@ export function App() {
     setCurrentFile('')
     setCurrentStudyIndex(0)
     setError(null)
+    setProfileLoadFailed(false)
     setTotalSize(0)
     cancelParseRef.current = false
     uploadAbortRef.current = null
@@ -330,6 +332,7 @@ export function App() {
     }
 
     setError(null)
+    setProfileLoadFailed(false)
     setStage('uploading')
     const totalFiles = files.length
     setUploadProgress({ current: 0, total: totalFiles })
@@ -351,9 +354,14 @@ export function App() {
           if (profile.keep_private_tags) {
             keepPrivateTags = true
           }
+        } else {
+          // Non-fatal: fall back to full strip, but tell the user.
+          setProfileLoadFailed(true)
         }
       } catch {
-        // Non-fatal: if profile fetch fails, fall back to full strip
+        // Non-fatal: if profile fetch fails, fall back to full strip — but
+        // surface it so the uploader knows retained tags won't be honored.
+        setProfileLoadFailed(true)
       }
 
       const results: UploadResult[] = []
@@ -450,6 +458,21 @@ export function App() {
           fontSize: '14px',
         }}>
           {error}
+        </div>
+      )}
+
+      {/* Anon-profile fallback warning — non-blocking, informational only */}
+      {profileLoadFailed && (
+        <div style={{
+          padding: '12px 16px',
+          backgroundColor: '#ffedd5',
+          border: '1px solid #fed7aa',
+          borderRadius: '8px',
+          color: '#9a3412',
+          marginBottom: '24px',
+          fontSize: '14px',
+        }}>
+          Couldn't load this project's anonymization profile — maximum anonymization (full tag strip) will be applied instead.
         </div>
       )}
 
