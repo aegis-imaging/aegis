@@ -99,7 +99,15 @@ func (s *Server) InviteProjectUploader(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prefer the dedicated upload-portal URL when configured — the portal
+	// serves the redeem page at /invite/{token}. Fall back to the legacy
+	// landing-page path (/upload/invite/{token}) so links keep resolving on
+	// deployments that haven't set UPLOAD_PORTAL_BASE_URL yet; the portal
+	// accepts both path shapes.
 	redeemURL := strings.TrimRight(s.cfg.LandingBaseURL, "/") + "/upload/invite/" + inv.InviteToken
+	if base := strings.TrimRight(s.cfg.UploadPortalBaseURL, "/"); base != "" {
+		redeemURL = base + "/invite/" + inv.InviteToken
+	}
 	subject, body := email.UploaderInvite(req.Name, proj.Name, redeemURL, inv.ExpiresAt)
 	if err := s.mailer.Send(r.Context(), req.Email, subject, body); err != nil {
 		log.Printf("invite uploader: send email to %s: %v", req.Email, err)

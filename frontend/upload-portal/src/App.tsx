@@ -7,14 +7,19 @@ import { parseDicomFile, buildStudySummary, isDicomFile, groupByStudy } from '@a
 import { deidentify } from '@aegis/client'
 import { uploadStudy } from '@aegis/client'
 import type { ParsedDicomFile, StudySummary as StudySummaryType, DicomTag, UploadResult } from '@aegis/client'
+import type { UploaderProject, UploaderUser } from './hooks/useUploaderAuth'
 
 type Stage = 'select' | 'parsing' | 'preview' | 'uploading' | 'ready'
 
-interface Project {
-  id: string
-  name: string
-  slug: string
-  description: string
+interface AppProps {
+  /** Signed-in uploader account, or null in open (dev) mode. */
+  user: UploaderUser | null
+  /** Projects the account can upload to (from /api/auth/uploader-me), or the
+   *  public project list in open mode. */
+  projects: UploaderProject[]
+  /** True when running without accounts (AUTH_ENABLED=false local dev). */
+  openMode: boolean
+  onLogout: () => void | Promise<void>
 }
 
 interface AuthUser {
@@ -114,7 +119,7 @@ function writeDisplayTimezone(mode: DisplayTimezoneMode, customTimeZone: string)
   writeToLocalStorage([GLOBAL_DISPLAY_TZ_CUSTOM_KEY, ...LEGACY_DISPLAY_TZ_CUSTOM_KEYS], customTimeZone)
 }
 
-export function App() {
+export function App({ user, projects, openMode, onLogout }: AppProps) {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
   const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
   const [stage, setStage] = useState<Stage>('select')
@@ -125,7 +130,9 @@ export function App() {
   const [parseProgress, setParseProgress] = useState({ current: 0, total: 0 })
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([])
-  const [uploaderEmail, setUploaderEmail] = useState('')
+  // Signed-in uploaders always attribute uploads to their account email (the
+  // field is locked in the UI); open mode keeps the old optional free text.
+  const [uploaderEmail, setUploaderEmail] = useState(user?.email ?? '')
   const [emailTouched, setEmailTouched] = useState(false)
   const [currentFile, setCurrentFile] = useState('')
   const [currentStudyIndex, setCurrentStudyIndex] = useState(0)
@@ -136,10 +143,10 @@ export function App() {
   // Auth state — fire-and-forget; non-blocking (auth is handled at infra level)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
 
-  // Project selector state
-  const [projects, setProjects] = useState<Project[]>([])
-  const [selectedProject, setSelectedProject] = useState('default')
-  const [projectsLoading, setProjectsLoading] = useState(true)
+  // Project selector state — the list itself comes from the auth gate
+  // (scoped to the account, or the public list in open mode).
+  const [selectedProject, setSelectedProject] = useState(() =>
+    projects.find(p => p.slug === 'default')?.slug ?? projects[0]?.slug ?? 'default')
   const [attributionRole, setAttributionRole] = useState<ProjectMemberRole | null>(null)
   const [attributionInstitutionId, setAttributionInstitutionId] = useState<string | null>(null)
   const [attributionInstitutionName, setAttributionInstitutionName] = useState('')
@@ -163,21 +170,20 @@ export function App() {
       .catch(() => { /* not authenticated or auth disabled — continue as public */ })
   }, [])
 
-  // Fetch projects on mount — API filters by membership for researcher role,
-  // returns only non-restricted projects for unauthenticated callers.
+  // Keep the selection valid when the account's project list changes
+  // (e.g. after a refresh() picks up a new membership).
   useEffect(() => {
-    fetch('/api/projects')
-      .then(res => res.ok ? res.json() as Promise<Project[]> : [])
-      .then(data => {
-        setProjects(data)
-        if (data.length === 1) setSelectedProject(data[0].slug)
-        else if (data.length > 0 && !data.find(p => p.slug === 'default')) {
-          setSelectedProject(data[0].slug)
-        }
-      })
-      .catch(() => setProjects([]))
-      .finally(() => setProjectsLoading(false))
-  }, [])
+    if (projects.length === 0) return
+    if (!projects.some(p => p.slug === selectedProject)) {
+      setSelectedProject(projects[0].slug)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects])
+
+  // Signed-in accounts always upload as their own email.
+  useEffect(() => {
+    if (user) setUploaderEmail(user.email)
+  }, [user])
 
   useEffect(() => {
     const selected = projects.find(p => p.slug === selectedProject)
@@ -309,7 +315,7 @@ export function App() {
     setPrivateTagsRemoved(0)
     setUploadProgress({ current: 0, total: 0 })
     setUploadResults([])
-    setUploaderEmail('')
+    setUploaderEmail(user?.email ?? '')
     setEmailTouched(false)
     setCurrentFile('')
     setCurrentStudyIndex(0)
@@ -318,7 +324,7 @@ export function App() {
     setTotalSize(0)
     cancelParseRef.current = false
     uploadAbortRef.current = null
-  }, [])
+  }, [user])
 
   const handleUpload = useCallback(async () => {
     if (studyGroups.length === 0) {
@@ -411,12 +417,29 @@ export function App() {
     }}>
       {/* Header */}
       <header style={{ marginBottom: '32px' }}>
-        <h1 style={{ margin: '0 0 4px', fontSize: '28px', fontWeight: 700 }}>
-          AEGIS Upload Portal
-        </h1>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '15px' }}>
-          Anonymization & Exchange Gateway for Imaging Studies
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ margin: '0 0 4px', fontSize: '28px', fontWeight: 700 }}>
+              AEGIS Upload Portal
+            </h1>
+            <p style={{ margin: 0, color: '#6b7280', fontSize: '15px' }}>
+              Anonymization & Exchange Gateway for Imaging Studies
+            </p>
+          </div>
+          {user ? (
+            <div className="session-bar">
+              <span className="session-user">{user.name || user.email}</span>
+              <span aria-hidden="true">·</span>
+              <button type="button" className="session-signout" onClick={() => void onLogout()}>
+                Sign out
+              </button>
+            </div>
+          ) : openMode && currentUser?.role !== 'researcher' ? (
+            // Hidden for infra-authenticated researchers (IAP etc.), who see
+            // their own "Logged in as" banner below instead.
+            <span className="open-mode-note">development mode — authentication disabled</span>
+          ) : null}
+        </div>
         <div className="tz-control">
           <label className="tz-label" htmlFor="upload-display-timezone-mode">Time Zone</label>
           <select
@@ -502,8 +525,8 @@ export function App() {
             </div>
           )}
 
-          {/* Project selector */}
-          {!projectsLoading && projects.length > 1 && (
+          {/* Project selector — only the projects this account can upload to */}
+          {projects.length > 1 && (
             <div style={{
               padding: '16px',
               backgroundColor: '#f9fafb',
@@ -558,7 +581,21 @@ export function App() {
             </div>
           )}
 
-          <FileDropZone onFilesSelected={handleFilesSelected} />
+          {user && projects.length === 0 ? (
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#ffedd5',
+              border: '1px solid #fed7aa',
+              borderRadius: '8px',
+              fontSize: '14px',
+              color: '#9a3412',
+            }}>
+              No projects are assigned to your account yet. Ask your study
+              coordinator to invite you to a project before uploading.
+            </div>
+          ) : (
+            <FileDropZone onFilesSelected={handleFilesSelected} />
+          )}
         </div>
       )}
 
@@ -693,7 +730,7 @@ export function App() {
               htmlFor="uploader-email"
               style={{ display: 'block', fontSize: '14px', fontWeight: 500, marginBottom: '6px' }}
             >
-              Your email <span style={{ color: '#6b7280', fontWeight: 400 }}>(optional)</span>
+              Your email{!user && <span style={{ color: '#6b7280', fontWeight: 400 }}> (optional)</span>}
             </label>
             <input
               id="uploader-email"
@@ -702,16 +739,24 @@ export function App() {
               onChange={e => setUploaderEmail(e.target.value)}
               onBlur={() => setEmailTouched(true)}
               placeholder="you@institution.edu"
+              disabled={!!user}
               style={{
                 width: '100%',
                 padding: '8px 12px',
-                border: `1px solid ${emailTouched && !emailValid ? '#fca5a5' : '#d1d5db'}`,
+                border: `1px solid ${emailTouched && !emailValid ? '#fdba74' : '#d1d5db'}`,
                 borderRadius: '6px',
                 fontSize: '14px',
                 boxSizing: 'border-box',
+                backgroundColor: user ? '#f3f4f6' : '#fff',
+                color: user ? '#4b5563' : '#111827',
               }}
             />
-            {emailTouched && !emailValid ? (
+            {user ? (
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#6b7280' }}>
+                Uploads are attributed to your account email. You'll receive a
+                confirmation when your study is processed.
+              </p>
+            ) : emailTouched && !emailValid ? (
               <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#ea580c' }}>
                 Please enter a valid email address.
               </p>

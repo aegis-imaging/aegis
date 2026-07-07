@@ -93,7 +93,6 @@ jobs:
           - service: upload-portal
             context: .
             dockerfile: frontend/upload-portal/Dockerfile
-            build_args: "--build-arg VITE_INVITE_GATE_ENABLED=true"
           - service: dwv
             context: dwv
             dockerfile: dwv/Dockerfile
