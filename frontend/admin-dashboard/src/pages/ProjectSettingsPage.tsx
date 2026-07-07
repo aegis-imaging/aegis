@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 // ProjectSettingsPage is the per-project settings home at
@@ -16,10 +16,13 @@ import { Link, useParams } from 'react-router-dom'
 // project owners don't have to filter the global tabs.
 //
 // Backend uses the per-project endpoints that already exist:
-//   GET  /api/projects/:id
-//   PUT  /api/projects/:id
-//   GET  /api/projects/:id/anon-profiles
-//   GET  /api/projects/:id/protocol-templates
+//   GET    /api/projects/:id
+//   PUT    /api/projects/:id
+//   GET    /api/projects/:id/anon-profiles
+//   GET    /api/projects/:id/protocol-templates
+//   GET    /api/projects/:id/uploaders            (403 for non-owners)
+//   POST   /api/projects/:id/uploaders
+//   DELETE /api/projects/:id/uploaders/:userId
 
 type Project = {
   id: string
@@ -49,6 +52,32 @@ type ProtocolTemplate = {
   body_part: string
 }
 
+// Active project member with role=uploader (subset of the API's ProjectMember).
+type ProjectUploader = {
+  id: string
+  admin_user_id: string
+  user_email?: string
+  user_name?: string
+  institution_name?: string
+  created_at: string
+}
+
+// Pending (un-redeemed, un-expired) invite. invite_token is blanked server-side.
+type UploaderInvite = {
+  id: string
+  email: string
+  name?: string
+  invited_by?: string
+  institution_name?: string
+  expires_at: string
+  created_at: string
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
+}
+
 export function ProjectSettingsPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [project, setProject] = useState<Project | null>(null)
@@ -65,6 +94,26 @@ export function ProjectSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Uploaders section — loaded separately so a 403 (non-owner researcher)
+  // degrades to an access note without breaking the rest of the page.
+  const [uploaders, setUploaders] = useState<ProjectUploader[]>([])
+  const [pendingInvites, setPendingInvites] = useState<UploaderInvite[]>([])
+  const [uploadersLoading, setUploadersLoading] = useState(true)
+  const [uploadersError, setUploadersError] = useState<string | null>(null)
+  const [uploadersForbidden, setUploadersForbidden] = useState(false)
+  const [revokeError, setRevokeError] = useState<string | null>(null)
+
+  // Invite form state
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteName, setInviteName] = useState('')
+  const [inviteExpiryDays, setInviteExpiryDays] = useState(7)
+  const [inviting, setInviting] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [smtpUnavailable, setSmtpUnavailable] = useState(false)
+  const [inviteSentTo, setInviteSentTo] = useState<string | null>(null)
+  const [redeemUrl, setRedeemUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!projectId) return
@@ -91,6 +140,114 @@ export function ProjectSettingsPage() {
       .finally(() => !cancelled && setLoading(false))
     return () => { cancelled = true }
   }, [projectId])
+
+  const loadUploaders = useCallback(async () => {
+    if (!projectId) return
+    setUploadersError(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/uploaders`)
+      if (res.status === 403) {
+        // Non-owners can see the settings page but not manage uploaders —
+        // render the access note instead of the table+form.
+        setUploadersForbidden(true)
+        return
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = (await res.json()) as {
+        uploaders?: ProjectUploader[]
+        pending_invites?: UploaderInvite[]
+      }
+      setUploadersForbidden(false)
+      setUploaders(data.uploaders ?? [])
+      setPendingInvites(data.pending_invites ?? [])
+    } catch (e) {
+      setUploadersError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setUploadersLoading(false)
+    }
+  }, [projectId])
+
+  useEffect(() => { void loadUploaders() }, [loadUploaders])
+
+  async function inviteUploader() {
+    if (!projectId) return
+    setInviteError(null)
+    setSmtpUnavailable(false)
+    setInviteSentTo(null)
+    setRedeemUrl(null)
+    setCopied(false)
+    const email = inviteEmail.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setInviteError('Enter a valid email address.')
+      return
+    }
+    setInviting(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/uploaders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name: inviteName.trim(), expiry_days: inviteExpiryDays }),
+      })
+      if (res.status === 503) {
+        // The handler refuses before creating the invite when SMTP_HOST is
+        // unset — nothing was created, so don't refresh or clear the form.
+        setSmtpUnavailable(true)
+        return
+      }
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        redeem_url?: string
+        email_sent?: boolean
+      }
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      if (data.email_sent) {
+        setInviteSentTo(email)
+      } else {
+        // Invite row exists but the email bounced at send time (200 +
+        // email_sent:false) — surface the redeem link for manual delivery.
+        setRedeemUrl(data.redeem_url ?? null)
+      }
+      setInviteEmail('')
+      setInviteName('')
+      await loadUploaders()
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Invite failed')
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  async function revokeUploader(u: ProjectUploader) {
+    if (!projectId) return
+    const label = u.user_email || u.user_name || u.admin_user_id
+    if (!window.confirm(`Revoke upload access for ${label}? Their active sessions will be ended.`)) return
+    setRevokeError(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/uploaders/${u.admin_user_id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        // 409 = target isn't role=uploader; surface the server's message.
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
+      await loadUploaders()
+    } catch (err) {
+      setRevokeError(err instanceof Error ? err.message : 'Revoke failed')
+    }
+  }
+
+  async function copyRedeemUrl() {
+    if (!redeemUrl) return
+    try {
+      await navigator.clipboard.writeText(redeemUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard API unavailable (e.g. non-secure context) — the readonly
+      // input still lets the user select and copy manually.
+    }
+  }
 
   async function save() {
     if (!project) return
@@ -295,6 +452,176 @@ export function ProjectSettingsPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+
+      {/* Uploaders — outside contributors with upload-only access */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>
+            Uploaders
+            {!uploadersForbidden && !uploadersLoading && !uploadersError
+              ? ` (${uploaders.length + pendingInvites.length})`
+              : ''}
+          </h2>
+        </div>
+        {uploadersForbidden ? (
+          <div className="aegis-muted">
+            Only project owners and platform admins can manage uploaders.
+          </div>
+        ) : uploadersLoading ? (
+          <div className="aegis-muted">Loading uploaders…</div>
+        ) : (
+          <>
+            {uploadersError && <div className="aegis-error">{uploadersError}</div>}
+            {revokeError && <div className="aegis-error">{revokeError}</div>}
+            {!uploadersError && (
+              uploaders.length === 0 && pendingInvites.length === 0 ? (
+                <div className="aegis-muted">
+                  No uploaders yet. Invite an outside contributor to let them upload studies to this
+                  project.
+                </div>
+              ) : (
+                <div className="aegis-table-wrap">
+                  <table className="aegis-table">
+                    <thead>
+                      <tr>
+                        <th>Uploader</th>
+                        <th>Institution</th>
+                        <th>Status</th>
+                        <th>Invited by</th>
+                        <th>Added</th>
+                        <th>Expires</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {uploaders.map(u => (
+                        <tr key={`member-${u.admin_user_id}`}>
+                          <td>
+                            {u.user_name
+                              ? <>{u.user_name} <span className="aegis-muted">({u.user_email || 'no email'})</span></>
+                              : (u.user_email || <span className="aegis-muted">—</span>)}
+                          </td>
+                          <td>{u.institution_name || <span className="aegis-muted">—</span>}</td>
+                          <td><span className="aegis-pill">Active</span></td>
+                          <td className="aegis-muted">—</td>
+                          <td>{fmtDate(u.created_at)}</td>
+                          <td className="aegis-muted">—</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="aegis-btn-secondary aegis-btn-compact"
+                              onClick={() => revokeUploader(u)}
+                            >
+                              Revoke
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {pendingInvites.map(inv => (
+                        <tr key={`invite-${inv.id}`}>
+                          <td>
+                            {inv.name
+                              ? <>{inv.name} <span className="aegis-muted">({inv.email})</span></>
+                              : inv.email}
+                          </td>
+                          <td>{inv.institution_name || <span className="aegis-muted">—</span>}</td>
+                          <td><span className="aegis-pill-outline">Pending</span></td>
+                          <td>{inv.invited_by || <span className="aegis-muted">—</span>}</td>
+                          <td>{fmtDate(inv.created_at)}</td>
+                          <td>{fmtDate(inv.expires_at)}</td>
+                          <td></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+
+            {/* Invite form */}
+            <div className="aegis-subform">
+              <h3>Invite an uploader</h3>
+              {smtpUnavailable && (
+                <div className="aegis-warning-banner aegis-note-block">
+                  Email is not configured on this server (SMTP).
+                </div>
+              )}
+              {inviteError && <div className="aegis-error">{inviteError}</div>}
+              {inviteSentTo && (
+                <div className="aegis-success-note aegis-note-block">
+                  Invitation sent to {inviteSentTo}
+                </div>
+              )}
+              {redeemUrl && (
+                <div className="aegis-note-block">
+                  <div className="aegis-warning-banner">
+                    Email couldn&apos;t be sent — copy this link and send it manually
+                  </div>
+                  <div className="aegis-copy-row">
+                    <div className="aegis-form-row">
+                      <input
+                        readOnly
+                        aria-label="Invite redeem link"
+                        value={redeemUrl}
+                        onFocus={e => e.currentTarget.select()}
+                      />
+                    </div>
+                    <button type="button" className="aegis-btn-secondary" onClick={copyRedeemUrl}>
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="aegis-form-row">
+                <label htmlFor="uploader-email">Email</label>
+                <input
+                  id="uploader-email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="colleague@university.edu"
+                />
+              </div>
+              <div className="aegis-form-row">
+                <label htmlFor="uploader-name">Name (optional)</label>
+                <input
+                  id="uploader-name"
+                  type="text"
+                  value={inviteName}
+                  onChange={e => setInviteName(e.target.value)}
+                  placeholder="Dr. Jane Contributor"
+                />
+              </div>
+              <div className="aegis-form-row">
+                <label htmlFor="uploader-expiry">Invitation expires after</label>
+                <select
+                  id="uploader-expiry"
+                  value={inviteExpiryDays}
+                  onChange={e => setInviteExpiryDays(parseInt(e.target.value, 10))}
+                >
+                  <option value={3}>3 days</option>
+                  <option value={7}>7 days</option>
+                  <option value={14}>14 days</option>
+                  <option value={30}>30 days</option>
+                </select>
+                <span className="aegis-form-hint">
+                  The invite link stops working after this window — you can always send a new one.
+                </span>
+              </div>
+              <div className="aegis-form-actions">
+                <button
+                  type="button"
+                  className="aegis-btn-primary"
+                  onClick={inviteUploader}
+                  disabled={inviting || !inviteEmail.trim()}
+                >
+                  {inviting ? 'Sending…' : 'Send invitation'}
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </section>
     </>
