@@ -86,7 +86,6 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          --build-arg VITE_INVITE_GATE_ENABLED=true \
           -t ${_REPO}/upload-portal:${SHORT_SHA} \
           -t ${_REPO}/upload-portal:latest \
           frontend/upload-portal
