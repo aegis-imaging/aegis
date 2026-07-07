@@ -2,6 +2,10 @@ package handler_test
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -11,11 +15,24 @@ import (
 	"time"
 
 	"github.com/aegis-imaging/aegis/api/handler"
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// withAuthUser injects an authenticated user into the request context, matching
+// what the auth middleware would do (same pattern as uploader_handler_test.go).
+func withAuthUser(req *http.Request, u *model.AdminUser) *http.Request {
+	ctx := context.WithValue(req.Context(), middleware.AuthUserContextKey(), &middleware.AuthUser{
+		ID:    u.ID,
+		Email: u.Email,
+		Name:  u.Name,
+		Role:  u.Role,
+	})
+	return req.WithContext(ctx)
+}
 
 // helper: register an installer via the JSON external_url path (no multipart, no storage hit).
 func createExternalInstaller(t *testing.T, srv *handler.Server, product, platform, version, externalURL string) string {
@@ -238,17 +255,114 @@ func TestDeleteDesktopInstaller(t *testing.T) {
 func TestEmailInvite_NoSMTPConfigured(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db) // TestServer leaves SMTPHost empty
+	admin := testutil.CreateTestAdminUser(t, db, "admin@aegis.test", "admin")
 
 	id := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
 
 	body, _ := json.Marshal(map[string]any{"recipient_email": "user@example.com"})
 	req := httptest.NewRequest("POST", "/api/desktop-installers/"+id+"/email", bytes.NewReader(body))
 	req.SetPathValue("id", id)
+	req = withAuthUser(req, admin)
 	rr := httptest.NewRecorder()
 	srv.EmailDesktopInstallerInvite(rr, req)
 
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code,
 		"should refuse to send when SMTP_HOST is unset")
+}
+
+func TestEmailInvite_UnscopedRequiresAdmin(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "researcher@aegis.test", "researcher")
+
+	id := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+
+	// Route is now auth() rather than adminOnly, so the handler must enforce
+	// admin for invites that don't name a project.
+	body, _ := json.Marshal(map[string]any{"recipient_email": "user@example.com"})
+	req := httptest.NewRequest("POST", "/api/desktop-installers/"+id+"/email", bytes.NewReader(body))
+	req.SetPathValue("id", id)
+	req = withAuthUser(req, researcher)
+	rr := httptest.NewRecorder()
+	srv.EmailDesktopInstallerInvite(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code, rr.Body.String())
+}
+
+// TestEmailInvite_ProjectScoped_RejectsNonOwnerResearcher — a researcher who
+// is not an owner of the target project cannot mint project-scoped install
+// invites (same rule as browser uploader management).
+func TestEmailInvite_ProjectScoped_RejectsNonOwnerResearcher(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.CreateTestProject(t, db, "ScopedInstallProj")
+	researcher := testutil.CreateTestAdminUser(t, db, "notowner@aegis.test", "researcher")
+	// Member, but only as coordinator — not owner.
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "coordinator",
+	}))
+
+	id := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+
+	body, _ := json.Marshal(map[string]any{
+		"recipient_email": "user@example.com",
+		"project_id":      proj.ID,
+	})
+	req := httptest.NewRequest("POST", "/api/desktop-installers/"+id+"/email", bytes.NewReader(body))
+	req.SetPathValue("id", id)
+	req = withAuthUser(req, researcher)
+	rr := httptest.NewRecorder()
+	srv.EmailDesktopInstallerInvite(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code, rr.Body.String())
+}
+
+// TestEmailInvite_ProjectScoped_OwnerResearcherPassesAuthz — a project-owner
+// researcher gets past the authorization gate; with SMTP unset the request
+// then fails at the 503 email gate, proving the authz check passed (same
+// pattern as TestInviteProjectUploader_AdminAllowed).
+func TestEmailInvite_ProjectScoped_OwnerResearcherPassesAuthz(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.CreateTestProject(t, db, "OwnerScopedProj")
+	owner := testutil.CreateTestAdminUser(t, db, "owner@aegis.test", "researcher")
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: owner.ID,
+		Role:        "owner",
+	}))
+
+	id := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+
+	body, _ := json.Marshal(map[string]any{
+		"recipient_email": "user@example.com",
+		"project_id":      proj.ID,
+	})
+	req := httptest.NewRequest("POST", "/api/desktop-installers/"+id+"/email", bytes.NewReader(body))
+	req.SetPathValue("id", id)
+	req = withAuthUser(req, owner)
+	rr := httptest.NewRecorder()
+	srv.EmailDesktopInstallerInvite(rr, req)
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code, rr.Body.String())
+}
+
+func TestEmailInvite_ProjectScoped_UnknownProject(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	admin := testutil.CreateTestAdminUser(t, db, "admin2@aegis.test", "admin")
+
+	id := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+
+	body, _ := json.Marshal(map[string]any{
+		"recipient_email": "user@example.com",
+		"project_id":      "00000000-0000-0000-0000-000000000000",
+	})
+	req := httptest.NewRequest("POST", "/api/desktop-installers/"+id+"/email", bytes.NewReader(body))
+	req.SetPathValue("id", id)
+	req = withAuthUser(req, admin)
+	rr := httptest.NewRecorder()
+	srv.EmailDesktopInstallerInvite(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code, rr.Body.String())
 }
 
 func TestPairDesktopInstaller_UnknownToken(t *testing.T) {
@@ -299,6 +413,104 @@ func TestPairDesktopInstaller_HappyPath(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	srv.PairDesktopInstaller(rr2, req2)
 	assert.Equal(t, http.StatusGone, rr2.Code, "pairing token is single-use")
+
+	// Unscoped invite: pairing must NOT provision any account — behavior
+	// predates project-scoped invites and stays unchanged.
+	_, err = model.GetAdminUserByEmail(context.Background(), db, "user@example.com")
+	assert.ErrorIs(t, err, sql.ErrNoRows,
+		"unscoped pairing must not create an admin_users row")
+}
+
+// TestPairDesktopInstaller_ProjectScoped_ProvisionsUploader — pairing a
+// project-scoped invite provisions the recipient like the browser uploader
+// redeem flow: admin_users role='uploader', project_members role='uploader',
+// and the returned API key resolves to that identity via created_by.
+func TestPairDesktopInstaller_ProjectScoped_ProvisionsUploader(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	proj := testutil.CreateTestProject(t, db, "DesktopUploadProj")
+	instID := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+	inv, err := model.CreateDesktopInstallerInvite(t.Context(), db, model.CreateDesktopInstallerInviteInput{
+		InstallerID:    instID,
+		ProjectID:      proj.ID,
+		RecipientEmail: "Desktop.User@hospital.test",
+		RecipientName:  "Dr. Desktop",
+		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour),
+		SentBy:         "admin@example.com",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, inv.ProjectID)
+
+	body, _ := json.Marshal(map[string]any{"pairing_token": inv.PairingToken()})
+	req := httptest.NewRequest("POST", "/api/install/pair", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.PairDesktopInstaller(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	var out struct {
+		APIKey string `json:"api_key"`
+	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&out))
+	require.NotEmpty(t, out.APIKey)
+
+	// admin_users row exists with role=uploader (email lowercased).
+	u, err := model.GetAdminUserByEmail(context.Background(), db, "desktop.user@hospital.test")
+	require.NoError(t, err)
+	assert.Equal(t, "uploader", u.Role)
+	assert.True(t, u.Enabled)
+
+	// project_members row exists with role=uploader.
+	access, err := model.GetUserAccessForProject(context.Background(), db, u.ID, proj.ID)
+	require.NoError(t, err)
+	require.NotNil(t, access, "pairing must create the project membership")
+	assert.Equal(t, "uploader", access.Role)
+
+	// The API key's created_by resolves to the provisioned user, so
+	// Bearer-key uploads carry the identity.
+	h := sha256.Sum256([]byte(out.APIKey))
+	key, err := model.GetAPIKeyByHash(context.Background(), db, hex.EncodeToString(h[:]))
+	require.NoError(t, err)
+	assert.Equal(t, "desktop.user@hospital.test", key.CreatedBy)
+}
+
+// TestPairDesktopInstaller_ProjectScoped_ExistingDifferentRole — when the
+// recipient email already belongs to a non-uploader account, pairing must NOT
+// change the role but still grants project membership + key identity.
+func TestPairDesktopInstaller_ProjectScoped_ExistingDifferentRole(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	proj := testutil.CreateTestProject(t, db, "ExistingRoleProj")
+	existing := testutil.CreateTestAdminUser(t, db, "pi@hospital.test", "researcher")
+
+	instID := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+	inv, err := model.CreateDesktopInstallerInvite(t.Context(), db, model.CreateDesktopInstallerInviteInput{
+		InstallerID:    instID,
+		ProjectID:      proj.ID,
+		RecipientEmail: "pi@hospital.test",
+		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour),
+		SentBy:         "admin@example.com",
+	})
+	require.NoError(t, err)
+
+	body, _ := json.Marshal(map[string]any{"pairing_token": inv.PairingToken()})
+	req := httptest.NewRequest("POST", "/api/install/pair", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.PairDesktopInstaller(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	// Role untouched.
+	u, err := model.GetAdminUserByEmail(context.Background(), db, "pi@hospital.test")
+	require.NoError(t, err)
+	assert.Equal(t, "researcher", u.Role, "existing role must not be overwritten")
+	assert.Equal(t, existing.ID, u.ID)
+
+	// Membership granted anyway.
+	access, err := model.GetUserAccessForProject(context.Background(), db, u.ID, proj.ID)
+	require.NoError(t, err)
+	require.NotNil(t, access)
+	assert.Equal(t, "uploader", access.Role)
 }
 
 // TestCreateInvite_WithInstitutionID exercises the new institution_id link:
@@ -371,6 +583,36 @@ func TestCreateInvite_WithoutInstitutionID(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&out))
 	assert.Empty(t, out.Invites,
 		"an institution should only see invites that name it (not all global invites)")
+}
+
+// TestCreateInvite_WithProjectID — model layer: project_id persists on the
+// invite row and the invite listing joins the project name for display
+// (mirrors TestCreateInvite_WithInstitutionID).
+func TestCreateInvite_WithProjectID(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+
+	id := createExternalInstaller(t, srv, "uploader", "macos-arm64", "1.0.0", "https://example.com/a.dmg")
+	proj := testutil.CreateTestProject(t, db, "PersistProj")
+
+	inv, err := model.CreateDesktopInstallerInvite(t.Context(), db, model.CreateDesktopInstallerInviteInput{
+		InstallerID:    id,
+		ProjectID:      proj.ID,
+		RecipientEmail: "scoped@hospital.test",
+		ExpiresAt:      time.Now().UTC().Add(7 * 24 * time.Hour),
+		SentBy:         "admin@example.com",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, inv.ProjectID)
+	assert.Equal(t, proj.ID, *inv.ProjectID)
+
+	list, err := model.ListDesktopInstallerInvites(t.Context(), db, 10)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.NotNil(t, list[0].ProjectID)
+	assert.Equal(t, proj.ID, *list[0].ProjectID)
+	require.NotNil(t, list[0].ProjectName)
+	assert.Equal(t, proj.Name, *list[0].ProjectName)
 }
 
 // TestListInstitutionInstallerInvites_UnknownInstitution returns 404 instead

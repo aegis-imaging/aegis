@@ -73,6 +73,38 @@ type UploaderInvite = {
   created_at: string
 }
 
+// One registered desktop installer build (subset of the API's DesktopInstaller).
+type DesktopInstaller = {
+  id: string
+  product: string
+  platform: string
+  version: string
+  is_current: boolean
+}
+
+// Readable platform labels — mirrors allowedInstallerPlatforms in the API.
+const INSTALLER_PLATFORM_LABELS: Record<string, string> = {
+  'macos-arm64': 'macOS (Apple Silicon)',
+  'macos-x64': 'macOS (Intel)',
+  'windows-x64': 'Windows (64-bit)',
+  'linux-deb': 'Linux (.deb)',
+  'linux-appimage': 'Linux (AppImage)',
+  'linux-rpm': 'Linux (.rpm)',
+}
+
+// pickUploaderInstallers returns one uploader-product installer per platform:
+// the is_current build when marked, otherwise the newest (the API lists rows
+// newest-first per product/platform, so the first row seen wins).
+function pickUploaderInstallers(installers: DesktopInstaller[]): DesktopInstaller[] {
+  const byPlatform = new Map<string, DesktopInstaller>()
+  for (const inst of installers) {
+    if (inst.product !== 'uploader') continue
+    const cur = byPlatform.get(inst.platform)
+    if (!cur || (inst.is_current && !cur.is_current)) byPlatform.set(inst.platform, inst)
+  }
+  return [...byPlatform.values()]
+}
+
 function fmtDate(iso: string): string {
   const d = new Date(iso)
   return isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
@@ -114,6 +146,17 @@ export function ProjectSettingsPage() {
   const [inviteSentTo, setInviteSentTo] = useState<string | null>(null)
   const [redeemUrl, setRedeemUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // Desktop uploader sub-block — send a project-scoped installer invite.
+  // Pairing the installed app then grants upload access to this project.
+  const [installers, setInstallers] = useState<DesktopInstaller[]>([])
+  const [installersLoading, setInstallersLoading] = useState(true)
+  const [desktopEmail, setDesktopEmail] = useState('')
+  const [desktopInstallerId, setDesktopInstallerId] = useState('')
+  const [desktopSending, setDesktopSending] = useState(false)
+  const [desktopError, setDesktopError] = useState<string | null>(null)
+  const [desktopSmtpUnavailable, setDesktopSmtpUnavailable] = useState(false)
+  const [desktopSentTo, setDesktopSentTo] = useState<string | null>(null)
 
   useEffect(() => {
     if (!projectId) return
@@ -168,6 +211,26 @@ export function ProjectSettingsPage() {
   }, [projectId])
 
   useEffect(() => { void loadUploaders() }, [loadUploaders])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/desktop-installers')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((data: { installers?: DesktopInstaller[] }) => {
+        if (cancelled) return
+        const all = data.installers ?? []
+        setInstallers(all)
+        const picked = pickUploaderInstallers(all)
+        if (picked.length > 0) setDesktopInstallerId(picked[0].id)
+      })
+      .catch(() => {
+        // Endpoint unavailable — the sub-block degrades to the "no builds
+        // registered" note rather than breaking the settings page.
+        if (!cancelled) setInstallers([])
+      })
+      .finally(() => !cancelled && setInstallersLoading(false))
+    return () => { cancelled = true }
+  }, [])
 
   async function inviteUploader() {
     if (!projectId) return
@@ -234,6 +297,41 @@ export function ProjectSettingsPage() {
       await loadUploaders()
     } catch (err) {
       setRevokeError(err instanceof Error ? err.message : 'Revoke failed')
+    }
+  }
+
+  async function sendDesktopInvite() {
+    if (!projectId || !desktopInstallerId) return
+    setDesktopError(null)
+    setDesktopSmtpUnavailable(false)
+    setDesktopSentTo(null)
+    const email = desktopEmail.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setDesktopError('Enter a valid email address.')
+      return
+    }
+    setDesktopSending(true)
+    try {
+      const res = await fetch(`/api/desktop-installers/${desktopInstallerId}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient_email: email, project_id: projectId }),
+      })
+      if (res.status === 503) {
+        // Handler refuses before creating the invite when SMTP_HOST is unset.
+        setDesktopSmtpUnavailable(true)
+        return
+      }
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
+      setDesktopSentTo(email)
+      setDesktopEmail('')
+    } catch (err) {
+      setDesktopError(err instanceof Error ? err.message : 'Send failed')
+    } finally {
+      setDesktopSending(false)
     }
   }
 
@@ -620,6 +718,72 @@ export function ProjectSettingsPage() {
                   {inviting ? 'Sending…' : 'Send invitation'}
                 </button>
               </div>
+            </div>
+
+            {/* Desktop uploader — project-scoped installer invite. Pairing the
+                installed app provisions upload access to this project. */}
+            <div className="aegis-subform">
+              <h3>Desktop uploader</h3>
+              {installersLoading ? (
+                <div className="aegis-muted">Loading installer builds…</div>
+              ) : pickUploaderInstallers(installers).length === 0 ? (
+                <div className="aegis-muted">
+                  No desktop installer builds are registered yet — upload one under Admin → Downloads.
+                </div>
+              ) : (
+                <>
+                  <span className="aegis-form-hint">
+                    Email a download link for the AEGIS Desktop Uploader. When the recipient installs
+                    and pairs the app, it is automatically granted upload access to this project.
+                  </span>
+                  {desktopSmtpUnavailable && (
+                    <div className="aegis-warning-banner aegis-note-block">
+                      Email is not configured on this server (SMTP).
+                    </div>
+                  )}
+                  {desktopError && <div className="aegis-error">{desktopError}</div>}
+                  {desktopSentTo && (
+                    <div className="aegis-success-note aegis-note-block">
+                      Install link sent to {desktopSentTo} — pairing will grant upload access to this
+                      project.
+                    </div>
+                  )}
+                  <div className="aegis-form-row">
+                    <label htmlFor="desktop-uploader-email">Email</label>
+                    <input
+                      id="desktop-uploader-email"
+                      type="email"
+                      value={desktopEmail}
+                      onChange={e => setDesktopEmail(e.target.value)}
+                      placeholder="colleague@university.edu"
+                    />
+                  </div>
+                  <div className="aegis-form-row">
+                    <label htmlFor="desktop-uploader-installer">Installer</label>
+                    <select
+                      id="desktop-uploader-installer"
+                      value={desktopInstallerId}
+                      onChange={e => setDesktopInstallerId(e.target.value)}
+                    >
+                      {pickUploaderInstallers(installers).map(inst => (
+                        <option key={inst.id} value={inst.id}>
+                          {(INSTALLER_PLATFORM_LABELS[inst.platform] ?? inst.platform)} — v{inst.version}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="aegis-form-actions">
+                    <button
+                      type="button"
+                      className="aegis-btn-primary"
+                      onClick={sendDesktopInvite}
+                      disabled={desktopSending || !desktopEmail.trim() || !desktopInstallerId}
+                    >
+                      {desktopSending ? 'Sending…' : 'Send install link'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}

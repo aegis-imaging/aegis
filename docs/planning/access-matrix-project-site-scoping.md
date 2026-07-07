@@ -361,7 +361,7 @@ Canonical access matrix for authenticated API routes in `api/main.go`.
 | `adminOnly` | `PATCH /api/desktop-installers/{id}` | `UpdateDesktopInstaller` | `platform_admin` |
 | `adminOnly` | `DELETE /api/desktop-installers/{id}` | `DeleteDesktopInstaller` | `platform_admin` |
 | `auth` | `GET /api/desktop-installers/{id}/download` | `DownloadDesktopInstaller` | `project_member_any` |
-| `adminOnly` | `POST /api/desktop-installers/{id}/email` | `EmailDesktopInstallerInvite` | `platform_admin` |
+| `auth` | `POST /api/desktop-installers/{id}/email` | `EmailDesktopInstallerInvite` | `project_member_any` |
 | `auth` | `GET /api/desktop-installers/invites` | `ListDesktopInstallerInvites` | `project_member_any` |
 | `adminOnly` | `POST /api/admin/backfill-study-metadata` | `BackfillStudyMetadata` | `platform_admin` |
 
