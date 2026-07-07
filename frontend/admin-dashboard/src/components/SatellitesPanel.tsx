@@ -196,10 +196,10 @@ function satelliteStatus(s: Satellite): SatelliteUIStatus {
 
 function StatusBadge({ status }: { status: SatelliteUIStatus }) {
   const colors: Record<SatelliteUIStatus, string> = {
-    active: '#10b981',
+    active: '#0d9488',
     pending: '#f59e0b',
     idle: '#9ca3af',
-    disabled: '#ef4444',
+    disabled: '#ea580c',
   }
   const labels: Record<SatelliteUIStatus, string> = {
     active: '● active',
@@ -487,7 +487,7 @@ function SpokeDrawer({
 
         {isAdmin && satellite.cert_thumbprint && (
           <section style={{ marginTop: 16 }}>
-            <h4 style={{ margin: '0 0 8px 0', color: '#b91c1c' }}>Danger zone</h4>
+            <h4 style={{ margin: '0 0 8px 0', color: '#9a3412' }}>Danger zone</h4>
             <button type="button" className="btn-danger" onClick={revokeCert}>
               Revoke mTLS cert
             </button>

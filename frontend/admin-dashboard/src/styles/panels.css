@@ -19,30 +19,8 @@
 }
 
 /* ── Stats bar ───────────────────────────────────────────────────────────── */
-
-.stat-card {
-  padding: 12px 20px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  min-width: 120px;
-}
-
-.stat-number {
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.stat-number--warning { color: #f59e0b; }
-.stat-number--success { color: #0d9488; }
-.stat-number--error   { color: #ea580c; }
-.stat-number--neutral { color: #6b7280; }
-
-.stat-label {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 2px;
-}
+/* .stat-card / .stat-number / .stat-number--* / .stat-label live in
+   components.css (canonical copy) — the duplicate block was removed here. */
 
 /* ── State displays ──────────────────────────────────────────────────────── */
 .state-loading,
@@ -61,50 +39,8 @@
 }
 
 /* ── Badges ──────────────────────────────────────────────────────────────── */
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-/* Status badges */
-
-.badge--approved { background: #ccfbf1; color: #0f766e; }
-.badge--rejected { background: #ffedd5; color: #9a3412; }
-
-/* Source badges */
-
-/* PHI scan badges */
-.badge--pending  { background: #f3f4f6; color: #6b7280; }
-.badge--scanning { background: #fef9c3; color: #854d0e; }
-
-.badge--flagged  { background: #ffedd5; color: #9a3412; }
-
-/* QC check badges */
-
-.badge--warn     { background: #fef3c7; color: #92400e; }
-
-/* BIDS conversion badges */
-
-/* Classification badges */
-
-/* Protocol compliance badges */
-
-/* Export status badges */
-
-/* Analytics status badges */
-
-/* Status badges (generic) */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 12px;
-  font-weight: 600;
-}
+/* .badge, .badge--* variants and .status-badge live in components.css
+   (canonical copy) — the duplicate block was removed here. */
 
 /* ── Pipeline stats banner ───────────────────────────────────────────────── */
 .stats-banner {
@@ -938,7 +874,7 @@
   font-weight: 600;
 }
 
-.badge--enabled  { background: #ccfbf1; color: #0f766e; }
+/* .badge--enabled lives in components.css with the other badge variants. */
 
 /* Institution type action colours */
 
