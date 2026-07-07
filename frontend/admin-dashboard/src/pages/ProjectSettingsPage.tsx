@@ -97,23 +97,43 @@ export function ProjectSettingsPage() {
     setSaving(true)
     setSaveError(null)
     try {
-      const body = {
-        ...project,
+      const putJSON = async (url: string, body: unknown) => {
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          const t = await res.text()
+          throw new Error(t || `HTTP ${res.status}`)
+        }
+        return res
+      }
+      // PUT /api/projects/:id only accepts name/slug/description — send just
+      // those (previously we spread the whole project object, whose extra
+      // fields the handler silently ignored). The remaining editable settings
+      // each have a dedicated endpoint.
+      const res = await putJSON(`/api/projects/${project.id}`, {
+        name: project.name,
+        slug: project.slug,
         description,
+      })
+      await putJSON(`/api/projects/${project.id}/retention`, {
+        retention_days: retentionDays === '' ? null : retentionDays,
+      })
+      await putJSON(`/api/projects/${project.id}/sla-threshold`, {
+        stuck_threshold_minutes: stuckMinutes === '' ? null : stuckMinutes,
+      })
+      await putJSON(`/api/projects/${project.id}/default-anon-profile`, {
+        profile_id: defaultProfileId,
+      })
+      const updated = (await res.json()) as Project
+      setProject({
+        ...updated,
         retention_days: retentionDays === '' ? null : retentionDays,
         stuck_threshold_minutes: stuckMinutes === '' ? null : stuckMinutes,
         default_anon_profile_id: defaultProfileId || null,
-      }
-      const res = await fetch(`/api/projects/${project.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
       })
-      if (!res.ok) {
-        const t = await res.text()
-        throw new Error(t || `HTTP ${res.status}`)
-      }
-      setProject(await res.json())
       setSavedAt(Date.now())
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed')
