@@ -279,6 +279,76 @@ body {
   color: #fdba74;
 }
 
+/* Teal success note (colorblind-safe positive: teal, never green). */
+.aegis-success-note {
+  background: #ccfbf1;
+  border: 1px solid #99f6e4;
+  border-radius: 6px;
+  padding: 8px 14px;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+:root[data-theme="dark"] .aegis-success-note {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: rgba(45, 212, 191, 0.35);
+  color: #5eead4;
+}
+
+/* ── Sub-form inside a section (e.g. "Invite an uploader") ───────────── */
+
+.aegis-subform {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--aegis-border);
+}
+
+.aegis-subform h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.aegis-subform .aegis-form-row {
+  margin-bottom: 10px;
+}
+
+.aegis-subform .aegis-form-row select {
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--aegis-border);
+  border-radius: 6px;
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
+  max-width: 220px;
+}
+
+/* Inline notes (success/warning) rendered above a sub-form. */
+.aegis-note-block {
+  margin: 0 0 12px;
+}
+
+/* Readonly value + copy button row (e.g. invite redeem link). */
+.aegis-copy-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: stretch;
+}
+
+.aegis-copy-row .aegis-form-row {
+  flex: 1;
+}
+
+/* Compact button for table row actions. */
+.aegis-btn-compact {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 /* ── Home page cards ─────────────────────────────────────────────────── */
 
 .aegis-home-greeting h1 {
@@ -347,6 +417,17 @@ body {
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Outline variant — pending/not-yet-active states on the teal axis. */
+.aegis-pill-outline {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--aegis-link);
   color: var(--aegis-link-hover);
   font-size: 11px;
   font-weight: 600;
