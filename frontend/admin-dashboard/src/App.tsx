@@ -6718,7 +6718,7 @@ function InstitutionsPanel({ isAdmin, detailInstitutionId }: { isAdmin: boolean;
                 <td>
                   <div>
                     <Link
-                      to={`/admin/institutions/${inst.id}`}
+                      to={`/institutions/${inst.id}`}
                       style={{ color: 'var(--aegis-link)', textDecoration: 'none', fontWeight: 500 }}
                     >
                       {inst.name}
@@ -10706,10 +10706,6 @@ export function App() {
   // regex here only fires for institutions today.
   const detailMatch = location.pathname.match(/^\/(institutions)\/([^/]+)/)
   const institutionId = detailMatch?.[1] === 'institutions' ? (detailMatch[2] ?? null) : null
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    const saved = localStorage.getItem('aegis_sidebar_open')
-    return saved !== null ? saved === 'true' : true
-  })
   // Theme — shared with TopBar via the useDarkMode hook so toggling from
   // anywhere (admin sidebar button OR the topbar button) updates everywhere.
   const [darkMode, toggleDarkMode] = useDarkMode()
@@ -11530,46 +11526,6 @@ export function App() {
     return `/api/studies.csv${qs ? '?' + qs : ''}`
   })()
   const pageEnd    = Math.min((page + 1) * PAGE_SIZE, studiesTotal)
-
-  const toggleSidebar = () => {
-    setSidebarOpen(prev => {
-      localStorage.setItem('aegis_sidebar_open', String(!prev))
-      return !prev
-    })
-  }
-
-  const navItem = (label: string, target: AppTab, icon: string, badge?: React.ReactNode) => {
-    const path = `/admin/${target}`
-    // Derive active state straight from the URL bar — not from `tab` —
-    // so the highlight is always correct even if some other piece of
-    // state somehow falls out of sync.
-    const isActive = location.pathname === path
-    return (
-      <NavLink
-        to={path}
-        end
-        className={`aegis-sidenav-item${isActive ? ' aegis-sidenav-item--active' : ''}`}
-        onClick={() => {
-          // Side-effect only: close the sidebar on narrow screens.
-          // Do NOT preventDefault + navigate() here — that pattern was
-          // added in #529 as a workaround for stale-render issues, but
-          // it makes the click a single point of failure: if navigate()
-          // throws or silently no-ops, preventDefault has already killed
-          // the browser's native <a href> fallback so the click goes
-          // nowhere. By letting NavLink do its native job (and trusting
-          // PR #540's `key={location.pathname}` to force re-mount on
-          // URL change), we get React Router navigation when it works
-          // AND a full-page nav fallback when it doesn't.
-          if (window.innerWidth < 900) setSidebarOpen(false)
-        }}
-        title={!sidebarOpen ? label : undefined}
-      >
-        <span className="aegis-sidenav-icon">{icon}</span>
-        <span className="aegis-sidenav-label">{label}</span>
-        {badge}
-      </NavLink>
-    )
-  }
 
   return (
     <>
