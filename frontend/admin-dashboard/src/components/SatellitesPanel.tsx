@@ -133,7 +133,7 @@ export function SatellitesPanel({ isAdmin }: { isAdmin: boolean }) {
                 <tr key={s.institution_id}>
                   <td>
                     <Link
-                      to={`/admin/institutions/${s.institution_id}`}
+                      to={`/institutions/${s.institution_id}`}
                       style={{
                         fontWeight: 600,
                         color: 'var(--aegis-link)',
