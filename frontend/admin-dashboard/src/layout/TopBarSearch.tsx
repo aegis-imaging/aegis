@@ -115,7 +115,7 @@ export function TopBarSearch() {
                   onClick={() => {
                     const path = st.subject_id
                       ? `/projects/${st.project_id}/subjects/${st.subject_id}/studies/${st.study_id}`
-                      : `/admin/studies` // fall back to admin list when no subject
+                      : `/studies` // fall back to the studies list when no subject
                     goTo(path)
                   }}
                 >
