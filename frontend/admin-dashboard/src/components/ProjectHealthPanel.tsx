@@ -113,7 +113,7 @@ export function ProjectHealthPanel({ projectId, projectName, onClose }: Props) {
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827' }}>Project Health</h3>
             <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{projectName}</div>
           </div>
-          <button type="button" onClick={onClose}
+          <button type="button" onClick={onClose} aria-label="Close panel"
             style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#6b7280', lineHeight: 1 }}>×</button>
         </div>
 
