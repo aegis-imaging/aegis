@@ -86,7 +86,7 @@ export function ComplianceReportPanel({ projectId, onClose }: Props) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827' }}>Compliance Report</h3>
-          <button type="button" onClick={onClose} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280' }}>×</button>
+          <button type="button" onClick={onClose} aria-label="Close panel" style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7280' }}>×</button>
         </div>
 
         {/* Period selector */}
