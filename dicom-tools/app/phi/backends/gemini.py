@@ -15,6 +15,10 @@ Environment variables:
     GEMINI_PROJECT_ID    — GCP project for Vertex AI (default: read from ADC metadata)
     GEMINI_LOCATION      — Vertex AI location (default: us-central1)
     GEMINI_MODEL         — Gemini model to use (default: gemini-2.5-flash)
+    GEMINI_TIMEOUT_SECONDS         — per-request HTTP timeout in seconds (default: 60)
+    GEMINI_TOTAL_DEADLINE_SECONDS  — overall per-study deadline for the frame
+                                     loop; partial results are returned with a
+                                     warning once exceeded (default: 300)
 """
 
 import io
@@ -22,6 +26,7 @@ import json
 import logging
 import os
 import re
+import time
 
 from .base import PHIDetectionBackend, FileFinding, Region
 from .pixel_utils import dicom_to_pil
@@ -54,6 +59,8 @@ class GeminiBackend(PHIDetectionBackend):
         location: str | None = None,
         model: str | None = None,
         api_key: str | None = None,
+        timeout_seconds: float | None = None,
+        total_deadline_seconds: float | None = None,
     ):
         self._confidence_threshold = confidence_threshold
         self._min_text_length = min_text_length
@@ -61,6 +68,12 @@ class GeminiBackend(PHIDetectionBackend):
         self._location = location or os.environ.get("GEMINI_LOCATION", "us-central1")
         self._model_name = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
         self._api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        self._timeout_seconds = timeout_seconds or float(
+            os.environ.get("GEMINI_TIMEOUT_SECONDS", "60")
+        )
+        self._total_deadline_seconds = total_deadline_seconds or float(
+            os.environ.get("GEMINI_TOTAL_DEADLINE_SECONDS", "300")
+        )
         self._client = None  # lazy-initialised
 
     @property
@@ -78,14 +91,17 @@ class GeminiBackend(PHIDetectionBackend):
         if self._client is None:
             from google import genai
 
+            # http_options timeout is in milliseconds.
+            http_options = {"timeout": int(self._timeout_seconds * 1000)}
             if self._api_key:
                 # AI Studio mode — API key auth.
-                self._client = genai.Client(api_key=self._api_key)
+                self._client = genai.Client(api_key=self._api_key, http_options=http_options)
             else:
                 # Vertex AI mode — ADC / Workload Identity.
                 init_kwargs: dict = {
                     "vertexai": True,
                     "location": self._location,
+                    "http_options": http_options,
                 }
                 if self._project_id:
                     init_kwargs["project"] = self._project_id
@@ -99,7 +115,17 @@ class GeminiBackend(PHIDetectionBackend):
         findings: list[FileFinding] = []
         client = self._get_client()
 
-        for path in dicom_paths:
+        start = time.monotonic()
+        for i, path in enumerate(dicom_paths):
+            elapsed = time.monotonic() - start
+            if elapsed > self._total_deadline_seconds:
+                log.warning(
+                    "Gemini PHI detection deadline (%.0fs) exceeded after %d/%d files — "
+                    "returning partial results",
+                    self._total_deadline_seconds, i, len(dicom_paths),
+                )
+                break
+
             try:
                 img = dicom_to_pil(path)
                 if img is None:
