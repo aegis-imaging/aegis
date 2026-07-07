@@ -36,8 +36,11 @@ export function useInviteCode() {
     gatingEnabled ? isStoredAdmitted() : true
   )
   const [autoSubmitting, setAutoSubmitting] = useState(false)
+  const [autoSubmitError, setAutoSubmitError] = useState(false)
 
   // On mount: auto-submit ?invite=<code> from URL if present and not already admitted.
+  // A failed auto-submit sets autoSubmitError so the gate can show its error
+  // state instead of silently presenting an empty form.
   useEffect(() => {
     if (!gatingEnabled || admitted) return
     const params = new URLSearchParams(window.location.search)
@@ -45,7 +48,9 @@ export function useInviteCode() {
     if (!urlCode) return
 
     setAutoSubmitting(true)
-    submitCode(urlCode).finally(() => setAutoSubmitting(false))
+    submitCode(urlCode)
+      .then(valid => { if (!valid) setAutoSubmitError(true) })
+      .finally(() => setAutoSubmitting(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -75,5 +80,5 @@ export function useInviteCode() {
     setAdmitted(false)
   }
 
-  return { admitted, gatingEnabled, autoSubmitting, submitCode, revoke }
+  return { admitted, gatingEnabled, autoSubmitting, autoSubmitError, submitCode, revoke }
 }
