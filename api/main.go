@@ -472,7 +472,9 @@ func main() {
 	mux.HandleFunc("PATCH /api/desktop-installers/{id}", adminOnly(srv.UpdateDesktopInstaller))
 	mux.HandleFunc("DELETE /api/desktop-installers/{id}", adminOnly(srv.DeleteDesktopInstaller))
 	mux.HandleFunc("GET /api/desktop-installers/{id}/download", auth(srv.DownloadDesktopInstaller))
-	mux.HandleFunc("POST /api/desktop-installers/{id}/email", adminOnly(srv.EmailDesktopInstallerInvite))
+	// auth (not adminOnly): the handler enforces admin for unscoped invites,
+	// and admin-or-project-owner for project-scoped invites (project_id in body).
+	mux.HandleFunc("POST /api/desktop-installers/{id}/email", auth(srv.EmailDesktopInstallerInvite))
 	mux.HandleFunc("GET /api/desktop-installers/invites", auth(srv.ListDesktopInstallerInvites))
 	mux.HandleFunc("GET /install/{token}", srv.InstallLandingPage)
 	mux.HandleFunc("POST /api/install/pair", srv.PairDesktopInstaller)
