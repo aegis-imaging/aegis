@@ -63,8 +63,13 @@
 
 /* Status badges */
 
+.badge--received { background: #f3f4f6; color: #4b5563; }
+.badge--defacing { background: #fef3c7; color: #92400e; }
+.badge--clean    { background: #ccfbf1; color: #0f766e; }
+.badge--defaced  { background: #ccfbf1; color: #0f766e; }
 .badge--approved { background: #ccfbf1; color: #0f766e; }
 .badge--rejected { background: #ffedd5; color: #9a3412; }
+.badge--expired  { background: #ffedd5; color: #9a3412; }
 
 /* Source badges */
 
@@ -77,6 +82,9 @@
 /* QC check badges */
 
 .badge--warn     { background: #fef3c7; color: #92400e; }
+
+/* Enabled/disabled badges */
+.badge--enabled  { background: #ccfbf1; color: #0f766e; }
 
 /* BIDS conversion badges */
 

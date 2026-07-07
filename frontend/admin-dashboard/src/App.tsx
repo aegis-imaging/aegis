@@ -8066,7 +8066,7 @@ function InviteCodesPanel() {
               <select
                 value={reqFilter}
                 onChange={e => setReqFilter(e.target.value as typeof reqFilter)}
-                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--aegis-border)', fontSize: '0.85rem', background: 'var(--aegis-surface)' }}
               >
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
@@ -9862,10 +9862,10 @@ function APIKeysPanel() {
         </div>
 
         {newKeyValue && (
-          <div className="aegis-section" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-            <strong style={{ color: '#166534' }}>API key {newKeyLabel} — copy it now, it will not be shown again:</strong>
+          <div className="aegis-section" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
+            <strong style={{ color: '#0f766e' }}>API key {newKeyLabel} — copy it now, it will not be shown again:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-              <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
+              <code style={{ background: '#ccfbf1', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
                 {newKeyValue}
               </code>
               <button type="button" className="aegis-btn-secondary"
@@ -10099,8 +10099,8 @@ function DownloadsPanel() {
                   const history  = versions.filter(v => v.id !== current.id)
                   return (
                     <div key={plat.value} style={{
-                      border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px',
-                      background: '#fff',
+                      border: '1px solid var(--aegis-border)', borderRadius: '8px', padding: '16px',
+                      background: 'var(--aegis-surface)',
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start' }}>
                         <div style={{ flex: 1 }}>
@@ -11681,7 +11681,7 @@ export function App() {
           )}
           {showExpiringPanel && expiringStudies.length > 0 && (
             <div style={{
-              background: '#fff', border: '1px solid #fed7aa', borderRadius: 6,
+              background: 'var(--aegis-surface)', border: '1px solid #fed7aa', borderRadius: 6,
               padding: '10px 14px', marginBottom: 10, overflowX: 'auto'
             }}>
               <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
@@ -12508,7 +12508,7 @@ export function App() {
                 {showProtocolTrend && protocolTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
               </div>
               {showProtocolTrend && protocolTrend && !protocolTrendLoading && (
-                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
                   <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
                     <strong>Overall ({protocolTrend.period_days}d):</strong>{' '}
                     {protocolTrend.totals.checked} checked ·{' '}
@@ -12566,7 +12566,7 @@ export function App() {
                 )}
               </div>
               {showStuckPanel && stuckStudies.length > 0 && (
-                <div style={{background: '#fff', border: '1px solid #fed7aa', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid #fed7aa', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
                   <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
                     <thead>
                       <tr>
@@ -12622,7 +12622,7 @@ export function App() {
                 {showPhiTrend && phiTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
               </div>
               {showPhiTrend && phiTrend && !phiTrendLoading && (
-                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
                   <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
                     <strong>Overall ({phiTrend.period_days}d):</strong>{' '}
                     {phiTrend.totals.scanned} scanned ·{' '}
@@ -12670,7 +12670,7 @@ export function App() {
                 {showModalityTrend && modalityTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
               </div>
               {showModalityTrend && modalityTrend && !modalityTrendLoading && (
-                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
                   {Object.keys(modalityTrend.totals).length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies in this period.</p>
                   ) : (
@@ -12722,7 +12722,7 @@ export function App() {
                 {showLabelUsage && labelUsageLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
               </div>
               {showLabelUsage && labelUsage && !labelUsageLoading && (
-                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
                   {labelUsage.labels.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No labels applied to studies in this project.</p>
                   ) : (
@@ -12760,7 +12760,7 @@ export function App() {
                 {showSourceTrend && sourceTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
               </div>
               {showSourceTrend && sourceTrend && !sourceTrendLoading && (
-                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
                   <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
                     <strong>Overall ({sourceTrend.period_days}d):</strong>{' '}
                     External: <strong>{sourceTrend.totals.external}</strong> ·{' '}
@@ -12806,7 +12806,7 @@ export function App() {
                 {showInstitBreakdown && institBreakdownLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
               </div>
               {showInstitBreakdown && institBreakdown && !institBreakdownLoading && (
-                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
                   {institBreakdown.rows.length === 0 ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies in this project yet.</p>
                   ) : (
@@ -12852,7 +12852,7 @@ export function App() {
                 )}
               </div>
               {showTrashPanel && (
-                <div style={{background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
                   {trashLoading ? (
                     <p style={{fontSize: '0.8rem', color: '#6b7280'}}>Loading…</p>
                   ) : trashStudies.length === 0 ? (
