@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import './styles/landing.css'
 
@@ -6,6 +7,7 @@ const GITHUB_URL = 'https://github.com/aegis-imaging/aegis'
 const CONTACT_EMAIL = 'contact@aegisimaging.ai'
 
 const NAV = [
+  { href: '#deployments', label: 'Deployments' },
   { href: '#problem', label: 'Problem' },
   { href: '#approach', label: 'Approach' },
   { href: '#architecture', label: 'Architecture' },
@@ -22,6 +24,7 @@ export function App() {
       <TopBar />
       <main id="main">
         <Hero />
+        <Deployments />
         <Problem />
         <Approach />
         <Architecture />
@@ -70,7 +73,7 @@ function TopBar() {
 }
 
 const FACTS = [
-  { title: 'Three clouds', body: 'GCP Cloud Run, AWS ECS Fargate, Azure Container Apps — one codebase' },
+  { title: 'Three clouds', body: 'GCP Cloud Run, AWS ECS Fargate, Azure Container Apps — one codebase', href: '#deployments' },
   { title: 'Any DICOM modality', body: 'MRI, CT, PET, ultrasound, X-ray, mammography and more' },
   { title: 'Ingest anywhere', body: 'Browser upload, DIMSE C-STORE from PACS, DICOMweb STOW-RS' },
   { title: 'Analysis-ready output', body: 'BIDS / NIfTI trees, DICOMweb access, token-gated exports' },
@@ -102,9 +105,131 @@ function Hero() {
         </div>
         <ul className="lp-facts" aria-label="At a glance">
           {FACTS.map((f) => (
-            <li key={f.title}>
-              <strong>{f.title}</strong>
-              <span>{f.body}</span>
+            <li key={f.title} className={f.href ? 'lp-fact-link' : undefined}>
+              {f.href ? (
+                <a href={f.href}>
+                  <strong>{f.title}</strong>
+                  <span>{f.body}</span>
+                </a>
+              ) : (
+                <>
+                  <strong>{f.title}</strong>
+                  <span>{f.body}</span>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+const CLOUDS = [
+  {
+    name: 'Google Cloud',
+    api: 'https://api.aegisimaging.ai',
+    app: 'https://app.aegisimaging.ai',
+    stack: [
+      ['Compute', 'Cloud Run services · Compute Engine DIMSE receiver'],
+      ['Data', 'Cloud SQL for PostgreSQL · Cloud Storage'],
+      ['Edge', 'Global HTTPS load balancer · Cloud Armor · Identity-Aware Proxy'],
+    ],
+  },
+  {
+    name: 'Amazon Web Services',
+    api: 'https://aws.api.aegisimaging.ai',
+    app: 'https://aws.admin.aegisimaging.ai',
+    stack: [
+      ['Compute', 'ECS Fargate services · EC2 DIMSE receiver'],
+      ['Data', 'RDS for PostgreSQL · S3'],
+      ['Edge', 'Application Load Balancer · Cognito · SES'],
+    ],
+  },
+  {
+    name: 'Microsoft Azure',
+    api: 'https://azure.api.aegisimaging.ai',
+    app: 'https://azure.admin.aegisimaging.ai',
+    stack: [
+      ['Compute', 'Container Apps · Linux VM DIMSE receiver'],
+      ['Data', 'Azure Database for PostgreSQL · Blob Storage · Key Vault'],
+      ['Edge', 'Container Apps ingress · Microsoft Entra ID sign-in'],
+    ],
+  },
+]
+
+type Probe = { state: 'checking' } | { state: 'up'; ms: number } | { state: 'down' }
+
+// The API only allows its own frontends as CORS origins, so the response is
+// opaque here; a resolved fetch still proves an HTTPS server answered.
+function useProbe(url: string): Probe {
+  const [probe, setProbe] = useState<Probe>({ state: 'checking' })
+  useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8000)
+    const started = performance.now()
+    fetch(url, { mode: 'no-cors', cache: 'no-store', signal: controller.signal })
+      .then(() => {
+        if (!cancelled) setProbe({ state: 'up', ms: Math.round(performance.now() - started) })
+      })
+      .catch(() => {
+        if (!cancelled) setProbe({ state: 'down' })
+      })
+      .finally(() => clearTimeout(timer))
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [url])
+  return probe
+}
+
+function ProbeBadge({ url }: { url: string }) {
+  const probe = useProbe(url)
+  if (probe.state === 'up') {
+    return <span className="lp-probe lp-probe-up">responding · {probe.ms} ms</span>
+  }
+  if (probe.state === 'down') {
+    return <span className="lp-probe lp-probe-down">no response</span>
+  }
+  return <span className="lp-probe lp-probe-checking">checking…</span>
+}
+
+function Deployments() {
+  return (
+    <section id="deployments" className="lp-section lp-section-alt">
+      <div className="lp-container">
+        <h2 className="lp-section-title">Live on three clouds</h2>
+        <p className="lp-lead">
+          The same container images and Terraform-managed infrastructure run on each provider.
+          Each badge is a live request from your browser to that cloud's API; the linked health
+          endpoint returns JSON status for the database, storage, and every sidecar service.
+        </p>
+        <ul className="lp-clouds">
+          {CLOUDS.map((c) => (
+            <li key={c.name} className="lp-cloud">
+              <div className="lp-cloud-head">
+                <h3>{c.name}</h3>
+                <ProbeBadge url={`${c.api}/healthz`} />
+              </div>
+              <dl className="lp-cloud-stack">
+                {c.stack.map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="lp-cloud-links">
+                <ExternalLink href={`${c.api}/healthz`} className="lp-btn lp-btn-ghost lp-btn-sm">
+                  API health
+                </ExternalLink>
+                <a href={c.app} className="lp-btn lp-btn-ghost lp-btn-sm">
+                  Sign in
+                </a>
+                <code className="lp-cloud-host">{new URL(c.api).host}</code>
+              </div>
             </li>
           ))}
         </ul>

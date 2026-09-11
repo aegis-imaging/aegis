@@ -254,6 +254,139 @@ img {
   color: var(--lp-muted);
 }
 
+.lp-facts a {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.lp-fact-link {
+  transition: border-color 120ms ease;
+}
+
+.lp-fact-link:hover {
+  border-color: var(--lp-accent);
+}
+
+/* ── Deployments ─────────────────────────────────────────────────────── */
+
+.lp-clouds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lp-cloud {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  background: var(--lp-bg);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+}
+
+.lp-cloud-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.lp-cloud-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.lp-probe {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--lp-border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lp-muted);
+  white-space: nowrap;
+}
+
+.lp-probe::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lp-border);
+}
+
+.lp-probe-checking::before {
+  animation: lp-pulse 1s ease-in-out infinite;
+}
+
+.lp-probe-up {
+  color: var(--lp-accent-hover);
+  background: var(--lp-accent-soft);
+  border-color: var(--lp-accent);
+}
+
+.lp-probe-up::before {
+  background: var(--lp-accent);
+}
+
+@keyframes lp-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.lp-cloud-stack {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.lp-cloud-stack div {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.lp-cloud-stack dt {
+  padding-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lp-muted);
+}
+
+.lp-cloud-stack dd {
+  margin: 0;
+}
+
+.lp-cloud-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.lp-cloud-host {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--lp-muted);
+}
+
 /* ── Sections ────────────────────────────────────────────────────────── */
 
 .lp-section {
