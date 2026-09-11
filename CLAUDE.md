@@ -20,7 +20,7 @@ aegis/
 │   ├── upload-portal/      # React 19 — public upload + anonymization
 │   ├── admin-dashboard/    # React 19 — QC, viewer, study management
 │   ├── export-portal/      # React 19 — share download UI
-│   └── landing/            # React 19 — aegisimaging.ai
+│   └── landing/            # React 19 — aegisimaging.ai (static, Cloudflare Pages)
 ├── client/                 # TypeScript DICOM anonymization library
 ├── defacing/               # Python — mri_deface, DeepDefacer, dcm2niix
 ├── phi-detection/          # Python — burned-in PHI OCR + pixel redaction
