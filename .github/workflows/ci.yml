@@ -188,6 +188,7 @@ jobs:
           - { dir: frontend/upload-portal, name: upload-portal, needs_client: true }
           - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: true }
           - { dir: frontend/export-portal, name: export-portal, needs_client: false }
+          - { dir: frontend/landing, name: landing, needs_client: false }
           - { dir: mcp-server, name: mcp-server, needs_client: false }
     steps:
       - uses: actions/checkout@v4

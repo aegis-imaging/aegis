@@ -1,0 +1,10 @@
+/about            /                                                  301
+/admin            https://app.aegisimaging.ai/admin                  302
+/admin/*          https://app.aegisimaging.ai/admin/:splat           302
+/projects         https://app.aegisimaging.ai/projects               302
+/projects/*       https://app.aegisimaging.ai/projects/:splat        302
+/profile          https://app.aegisimaging.ai/profile                302
+/profile/*        https://app.aegisimaging.ai/profile/:splat         302
+/institutions/*   https://app.aegisimaging.ai/institutions/:splat    302
+/install/*        https://app.aegisimaging.ai/install/:splat         302
+/upload/*         https://app.aegisimaging.ai/upload/:splat          302

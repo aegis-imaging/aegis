@@ -1,4 +1,4 @@
-.PHONY: up down clean build api lint lint-go lint-python lint-python-scripts lint-frontend lint-mcp lint-shell lint-terraform lint-infra-guard check logs test test-unit test-race smoke cloud-smoke-from-terraform dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc gcp-verify-deployment aws-build-images aws-apply-infra aws-install-poc aws-verify-deployment
+.PHONY: up down clean build api lint lint-go lint-python lint-python-scripts lint-frontend lint-mcp lint-shell lint-terraform lint-infra-guard check logs test test-unit test-race smoke cloud-smoke-from-terraform dimse-e2e gcp-preflight gcp-bootstrap-project gcp-build-images gcp-apply-infra gcp-install-poc gcp-verify-deployment aws-build-images aws-apply-infra aws-install-poc aws-verify-deployment azure-build-images
 
 # ── Docker Compose ──────────────────────────────────────────────────
 
@@ -167,6 +167,11 @@ aws-build-images:
 aws-install-poc:
 	@REGION="$${REGION:-us-east-1}" PROJECT_NAME="$${PROJECT_NAME:-aegis}" TAG="$${TAG:-latest}" \
 		./scripts/aws_install_poc.sh --region="$$REGION" --project-name="$$PROJECT_NAME" --tag="$$TAG"
+
+# REGISTRY is the ACR login server (terraform -chdir=terraform/azure output -raw acr_login_server).
+# SERVICES limits the build, e.g. SERVICES="api admin-dashboard".
+azure-build-images:
+	@TAG="$${TAG:-latest}" ./scripts/azure_build_push_images.sh --registry="$$REGISTRY" --tag="$$TAG"
 
 aws-verify-deployment:
 	@CMD="./scripts/aws_verify_deployment.sh"; \

@@ -188,11 +188,13 @@ docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/api:latest
 docker build --platform linux/amd64 \
   --build-arg VITE_DWV_BASE_URL=https://aws.dwv.aegisimaging.ai \
   -t 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:latest \
-  -f frontend/admin-dashboard/Dockerfile frontend/admin-dashboard/
+  -f frontend/admin-dashboard/Dockerfile .
 docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:latest
 ```
 
-Note: `API_URL` is NOT a build arg — it is set at runtime via ECS task definition env var.
+Note: the build context is the repo root (`.`), not `frontend/admin-dashboard/` — the
+Dockerfile copies the root `package-lock.json` and the `client/` workspace package.
+`API_URL` is NOT a build arg — it is set at runtime via ECS task definition env var.
 
 ### Build & push DWV
 

@@ -8046,7 +8046,7 @@ function InviteCodesPanel() {
     } finally { setSending(false) }
   }
 
-  const SITE = 'https://aegisimaging.ai'
+  const SITE = window.location.origin
 
   if (loading) return <div className="aegis-muted">Loading…</div>
   if (error)   return <div className="aegis-error">{error}</div>

@@ -39,7 +39,7 @@ aegis/
 │   ├── upload-portal/          # React — public-facing upload + anonymization UI
 │   ├── admin-dashboard/        # React — internal QC, dwvewer, study management
 │   ├── export-portal/          # React — public-facing export share download UI
-│   └── landing/                # React — marketing landing page (aegisimaging.ai)
+│   └── landing/                # React — public landing page (aegisimaging.ai, Cloudflare Pages)
 ├── client/                     # TypeScript DICOM anonymization library (npm)
 ├── defacing/                   # Python defacing service (DeepDefacer, mri_deface)
 ├── phi-detection/              # Python burned-in PHI detection (Tesseract OCR)

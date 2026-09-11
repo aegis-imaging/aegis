@@ -74,7 +74,8 @@ steps:
         docker push ${_REPO}/admin-dashboard:${SHORT_SHA}
         docker push ${_REPO}/admin-dashboard:latest
 
-  # Landing service retired — content folded into admin-dashboard /about.
+  # Landing page (frontend/landing) is a static site deployed by Cloudflare
+  # Pages from the develop branch — no image is built here.
 
   # --- upload-portal (invite-gated public upload SPA for remote sending sites) ---
   - name: gcr.io/cloud-builders/docker
@@ -260,8 +261,8 @@ steps:
       - --project=${_PROJECT_ID}
       - --quiet
 
-  # Landing deploy retired — admin-dashboard now serves /about/* via the
-  # no-IAP backend on the same Cloud Run service.
+  # Landing page is deployed by Cloudflare Pages (see frontend/landing);
+  # admin-dashboard still serves /about/* via the no-IAP backend.
 
   # --- deploy upload-portal ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
