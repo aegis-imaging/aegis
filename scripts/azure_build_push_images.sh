@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REGION="${REGION:-us-east-1}"
-PROJECT_NAME="${PROJECT_NAME:-aegis}"
+REGISTRY="${REGISTRY:-}"
 TAG="${TAG:-latest}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 SERVICES="${SERVICES:-}"
@@ -10,19 +9,18 @@ PUSH=1
 
 for arg in "$@"; do
   case "$arg" in
-    --region=*) REGION="${arg#*=}" ;;
-    --project-name=*) PROJECT_NAME="${arg#*=}" ;;
+    --registry=*) REGISTRY="${arg#*=}" ;;
     --tag=*) TAG="${arg#*=}" ;;
     --platform=*) PLATFORM="${arg#*=}" ;;
     --services=*) SERVICES="${arg#*=}" ;;
     --no-push) PUSH=0 ;;
     -h|--help)
       cat <<'USAGE'
-Usage: ./scripts/aws_build_push_images.sh [options]
+Usage: ./scripts/azure_build_push_images.sh [options]
 
 Options:
-  --region=<region>           Default: us-east-1
-  --project-name=<name>       Default: aegis
+  --registry=<login-server>   ACR login server, e.g. aegisprodacr.azurecr.io.
+                              Default: terraform -chdir=terraform/azure output -raw acr_login_server
   --tag=<tag>                 Default: latest
   --platform=<platform>       Default: linux/amd64
   --services=<a,b,c>          Subset to build (default: api admin-dashboard defacing
@@ -32,7 +30,11 @@ Options:
                               Minimal footprint: --services=api,admin-dashboard
   --no-push                   Build locally with --load only
 
-Environment variables supported: REGION, PROJECT_NAME, TAG, PLATFORM, SERVICES,
+Images are pushed as <registry>/<service>:<tag>, which is what terraform/azure
+expects. Terraform ignores image changes after the first apply, so roll a new
+image with: az containerapp update -g <rg> -n aegis-prod-<service> --image <ref>
+
+Environment variables supported: REGISTRY, TAG, PLATFORM, SERVICES,
 DWV_BASE_URL and OHIF_BASE_URL (baked into the admin dashboard bundle; optional).
 USAGE
       exit 0
@@ -47,7 +49,7 @@ done
 # shellcheck source=scripts/image_build_common.sh
 . "$(dirname "$0")/image_build_common.sh"
 
-for cmd in aws docker; do
+for cmd in az docker; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "error: required command not found: $cmd" >&2
     exit 1
@@ -56,18 +58,18 @@ done
 
 SERVICES="$(resolve_image_services "$SERVICES")"
 
-ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text 2>/dev/null || true)"
-if [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "None" ]; then
-  echo "error: unable to determine AWS account id. Configure aws credentials first." >&2
+if [ -z "$REGISTRY" ]; then
+  REGISTRY="$(terraform -chdir=terraform/azure output -raw acr_login_server 2>/dev/null || true)"
+fi
+if [ -z "$REGISTRY" ]; then
+  echo "error: ACR login server unknown. Pass --registry=<name>.azurecr.io or apply terraform/azure first." >&2
   exit 1
 fi
 
-REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
-
 if [ "$PUSH" -eq 1 ]; then
-  aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+  az acr login --name "${REGISTRY%%.*}"
 fi
 
 for name in $SERVICES; do
-  build_image "${REGISTRY}/${PROJECT_NAME}/${name}:${TAG}" "$name" "$PLATFORM" "$PUSH"
+  build_image "${REGISTRY}/${name}:${TAG}" "$name" "$PLATFORM" "$PUSH"
 done
