@@ -14,7 +14,7 @@
 #     GCP_REGION        = us-central1
 #     GCP_DWV_URL       = https://dwv-uk5cvzf5nq-uc.a.run.app
 #     GCP_API_URL       = https://api.aegisimaging.ai
-#     GCP_ADMIN_URL     = https://admin.aegisimaging.ai
+#     GCP_ADMIN_URL     = https://app.aegisimaging.ai
 #     GCP_DIMSE_INSTANCE = aegis-prod-dimse-receiver   (optional — skip to disable DIMSE deploy)
 #     GCP_DIMSE_ZONE     = us-central1-a               (optional)
 

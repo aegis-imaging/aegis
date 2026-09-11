@@ -34,6 +34,20 @@ locals {
   placeholder_image     = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
   use_placeholder_image = var.api_image_tag == "placeholder"
 
+  # Internal URLs the API uses to reach each sidecar. Only injected when the
+  # sidecars are deployed, so the API skips those pipeline steps otherwise.
+  sidecar_service_urls = {
+    DEFACING_SERVICE_URL       = "https://${local.prefix}-defacing.internal.${local.aca_internal_domain}"
+    PHI_DETECTION_SERVICE_URL  = "https://${local.prefix}-phi-detection.internal.${local.aca_internal_domain}"
+    QC_SERVICE_URL             = "https://${local.prefix}-qc-service.internal.${local.aca_internal_domain}"
+    BIDS_SERVICE_URL           = "https://${local.prefix}-bids-service.internal.${local.aca_internal_domain}"
+    CLASSIFICATION_SERVICE_URL = "https://${local.prefix}-classify.internal.${local.aca_internal_domain}"
+    PROTOCOL_SERVICE_URL       = "https://${local.prefix}-protocol-service.internal.${local.aca_internal_domain}"
+    SYNTH_SERVICE_URL          = "https://${local.prefix}-synth-service.internal.${local.aca_internal_domain}"
+    ANALYTICS_SERVICE_URL      = "https://${local.prefix}-analytics-service.internal.${local.aca_internal_domain}"
+    SCT_SERVICE_URL            = "https://${local.prefix}-sct-service.internal.${local.aca_internal_domain}"
+  }
+
   # Common env vars injected into every sidecar
   sidecar_common_env = [
     {
@@ -113,8 +127,8 @@ resource "azurerm_container_app" "api" {
     container {
       name   = "api"
       image  = local.use_placeholder_image ? local.placeholder_image : "${local.acr_server}/api:${var.api_image_tag}"
-      cpu    = 1.0
-      memory = "2Gi"
+      cpu    = var.api_cpu
+      memory = var.api_memory
 
       env {
         name  = "PORT"
@@ -158,41 +172,12 @@ resource "azurerm_container_app" "api" {
         value = var.first_admin_email
       }
       # Sidecar service URLs via internal ACA DNS
-      env {
-        name  = "DEFACING_SERVICE_URL"
-        value = "https://${local.prefix}-defacing.internal.${local.aca_internal_domain}"
-      }
-      env {
-        name  = "PHI_DETECTION_SERVICE_URL"
-        value = "https://${local.prefix}-phi-detection.internal.${local.aca_internal_domain}"
-      }
-      env {
-        name  = "QC_SERVICE_URL"
-        value = "https://${local.prefix}-qc-service.internal.${local.aca_internal_domain}"
-      }
-      env {
-        name  = "BIDS_SERVICE_URL"
-        value = "https://${local.prefix}-bids-service.internal.${local.aca_internal_domain}"
-      }
-      env {
-        name  = "CLASSIFICATION_SERVICE_URL"
-        value = "https://${local.prefix}-classify.internal.${local.aca_internal_domain}"
-      }
-      env {
-        name  = "PROTOCOL_SERVICE_URL"
-        value = "https://${local.prefix}-protocol-service.internal.${local.aca_internal_domain}"
-      }
-      env {
-        name  = "SYNTH_SERVICE_URL"
-        value = "https://${local.prefix}-synth-service.internal.${local.aca_internal_domain}"
-      }
-      env {
-        name  = "ANALYTICS_SERVICE_URL"
-        value = "https://${local.prefix}-analytics-service.internal.${local.aca_internal_domain}"
-      }
-      env {
-        name  = "SCT_SERVICE_URL"
-        value = "https://${local.prefix}-sct-service.internal.${local.aca_internal_domain}"
+      dynamic "env" {
+        for_each = { for name, url in local.sidecar_service_urls : name => url if var.enable_sidecars }
+        content {
+          name  = env.key
+          value = env.value
+        }
       }
       dynamic "env" {
         for_each = local.dimse_enabled ? [azurerm_network_interface.dimse[0].private_ip_address] : []
@@ -284,7 +269,7 @@ resource "azurerm_container_app" "admin_dashboard" {
   }
 
   template {
-    min_replicas = 1
+    min_replicas = var.admin_min_replicas
     max_replicas = 3
 
     container {
@@ -297,9 +282,11 @@ resource "azurerm_container_app" "admin_dashboard" {
         name  = "API_URL"
         value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
       }
+      # nginx fails to start on an empty upstream, so point /agent/ at a dead
+      # local port (502) rather than blanking it when the MCP server is off.
       env {
         name  = "MCP_SERVER_URL"
-        value = "https://${azurerm_container_app.mcp_server.ingress[0].fqdn}"
+        value = var.enable_mcp_server ? "https://${azurerm_container_app.mcp_server[0].ingress[0].fqdn}" : "http://127.0.0.1:9"
       }
     }
   }
@@ -314,6 +301,8 @@ resource "azurerm_container_app" "admin_dashboard" {
 # ── Landing Page ──────────────────────────────────────────────────────────────
 
 resource "azurerm_container_app" "landing" {
+  count = var.enable_landing ? 1 : 0
+
   name                         = "${local.prefix}-landing"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -373,16 +362,23 @@ resource "azurerm_container_app" "landing" {
 # This provisions a free Azure-managed TLS certificate for the domain.
 
 resource "azurerm_container_app_custom_domain" "landing" {
-  count = var.landing_domain != "" ? 1 : 0
+  count = var.enable_landing && var.landing_domain != "" ? 1 : 0
 
   name                     = var.landing_domain
-  container_app_id         = azurerm_container_app.landing.id
+  container_app_id         = azurerm_container_app.landing[0].id
   certificate_binding_type = "Disabled"
+
+  # `az containerapp hostname bind` switches the binding to a managed cert.
+  lifecycle {
+    ignore_changes = [certificate_binding_type, container_app_environment_certificate_id]
+  }
 }
 
 # ── Upload Portal ──────────────────────────────────────────────────────────────
 
 resource "azurerm_container_app" "upload_portal" {
+  count = var.enable_upload_portal ? 1 : 0
+
   name                         = "${local.prefix}-upload-portal"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -447,16 +443,56 @@ resource "azurerm_container_app" "upload_portal" {
 # This provisions a free Azure-managed TLS certificate for the domain.
 
 resource "azurerm_container_app_custom_domain" "upload_portal" {
-  count = var.upload_portal_domain != "" ? 1 : 0
+  count = var.enable_upload_portal && var.upload_portal_domain != "" ? 1 : 0
 
   name                     = var.upload_portal_domain
-  container_app_id         = azurerm_container_app.upload_portal.id
+  container_app_id         = azurerm_container_app.upload_portal[0].id
   certificate_binding_type = "Disabled"
+
+  lifecycle {
+    ignore_changes = [certificate_binding_type, container_app_environment_certificate_id]
+  }
+}
+
+# ── API / Admin — Custom Domains (optional) ───────────────────────────────────
+#
+# Same two-step flow as above. Skipped when the Application Gateway edge path
+# is enabled, because the hostnames then point at the gateway instead of the
+# Container Apps ingress. Before the first apply with these set, create in DNS:
+#   CNAME <api_domain>         -> <api_fqdn output>
+#   TXT   asuid.<api_domain>   -> <custom_domain_verification_id output>
+#   (same pair for admin_domain -> admin_dashboard_fqdn)
+# then run `az containerapp hostname bind` for each to get the managed cert.
+
+resource "azurerm_container_app_custom_domain" "api" {
+  count = var.api_domain != "" && !var.enable_application_gateway_waf ? 1 : 0
+
+  name                     = var.api_domain
+  container_app_id         = azurerm_container_app.api.id
+  certificate_binding_type = "Disabled"
+
+  lifecycle {
+    ignore_changes = [certificate_binding_type, container_app_environment_certificate_id]
+  }
+}
+
+resource "azurerm_container_app_custom_domain" "admin" {
+  count = var.admin_domain != "" && !var.enable_application_gateway_waf ? 1 : 0
+
+  name                     = var.admin_domain
+  container_app_id         = azurerm_container_app.admin_dashboard.id
+  certificate_binding_type = "Disabled"
+
+  lifecycle {
+    ignore_changes = [certificate_binding_type, container_app_environment_certificate_id]
+  }
 }
 
 # ── DWV Viewer ────────────────────────────────────────────────────────────────
 
 resource "azurerm_container_app" "dwv" {
+  count = var.enable_dwv ? 1 : 0
+
   name                         = "${local.prefix}-dwv"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -506,6 +542,8 @@ resource "azurerm_container_app" "dwv" {
 # ── MCP Server ────────────────────────────────────────────────────────────────
 
 resource "azurerm_container_app" "mcp_server" {
+  count = var.enable_mcp_server ? 1 : 0
+
   name                         = "${local.prefix}-mcp-server"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -575,6 +613,8 @@ resource "azurerm_container_app" "mcp_server" {
 # access Azure Blob Storage via managed identity.
 
 resource "azurerm_container_app" "defacing" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-defacing"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -634,6 +674,8 @@ resource "azurerm_container_app" "defacing" {
 }
 
 resource "azurerm_container_app" "phi_detection" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-phi-detection"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -701,6 +743,8 @@ resource "azurerm_container_app" "phi_detection" {
 }
 
 resource "azurerm_container_app" "qc_service" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-qc-service"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -768,6 +812,8 @@ resource "azurerm_container_app" "qc_service" {
 }
 
 resource "azurerm_container_app" "bids_service" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-bids-service"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -827,6 +873,8 @@ resource "azurerm_container_app" "bids_service" {
 }
 
 resource "azurerm_container_app" "classification_service" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-classify"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -890,6 +938,8 @@ resource "azurerm_container_app" "classification_service" {
 }
 
 resource "azurerm_container_app" "protocol_service" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-protocol-service"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -953,6 +1003,8 @@ resource "azurerm_container_app" "protocol_service" {
 }
 
 resource "azurerm_container_app" "synth_service" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-synth-service"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -1008,6 +1060,8 @@ resource "azurerm_container_app" "synth_service" {
 }
 
 resource "azurerm_container_app" "analytics_service" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-analytics-service"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
@@ -1067,6 +1121,8 @@ resource "azurerm_container_app" "analytics_service" {
 }
 
 resource "azurerm_container_app" "sct_service" {
+  count = var.enable_sidecars ? 1 : 0
+
   name                         = "${local.prefix}-sct-service"
   container_app_environment_id = local.aca_env_id
   resource_group_name          = azurerm_resource_group.main.name
