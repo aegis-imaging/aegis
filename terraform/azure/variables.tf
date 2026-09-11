@@ -171,6 +171,56 @@ variable "api_max_replicas" {
   default     = 10
 }
 
+variable "api_cpu" {
+  description = "vCPU for the Go API Container App. Container Apps requires a 1:2 cpu:memory ratio (e.g. 0.5 with 1Gi)."
+  type        = number
+  default     = 1.0
+}
+
+variable "api_memory" {
+  description = "Memory for the Go API Container App (e.g. \"2Gi\")"
+  type        = string
+  default     = "2Gi"
+}
+
+variable "admin_min_replicas" {
+  description = "Minimum replicas for the admin dashboard Container App"
+  type        = number
+  default     = 1
+}
+
+# ── Optional workloads ────────────────────────────────────────────────────────
+
+variable "enable_sidecars" {
+  description = "Deploy the nine Python processing sidecar Container Apps. false = no sidecar apps and the API gets no *_SERVICE_URL env vars, so those pipeline steps are skipped (minimal footprint)."
+  type        = bool
+  default     = true
+}
+
+variable "enable_dwv" {
+  description = "Deploy the DWV viewer Container App"
+  type        = bool
+  default     = true
+}
+
+variable "enable_mcp_server" {
+  description = "Deploy the MCP server Container App. false = the admin dashboard's /agent/ proxy has no upstream."
+  type        = bool
+  default     = true
+}
+
+variable "enable_upload_portal" {
+  description = "Deploy the upload portal Container App"
+  type        = bool
+  default     = true
+}
+
+variable "enable_landing" {
+  description = "Deploy the landing Container App. Off by default: the public landing site is served by Cloudflare Pages from frontend/landing."
+  type        = bool
+  default     = false
+}
+
 # ── DIMSE Receiver ────────────────────────────────────────────────────────────
 
 variable "dimse_receiver_image" {

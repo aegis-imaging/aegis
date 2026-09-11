@@ -18,19 +18,39 @@ output "admin_dashboard_url" {
   value       = "https://${azurerm_container_app.admin_dashboard.ingress[0].fqdn}"
 }
 
+output "admin_dashboard_fqdn" {
+  description = "Admin Dashboard Container App FQDN (CNAME target for admin_domain)"
+  value       = azurerm_container_app.admin_dashboard.ingress[0].fqdn
+}
+
 output "landing_url" {
-  description = "Landing Page URL"
-  value       = var.landing_domain != "" ? "https://${var.landing_domain}" : "https://${azurerm_container_app.landing.ingress[0].fqdn}"
+  description = "Landing Page URL (null when enable_landing is false)"
+  value       = !var.enable_landing ? null : (var.landing_domain != "" ? "https://${var.landing_domain}" : "https://${azurerm_container_app.landing[0].ingress[0].fqdn}")
 }
 
 output "dwv_url" {
-  description = "DWV Viewer URL"
-  value       = "https://${azurerm_container_app.dwv.ingress[0].fqdn}"
+  description = "DWV Viewer URL (null when enable_dwv is false)"
+  value       = var.enable_dwv ? "https://${azurerm_container_app.dwv[0].ingress[0].fqdn}" : null
 }
 
 output "mcp_server_url" {
-  description = "MCP Server URL"
-  value       = "https://${azurerm_container_app.mcp_server.ingress[0].fqdn}"
+  description = "MCP Server URL (null when enable_mcp_server is false)"
+  value       = var.enable_mcp_server ? "https://${azurerm_container_app.mcp_server[0].ingress[0].fqdn}" : null
+}
+
+output "resource_group_name" {
+  description = "Resource group holding every AEGIS resource (for az CLI commands)"
+  value       = azurerm_resource_group.main.name
+}
+
+output "container_app_environment_name" {
+  description = "Container Apps Environment name (for `az containerapp hostname bind`)"
+  value       = azurerm_container_app_environment.main.name
+}
+
+output "custom_domain_verification_id" {
+  description = "Value of the asuid.<hostname> TXT record that Container Apps custom domains require"
+  value       = azurerm_container_app_environment.main.custom_domain_verification_id
 }
 
 output "storage_account_name" {

@@ -101,6 +101,8 @@ resource "aws_iam_role_policy" "mcp_server_bedrock" {
 # ── ECS task definition ────────────────────────────────────────────────────────
 
 resource "aws_ecs_task_definition" "mcp_server" {
+  count = var.enable_mcp_server ? 1 : 0
+
   family                   = "${var.project_name}-mcp-server"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -154,9 +156,11 @@ resource "aws_ecs_task_definition" "mcp_server" {
 # ── ECS service ────────────────────────────────────────────────────────────────
 
 resource "aws_ecs_service" "mcp_server" {
+  count = var.enable_mcp_server ? 1 : 0
+
   name                   = "${var.project_name}-mcp-server"
   cluster                = aws_ecs_cluster.main.id
-  task_definition        = aws_ecs_task_definition.mcp_server.arn
+  task_definition        = aws_ecs_task_definition.mcp_server[0].arn
   desired_count          = 1
   launch_type            = "FARGATE"
   enable_execute_command = true

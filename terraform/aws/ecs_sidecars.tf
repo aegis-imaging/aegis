@@ -91,7 +91,7 @@ locals {
 # ── Task definitions ───────────────────────────────────────────────────────────
 
 resource "aws_ecs_task_definition" "sidecar" {
-  for_each = local.sidecar_configs
+  for_each = { for name, cfg in local.sidecar_configs : name => cfg if var.enable_sidecars }
 
   family                   = "${var.project_name}-${each.key}"
   requires_compatibilities = ["FARGATE"]
@@ -135,7 +135,7 @@ resource "aws_ecs_task_definition" "sidecar" {
 # ── ECS services ──────────────────────────────────────────────────────────────
 
 resource "aws_ecs_service" "sidecar" {
-  for_each = local.sidecar_configs
+  for_each = { for name, cfg in local.sidecar_configs : name => cfg if var.enable_sidecars }
 
   name                   = "${var.project_name}-${each.key}"
   cluster                = aws_ecs_cluster.main.id

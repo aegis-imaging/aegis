@@ -152,6 +152,24 @@ variable "sidecar_image_tag" {
   default     = "latest"
 }
 
+variable "enable_sidecars" {
+  description = "Run the nine Python processing sidecars on ECS. false = no sidecar tasks and the API's *_SERVICE_URL env vars are blank, so those pipeline steps are skipped (minimal footprint)."
+  type        = bool
+  default     = true
+}
+
+variable "enable_dwv" {
+  description = "Run the DWV viewer ECS service. false = the viewer hostname returns 503 from the ALB."
+  type        = bool
+  default     = true
+}
+
+variable "enable_mcp_server" {
+  description = "Run the MCP server ECS service. false = the admin dashboard's /agent/ proxy has no upstream."
+  type        = bool
+  default     = true
+}
+
 variable "dimse_receiver_image" {
   description = "Full ECR image URI for the DIMSE receiver EC2 instance (empty = skip all DIMSE resources)"
   type        = string
@@ -1060,15 +1078,15 @@ resource "aws_ecs_task_definition" "api" {
         { name = "AUTH_ENABLED", value = "true" },
         { name = "AUTH_PROVIDER", value = "aws" },
         { name = "PIPELINE_AUTO", value = "true" },
-        { name = "DEFACING_SERVICE_URL", value = "http://defacing.aegis.local:8080" },
-        { name = "PHI_DETECTION_SERVICE_URL", value = "http://phi-detection.aegis.local:8080" },
-        { name = "QC_SERVICE_URL", value = "http://qc-service.aegis.local:8080" },
-        { name = "BIDS_SERVICE_URL", value = "http://bids-service.aegis.local:8080" },
-        { name = "CLASSIFICATION_SERVICE_URL", value = "http://classification-service.aegis.local:8080" },
-        { name = "PROTOCOL_SERVICE_URL", value = "http://protocol-service.aegis.local:8080" },
-        { name = "SYNTH_SERVICE_URL", value = "http://synth-service.aegis.local:8080" },
-        { name = "ANALYTICS_SERVICE_URL", value = "http://analytics-service.aegis.local:8080" },
-        { name = "SCT_SERVICE_URL", value = "http://sct-service.aegis.local:8080" },
+        { name = "DEFACING_SERVICE_URL", value = var.enable_sidecars ? "http://defacing.aegis.local:8080" : "" },
+        { name = "PHI_DETECTION_SERVICE_URL", value = var.enable_sidecars ? "http://phi-detection.aegis.local:8080" : "" },
+        { name = "QC_SERVICE_URL", value = var.enable_sidecars ? "http://qc-service.aegis.local:8080" : "" },
+        { name = "BIDS_SERVICE_URL", value = var.enable_sidecars ? "http://bids-service.aegis.local:8080" : "" },
+        { name = "CLASSIFICATION_SERVICE_URL", value = var.enable_sidecars ? "http://classification-service.aegis.local:8080" : "" },
+        { name = "PROTOCOL_SERVICE_URL", value = var.enable_sidecars ? "http://protocol-service.aegis.local:8080" : "" },
+        { name = "SYNTH_SERVICE_URL", value = var.enable_sidecars ? "http://synth-service.aegis.local:8080" : "" },
+        { name = "ANALYTICS_SERVICE_URL", value = var.enable_sidecars ? "http://analytics-service.aegis.local:8080" : "" },
+        { name = "SCT_SERVICE_URL", value = var.enable_sidecars ? "http://sct-service.aegis.local:8080" : "" },
         { name = "DIMSE_RECEIVER_URL", value = try("http://${aws_instance.dimse_receiver[0].private_ip}:8080", "") },
         { name = "FIRST_ADMIN_EMAIL", value = var.first_admin_email },
         { name = "SMTP_HOST", value = local.ses_smtp_hostname },
@@ -1199,6 +1217,8 @@ resource "aws_ecs_service" "admin" {
 # --- DWV viewer ---
 
 resource "aws_ecs_task_definition" "dwv" {
+  count = var.enable_dwv ? 1 : 0
+
   family                   = "${var.project_name}-dwv"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -1235,9 +1255,11 @@ resource "aws_ecs_task_definition" "dwv" {
 }
 
 resource "aws_ecs_service" "dwv" {
+  count = var.enable_dwv ? 1 : 0
+
   name            = "${var.project_name}-dwv"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.dwv.arn
+  task_definition = aws_ecs_task_definition.dwv[0].arn
   desired_count   = 1
   launch_type     = "FARGATE"
 

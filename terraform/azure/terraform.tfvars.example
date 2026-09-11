@@ -21,6 +21,19 @@ db_admin_password = "CHANGE_ME_USE_A_STRONG_PASSWORD"
 db_sku_name       = "B_Standard_B2s"  # cheapest; use GP_Standard_D2s_v3 for prod load
 db_storage_mb     = 32768             # 32 GB
 
+# ── Minimal footprint ────────────────────────────────────────────────────────
+# Keeps the API, admin dashboard, PostgreSQL and Blob Storage so the health
+# endpoint and sign-in page answer; drops every other Container App.
+# See docs/runbooks/minimal-footprint.md.
+# enable_sidecars      = false
+# enable_dwv           = false
+# enable_mcp_server    = false
+# enable_upload_portal = false
+# api_cpu              = 0.5
+# api_memory           = "1Gi"
+# db_sku_name          = "B_Standard_B1ms"
+# dimse_receiver_image = ""
+
 # ── Monitoring ────────────────────────────────────────────────────────────────
 alert_email = "ops@aegisimaging.ai"
 
