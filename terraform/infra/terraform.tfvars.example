@@ -2,10 +2,17 @@ project_id   = "aegis-prod"
 region       = "us-central1"
 environment  = "dev"
 api_domain     = "api-dev.aegisimaging.ai"
-# Apex domain serving the unified React app — XNAT routes at /, admin tabs
-# at /admin/*, public about pages at /about. The former admin.* subdomain
-# has been retired.
+# Hostname of the unified React app — XNAT routes at /, admin tabs at
+# /admin/*, public about pages at /about. Must resolve to the LB IP before
+# apply, or managed-certificate provisioning fails.
+app_domain = "app-dev.aegisimaging.ai"
+# Public landing site, hosted on Cloudflare Pages (not this LB). Only used
+# for the API CORS allowlist.
 landing_domain = "aegisimaging.ai"
+# Extra hostnames the LB certificate must cover temporarily, e.g. the apex
+# while DNS moves to Cloudflare. Remove once the move is done so renewals
+# don't fail on a hostname that no longer points here.
+# extra_lb_domains = ["aegisimaging.ai", "www.aegisimaging.ai"]
 
 # IAP OAuth credentials for the admin dashboard backend.
 iap_oauth_client_id     = "YOUR_IAP_OAUTH_CLIENT_ID"

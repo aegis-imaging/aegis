@@ -66,9 +66,20 @@ variable "api_domain" {
 }
 
 variable "landing_domain" {
-  description = "FQDN of the single application apex (example: aegisimaging.ai). Serves the unified admin-dashboard React app — XNAT routes at /, admin tabs at /admin/*, public about pages at /about. The former admin.* subdomain has been retired in favor of one hostname."
+  description = "FQDN of the public landing site (example: aegisimaging.ai). Served by Cloudflare Pages from frontend/landing, not by this load balancer; listed here only so it is in the API CORS allowlist."
   type        = string
   default     = ""
+}
+
+variable "app_domain" {
+  description = "FQDN of the unified application (example: app.aegisimaging.ai). Serves the admin-dashboard React app behind IAP — XNAT routes at /, admin tabs at /admin/*, public about pages at /about."
+  type        = string
+}
+
+variable "extra_lb_domains" {
+  description = "Additional hostnames the load balancer certificate must cover, e.g. the apex while DNS is being moved to Cloudflare Pages. Every entry must resolve to the LB IP or certificate provisioning fails."
+  type        = list(string)
+  default     = []
 }
 
 variable "upload_portal_domain" {
@@ -481,15 +492,15 @@ locals {
     var.analytics_service_image != "" ? { analytics-service = var.analytics_service_image } : {}
   )
 
-  lb_domains = distinct(compact([
+  lb_domains = distinct(compact(concat([
     var.api_domain,
-    var.landing_domain,
-    var.landing_domain != "" ? "www.${var.landing_domain}" : "",
+    var.app_domain,
     var.upload_portal_domain,
-  ]))
+  ], var.extra_lb_domains)))
 
   resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : compact([
     "https://${var.api_domain}",
+    "https://${var.app_domain}",
     var.landing_domain != "" ? "https://${var.landing_domain}" : "",
     var.upload_portal_domain != "" ? "https://${var.upload_portal_domain}" : "",
   ])
@@ -1051,6 +1062,10 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.export_portal_base_url
       }
       env {
+        name  = "LANDING_BASE_URL"
+        value = "https://${var.app_domain}"
+      }
+      env {
         name  = "APP_TIMEZONE"
         value = "UTC"
       }
@@ -1215,12 +1230,12 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
   }
 }
 
-# --- Landing page service retired ---
+# --- Landing page ---
 #
-# The standalone aegis-prod-landing Cloud Run service has been retired.
-# Its content was folded into the admin-dashboard React app under /about/*,
-# which is served via a no-IAP backend (google_compute_backend_service.admin_public)
-# so anonymous visitors can still reach the public about pages.
+# The public landing site (frontend/landing) is a static build hosted on
+# Cloudflare Pages at var.landing_domain; it has no Cloud Run service and no
+# LB backend here. The admin-dashboard app still serves /about/* via a no-IAP
+# backend (google_compute_backend_service.admin_public) on var.app_domain.
 
 # --- Upload portal Cloud Run service ---
 
@@ -1399,7 +1414,7 @@ resource "google_cloud_run_v2_service" "mcp_server" {
       }
       env {
         name  = "MCP_AGENT_ALLOWED_ORIGIN"
-        value = "https://${var.landing_domain}"
+        value = "https://${var.app_domain}"
       }
       env {
         name  = "MCP_AGENT_REQUIRE_AUTH"
@@ -1472,12 +1487,12 @@ resource "google_compute_global_address" "lb_ip" {
 }
 
 resource "google_compute_managed_ssl_certificate" "lb_cert" {
-  # Bump the version suffix whenever local.lb_domains changes — managed
-  # certs in GCP are immutable, so terraform must create a fresh resource
-  # alongside the old one (create_before_destroy), switch the LB to the
-  # new cert, then garbage-collect the old. Using the same name on a
-  # domain change yields a 409 "already exists" and aborts the apply.
-  name = "${local.name_prefix}-lb-cert-v5"
+  # Managed certs in GCP are immutable, so any change to local.lb_domains
+  # must create a fresh resource alongside the old one (create_before_destroy),
+  # switch the LB to it, then garbage-collect the old. Reusing a name on a
+  # domain change yields a 409 "already exists" and aborts the apply, so the
+  # name is derived from the (sorted) domain list instead of a hand-bumped suffix.
+  name = "${local.name_prefix}-lb-cert-${substr(md5(join(",", sort(local.lb_domains))), 0, 8)}"
   managed {
     domains = local.lb_domains
   }
@@ -1610,11 +1625,12 @@ resource "google_compute_url_map" "https" {
     path_matcher = "api"
   }
 
-  # Apex domain (e.g. aegisimaging.ai) serves the unified app.
+  # App hostname (e.g. app.aegisimaging.ai) serves the unified app. The apex
+  # is the public landing site on Cloudflare Pages and never reaches this LB.
   # Default: IAP-gated `admin` backend (XNAT, /admin/*, /search, etc.).
   # Path rule: /about and /about/* route to `admin_public` (no IAP).
   host_rule {
-    hosts        = [var.landing_domain]
+    hosts        = [var.app_domain]
     path_matcher = "app"
   }
 
@@ -2280,11 +2296,11 @@ output "api_auth_me_url" {
 }
 
 output "admin_base_url" {
-  value = "https://${var.landing_domain}"
+  value = "https://${var.app_domain}"
 }
 
 output "admin_root_url" {
-  value = "https://${var.landing_domain}/"
+  value = "https://${var.app_domain}/"
 }
 
 output "cloud_armor_policy_name" {
