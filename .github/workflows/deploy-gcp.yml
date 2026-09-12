@@ -26,6 +26,12 @@ on:
   push:
     branches:
       - develop
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.pdf"
+      - "frontend/landing/**"   # deployed by Cloudflare Pages
+      - "terraform/**"          # handled by the terraform-* workflows
   workflow_dispatch:
 
 permissions:
@@ -188,6 +194,9 @@ jobs:
       API_URL:    ${{ vars.GCP_API_URL }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Authenticate to GCP (WIF)
         uses: google-github-actions/auth@v2
         with:
@@ -197,77 +206,44 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # scripts/gcp_cloud_run_deploy.sh prints the failed revision's logs when
+      # a container does not start, so the cause shows up in this run.
       - name: Deploy — api
-        run: |
-          gcloud run deploy aegis-api \
-            --image="$REPO/api:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh aegis-api "$REPO/api:$IMAGE_TAG"
 
       - name: Deploy — admin-dashboard
-        run: |
-          gcloud run deploy aegis-admin-dashboard \
-            --image="$REPO/admin-dashboard:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh aegis-admin-dashboard "$REPO/admin-dashboard:$IMAGE_TAG"
 
       - name: Deploy — upload-portal
         run: |
           if gcloud run services describe aegis-prod-upload-portal \
               --region="$REGION" --project="$PROJECT_ID" \
               --format="value(name)" 2>/dev/null | grep -q aegis-prod-upload-portal; then
-            gcloud run deploy aegis-prod-upload-portal \
-              --image="$REPO/upload-portal:$IMAGE_TAG" \
-              --region="$REGION" --project="$PROJECT_ID" --quiet
+            ./scripts/gcp_cloud_run_deploy.sh aegis-prod-upload-portal "$REPO/upload-portal:$IMAGE_TAG"
           else
             echo "Skipping aegis-prod-upload-portal (service not provisioned)"
           fi
 
       - name: Deploy — dwv
-        run: |
-          gcloud run deploy dwv \
-            --image="$REPO/dwv:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" \
-            --set-env-vars="API_URL=$API_URL" \
-            --allow-unauthenticated \
-            --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh dwv "$REPO/dwv:$IMAGE_TAG" --set-env-vars="API_URL=$API_URL" --allow-unauthenticated
 
       - name: Deploy — ohif
-        run: |
-          gcloud run deploy ohif \
-            --image="$REPO/ohif:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" \
-            --set-env-vars="API_URL=$API_URL" \
-            --allow-unauthenticated \
-            --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh ohif "$REPO/ohif:$IMAGE_TAG" --set-env-vars="API_URL=$API_URL" --allow-unauthenticated
 
       - name: Deploy — defacing
-        run: |
-          gcloud run deploy defacing \
-            --image="$REPO/defacing:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh defacing "$REPO/defacing:$IMAGE_TAG"
 
       - name: Deploy — dicom-tools
-        run: |
-          gcloud run deploy dicom-tools \
-            --image="$REPO/dicom-tools:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh dicom-tools "$REPO/dicom-tools:$IMAGE_TAG"
 
       - name: Deploy — analytics-service
-        run: |
-          gcloud run deploy analytics-service \
-            --image="$REPO/analytics-service:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh analytics-service "$REPO/analytics-service:$IMAGE_TAG"
 
       - name: Deploy — sct-service
-        run: |
-          gcloud run deploy sct-service \
-            --image="$REPO/sct-service:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh sct-service "$REPO/sct-service:$IMAGE_TAG"
 
       - name: Deploy — mcp-server
-        run: |
-          gcloud run deploy aegis-mcp-server \
-            --image="$REPO/mcp-server:$IMAGE_TAG" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
+        run: ./scripts/gcp_cloud_run_deploy.sh aegis-mcp-server "$REPO/mcp-server:$IMAGE_TAG"
 
   # ── Phase 2b: Deploy DIMSE Receiver VM (if configured) ─────────────────────
   # Mirrors cloudbuild.yaml: update dimse-image metadata, then reset the VM.
@@ -319,9 +295,17 @@ jobs:
       - name: Reset DIMSE VM (triggers startup script re-pull)
         if: steps.check-instance.outputs.exists == 'true'
         run: |
-          gcloud compute instances reset "$DIMSE_INSTANCE" \
-            --zone="$DIMSE_ZONE" \
-            --project="$PROJECT_ID"
+          # The metadata update above leaves the instance briefly "not ready";
+          # the reset is rejected until that operation settles, so retry.
+          for attempt in 1 2 3 4 5 6; do
+            if gcloud compute instances reset "$DIMSE_INSTANCE" --zone="$DIMSE_ZONE" --project="$PROJECT_ID"; then
+              exit 0
+            fi
+            echo "reset rejected (attempt $attempt/6); retrying in 10s"
+            sleep 10
+          done
+          echo "::error::could not reset $DIMSE_INSTANCE after 6 attempts"
+          exit 1
 
   # ── Phase 3: Post-deploy smoke check ────────────────────────────────────────
   smoke-check:
