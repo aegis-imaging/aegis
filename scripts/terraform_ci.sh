@@ -40,12 +40,46 @@ summary() {
   fi
 }
 
+# The full human-readable plan (attribute values included) is what an
+# approver needs, and it must never reach the public logs. When PLAN_ARCHIVE
+# is set — a gs://, s3:// or https://<account>.blob.core.windows.net/<container>[/prefix]
+# location, normally the private Terraform state bucket — it is written there
+# as <run id>-plan.txt and the location is printed.
+archive_plan() {
+  [ -n "${PLAN_ARCHIVE:-}" ] || return 0
+  local name="${GITHUB_RUN_ID:-local}-plan.txt" txt
+  txt="$(mktemp)"
+  terraform -chdir="$DIR" show -no-color tfplan.bin > "$txt"
+  case "$PLAN_ARCHIVE" in
+    gs://*)
+      gcloud storage cp --quiet "$txt" "${PLAN_ARCHIVE%/}/$name" ;;
+    s3://*)
+      aws s3 cp --quiet "$txt" "${PLAN_ARCHIVE%/}/$name" ;;
+    https://*.blob.core.windows.net/*)
+      local rest account container prefix
+      rest="${PLAN_ARCHIVE#https://}"
+      account="${rest%%.blob.core.windows.net*}"
+      rest="${rest#*.blob.core.windows.net/}"
+      container="${rest%%/*}"
+      prefix="${rest#"$container"}"; prefix="${prefix#/}"
+      az storage blob upload --only-show-errors --auth-mode key --overwrite \
+        --account-name "$account" --container-name "$container" \
+        --name "${prefix:+$prefix/}$name" --file "$txt" >/dev/null ;;
+    *)
+      echo "[warn] PLAN_ARCHIVE has an unsupported scheme: $PLAN_ARCHIVE"; rm -f "$txt"; return 0 ;;
+  esac
+  rm -f "$txt"
+  echo "[info] Full plan with attribute values archived to ${PLAN_ARCHIVE%/}/$name"
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "Full plan: \`${PLAN_ARCHIVE%/}/$name\`" >> "$GITHUB_STEP_SUMMARY"
+}
+
 LOG="$(mktemp)"
-trap 'rm -f "$LOG"' EXIT
+trap 'rm -f "$LOG" "$DIR/tfplan.bin"' EXIT
 
 case "$MODE" in
   plan)
-    terraform -chdir="$DIR" plan -input=false -lock-timeout=5m -json | filter | tee "$LOG"
+    terraform -chdir="$DIR" plan -input=false -lock-timeout=5m -out=tfplan.bin -json | filter | tee "$LOG"
+    archive_plan
     ;;
   apply)
     terraform -chdir="$DIR" apply -input=false -auto-approve -lock-timeout=5m -json | filter | tee "$LOG"
