@@ -10,9 +10,9 @@
 #     GCP_SERVICE_ACCOUNT             — output: deploy_service_account (aegis-cloud-build@...)
 #     GCP_TERRAFORM_TFVARS            — full contents of terraform/infra/terraform.tfvars
 #   Variables:
-#     GCP_PROJECT_ID    = aegis-prod-488120
+#     GCP_PROJECT_ID    = <GCP_PROJECT_ID>
 #     GCP_REGION        = us-central1
-#     GCP_DWV_URL       = https://dwv-uk5cvzf5nq-uc.a.run.app
+#     GCP_DWV_URL       = https://dwv-<CLOUD_RUN_HASH>-uc.a.run.app
 #     GCP_API_URL       = https://api.aegisimaging.ai
 #     GCP_ADMIN_URL     = https://app.aegisimaging.ai
 #     GCP_DIMSE_INSTANCE = aegis-prod-dimse-receiver   (optional — skip to disable DIMSE deploy)

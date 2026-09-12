@@ -9,9 +9,9 @@ GCP production environment is **fully deployed and operational**. The platform i
 
 ## What Was Completed (2026-02-21 → 2026-02-22)
 
-### GCP Production Deployment (`aegis-prod-488120`)
+### GCP Production Deployment (`<GCP_PROJECT_ID>`)
 
-- **Project**: `aegis-prod-488120`, region `us-central1`, billing `016DEE-91CE5C-ECB970`
+- **Project**: `<GCP_PROJECT_ID>`, region `us-central1`, billing `016DEE-91CE5C-ECB970`
 - **API**: `https://api.aegisimaging.ai` — Cloud Run, distroless Go container, all routes live
 - **Admin dashboard**: `https://admin.aegisimaging.ai` — IAP-gated, `<your-google-account-email>` provisioned as first admin
 - **6 Python sidecars** deployed on Cloud Run: defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service — all healthy
@@ -73,11 +73,11 @@ Result: PASS (2.56s, steps=11)
 
 | Item | Value |
 |------|-------|
-| GCP Project | `aegis-prod-488120` |
+| GCP Project | `<GCP_PROJECT_ID>` |
 | Region | `us-central1` |
 | API | `https://api.aegisimaging.ai` |
 | Admin Dashboard | `https://admin.aegisimaging.ai` |
-| AR Registry | `us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services` |
+| AR Registry | `us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/aegis-services` |
 | First Admin | `<your-google-account-email>` |
 | DB Secret | `aegis-prod-db-password` (Secret Manager) |
 | GCS Signing | IAM-based (no private key), `GCS_SIGNING_EMAIL` = API SA email |

@@ -8,12 +8,12 @@ name: Deploy to GCP
 #     GCP_WORKLOAD_IDENTITY_PROVIDER  — WIF provider resource name
 #                                       (output of terraform/project/github_actions.tf)
 #     GCP_SERVICE_ACCOUNT             — SA email to impersonate
-#                                       (aegis-cloud-build@aegis-prod-488120.iam.gserviceaccount.com)
+#                                       (aegis-cloud-build@<GCP_PROJECT_ID>.iam.gserviceaccount.com)
 #   Variables:
-#     GCP_PROJECT_ID    = aegis-prod-488120
+#     GCP_PROJECT_ID    = <GCP_PROJECT_ID>
 #     GCP_REGION        = us-central1
-#     GCP_DWV_URL       = https://dwv-uk5cvzf5nq-uc.a.run.app
-#     GCP_OHIF_URL      = https://ohif-uk5cvzf5nq-uc.a.run.app
+#     GCP_DWV_URL       = https://dwv-<CLOUD_RUN_HASH>-uc.a.run.app
+#     GCP_OHIF_URL      = https://ohif-<CLOUD_RUN_HASH>-uc.a.run.app
 #     GCP_API_URL       = https://api.aegisimaging.ai
 #     GCP_ADMIN_URL     = https://app.aegisimaging.ai
 #     GCP_DIMSE_INSTANCE = aegis-prod-dimse-receiver   (leave empty to skip DIMSE VM deploy)

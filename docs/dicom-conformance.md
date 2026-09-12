@@ -296,7 +296,7 @@ AEGIS is certified for deployment on three cloud platforms. The DICOM protocol b
 | Component | Platform Resource |
 |-----------|-----------------|
 | Go API | Cloud Run (`aegis-api`) |
-| DIMSE Receiver SCP | Compute Engine VM (Debian 12, static IP `35.232.172.221`, port 11112) — operational |
+| DIMSE Receiver SCP | Compute Engine VM (Debian 12, static IP `<GCP_DIMSE_PUBLIC_IP>`, port 11112) — operational |
 | DICOM Storage | Google Cloud Storage (GCS), `STORAGE_MODE=gcs` |
 | Auth | IAP (`AUTH_PROVIDER=iap`), header `X-Goog-Authenticated-User-Email` |
 | Cross-cloud routing | STOW-RS to AWS/Azure via routing rules + API key auth |
@@ -318,7 +318,7 @@ AEGIS is certified for deployment on three cloud platforms. The DICOM protocol b
 | Component | Platform Resource |
 |-----------|-----------------|
 | Go API | Azure Container Apps |
-| DIMSE Receiver SCP | Azure Linux VM (Standard_B2s, Debian 12, static IP `20.97.180.87`, port 11112) — operational |
+| DIMSE Receiver SCP | Azure Linux VM (Standard_B2s, Debian 12, static IP `<AZURE_DIMSE_PUBLIC_IP>`, port 11112) — operational |
 | DICOM Storage | Azure Blob Storage, `STORAGE_MODE=azure` |
 | Auth | Easy Auth (`AUTH_PROVIDER=azure`), header `X-MS-CLIENT-PRINCIPAL-NAME` |
 | Email (SMTP) | Azure Communication Services Email relay (`smtp.azurecomm.net:587`) |

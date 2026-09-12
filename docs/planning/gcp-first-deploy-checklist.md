@@ -3,7 +3,7 @@
 Created: 2026-02-20
 Updated: 2026-02-22
 
-> **Status: COMPLETE ✅** — GCP production environment `aegis-prod-488120` fully deployed and smoke-tested (2026-02-22).
+> **Status: COMPLETE ✅** — GCP production environment `<GCP_PROJECT_ID>` fully deployed and smoke-tested (2026-02-22).
 > API: `https://api.aegisimaging.ai` | Admin: `https://admin.aegisimaging.ai` (IAP-gated)
 > Cloud smoke suite: **11/11 PASS in 2.56s**
 

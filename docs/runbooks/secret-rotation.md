@@ -51,7 +51,7 @@ gcloud run services update aegis-<env>-api \
 Use this if Terraform state is unavailable or rotation must happen immediately.
 
 ```bash
-export PROJECT_ID="aegis-prod-488120"
+export PROJECT_ID="<GCP_PROJECT_ID>"
 export ENV="prod"
 export SECRET_ID="aegis-${ENV}-db-password"
 export INSTANCE="aegis-${ENV}-postgres"

@@ -27,17 +27,17 @@
 # different environment.
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-aegis-prod-488120}"
+PROJECT_ID="${PROJECT_ID:-}"
 REGION="${REGION:-us-central1}"
 CONNECTION_NAME="${CONNECTION_NAME:-aegis}"
 REPO_NAME="${REPO_NAME:-aegis}"
 REPO_URI="${REPO_URI:-https://github.com/aegis-imaging/aegis.git}"
 TRIGGER_NAME="${TRIGGER_NAME:-deploy-on-develop}"
 TF_TRIGGER_NAME="${TF_TRIGGER_NAME:-terraform-apply-on-develop}"
-TF_STATE_BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
+TF_STATE_BUCKET="${TF_STATE_BUCKET:-}"
 TF_VARS_SECRET="${TF_VARS_SECRET:-aegis-prod-terraform-tfvars}"
 # Service account that Cloud Build runs as (must have run.admin + artifactregistry.writer)
-CB_BYOSA="${CB_BYOSA:-aegis-cloud-build@${PROJECT_ID}.iam.gserviceaccount.com}"
+CB_BYOSA="${CB_BYOSA:-}"
 
 for arg in "$@"; do
   case "$arg" in
@@ -56,7 +56,7 @@ for arg in "$@"; do
 Usage: ./scripts/gcp_setup_cloudbuild.sh [options]
 
 Options:
-  --project-id=<id>         GCP project ID (default: aegis-prod-488120)
+  --project-id=<id>         GCP project ID (required unless PROJECT_ID is set)
   --region=<region>         Cloud Build region (default: us-central1)
   --connection-name=<name>  Cloud Build connection name (default: aegis)
   --repo-name=<name>        Repository resource name within connection (default: aegis)
@@ -78,6 +78,14 @@ USAGE
       ;;
   esac
 done
+
+if [ -z "$PROJECT_ID" ]; then
+  echo "error: GCP project ID required — pass --project-id=<id> or set PROJECT_ID" >&2
+  exit 1
+fi
+# Derived defaults resolve after argument parsing so --project-id applies to them.
+TF_STATE_BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
+CB_BYOSA="${CB_BYOSA:-aegis-cloud-build@${PROJECT_ID}.iam.gserviceaccount.com}"
 
 GCLOUD="${GCLOUD:-gcloud}"
 if ! command -v "$GCLOUD" &>/dev/null; then
