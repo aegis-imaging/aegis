@@ -4,8 +4,10 @@ name: Terraform GCP
 # environment approval. Same pattern as terraform-aws.yml and
 # terraform-azure.yml. Auth is Workload Identity Federation — no keys.
 #
-# Repo secrets:   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT,
-#                 GCP_TERRAFORM_TFVARS (full contents of terraform/infra/terraform.tfvars)
+# Repo secrets:   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT
+# tfvars:         Secret Manager secret named by the GCP_TFVARS_SECRET variable
+#                 (preferred: viewable and versioned in the Console), else the
+#                 GCP_TERRAFORM_TFVARS repository secret
 # Repo variables: GCP_PROJECT_ID; optional GCP_PLAN_ARCHIVE = gs://<state bucket>/plans
 #                 (full plan for the approver, written to the private bucket)
 # Environment:    gcp-prod — its required reviewers are the approval gate
@@ -80,12 +82,27 @@ jobs:
       - name: Terraform fmt check
         run: terraform -chdir=terraform/infra fmt -check
 
+      # tfvars come from the Secret Manager secret named by GCP_TFVARS_SECRET
+      # (viewable and versioned in the Console), else from the
+      # GCP_TERRAFORM_TFVARS repository secret. The file is parse-checked
+      # here so a bad edit fails with a line number, never a value.
       - name: Write terraform.tfvars
         env:
+          TFVARS_SECRET: ${{ vars.GCP_TFVARS_SECRET }}
           TFVARS_CONTENT: ${{ secrets.GCP_TERRAFORM_TFVARS }}
         run: |
-          [ -n "$TFVARS_CONTENT" ] || { echo "::error::GCP_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
-          printf '%s\n' "$TFVARS_CONTENT" > terraform/infra/terraform.tfvars
+          if [ -n "$TFVARS_SECRET" ]; then
+            gcloud secrets versions access latest --secret="$TFVARS_SECRET" > terraform/infra/terraform.tfvars
+          elif [ -n "$TFVARS_CONTENT" ]; then
+            printf '%s\n' "$TFVARS_CONTENT" > terraform/infra/terraform.tfvars
+          else
+            echo "::error::set the GCP_TFVARS_SECRET variable (Secret Manager secret name) or the GCP_TERRAFORM_TFVARS secret"
+            exit 1
+          fi
+          if ! err=$(terraform -chdir=terraform/infra fmt terraform.tfvars 2>&1 >/dev/null); then
+            echo "::error::terraform.tfvars does not parse ($(echo "$err" | grep -oE 'line [0-9]+' | head -1)) — every 'name = value' must be on its own line"
+            exit 1
+          fi
 
       - name: Terraform init
         run: terraform -chdir=terraform/infra init -input=false
@@ -135,12 +152,27 @@ jobs:
           terraform_version: "~1.9"
           terraform_wrapper: false
 
+      # tfvars come from the Secret Manager secret named by GCP_TFVARS_SECRET
+      # (viewable and versioned in the Console), else from the
+      # GCP_TERRAFORM_TFVARS repository secret. The file is parse-checked
+      # here so a bad edit fails with a line number, never a value.
       - name: Write terraform.tfvars
         env:
+          TFVARS_SECRET: ${{ vars.GCP_TFVARS_SECRET }}
           TFVARS_CONTENT: ${{ secrets.GCP_TERRAFORM_TFVARS }}
         run: |
-          [ -n "$TFVARS_CONTENT" ] || { echo "::error::GCP_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
-          printf '%s\n' "$TFVARS_CONTENT" > terraform/infra/terraform.tfvars
+          if [ -n "$TFVARS_SECRET" ]; then
+            gcloud secrets versions access latest --secret="$TFVARS_SECRET" > terraform/infra/terraform.tfvars
+          elif [ -n "$TFVARS_CONTENT" ]; then
+            printf '%s\n' "$TFVARS_CONTENT" > terraform/infra/terraform.tfvars
+          else
+            echo "::error::set the GCP_TFVARS_SECRET variable (Secret Manager secret name) or the GCP_TERRAFORM_TFVARS secret"
+            exit 1
+          fi
+          if ! err=$(terraform -chdir=terraform/infra fmt terraform.tfvars 2>&1 >/dev/null); then
+            echo "::error::terraform.tfvars does not parse ($(echo "$err" | grep -oE 'line [0-9]+' | head -1)) — every 'name = value' must be on its own line"
+            exit 1
+          fi
 
       - name: Terraform init
         run: terraform -chdir=terraform/infra init -input=false

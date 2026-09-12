@@ -23,7 +23,7 @@ filter() {
         or .type == "apply_start" or .type == "apply_progress" or .type == "apply_complete"
         or .type == "apply_errored" or .type == "diagnostic")
     | if .type == "diagnostic"
-      then "[\(.["@level"])] \(.["@message"])\n\(.diagnostic.detail // "")"
+      then "[\(.["@level"])] \(.["@message"])\(.diagnostic.range | if . then " (\(.filename):\(.start.line))" else "" end)\n\(.diagnostic.detail // "")"
       else "[\(.["@level"])] \(.["@message"])"
       end'
 }
