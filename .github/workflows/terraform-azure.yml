@@ -1,0 +1,132 @@
+name: Terraform Azure
+
+# Plan on pull requests; apply on merge to develop behind the azure-prod
+# environment approval. Same pattern as terraform-gcp.yml. Auth is GitHub
+# OIDC against the Entra app registration created by
+# scripts/azure_bootstrap_github_oidc.sh — no client secrets.
+#
+# Repo secrets:   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+#                 AZURE_TERRAFORM_TFVARS (full terraform/azure/terraform.tfvars)
+# Repo variables: AZURE_CI_ENABLED=true
+# Environment:    azure-prod — its required reviewers are the approval gate
+#
+# Nothing runs until AZURE_CI_ENABLED is "true", so this file is safe to
+# merge before the bootstrap. Logs are public: see scripts/terraform_ci.sh.
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "terraform/azure/**"
+      - "scripts/terraform_ci.sh"
+      - ".github/workflows/terraform-azure.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "terraform/azure/**"
+      - "scripts/terraform_ci.sh"
+      - ".github/workflows/terraform-azure.yml"
+  workflow_dispatch:
+    inputs:
+      confirm_apply:
+        description: "Type APPLY to apply after planning"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-azure
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  # The azurerm provider and backend both pick these up (OIDC, no secret).
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_use_oidc: "true"
+
+jobs:
+  plan:
+    name: Terraform Plan (Azure)
+    if: vars.AZURE_CI_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+          terraform_wrapper: false
+
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_CONTENT: ${{ secrets.AZURE_TERRAFORM_TFVARS }}
+        run: |
+          [ -n "$TFVARS_CONTENT" ] || { echo "::error::AZURE_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
+          printf '%s\n' "$TFVARS_CONTENT" > terraform/azure/terraform.tfvars
+
+      - name: Terraform fmt check
+        run: terraform -chdir=terraform/azure fmt -check
+
+      - name: Terraform init
+        run: terraform -chdir=terraform/azure init -input=false
+
+      - name: Terraform validate
+        run: terraform -chdir=terraform/azure validate
+
+      - name: Terraform plan
+        run: ./scripts/terraform_ci.sh plan terraform/azure
+
+  approve:
+    name: Approve apply (azure-prod)
+    needs: plan
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    runs-on: ubuntu-latest
+    environment: azure-prod
+    steps:
+      - run: echo "azure-prod approval granted; applying."
+
+  apply:
+    name: Terraform Apply (Azure)
+    needs: [plan, approve]
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+          terraform_wrapper: false
+
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_CONTENT: ${{ secrets.AZURE_TERRAFORM_TFVARS }}
+        run: |
+          [ -n "$TFVARS_CONTENT" ] || { echo "::error::AZURE_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
+          printf '%s\n' "$TFVARS_CONTENT" > terraform/azure/terraform.tfvars
+
+      - name: Terraform init
+        run: terraform -chdir=terraform/azure init -input=false
+
+      - name: Terraform apply
+        run: ./scripts/terraform_ci.sh apply terraform/azure

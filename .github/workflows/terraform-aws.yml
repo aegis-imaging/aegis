@@ -1,0 +1,130 @@
+name: Terraform AWS
+
+# Plan on pull requests; apply on merge to develop behind the aws-prod
+# environment approval. Same pattern as terraform-gcp.yml. Auth is GitHub
+# OIDC assuming the role created by terraform/aws/github_actions_oidc.tf
+# (output github_actions_terraform_role_arn) — no access keys.
+#
+# One-time bootstrap (the role is created by the module it deploys):
+#   terraform -chdir=terraform/aws apply \
+#     -target=aws_iam_openid_connect_provider.github_actions \
+#     -target=aws_iam_role.github_actions_terraform \
+#     -target=aws_iam_role_policy_attachment.github_actions_terraform_admin
+#
+# Repo secrets:   AWS_TERRAFORM_ROLE_ARN, AWS_TERRAFORM_TFVARS (full terraform/aws/terraform.tfvars)
+# Repo variables: AWS_CI_ENABLED=true, AWS_REGION
+# Environment:    aws-prod — its required reviewers are the approval gate
+#
+# Nothing runs until AWS_CI_ENABLED is "true", so this file is safe to merge
+# before the bootstrap. Logs are public: see scripts/terraform_ci.sh.
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "terraform/aws/**"
+      - "scripts/terraform_ci.sh"
+      - ".github/workflows/terraform-aws.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "terraform/aws/**"
+      - "scripts/terraform_ci.sh"
+      - ".github/workflows/terraform-aws.yml"
+  workflow_dispatch:
+    inputs:
+      confirm_apply:
+        description: "Type APPLY to apply after planning"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-aws
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  plan:
+    name: Terraform Plan (AWS)
+    if: vars.AWS_CI_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+          terraform_wrapper: false
+
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_CONTENT: ${{ secrets.AWS_TERRAFORM_TFVARS }}
+        run: |
+          [ -n "$TFVARS_CONTENT" ] || { echo "::error::AWS_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
+          printf '%s\n' "$TFVARS_CONTENT" > terraform/aws/terraform.tfvars
+          ./scripts/validate_tfvars_required.sh terraform/aws/terraform.tfvars acm_certificate_arn cognito_domain_prefix
+
+      - name: Terraform fmt check
+        run: terraform -chdir=terraform/aws fmt -check
+
+      - name: Terraform init
+        run: terraform -chdir=terraform/aws init -input=false
+
+      - name: Terraform validate
+        run: terraform -chdir=terraform/aws validate
+
+      - name: Terraform plan
+        run: ./scripts/terraform_ci.sh plan terraform/aws
+
+  approve:
+    name: Approve apply (aws-prod)
+    needs: plan
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    runs-on: ubuntu-latest
+    environment: aws-prod
+    steps:
+      - run: echo "aws-prod approval granted; applying."
+
+  apply:
+    name: Terraform Apply (AWS)
+    needs: [plan, approve]
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+          terraform_wrapper: false
+
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_CONTENT: ${{ secrets.AWS_TERRAFORM_TFVARS }}
+        run: |
+          [ -n "$TFVARS_CONTENT" ] || { echo "::error::AWS_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
+          printf '%s\n' "$TFVARS_CONTENT" > terraform/aws/terraform.tfvars
+
+      - name: Terraform init
+        run: terraform -chdir=terraform/aws init -input=false
+
+      - name: Terraform apply
+        run: ./scripts/terraform_ci.sh apply terraform/aws
