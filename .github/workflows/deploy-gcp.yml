@@ -295,6 +295,11 @@ jobs:
       - name: Reset DIMSE VM (triggers startup script re-pull)
         if: steps.check-instance.outputs.exists == 'true'
         run: |
+          status=$(gcloud compute instances describe "$DIMSE_INSTANCE" --zone="$DIMSE_ZONE" --project="$PROJECT_ID" --format='value(status)')
+          if [ "$status" != "RUNNING" ]; then
+            echo "::notice::$DIMSE_INSTANCE is $status — not resetting; it pulls the image named in its metadata on next boot"
+            exit 0
+          fi
           # The metadata update above leaves the instance briefly "not ready";
           # the reset is rejected until that operation settles, so retry.
           for attempt in 1 2 3 4 5 6; do
