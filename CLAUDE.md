@@ -8,7 +8,7 @@ Anonymization & Exchange Gateway for Imaging Studies. Cloud-hosted (GCP/AWS/Azur
 - **No PHI/CBI** in the repo ever
 - **Research docs**: Check `docs/research/` before web searching; save findings there with full citations
 - **Git workflow**: Never commit directly to `develop` or `main`. Branch from `develop`, PR back, merge via `gh pr merge`
-- **CI/CD**: Never manually deploy after merging to `develop` — Cloud Build auto-deploys
+- **CI/CD**: Never deploy by hand — merging to `develop` deploys through GitHub Actions on every cloud (see `docs/runbooks/ci-cd.md`)
 
 ## Repository Structure
 
@@ -118,11 +118,11 @@ Phase 3: Analytics + SCT (parallel, post-BIDS NIfTI)
 
 ## CI/CD
 
-- **GitHub Actions** (`.github/workflows/ci.yml`): PRs to `develop`/`main` — Go build/vet/test, Python compile/test, TypeScript typecheck, Docker builds
-- **GCP Cloud Build**: Push to `develop` → auto-build + deploy all Cloud Run services. Terraform auto-applies when `terraform/infra/**` changes
-- **Azure GitHub Actions**: Push to `develop` → auto-deploy Container Apps
-- **AWS**: Manual deploy (`terraform/aws/`)
-- `terraform/project/` is always manual (dangerous bootstrap resources)
+- **`ci.yml`**: PRs to `develop`/`main` — Go build/vet/test, Python compile/test, TypeScript typecheck, Docker builds, terraform fmt/validate
+- **`terraform-{gcp,aws,azure}.yml`**: plan on PRs touching that cloud's `terraform/` dir; on merge to `develop`, apply behind the `gcp-prod` / `aws-prod` / `azure-prod` environment approval. OIDC auth, `-json` output filtered by `scripts/terraform_ci.sh` (logs are public)
+- **`deploy-{gcp,aws,azure}.yml`**: every push to `develop` builds all images, pushes to the registry, and rolls the services that exist. AWS/Azure are no-ops until `AWS_CI_ENABLED` / `AZURE_CI_ENABLED` are `true`
+- **Landing page**: Cloudflare Pages builds `frontend/landing` from `develop`
+- `terraform/project/` is always manual (dangerous bootstrap resources). Full bootstrap and secrets list: `docs/runbooks/ci-cd.md`
 
 ## Conventions
 

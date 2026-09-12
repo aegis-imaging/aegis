@@ -86,12 +86,13 @@ CNAME records in Cloudflare as DNS-only records.
 
 ### 2A. Fresh
 
-```bash
-SERVICES="api admin-dashboard" make aws-install-poc
-```
-
-That runs the two-phase installer: apply, build and push only the two images,
-apply again. Then create the first Cognito user (aws-deployment.md, Phase 8):
+Everything runs from GitHub Actions (`ci-cd.md`): bootstrap the AWS identity
+once, put the tfvars in the `AWS_TERRAFORM_TFVARS` secret, set the variable
+`AWS_BUILD_SERVICES` to `api admin-dashboard`, then dispatch **Terraform AWS**
+with `APPLY` and approve `aws-prod`. When it finishes, dispatch **Deploy to
+AWS** once so the two images exist and the tasks start; every later merge to
+`develop` rolls them automatically. Then create the first Cognito user
+(aws-deployment.md, Phase 8):
 
 ```bash
 POOL=$(terraform -chdir=terraform/aws output -raw cognito_user_pool_id)
@@ -105,22 +106,15 @@ an admin.
 
 ### 2B. In place
 
-```bash
-terraform -chdir=terraform/aws plan
-```
+Update the `AWS_TERRAFORM_TFVARS` secret, dispatch **Terraform AWS** with
+`confirm_apply` empty and read the plan. Expect: the nine sidecar services and
+task definitions, `aegis-dwv` and `aegis-mcp-server` destroyed; the API and
+admin task definitions updated (new sizes, blank `*_SERVICE_URL`). Nothing
+touches RDS, S3, the ALB or Cognito. Then dispatch again with `APPLY` and
+approve `aws-prod`.
 
-Expect: the nine sidecar services and task definitions, `aegis-dwv` and
-`aegis-mcp-server` destroyed; the API and admin task definitions updated (new
-sizes, blank `*_SERVICE_URL`). Nothing touches RDS, S3, the ALB or Cognito.
-
-```bash
-terraform -chdir=terraform/aws apply
-```
-
-Images already in ECR are reused. To roll a newer build later:
-`SERVICES="api admin-dashboard" make aws-build-images`, then
-`aws ecs update-service --cluster aegis-cluster --service aegis-api --force-new-deployment --region us-east-1`
-(and the same for `aegis-admin-dashboard`).
+Images already in ECR are reused; each merge to `develop` rebuilds and rolls
+the services that exist.
 
 ### 3. DNS (Cloudflare, DNS-only / grey cloud)
 
@@ -168,32 +162,25 @@ served by Cloudflare Pages from `frontend/landing`.
 
 ### 2A. Fresh
 
-```bash
-terraform -chdir=terraform/azure apply                     # everything, with hello-world placeholder images
-SERVICES="api admin-dashboard" make azure-build-images     # registry taken from terraform output
-RG=$(terraform -chdir=terraform/azure output -raw resource_group_name)
-ACR=$(terraform -chdir=terraform/azure output -raw acr_login_server)
-az containerapp update -g "$RG" -n aegis-prod-api             --image "$ACR/api:latest"
-az containerapp update -g "$RG" -n aegis-prod-admin-dashboard --image "$ACR/admin-dashboard:latest"
-```
-
-Terraform ignores image changes after creation (`lifecycle.ignore_changes`),
-so `az containerapp update --image` is the deploy path from here on.
+Bootstrap the Azure identity once (`./scripts/azure_bootstrap_github_oidc.sh`,
+see `ci-cd.md`), put the tfvars in the `AZURE_TERRAFORM_TFVARS` secret, set
+the variable `AZURE_BUILD_SERVICES` to `api admin-dashboard`, then dispatch
+**Terraform Azure** with `APPLY` and approve `azure-prod`. That creates
+everything with the hello-world placeholder image. Set `AZURE_RESOURCE_GROUP`
+and `AZURE_ACR_LOGIN_SERVER` from the terraform outputs, then dispatch
+**Deploy to Azure** once: it builds the two images and points the apps at
+them. Terraform ignores image changes after creation, so the deploy workflow
+is the deploy path from here on.
 
 ### 2B. In place
 
-```bash
-terraform -chdir=terraform/azure plan
-```
-
-Expect: the nine sidecar apps, `dwv`, `mcp-server`, `landing` and
-`upload-portal` destroyed; the API app updated (cpu/memory, sidecar env vars
-removed); the admin app updated (`MCP_SERVER_URL`); PostgreSQL resized.
-Resizing the flexible server restarts it — a few minutes of API 503s.
-
-```bash
-terraform -chdir=terraform/azure apply
-```
+Update the `AZURE_TERRAFORM_TFVARS` secret, dispatch **Terraform Azure** with
+`confirm_apply` empty and read the plan. Expect: the nine sidecar apps, `dwv`,
+`mcp-server`, `landing` and `upload-portal` destroyed; the API app updated
+(cpu/memory, sidecar env vars removed); the admin app updated
+(`MCP_SERVER_URL`); PostgreSQL resized. Resizing the flexible server restarts
+it — a few minutes of API 503s. Then dispatch again with `APPLY` and approve
+`azure-prod`.
 
 ### 3. Custom domains
 
@@ -244,7 +231,7 @@ endpoints answer over HTTPS — nothing to configure.
 
 ## Going back to full size
 
-Remove the `enable_*` and sizing lines from tfvars (or set the flags to
-`true`), build the remaining images (`make aws-build-images` /
-`make azure-build-images` with no `SERVICES` filter, then
-`az containerapp update --image` on Azure), and apply.
+Remove the `enable_*` and sizing lines from the tfvars secrets (or set the
+flags to `true`), clear the `AWS_BUILD_SERVICES` / `AZURE_BUILD_SERVICES`
+variables, and dispatch the terraform workflow with `APPLY`, then the deploy
+workflow once.

@@ -1,0 +1,268 @@
+name: Deploy to Azure
+
+# Builds every service image, pushes to ACR, and updates the Container Apps
+# that exist (apps switched off by the minimal-footprint flags are skipped).
+# Fires on every push to develop; same shape as deploy-gcp.yml. Auth is
+# GitHub OIDC against the identity from scripts/azure_bootstrap_github_oidc.sh.
+#
+# Repo secrets:   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+# Repo variables: AZURE_CI_ENABLED=true, AZURE_RESOURCE_GROUP, AZURE_ACR_LOGIN_SERVER,
+#                 AZURE_API_URL, AZURE_ADMIN_URL
+#                 optional: AZURE_APP_PREFIX (default aegis-prod), AZURE_DWV_URL,
+#                 AZURE_BUILD_SERVICES (space-separated subset, e.g. "api admin-dashboard"),
+#                 AZURE_DIMSE_VM_NAME (set to also roll the DIMSE receiver VM)
+#
+# terraform/azure ignores image changes after the first apply, so
+# `az containerapp update --image` here is the deployment path.
+# Nothing runs until AZURE_CI_ENABLED is "true".
+
+on:
+  push:
+    branches: [develop]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.pdf"
+      - "frontend/landing/**"
+      - "terraform/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-azure
+  cancel-in-progress: false
+
+env:
+  ACR: ${{ vars.AZURE_ACR_LOGIN_SERVER }}
+  RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+  PREFIX: ${{ vars.AZURE_APP_PREFIX || 'aegis-prod' }}
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  validate:
+    name: Validate required configuration
+    if: vars.AZURE_CI_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets and variables
+        env:
+          CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          API_URL: ${{ vars.AZURE_API_URL }}
+        run: |
+          missing=()
+          [[ -n "$CLIENT_ID" ]]       || missing+=("AZURE_CLIENT_ID (secret)")
+          [[ -n "$TENANT_ID" ]]       || missing+=("AZURE_TENANT_ID (secret)")
+          [[ -n "$SUBSCRIPTION_ID" ]] || missing+=("AZURE_SUBSCRIPTION_ID (secret)")
+          [[ -n "$RG" ]]              || missing+=("AZURE_RESOURCE_GROUP (variable)")
+          [[ -n "$ACR" ]]             || missing+=("AZURE_ACR_LOGIN_SERVER (variable)")
+          [[ -n "$API_URL" ]]         || missing+=("AZURE_API_URL (variable)")
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            printf '::error::missing: %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.service }}
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: api
+            dockerfile: api/Dockerfile
+          - service: admin-dashboard
+            context: .
+            dockerfile: frontend/admin-dashboard/Dockerfile
+            build_args: "--build-arg VITE_DWV_BASE_URL=$DWV_URL --build-arg VITE_OHIF_BASE_URL="
+          - service: upload-portal
+            context: .
+            dockerfile: frontend/upload-portal/Dockerfile
+          - service: dwv
+            context: dwv
+            dockerfile: dwv/Dockerfile
+          - service: mcp-server
+            context: mcp-server
+            dockerfile: mcp-server/Dockerfile
+          - service: defacing
+            context: defacing
+            dockerfile: defacing/Dockerfile
+          # The six light sidecars ship in one image; terraform/azure expects an
+          # image per sidecar, so the same build is pushed under each name.
+          - service: dicom-tools
+            context: dicom-tools
+            dockerfile: dicom-tools/Dockerfile
+            push_as: "phi-detection qc-service bids-service classification-service protocol-service synth-service"
+          - service: analytics-service
+            context: analytics-service
+            dockerfile: analytics-service/Dockerfile
+          - service: sct-service
+            context: sct-service
+            dockerfile: sct-service/Dockerfile
+          - service: dimse-receiver
+            context: dimse-receiver
+            dockerfile: dimse-receiver/Dockerfile
+    env:
+      DWV_URL: ${{ vars.AZURE_DWV_URL }}
+    steps:
+      - name: Skip services outside AZURE_BUILD_SERVICES
+        id: gate
+        env:
+          FILTER: ${{ vars.AZURE_BUILD_SERVICES }}
+          SERVICE: ${{ matrix.service }}
+          PUSH_AS: ${{ matrix.push_as }}
+        run: |
+          wanted=1
+          if [[ -n "$FILTER" ]]; then
+            wanted=0
+            for name in $SERVICE ${PUSH_AS:-}; do
+              [[ " ${FILTER//,/ } " == *" $name "* ]] && wanted=1
+            done
+          fi
+          echo "build=$wanted" >> "$GITHUB_OUTPUT"
+          [[ "$wanted" == 1 ]] || echo "::notice::$SERVICE not in AZURE_BUILD_SERVICES — skipped"
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.build == '1'
+
+      - name: Authenticate to Azure (OIDC)
+        if: steps.gate.outputs.build == '1'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        if: steps.gate.outputs.build == '1'
+        run: az acr login --name "${ACR%%.*}"
+
+      - name: Build and push
+        if: steps.gate.outputs.build == '1'
+        env:
+          SERVICE: ${{ matrix.service }}
+          CTX: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          BUILD_ARGS: ${{ matrix.build_args }}
+          PUSH_AS: ${{ matrix.push_as }}
+        run: |
+          set -euo pipefail
+          expanded=""
+          [[ -z "${BUILD_ARGS:-}" ]] || expanded=$(eval echo "$BUILD_ARGS")
+          docker build --platform linux/amd64 --file "$DOCKERFILE" --tag "build:$SERVICE" ${expanded:+$expanded} "$CTX"
+          for name in ${PUSH_AS:-$SERVICE}; do
+            docker tag "build:$SERVICE" "$ACR/$name:$IMAGE_TAG"
+            docker tag "build:$SERVICE" "$ACR/$name:latest"
+            docker push "$ACR/$name:$IMAGE_TAG"
+            docker push "$ACR/$name:latest"
+          done
+
+  rollout:
+    name: Update Container Apps
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # "app-suffix=image-name"; the classification app is named -classify.
+      - name: Update every Container App that exists
+        run: |
+          set -euo pipefail
+          updated=0
+          for pair in api=api admin-dashboard=admin-dashboard upload-portal=upload-portal dwv=dwv mcp-server=mcp-server \
+                      defacing=defacing phi-detection=phi-detection qc-service=qc-service bids-service=bids-service \
+                      classify=classification-service protocol-service=protocol-service synth-service=synth-service \
+                      analytics-service=analytics-service sct-service=sct-service; do
+            app="$PREFIX-${pair%%=*}"
+            image="$ACR/${pair#*=}:$IMAGE_TAG"
+            if az containerapp show -g "$RG" -n "$app" --query name -o tsv >/dev/null 2>&1; then
+              az containerapp update -g "$RG" -n "$app" --image "$image" --query 'properties.latestRevisionName' -o tsv
+              updated=$((updated + 1))
+            else
+              echo "skip $app (not deployed)"
+            fi
+          done
+          [[ "$updated" -gt 0 ]] || { echo "::error::no Container Apps found with prefix $PREFIX in $RG"; exit 1; }
+
+  dimse:
+    name: Roll DIMSE receiver VM
+    needs: build
+    if: vars.AZURE_DIMSE_VM_NAME != ''
+    runs-on: ubuntu-latest
+    env:
+      VM: ${{ vars.AZURE_DIMSE_VM_NAME }}
+      API_URL: ${{ vars.AZURE_API_URL }}
+    steps:
+      - name: Authenticate to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Mirrors the VM's startup script (terraform/azure/dimse.tf): log in with
+      # the VM's managed identity, refresh the ACR token, pull, replace the container.
+      - name: Pull the new image and restart the container on the VM
+        run: |
+          set -euo pipefail
+          image="$ACR/dimse-receiver:$IMAGE_TAG"
+          acr_name="${ACR%%.*}"
+          script=$(cat <<EOS
+          set -euo pipefail
+          client_id=\$(curl -s -H Metadata:true "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fmanagement.azure.com%2F" | python3 -c 'import sys,json; print(json.load(sys.stdin)["client_id"])')
+          az login --identity --username "\$client_id" >/dev/null
+          token=\$(az acr login --name "$acr_name" --expose-token --output tsv --query accessToken)
+          docker login "$ACR" --username 00000000-0000-0000-0000-000000000000 --password "\$token"
+          docker pull "$image"
+          docker rm -f dimse-receiver 2>/dev/null || true
+          docker run -d --name dimse-receiver --restart unless-stopped -p 11112:11112 -p 8080:8080 \
+            -e DIMSE_AE_TITLE=AEGIS -e DIMSE_PORT=11112 -e DIMSE_DATA_DIR=/app/data \
+            -e DIMSE_INGEST_DURABLE_STORE_PATH=/app/persist/dimse-ingest-retry-state.json \
+            -e API_URL="$API_URL" -e DIMSE_PROJECT_SLUG=default \
+            -v /mnt/dimse-data:/app/persist "$image"
+          EOS
+          )
+          az vm run-command invoke -g "$RG" -n "$VM" --command-id RunShellScript --scripts "$script" \
+            --query 'value[0].message' -o tsv | tail -20
+
+  smoke:
+    name: Post-deploy smoke check
+    needs: rollout
+    runs-on: ubuntu-latest
+    env:
+      API_URL: ${{ vars.AZURE_API_URL }}
+      ADMIN_URL: ${{ vars.AZURE_ADMIN_URL }}
+    steps:
+      - name: API health
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "$API_URL/healthz" || echo 000)
+            if [[ "$status" == "200" ]]; then
+              cat /tmp/healthz.json; echo
+              exit 0
+            fi
+            echo "attempt $attempt: HTTP $status; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::API health check failed"
+          exit 1
+
+      - name: Admin sign-in page reachable
+        if: env.ADMIN_URL != ''
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' -I "$ADMIN_URL" || echo 000)
+          case "$status" in
+            200|301|302|401|403) echo "admin reachable (HTTP $status)" ;;
+            *) echo "::error::admin endpoint not reachable (HTTP $status)"; exit 1 ;;
+          esac

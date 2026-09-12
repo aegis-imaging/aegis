@@ -142,6 +142,40 @@ resource "aws_iam_role_policy_attachment" "github_actions_deploy" {
   policy_arn = aws_iam_policy.github_actions_deploy[0].arn
 }
 
+# ── Terraform role ────────────────────────────────────────────────────────────
+#
+# The deploy role above is scoped to ECR/ECS. Planning and applying this
+# module needs far more (IAM, KMS, VPC, RDS, ALB, Cognito, WAF), so the
+# terraform-aws.yml workflow assumes a separate administrator role with the
+# same repository-scoped trust policy.
+
+variable "github_actions_terraform_role_name" {
+  description = "IAM role name assumed by the GitHub Actions terraform workflow (plan on PRs, apply on develop)"
+  type        = string
+  default     = "aegis-github-actions-terraform"
+}
+
+resource "aws_iam_role" "github_actions_terraform" {
+  count = var.enable_github_actions_oidc ? 1 : 0
+
+  name               = var.github_actions_terraform_role_name
+  assume_role_policy = data.aws_iam_policy_document.github_actions_deploy_assume_role[0].json
+
+  description = "Assumed by GitHub Actions to plan and apply terraform/aws"
+}
+
+resource "aws_iam_role_policy_attachment" "github_actions_terraform_admin" {
+  count = var.enable_github_actions_oidc ? 1 : 0
+
+  role       = aws_iam_role.github_actions_terraform[0].name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}
+
+output "github_actions_terraform_role_arn" {
+  description = "Value for the AWS_TERRAFORM_ROLE_ARN GitHub secret"
+  value       = var.enable_github_actions_oidc ? aws_iam_role.github_actions_terraform[0].arn : null
+}
+
 output "github_actions_deploy_role_arn" {
   description = "IAM role ARN for GitHub Actions AWS deploy workflow OIDC authentication"
   value       = var.enable_github_actions_oidc ? aws_iam_role.github_actions_deploy[0].arn : null
