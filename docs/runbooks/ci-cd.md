@@ -27,6 +27,12 @@ The repository is public, so workflow logs and artifacts are world-readable.
   resource-level messages only (what changes, never attribute values), and no
   plan file is uploaded as an artifact — plan files contain every variable in
   cleartext.
+- The approver still needs the full plan. Set `GCP_PLAN_ARCHIVE`,
+  `AWS_PLAN_ARCHIVE` or `AZURE_PLAN_ARCHIVE` to a location in the private
+  state bucket (`gs://<bucket>/plans`, `s3://<bucket>/plans`,
+  `https://<account>.blob.core.windows.net/tfstate/plans`) and the plan step
+  writes `<run id>-plan.txt` there with every attribute change; the step
+  summary names the object. Read it in the cloud console before approving.
 - Cloud account identifiers are masked: the AWS credentials action masks the
   account ID, Azure identifiers are secrets, and the GCP workflows mask
   `GCP_PROJECT_ID`.

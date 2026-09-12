@@ -12,7 +12,7 @@ name: Terraform AWS
 #     -target=aws_iam_role_policy_attachment.github_actions_terraform_admin
 #
 # Repo secrets:   AWS_TERRAFORM_ROLE_ARN, AWS_TERRAFORM_TFVARS (full terraform/aws/terraform.tfvars)
-# Repo variables: AWS_CI_ENABLED=true, AWS_REGION
+# Repo variables: AWS_CI_ENABLED=true, AWS_REGION; optional AWS_PLAN_ARCHIVE = s3://<state bucket>/plans
 # Environment:    aws-prod — its required reviewers are the approval gate
 #
 # Nothing runs until AWS_CI_ENABLED is "true", so this file is safe to merge
@@ -87,7 +87,11 @@ jobs:
       - name: Terraform validate
         run: terraform -chdir=terraform/aws validate
 
+      # Full attribute-level plan goes to the private state bucket when
+      # AWS_PLAN_ARCHIVE is set (s3://<state bucket>/plans); logs stay resource-level.
       - name: Terraform plan
+        env:
+          PLAN_ARCHIVE: ${{ vars.AWS_PLAN_ARCHIVE }}
         run: ./scripts/terraform_ci.sh plan terraform/aws
 
   approve:

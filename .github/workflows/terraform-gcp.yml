@@ -6,7 +6,8 @@ name: Terraform GCP
 #
 # Repo secrets:   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT,
 #                 GCP_TERRAFORM_TFVARS (full contents of terraform/infra/terraform.tfvars)
-# Repo variables: GCP_PROJECT_ID
+# Repo variables: GCP_PROJECT_ID; optional GCP_PLAN_ARCHIVE = gs://<state bucket>/plans
+#                 (full plan for the approver, written to the private bucket)
 # Environment:    gcp-prod — its required reviewers are the approval gate
 #
 # Logs on a public repository are public: plan and apply run through
@@ -67,6 +68,8 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
+      - uses: google-github-actions/setup-gcloud@v2
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.9"
@@ -90,7 +93,11 @@ jobs:
       - name: Terraform validate
         run: terraform -chdir=terraform/infra validate
 
+      # Full attribute-level plan goes to the private state bucket when
+      # GCP_PLAN_ARCHIVE is set (gs://<state bucket>/plans); logs stay resource-level.
       - name: Terraform plan
+        env:
+          PLAN_ARCHIVE: ${{ vars.GCP_PLAN_ARCHIVE }}
         run: ./scripts/terraform_ci.sh plan terraform/infra
 
   approve:
@@ -120,6 +127,8 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
 
       - uses: hashicorp/setup-terraform@v3
         with:
