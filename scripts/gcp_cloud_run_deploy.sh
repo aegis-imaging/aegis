@@ -20,7 +20,7 @@ echo "::group::Recent logs for $SERVICE (severity >= WARNING, last 15 minutes)"
 gcloud logging read \
   "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$SERVICE\" AND severity>=WARNING AND timestamp>=\"$SINCE\"" \
   --project="$PROJECT_ID" --limit=80 --order=asc \
-  --format='value(timestamp,severity,textPayload,jsonPayload.message)' || true
+  --format='value(timestamp,severity,textPayload,jsonPayload.msg,jsonPayload.message,jsonPayload.error)' || true
 echo "::endgroup::"
 echo "::error::Cloud Run deploy of $SERVICE failed — see the log excerpt above"
 exit 1
