@@ -7,7 +7,8 @@ name: Terraform Azure
 #
 # Repo secrets:   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
 #                 AZURE_TERRAFORM_TFVARS (full terraform/azure/terraform.tfvars)
-# Repo variables: AZURE_CI_ENABLED=true
+# Repo variables: AZURE_CI_ENABLED=true; optional AZURE_PLAN_ARCHIVE =
+#                 https://<state account>.blob.core.windows.net/tfstate/plans
 # Environment:    azure-prod — its required reviewers are the approval gate
 #
 # Nothing runs until AZURE_CI_ENABLED is "true", so this file is safe to
@@ -88,7 +89,11 @@ jobs:
       - name: Terraform validate
         run: terraform -chdir=terraform/azure validate
 
+      # Full attribute-level plan goes to the private state container when
+      # AZURE_PLAN_ARCHIVE is set; logs stay resource-level.
       - name: Terraform plan
+        env:
+          PLAN_ARCHIVE: ${{ vars.AZURE_PLAN_ARCHIVE }}
         run: ./scripts/terraform_ci.sh plan terraform/azure
 
   approve:
