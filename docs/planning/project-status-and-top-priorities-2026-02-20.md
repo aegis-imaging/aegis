@@ -5,7 +5,7 @@ Reviewed branch: `working/from-origin-develop` (tracking `origin/develop`)
 
 ## Scope Reviewed
 
-- Core docs and setup runbooks (`README.md`, `SETUP_CHECKLIST.md`, `CODEX.md`)
+- Core docs and setup runbooks (`README.md`, `SETUP_CHECKLIST.md`)
 - CI and smoke workflows (`.github/workflows/ci.yml`, `.github/workflows/cloud-smoke.yml`)
 - Core infrastructure Terraform (`terraform/project`, `terraform/infra`, `terraform/aws`)
 - API, Python sidecars, MCP server, and local automation (`Makefile`, `scripts/cloud_smoke_test.py`)
