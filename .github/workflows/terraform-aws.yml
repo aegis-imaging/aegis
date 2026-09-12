@@ -68,6 +68,11 @@ jobs:
           terraform_version: "~1.9"
           terraform_wrapper: false
 
+      # fmt is checked before the tfvars file exists: it comes from a secret,
+      # is never committed, and need not be canonically formatted.
+      - name: Terraform fmt check
+        run: terraform -chdir=terraform/aws fmt -check
+
       - name: Write terraform.tfvars
         env:
           TFVARS_CONTENT: ${{ secrets.AWS_TERRAFORM_TFVARS }}
@@ -75,9 +80,6 @@ jobs:
           [ -n "$TFVARS_CONTENT" ] || { echo "::error::AWS_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
           printf '%s\n' "$TFVARS_CONTENT" > terraform/aws/terraform.tfvars
           ./scripts/validate_tfvars_required.sh terraform/aws/terraform.tfvars acm_certificate_arn cognito_domain_prefix
-
-      - name: Terraform fmt check
-        run: terraform -chdir=terraform/aws fmt -check
 
       - name: Terraform init
         run: terraform -chdir=terraform/aws init -input=false
