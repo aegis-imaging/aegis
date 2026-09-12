@@ -44,7 +44,8 @@ summary() {
 # approver needs, and it must never reach the public logs. When PLAN_ARCHIVE
 # is set — a gs://, s3:// or https://<account>.blob.core.windows.net/<container>[/prefix]
 # location, normally the private Terraform state bucket — it is written there
-# as <run id>-plan.txt and the location is printed.
+# as <run id>-plan.txt. Only the object name is printed: the bucket name
+# embeds the project identifier, and the logs and step summary are public.
 archive_plan() {
   [ -n "${PLAN_ARCHIVE:-}" ] || return 0
   local name="${GITHUB_RUN_ID:-local}-plan.txt" txt
@@ -69,8 +70,8 @@ archive_plan() {
       echo "[warn] PLAN_ARCHIVE has an unsupported scheme: $PLAN_ARCHIVE"; rm -f "$txt"; return 0 ;;
   esac
   rm -f "$txt"
-  echo "[info] Full plan with attribute values archived to ${PLAN_ARCHIVE%/}/$name"
-  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "Full plan: \`${PLAN_ARCHIVE%/}/$name\`" >> "$GITHUB_STEP_SUMMARY"
+  echo "[info] Full plan with attribute values archived as $name in the plan archive"
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "Full plan: \`$name\` in the plan archive" >> "$GITHUB_STEP_SUMMARY"
 }
 
 LOG="$(mktemp)"
