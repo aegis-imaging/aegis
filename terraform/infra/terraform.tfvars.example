@@ -35,6 +35,8 @@ first_admin_email = "you@example.com"
 api_image                    = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/api:latest"
 admin_dashboard_image        = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/admin-dashboard:latest"
 defacing_image               = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/defacing:latest"
+# dicom-tools serves phi-detection, qc, bids, classification, protocol and synth from one image (PR #530).
+dicom_tools_image            = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/dicom-tools:latest"
 phi_detection_image          = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/phi-detection:latest"
 qc_service_image             = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/qc-service:latest"
 bids_service_image           = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/bids-service:latest"
