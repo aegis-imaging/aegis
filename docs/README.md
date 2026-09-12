@@ -25,8 +25,6 @@ When given a research task, save your findings to `docs/research/<topic>.md` bef
 | `research/medical-imaging-deidentification.md` | De-identification failures, face reconstruction from MRI, burned-in PHI, NIH DMS policy, HIPAA Safe Harbor, DICOM PS3.15, MIDI-B challenge, market sizing |
 | `research/mri-protocol-compliance.md` | MRI acquisition parameter ranges, consortia protocols (ADNI4, HCP, ABCD, UK Biobank, ENIGMA), tolerance recommendations, mrQA tool, Enhanced vs Classic DICOM |
 | `research/mri-defacing-tools-comparison.md` | Tool comparison (afni_refacer, DeepDefacer, PyDeface, mri_deface, Quickshear), success rates, speed benchmarks, Docker size, licensing |
-| `research/encog-competitive-analysis.md` | Competitive landscape analysis, Encog and adjacent competitors |
-| `research/dual-market-strategy.md` | Dual-market strategy analysis (academic + commercial) |
 
 ## Directory Structure
 

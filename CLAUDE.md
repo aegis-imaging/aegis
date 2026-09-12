@@ -4,7 +4,8 @@ Anonymization & Exchange Gateway for Imaging Studies. Cloud-hosted (GCP/AWS/Azur
 
 ## Critical Rules
 
-- **PDF generation**: When editing `AEGIS_Executive_Summary.md` or `SETUP_CHECKLIST.md`, regenerate PDF with `npx md-to-pdf <file>` and commit both
+- **PDF generation**: When editing a markdown file that has a committed PDF twin (`SETUP_CHECKLIST.md`, the checklists in `docs/planning/`), regenerate it with `npx md-to-pdf <file>` and commit both
+- **Business and personal documents** (executive summary, decks, financials, pricing, competitive analyses, personal notes) live in a private repository, never here
 - **No PHI/CBI** in the repo ever
 - **Research docs**: Check `docs/research/` before web searching; save findings there with full citations
 - **Git workflow**: Never commit directly to `develop` or `main`. Branch from `develop`, PR back, merge via `gh pr merge`
