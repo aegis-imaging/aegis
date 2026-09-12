@@ -19,7 +19,7 @@ Private beta is active. Next sprint focuses on production hardening, compliance,
 | 3 | Automated Cloud Smoke Test Suite (11/11 PASS) | ✅ DONE | 2026-02-22 |
 | 4 | DIMSE PACS E2E Validation Harness | ✅ DONE | 2026-02-21 |
 | 5 | AWS HTTPS + Cognito Edge/Auth | ✅ DONE | 2026-02-21 |
-| 6 | DIMSE Receiver on Compute Engine VM (static IP 35.232.172.221, TCP 11112) | ✅ DONE | 2026-02-23 |
+| 6 | DIMSE Receiver on Compute Engine VM (static IP `<GCP_DIMSE_PUBLIC_IP>`, TCP 11112) | ✅ DONE | 2026-02-23 |
 | 7 | Cloud Build CI/CD pipeline (deploy-on-develop + terraform-apply-on-develop) | ✅ DONE | 2026-02-23 |
 | 8 | MCP Server Phase 0+1 (52+ read tools, 29+ write tools) | ✅ DONE | 2026-02-23 |
 | 9 | Production Observability Dashboard (9 alert policies, Cloud Monitoring) | ✅ DONE | 2026-02-23 |

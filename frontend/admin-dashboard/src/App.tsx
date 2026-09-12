@@ -8456,7 +8456,7 @@ function InviteCodesPanel() {
                         </div>
                         {adminInviteHelpCloud === 'gcp' && (
                           <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.73rem', color: '#94a3b8', lineHeight: 1.7 }}>
-                            <li>Open <a href="https://console.cloud.google.com/security/iap?project=aegis-prod-488120" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Cloud Console → Security → IAP</a></li>
+                            <li>Open <a href="https://console.cloud.google.com/security/iap" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Cloud Console → Security → IAP</a></li>
                             <li>Find <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3 }}>aegis-prod-admin-dashboard</code>, tick its checkbox</li>
                             <li>Click <strong style={{ color: '#e2e8f0' }}>Add Principal</strong> → paste <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code></li>
                             <li>Role: <strong style={{ color: '#e2e8f0' }}>Cloud IAP → IAP-secured Web App User</strong></li>

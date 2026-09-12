@@ -8,7 +8,7 @@ name: Terraform GCP
 #   GCP_WORKLOAD_IDENTITY_PROVIDER  — WIF provider resource name
 #                                     (output of terraform/project/github_actions.tf)
 #   GCP_SERVICE_ACCOUNT             — SA email to impersonate
-#                                     (aegis-cloud-build@aegis-prod-488120.iam.gserviceaccount.com)
+#                                     (aegis-cloud-build@<GCP_PROJECT_ID>.iam.gserviceaccount.com)
 #   GCP_TERRAFORM_TFVARS            — Full contents of terraform/infra/terraform.tfvars
 #
 # Auth uses Workload Identity Federation (OIDC) — no long-lived keys.

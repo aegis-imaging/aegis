@@ -1,7 +1,7 @@
 # AEGIS Observability Snapshot
 
 **Date:** 2026-02-22
-**Environment:** Production (`aegis-prod-488120`, `us-central1`)
+**Environment:** Production (`<GCP_PROJECT_ID>`, `us-central1`)
 **Monitoring provider:** GCP Cloud Monitoring
 
 ---
@@ -10,7 +10,7 @@
 
 GCP Console URL:
 ```
-https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+https://console.cloud.google.com/monitoring/dashboards?project=<GCP_PROJECT_ID>
 ```
 
 The dashboard is provisioned by Terraform (`terraform/infra/main.tf` →
@@ -44,8 +44,8 @@ Row 16 [0,16]──────────── Pipeline Failure Events (log-b
 | Cloud SQL Connections | `cloudsql.googleapis.com/database/postgresql/num_backends` | ALIGN_MAX 60s |
 | Cloud Run Memory | `run.googleapis.com/container/memory/utilizations` | p99 REDUCE_MAX across all services |
 | Sidecar 5xx Rate | `run.googleapis.com/request_count` (5xx) | All Cloud Run services, grouped by service name |
-| Pipeline Failures | `logging.googleapis.com/user/aegis-prod-488120/aegis-prod-pipeline-failures` | Log-based metric |
-| Stuck Study SLA | `logging.googleapis.com/user/aegis-prod-488120/aegis-prod-study-stuck` | Log-based metric |
+| Pipeline Failures | `logging.googleapis.com/user/<GCP_PROJECT_ID>/aegis-prod-pipeline-failures` | Log-based metric |
+| Stuck Study SLA | `logging.googleapis.com/user/<GCP_PROJECT_ID>/aegis-prod-study-stuck` | Log-based metric |
 
 ---
 

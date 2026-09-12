@@ -61,15 +61,15 @@ gh workflow run "GCP Cloud Build Failure Alert" \
 ```
 
 ```bash
-gcloud builds list --project=aegis-prod-488120 --sort-by=~createTime --limit=10
+gcloud builds list --project=<GCP_PROJECT_ID> --sort-by=~createTime --limit=10
 ```
 
 ```bash
-gcloud builds log <BUILD_ID> --project=aegis-prod-488120
+gcloud builds log <BUILD_ID> --project=<GCP_PROJECT_ID>
 ```
 
 ```bash
-gcloud builds describe <BUILD_ID> --project=aegis-prod-488120 --format=json | jq '.status, .images, .substitutions'
+gcloud builds describe <BUILD_ID> --project=<GCP_PROJECT_ID> --format=json | jq '.status, .images, .substitutions'
 ```
 
 ## AWS Terraform Apply Approval Gate (`aws-prod`)
@@ -149,7 +149,7 @@ Use this section whenever the `Terraform Azure` workflow is waiting for deployme
    ```bash
    gcloud logging read \
      'resource.type="cloud_run_revision" AND resource.labels.service_name="aegis-api" AND severity>=ERROR' \
-     --project=aegis-prod-488119 --limit=50 --format=json | jq '.[].textPayload'
+     --project=<GCP_PROJECT_ID> --limit=50 --format=json | jq '.[].textPayload'
    ```
 
 2. **Check `/healthz`**
@@ -167,7 +167,7 @@ Use this section whenever the `Terraform Azure` workflow is waiting for deployme
    ```bash
    gcloud run services update-traffic aegis-api \
      --to-revisions=PREV_REVISION=100 \
-     --region=us-central1 --project=aegis-prod-488119
+     --region=us-central1 --project=<GCP_PROJECT_ID>
    ```
 
 5. **Scale out if overloaded**
@@ -175,7 +175,7 @@ Use this section whenever the `Terraform Azure` workflow is waiting for deployme
    ```bash
    gcloud run services update aegis-api \
      --max-instances=50 \
-     --region=us-central1 --project=aegis-prod-488119
+     --region=us-central1 --project=<GCP_PROJECT_ID>
    ```
 
 ---
@@ -198,20 +198,20 @@ Use this section whenever the `Terraform Azure` workflow is waiting for deployme
 
    ```bash
    gcloud compute backend-services describe aegis-api-backend \
-     --global --project=aegis-prod-488119 --format=json | jq '.backends[].balancingMode'
+     --global --project=<GCP_PROJECT_ID> --format=json | jq '.backends[].balancingMode'
    ```
 
 3. **Check Cloud Run service status**
 
    ```bash
    gcloud run services describe aegis-api \
-     --region=us-central1 --project=aegis-prod-488119 --format=json | jq '.status.conditions'
+     --region=us-central1 --project=<GCP_PROJECT_ID> --format=json | jq '.status.conditions'
    ```
 
 4. **Check SSL certificate** — an expired cert will cause uptime check failures:
 
    ```bash
-   gcloud compute ssl-certificates list --project=aegis-prod-488119
+   gcloud compute ssl-certificates list --project=<GCP_PROJECT_ID>
    ```
 
 ---
@@ -231,7 +231,7 @@ Use this section whenever the `Terraform Azure` workflow is waiting for deployme
    ```bash
    gcloud run services update aegis-api \
      --min-instances=2 \
-     --region=us-central1 --project=aegis-prod-488119
+     --region=us-central1 --project=<GCP_PROJECT_ID>
    ```
 
 3. **Check sidecar timeouts** — if a sidecar (defacing, PHI scan) is slow, requests that
@@ -257,7 +257,7 @@ Use this section whenever the `Terraform Azure` workflow is waiting for deployme
 1. **Identify top queries**
 
    ```bash
-   gcloud sql connect aegis-prod --user=aegis --project=aegis-prod-488119
+   gcloud sql connect aegis-prod --user=aegis --project=<GCP_PROJECT_ID>
    ```
 
    Then in psql:
