@@ -1,167 +1,141 @@
 name: Terraform GCP
 
-# Replaces GCP Cloud Build trigger `terraform-apply-on-develop` (cloudbuild.terraform.yaml).
-# Runs plan on PRs and on push to develop when terraform/infra/** files change.
-# Apply is guarded by a `gcp-prod` protected GitHub environment (requires manual approval).
+# Plan on pull requests; apply on merge to develop behind the gcp-prod
+# environment approval. Same pattern as terraform-aws.yml and
+# terraform-azure.yml. Auth is Workload Identity Federation — no keys.
 #
-# Prerequisites — set in GitHub repo secrets:
-#   GCP_WORKLOAD_IDENTITY_PROVIDER  — WIF provider resource name
-#                                     (output of terraform/project/github_actions.tf)
-#   GCP_SERVICE_ACCOUNT             — SA email to impersonate
-#                                     (aegis-cloud-build@<GCP_PROJECT_ID>.iam.gserviceaccount.com)
-#   GCP_TERRAFORM_TFVARS            — Full contents of terraform/infra/terraform.tfvars
+# Repo secrets:   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT,
+#                 GCP_TERRAFORM_TFVARS (full contents of terraform/infra/terraform.tfvars)
+# Repo variables: GCP_PROJECT_ID
+# Environment:    gcp-prod — its required reviewers are the approval gate
 #
-# Auth uses Workload Identity Federation (OIDC) — no long-lived keys.
-# The SA must have roles/editor (or specific Terraform roles) on the project.
+# Logs on a public repository are public: plan and apply run through
+# scripts/terraform_ci.sh, which prints resource-level messages only, and
+# no plan file is ever uploaded as an artifact.
 #
-# Note: terraform/project/ is intentionally NOT managed here — it contains KMS keys
-# (prevent_destroy) and project-level IAM that are too risky to auto-apply.
-# Run terraform/project/ manually: cd terraform/project && terraform apply
+# terraform/project/ is intentionally not managed here (KMS keys with
+# prevent_destroy, project-level IAM). Apply it locally.
 
 on:
   pull_request:
-    branches:
-      - develop
+    branches: [develop]
     paths:
       - "terraform/infra/**"
+      - "scripts/terraform_ci.sh"
+      - ".github/workflows/terraform-gcp.yml"
   push:
-    branches:
-      - develop
+    branches: [develop]
     paths:
       - "terraform/infra/**"
+      - "scripts/terraform_ci.sh"
+      - ".github/workflows/terraform-gcp.yml"
   workflow_dispatch:
     inputs:
       confirm_apply:
-        description: "Type APPLY to run terraform apply"
+        description: "Type APPLY to apply after planning"
         required: false
         default: ""
 
 permissions:
-  id-token: write  # Required for OIDC token exchange with GCP
+  id-token: write
   contents: read
 
 concurrency:
   group: terraform-gcp
   cancel-in-progress: false
 
-jobs:
-  terraform-plan:
-    name: Terraform Plan (GCP)
-    runs-on: ubuntu-latest
+env:
+  TF_IN_AUTOMATION: "true"
 
+jobs:
+  plan:
+    name: Terraform Plan (GCP)
+    # Pull requests from forks carry no OIDC identity for this repo; skip them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Mask project identifier in logs
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: '[ -z "$PROJECT_ID" ] || echo "::add-mask::$PROJECT_ID"'
 
       - name: Authenticate to GCP (WIF)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account:            ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.9"
+          terraform_wrapper: false
 
       - name: Write terraform.tfvars
         env:
           TFVARS_CONTENT: ${{ secrets.GCP_TERRAFORM_TFVARS }}
-        working-directory: terraform/infra
         run: |
-          if [ -z "$TFVARS_CONTENT" ]; then
-            echo "GCP_TERRAFORM_TFVARS secret is empty or missing"
-            exit 1
-          fi
-          printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
+          [ -n "$TFVARS_CONTENT" ] || { echo "::error::GCP_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
+          printf '%s\n' "$TFVARS_CONTENT" > terraform/infra/terraform.tfvars
 
       - name: Terraform fmt check
-        working-directory: terraform/infra
-        run: terraform fmt -check
+        run: terraform -chdir=terraform/infra fmt -check
 
-      - name: Terraform Init
-        working-directory: terraform/infra
-        run: terraform init -input=false
+      - name: Terraform init
+        run: terraform -chdir=terraform/infra init -input=false
 
-      - name: Terraform Validate
-        working-directory: terraform/infra
-        run: terraform validate
+      - name: Terraform validate
+        run: terraform -chdir=terraform/infra validate
 
-      - name: Terraform Plan
-        working-directory: terraform/infra
-        run: |
-          set -o pipefail
-          terraform plan -input=false -no-color -out=tfplan | tee tfplan.txt
+      - name: Terraform plan
+        run: ./scripts/terraform_ci.sh plan terraform/infra
 
-      - name: Upload plan artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-gcp-plan-${{ github.run_id }}
-          path: |
-            terraform/infra/tfplan
-            terraform/infra/tfplan.txt
-
-  terraform-approval:
-    name: Terraform Apply Approval (GCP)
+  approve:
+    name: Approve apply (gcp-prod)
+    needs: plan
     if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
-    needs: terraform-plan
     runs-on: ubuntu-latest
     environment: gcp-prod
-
     steps:
-      - name: Await protected environment approval
-        run: echo "Approval granted for gcp-prod. Proceeding to apply job."
+      - run: echo "gcp-prod approval granted; applying."
 
-  terraform-apply:
+  apply:
     name: Terraform Apply (GCP)
+    needs: [plan, approve]
     if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
-    needs:
-      - terraform-plan
-      - terraform-approval
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Mask project identifier in logs
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: '[ -z "$PROJECT_ID" ] || echo "::add-mask::$PROJECT_ID"'
 
       - name: Authenticate to GCP (WIF)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account:            ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.9"
+          terraform_wrapper: false
 
       - name: Write terraform.tfvars
         env:
           TFVARS_CONTENT: ${{ secrets.GCP_TERRAFORM_TFVARS }}
-        working-directory: terraform/infra
         run: |
-          if [ -z "$TFVARS_CONTENT" ]; then
-            echo "GCP_TERRAFORM_TFVARS secret is empty or missing"
-            exit 1
-          fi
-          printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
+          [ -n "$TFVARS_CONTENT" ] || { echo "::error::GCP_TERRAFORM_TFVARS secret is empty or missing"; exit 1; }
+          printf '%s\n' "$TFVARS_CONTENT" > terraform/infra/terraform.tfvars
 
-      - name: Terraform Init
-        working-directory: terraform/infra
-        run: terraform init -input=false
+      - name: Terraform init
+        run: terraform -chdir=terraform/infra init -input=false
 
-      - name: Download plan artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-gcp-plan-${{ github.run_id }}
-          path: terraform/infra
-
-      - name: Terraform Apply
-        working-directory: terraform/infra
-        run: terraform apply -input=false -no-color tfplan
+      # A fresh plan is applied rather than a plan file carried between jobs:
+      # plan files contain every variable value and cannot be shared safely
+      # on a public repository.
+      - name: Terraform apply
+        run: ./scripts/terraform_ci.sh apply terraform/infra
