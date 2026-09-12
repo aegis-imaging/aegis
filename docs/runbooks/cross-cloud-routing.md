@@ -137,9 +137,9 @@ All three DIMSE C-STORE receivers are operational. Cross-cloud forwarding can us
 
 | Cloud | IP Address | Port | VM Type | Terraform File |
 |-------|-----------|------|---------|----------------|
-| GCP   | `35.232.172.221` | 11112 | Compute Engine (Debian 12) | `terraform/infra/dimse.tf` |
+| GCP   | `<GCP_DIMSE_PUBLIC_IP>` | 11112 | Compute Engine (Debian 12) | `terraform/infra/dimse.tf` |
 | AWS   | *(Elastic IP — run `terraform output dimse_receiver_ip` in `terraform/aws/`)* | 11112 | EC2 (Amazon Linux 2023) | `terraform/aws/dimse.tf` |
-| Azure | `20.97.180.87` | 11112 | Azure Linux VM (Debian 12) | `terraform/azure/dimse.tf` |
+| Azure | `<AZURE_DIMSE_PUBLIC_IP>` | 11112 | Azure Linux VM (Debian 12) | `terraform/azure/dimse.tf` |
 
 ### GCP → AWS (DIMSE C-STORE)
 
@@ -166,7 +166,7 @@ All three DIMSE C-STORE receivers are operational. Cross-cloud forwarding can us
      "name": "Azure DIMSE",
      "type": "dimse",
      "ae_title": "AEGIS",
-     "host": "20.97.180.87",
+     "host": "<AZURE_DIMSE_PUBLIC_IP>",
      "port": 11112,
      "enabled": true
    }
@@ -182,7 +182,7 @@ All three DIMSE C-STORE receivers are operational. Cross-cloud forwarding can us
      "name": "GCP DIMSE",
      "type": "dimse",
      "ae_title": "AEGIS",
-     "host": "35.232.172.221",
+     "host": "<GCP_DIMSE_PUBLIC_IP>",
      "port": 11112,
      "enabled": true
    }

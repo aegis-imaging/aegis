@@ -278,7 +278,7 @@ body {
     </div>
     <div class="g3">
       <div class="card c-react"><div class="card-hdr">React Upload Portal  (PWA)</div><ul><li>Drag-and-drop: files, folders, DICOM directories</li><li>Client-side tag de-identification (DICOM PS3.15)</li><li>Anonymization preview — before / after tag diff</li><li>Multi-study detection with per-study upload cards</li><li>Per-project retained-tag anonymization profiles</li><li>Auto-retry: 3× exponential backoff per file</li></ul></div>
-      <div class="card c-python"><div class="card-hdr">DIMSE Receiver  (pynetdicom · GCE VM)</div><ul><li>Compute Engine VM — aegis-prod-dimse-receiver</li><li>Static IP 35.232.172.221 · TCP port 11112</li><li>C-STORE SCP — receives from PACS systems / scanners</li><li>Institution attribution (AE title or IP CIDR)</li><li>Calls POST /api/ingest on DICOM association close</li><li>Durable retry queue + dead-letter (disk-persistent)</li></ul></div>
+      <div class="card c-python"><div class="card-hdr">DIMSE Receiver  (pynetdicom · GCE VM)</div><ul><li>Compute Engine VM — aegis-prod-dimse-receiver</li><li>Static IP &lt;GCP_DIMSE_PUBLIC_IP&gt; · TCP port 11112</li><li>C-STORE SCP — receives from PACS systems / scanners</li><li>Institution attribution (AE title or IP CIDR)</li><li>Calls POST /api/ingest on DICOM association close</li><li>Durable retry queue + dead-letter (disk-persistent)</li></ul></div>
       
     <div class="privacy">
       <div class="privacy-title">Key Privacy Principle</div>
@@ -298,7 +298,7 @@ body {
   <div class="zone z-gcp">
     <div class="zone-hdr">
       GCP PROJECT
-      <span class="zone-sub">aegis-prod-488120 &nbsp;·&nbsp; us-central1 &nbsp;·&nbsp; Live, February 2026</span>
+      <span class="zone-sub">&lt;GCP_PROJECT_ID&gt; &nbsp;·&nbsp; us-central1 &nbsp;·&nbsp; Live, February 2026</span>
     </div>
 
     <!-- Cloud Armor / LB -->
@@ -338,7 +338,7 @@ body {
   <div class="zone z-aws-main">
     <div class="zone-hdr">
       AWS ACCOUNT
-      <span class="zone-sub z-aws-sub">301691475234 &nbsp;·&nbsp; us-east-1 &nbsp;·&nbsp; ✓ Live — aws.api.aegisimaging.ai · Cross-cloud routing verified · Feb 25, 2026</span>
+      <span class="zone-sub z-aws-sub">&lt;AWS_ACCOUNT_ID&gt; &nbsp;·&nbsp; us-east-1 &nbsp;·&nbsp; ✓ Live — aws.api.aegisimaging.ai · Cross-cloud routing verified · Feb 25, 2026</span>
     </div>
     <div class="g3 mb-6">
       <div class="card c-orange"><div class="card-hdr">ALB + Cognito  (Auth Layer)</div><ul><li>HTTPS listener on ACM certificate</li><li>Cognito hosted UI — admin-create-only user pool</li><li>authenticate-cognito default action</li><li>Public bypass rules: /healthz, upload, export</li></ul></div>

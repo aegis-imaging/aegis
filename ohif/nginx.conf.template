@@ -62,7 +62,7 @@ server {
 
     # ── CSP: allow iframe embedding from the admin dashboard ─────────────────
     # frame-ancestors controls which pages may embed this viewer in an iframe.
-    add_header Content-Security-Policy "frame-ancestors https://admin.aegisimaging.ai https://aws.admin.aegisimaging.ai https://aegisimaging.ai https://*-uk5cvzf5nq-uc.a.run.app http://localhost:3001 http://localhost:3000 'self'" always;
+    add_header Content-Security-Policy "frame-ancestors https://app.aegisimaging.ai https://admin.aegisimaging.ai https://aws.admin.aegisimaging.ai https://aegisimaging.ai https://*-uk5cvzf5nq-uc.a.run.app http://localhost:3001 http://localhost:3000 'self'" always;
 
     # ── SPA fallback ──────────────────────────────────────────────────────────
     location / {

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Force-deploy all AEGIS Cloud Run services to pick up new :latest images.
-# Usage: ./scripts/deploy-services.sh [TAG]
+# Usage: PROJECT_ID=<gcp-project> ./scripts/deploy-services.sh [TAG]
 # Default TAG: latest
 
 set -euo pipefail
 
 TAG="${1:-latest}"
-PROJECT="aegis-prod-488120"
+PROJECT="${PROJECT_ID:?Set PROJECT_ID to the GCP project}"
 REGION="us-central1"
 REGISTRY="us-central1-docker.pkg.dev/${PROJECT}/aegis-services"
 

@@ -5,8 +5,8 @@ Scope reviewed: All services, API, frontend, Terraform, CI, MCP, docs.
 
 ## Current-State Snapshot (as of 2026-02-26)
 
-- **GCP production is live**: `aegis-prod-488120`, `us-central1` — day 7
-- **AWS production is live**: `301691475234`, `us-east-1` — day 8; cross-cloud routing GCP→AWS verified
+- **GCP production is live**: `<GCP_PROJECT_ID>`, `us-central1` — day 7
+- **AWS production is live**: `<AWS_ACCOUNT_ID>`, `us-east-1` — day 8; cross-cloud routing GCP→AWS verified
 - **Azure live**: Container Apps + PostgreSQL Flex + Azure Blob — live as of Feb 26
 - Go API: 126+ routes, 64 handler files, all fully implemented
 - 400+ automated tests (160+ Go integration tests, 244+ Python pytest tests across 8 sidecars)
@@ -40,7 +40,7 @@ Scope reviewed: All services, API, frontend, Terraform, CI, MCP, docs.
 | Q-4 | Export portal enhancement (badges, description, UID, countdown) | 2026-02-22 |
 | Q-5 | Shares tab improvements (email search, countdown, Note column) | 2026-02-22 |
 | Q-6 | Executive summary + architecture diagram + PDF | 2026-02-22 |
-| Q-7 | DIMSE receiver on Compute Engine VM (static IP 35.232.172.221, TCP 11112) | 2026-02-23 |
+| Q-7 | DIMSE receiver on Compute Engine VM (static IP `<GCP_DIMSE_PUBLIC_IP>`, TCP 11112) | 2026-02-23 |
 | Q-8 | Cloud Build CI/CD triggers active | 2026-02-23 |
 | P1-F1 | Production observability dashboard (9 alert policies, Cloud Monitoring) | 2026-02-23 |
 | P1-F2 | Study SLA / stuck-detection alerting (GET /api/studies/stuck, scheduler) | 2026-02-23 |

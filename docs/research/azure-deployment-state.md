@@ -333,7 +333,7 @@ All three clouds use `dimse_source_ranges` to restrict inbound DICOM traffic. Th
 
 ```hcl
 # terraform/infra/terraform.tfvars
-dimse_receiver_image = "us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/dimse-receiver:latest"
+dimse_receiver_image = "us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/aegis-services/dimse-receiver:latest"
 dimse_api_url        = "https://api.aegisimaging.ai"
 dimse_project_slug   = "default"
 dimse_source_ranges  = ["203.0.113.0/24"]  # replace with PACS IPs
