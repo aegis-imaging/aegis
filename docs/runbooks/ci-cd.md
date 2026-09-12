@@ -49,11 +49,23 @@ fully automatic on merge.
 
 ### GCP (already provisioned)
 
-Secrets `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`,
-`GCP_TERRAFORM_TFVARS`; variables `GCP_PROJECT_ID`, `GCP_REGION`,
-`GCP_DWV_URL`, `GCP_OHIF_URL`, `GCP_API_URL`, `GCP_ADMIN_URL`, optional
-`GCP_DIMSE_INSTANCE` + `GCP_DIMSE_ZONE`. The identity comes from
-`terraform/project/github_actions.tf`.
+Secrets `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`; variables
+`GCP_PROJECT_ID`, `GCP_REGION`, `GCP_DWV_URL`, `GCP_OHIF_URL`, `GCP_API_URL`,
+`GCP_ADMIN_URL`, optional `GCP_DIMSE_INSTANCE` + `GCP_DIMSE_ZONE`. The
+identity comes from `terraform/project/github_actions.tf`.
+
+The tfvars live in **Secret Manager**: set the variable `GCP_TFVARS_SECRET`
+to the secret name (`aegis-prod-terraform-tfvars`) and edit them there — the
+Console shows the text and keeps every version, unlike a GitHub secret. The
+`GCP_TERRAFORM_TFVARS` repository secret is only a fallback when the variable
+is unset. To change a value from a terminal:
+
+```bash
+gcloud secrets versions access latest --secret=aegis-prod-terraform-tfvars > terraform.tfvars
+# edit, then verify it parses before saving:
+terraform fmt terraform.tfvars && gcloud secrets versions add aegis-prod-terraform-tfvars --data-file=terraform.tfvars
+rm terraform.tfvars
+```
 
 If both workflows show "disabled manually" under Actions, enable them. Then
 retire the Cloud Build triggers so a merge does not deploy twice:
