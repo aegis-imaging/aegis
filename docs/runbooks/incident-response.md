@@ -44,7 +44,7 @@ curl -s https://api.aegisimaging.ai/healthz | jq .
 # Recent errors
 gcloud logging read \
   'resource.type="cloud_run_revision" AND severity>=ERROR' \
-  --project=aegis-prod-488119 --limit=20 --format=json | jq '.[].textPayload'
+  --project=<GCP_PROJECT_ID> --limit=20 --format=json | jq '.[].textPayload'
 
 # Study pipeline status — check for stuck studies
 curl -s 'https://api.aegisimaging.ai/api/studies?limit=10&status=defacing' \
@@ -142,28 +142,28 @@ Within 48 hours, add a post-mortem document to `docs/runbooks/postmortems/`:
 
 ```bash
 # View service status
-gcloud run services describe aegis-api --region=us-central1 --project=aegis-prod-488119
+gcloud run services describe aegis-api --region=us-central1 --project=<GCP_PROJECT_ID>
 
 # View recent revisions
-gcloud run revisions list --service=aegis-api --region=us-central1 --project=aegis-prod-488119
+gcloud run revisions list --service=aegis-api --region=us-central1 --project=<GCP_PROJECT_ID>
 
 # Roll back to previous revision
 PREV=$(gcloud run revisions list --service=aegis-api --region=us-central1 \
-  --project=aegis-prod-488119 --format='value(name)' | sed -n '2p')
+  --project=<GCP_PROJECT_ID> --format='value(name)' | sed -n '2p')
 gcloud run services update-traffic aegis-api \
-  --to-revisions=$PREV=100 --region=us-central1 --project=aegis-prod-488119
+  --to-revisions=$PREV=100 --region=us-central1 --project=<GCP_PROJECT_ID>
 
 # Stream live logs
 gcloud alpha logging tail \
   'resource.type="cloud_run_revision" AND resource.labels.service_name="aegis-api"' \
-  --project=aegis-prod-488119
+  --project=<GCP_PROJECT_ID>
 ```
 
 ### Cloud SQL
 
 ```bash
 # Connect to DB (requires Cloud SQL Auth Proxy or IAP tunnel)
-cloud_sql_proxy -instances=aegis-prod-488119:us-central1:aegis-prod=tcp:5432 &
+cloud_sql_proxy -instances=<GCP_PROJECT_ID>:us-central1:aegis-prod=tcp:5432 &
 psql -h 127.0.0.1 -U aegis -d aegis
 
 # Check replication lag (if replica exists)
@@ -179,7 +179,7 @@ FROM pg_stat_activity WHERE state != 'idle' ORDER BY duration DESC;
 ```bash
 # Retrieve DB password
 gcloud secrets versions access latest \
-  --secret=aegis-prod-db-password --project=aegis-prod-488119
+  --secret=aegis-prod-db-password --project=<GCP_PROJECT_ID>
 ```
 
 ### Terraform

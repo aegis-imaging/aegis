@@ -4,7 +4,7 @@
 --
 -- Context: the first_admin bootstrap (api/main.go) only seeds ONE email at
 -- API startup (read from var.first_admin_email in terraform tfvars). In
--- production that's matthewsenjem@gmail.com. But ops@aegisimaging.ai is
+-- production that's <your-google-account-email>. But ops@aegisimaging.ai is
 -- also a primary operator account (see memory) and needs admin access too.
 --
 -- This migration is idempotent (ON CONFLICT DO NOTHING). It runs once per

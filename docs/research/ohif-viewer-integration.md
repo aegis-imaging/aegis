@@ -284,7 +284,7 @@ AEGIS's CORS middleware (`api/middleware/cors.go`) maintains an `ALLOWED_ORIGINS
 http://localhost:3000,...,https://aegisimaging.ai,https://www.aegisimaging.ai
 
 # Additions needed
-https://ohif-uk5cvzf5nq-uc.a.run.app
+https://ohif-<CLOUD_RUN_HASH>-uc.a.run.app
 https://aws.ohif.aegisimaging.ai   (future AWS)
 ```
 
@@ -295,7 +295,7 @@ https://aws.ohif.aegisimaging.ai   (future AWS)
 DWV's `nginx.conf.template` restricts iframe embedding via CSP `frame-ancestors`. OHIF's container needs the equivalent so it can be iframed from `admin.aegisimaging.ai`:
 
 ```nginx
-add_header Content-Security-Policy "frame-ancestors https://admin.aegisimaging.ai https://aws.admin.aegisimaging.ai https://*-uk5cvzf5nq-uc.a.run.app http://localhost:3001 'self'" always;
+add_header Content-Security-Policy "frame-ancestors https://admin.aegisimaging.ai https://aws.admin.aegisimaging.ai https://*-<CLOUD_RUN_HASH>-uc.a.run.app http://localhost:3001 'self'" always;
 ```
 
 DWV's CSP also needs updating to include the OHIF origin (in case OHIF ever iframes DWV — unlikely but defensive).
@@ -368,7 +368,7 @@ server {
     listen ${PORT:-80};
 
     # Allow embedding from admin dashboards
-    add_header Content-Security-Policy "frame-ancestors https://admin.aegisimaging.ai https://aws.admin.aegisimaging.ai https://aegisimaging.ai https://*-uk5cvzf5nq-uc.a.run.app http://localhost:3001 http://localhost:3000 'self'" always;
+    add_header Content-Security-Policy "frame-ancestors https://admin.aegisimaging.ai https://aws.admin.aegisimaging.ai https://aegisimaging.ai https://*-<CLOUD_RUN_HASH>-uc.a.run.app http://localhost:3001 http://localhost:3000 'self'" always;
     add_header X-Frame-Options "ALLOWALL" always;
 
     # Proxy DICOMweb calls to AEGIS API (avoids browser-level CORS)
@@ -562,7 +562,7 @@ Following the exact pattern used for the DWV service at `dwv/`:
 
 ### Cloud Run Service: `aegis-ohif`
 
-- **Image:** `us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/ohif:latest`
+- **Image:** `us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/aegis-services/ohif:latest`
 - **Port:** 80
 - **Env vars:** `API_URL=https://api.aegisimaging.ai` (set at deploy time)
 - **Health check:** `GET /health`
@@ -617,7 +617,7 @@ Following the exact pattern used for the DWV service at `dwv/`:
 **New substitution variable:**
 ```yaml
 substitutions:
-  _OHIF_URL: https://ohif-uk5cvzf5nq-uc.a.run.app
+  _OHIF_URL: https://ohif-<CLOUD_RUN_HASH>-uc.a.run.app
 ```
 
 ---

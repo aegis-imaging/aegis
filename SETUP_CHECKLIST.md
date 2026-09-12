@@ -2,19 +2,19 @@
 
 Personal environment setup tasks for building the MVP/POC. Complete these in order — each section unblocks the next.
 
-> **GCP Production Status (2026-02-24):** `aegis-prod-488120` is live.
+> **GCP Production Status (2026-02-24):** `<GCP_PROJECT_ID>` is live.
 > API: `https://api.aegisimaging.ai` — all services healthy, cloud smoke suite 11/11 PASS.
-> DIMSE receiver: `aegis-prod-dimse-receiver` (Compute Engine VM, `us-central1-a`, static IP `35.232.172.221`, port 11112).
+> DIMSE receiver: `aegis-prod-dimse-receiver` (Compute Engine VM, `us-central1-a`, static IP `<GCP_DIMSE_PUBLIC_IP>`, port 11112).
 > CI/CD: Cloud Build triggers active in `us-central1` (`deploy-on-develop` + `terraform-apply-on-develop`).
 >
-> **AWS Production Status (2026-02-25):** `301691475234` / `us-east-1` is live.
+> **AWS Production Status (2026-02-25):** `<AWS_ACCOUNT_ID>` / `us-east-1` is live.
 > API: `https://aws.api.aegisimaging.ai` — 14 ECS Fargate services + EC2 DIMSE receiver (15 services total, matching GCP parity), RDS PostgreSQL 15, S3, ALB + Cognito auth.
 > DIMSE receiver: EC2 instance with Elastic IP (port 11112).
 > Cross-cloud DICOM routing: STOW-RS + DIMSE C-STORE verified live. GitHub Actions CI/CD active (fires on push to `develop`).
 >
 > **Azure Production Status (2026-02-28):** Live.
 > API: `https://azure.api.aegisimaging.ai` — 14 Container Apps + Azure Linux VM DIMSE receiver (15 services total), PostgreSQL Flexible Server, Azure Blob Storage, Azure Container Registry.
-> DIMSE receiver: Azure Linux VM (Standard_B2s, Debian 12, static IP `20.97.180.87`, port 11112).
+> DIMSE receiver: Azure Linux VM (Standard_B2s, Debian 12, static IP `<AZURE_DIMSE_PUBLIC_IP>`, port 11112).
 > GitHub Actions OIDC CI/CD (`.github/workflows/deploy-azure.yml`) fires on push to `develop`.
 
 ---
@@ -22,7 +22,7 @@ Personal environment setup tasks for building the MVP/POC. Complete these in ord
 ## Monitoring & Observability
 
 **Cloud Monitoring Dashboard** (requires GCP console access):
-https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+`https://console.cloud.google.com/monitoring/dashboards?project=<GCP_PROJECT_ID>`
 
 **Alert policies** (9 active):
 - API 5xx rate, API p99 latency, API uptime check
@@ -59,7 +59,7 @@ Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC a
 
 - [ ] AEGIS Imaging LLC EIN obtained ✓
 - [ ] Open business bank account for AEGIS Imaging LLC
-- [x] Create GCP account + billing account for AEGIS Imaging LLC — project `aegis-prod-488120`, billing `016DEE-91CE5C-ECB970`
+- [x] Create GCP account + billing account for AEGIS Imaging LLC — project `<GCP_PROJECT_ID>`, billing `016DEE-91CE5C-ECB970`
 - [ ] Create Vercel account for AEGIS Imaging LLC
 - [ ] Create Brevo account for AEGIS Imaging LLC (free tier: 300 emails/day)
 
@@ -75,11 +75,11 @@ Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC a
 
 ## 2. GCP Project Setup
 
-- [x] Create a new GCP project under the **AEGIS Imaging LLC billing account** — `aegis-prod-488120` (region `us-central1`)
+- [x] Create a new GCP project under the **AEGIS Imaging LLC billing account** — `<GCP_PROJECT_ID>` (region `us-central1`)
 - [x] Link the AEGIS billing account to the project — `016DEE-91CE5C-ECB970`
 - [x] Install the gcloud CLI (`brew install google-cloud-sdk`)
 - [x] Authenticate: `gcloud auth login` and `gcloud auth application-default login`
-- [x] Set default project: `gcloud config set project aegis-prod-488120`
+- [x] Set default project: `gcloud config set project <GCP_PROJECT_ID>`
 
 ### Beta launch auth (GCP IAP)
 
@@ -101,13 +101,13 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   This creates `service-{PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com`. Terraform grants it
   `roles/run.invoker` on the admin Cloud Run service automatically — but the identity must exist first.
   Safe to run multiple times (idempotent). Run this **before** `terraform apply` in section 4.
-- [x] Add beta testers' Google accounts to IAP access list: (`matthewsenjem@gmail.com`)
+- [x] Add beta testers' Google accounts to IAP access list: (`<your-google-account-email>`)
   ```bash
   gcloud iap web add-iam-policy-binding \
     --member="user:tester@gmail.com" \
     --role="roles/iap.httpsResourceAccessUser"
   ```
-- [x] Add the same emails to `admin_users` table (role: `admin` or `viewer`) — `matthewsenjem@gmail.com` seeded via `FIRST_ADMIN_EMAIL`
+- [x] Add the same emails to `admin_users` table (role: `admin` or `viewer`) — `<your-google-account-email>` seeded via `FIRST_ADMIN_EMAIL`
 - [x] Set env vars on Cloud Run: `AUTH_ENABLED=true AUTH_PROVIDER=iap`
 - [x] Verify: tester visits admin dashboard URL → Google sign-in → dashboard loads
 
@@ -124,11 +124,11 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 
 - [x] Copy `terraform/infra/terraform.tfvars.example` to `terraform/infra/terraform.tfvars`
 - [x] Fill in required `terraform/infra/terraform.tfvars` values:
-  - `project_id = "aegis-prod-488120"`, `region = "us-central1"`, `environment = "prod"`
+  - `project_id = "<GCP_PROJECT_ID>"`, `region = "us-central1"`, `environment = "prod"`
   - `api_domain = "api.aegisimaging.ai"`, `admin_domain = "admin.aegisimaging.ai"`
-  - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members = ["user:matthewsenjem@gmail.com"]`
+  - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members = ["user:<your-google-account-email>"]`
   - `db_password` (via Secret Manager), `db_password_secret_id`
-  - image URIs for all services at `us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services`
+  - image URIs for all services at `us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/aegis-services`
 - [x] Build and push images to Artifact Registry — all 8 services pushed at `:latest`
 - [x] Run `terraform init` in `terraform/infra/`
 - [x] Run `terraform fmt -check`
@@ -166,16 +166,16 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   ```
 - [ ] Open the Cloud Monitoring dashboard in GCP Console:
   ```
-  https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+  https://console.cloud.google.com/monitoring/dashboards?project=<GCP_PROJECT_ID>
   ```
   Expected: "AEGIS Operations — prod" dashboard with 11 tiles (API rate/errors/latency, Cloud Run instances/memory, Cloud SQL CPU/disk/connections, sidecar 5xx, pipeline failures, stuck-study SLA alerts).
 - [ ] Confirm alert policies are active (9 total after Feature 55):
   ```bash
-  gcloud monitoring policies list --project=aegis-prod-488120 --format='table(displayName,enabled)'
+  gcloud monitoring policies list --project=<GCP_PROJECT_ID> --format='table(displayName,enabled)'
   ```
 - [ ] Confirm log-based metrics exist:
   ```bash
-  gcloud logging metrics list --project=aegis-prod-488120 --format='value(name)'
+  gcloud logging metrics list --project=<GCP_PROJECT_ID> --format='value(name)'
   # Expected: aegis-prod-pipeline-failures, aegis-prod-study-stuck
   ```
 - [ ] See `terraform/monitoring/README.md` for full metric reference and runbook links.
@@ -186,14 +186,14 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 The DIMSE C-STORE SCP runs on a dedicated Compute Engine VM because Cloud Run cannot expose raw TCP ports. Terraform creates the VM; Cloud Build deploys new images by updating VM metadata and resetting the instance.
 
 - [x] VM `aegis-prod-dimse-receiver` created in `us-central1-a` via `terraform/infra/dimse.tf`
-- [x] Static regional IP `35.232.172.221` assigned; firewall rule allows TCP 11112 from `0.0.0.0/0`
+- [x] Static regional IP `<GCP_DIMSE_PUBLIC_IP>` assigned; firewall rule allows TCP 11112 from `0.0.0.0/0`
 - [x] VPC-internal firewall allows TCP 8080 from Go API → DIMSE VM health endpoint
 - [x] Startup script mounts GCS staging bucket via gcsfuse at `/app/data` and starts the DIMSE container
 - [x] `dimse_receiver_image` and `dimse_api_url` set in `terraform/infra/terraform.tfvars` (stored in Secret Manager as `aegis-prod-terraform-tfvars` version 2)
 - [ ] Verify DIMSE receiver is running after a test C-STORE from PACS:
   ```bash
   # From any host with storescu installed
-  storescu -v -aec AEGIS 35.232.172.221 11112 /path/to/test.dcm
+  storescu -v -aec AEGIS <GCP_DIMSE_PUBLIC_IP> 11112 /path/to/test.dcm
   # Then verify in admin dashboard → Studies tab
   ```
 - [ ] Verify VM health endpoint (VPC-internal only):
@@ -207,7 +207,7 @@ The DIMSE C-STORE SCP runs on a dedicated Compute Engine VM because Cloud Run ca
 # Manual update (if needed):
 gcloud compute instances add-metadata aegis-prod-dimse-receiver \
   --zone=us-central1-a \
-  --metadata=dimse-image=us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/dimse-receiver:latest
+  --metadata=dimse-image=us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/aegis-services/dimse-receiver:latest
 gcloud compute instances reset aegis-prod-dimse-receiver --zone=us-central1-a
 ```
 
@@ -218,11 +218,11 @@ Cloud Build triggers were created by `scripts/gcp_setup_cloudbuild.sh` and run i
 - [x] GitHub App connection established (Cloud Build → `aegis` connection → `aegis-imaging/aegis` repo)
 - [x] Trigger `deploy-on-develop` — fires on push to `develop`; runs `cloudbuild.yaml` (builds+pushes all images, deploys Cloud Run services, hot-swaps DIMSE VM)
 - [x] Trigger `terraform-apply-on-develop` — fires when `terraform/infra/**` changes on `develop`; runs `cloudbuild.terraform.yaml`; reads `terraform.tfvars` from Secret Manager
-- [x] Cloud Build SA `aegis-cloud-build@aegis-prod-488120.iam.gserviceaccount.com` has all required IAM roles (tracked in `terraform/project/main.tf`)
+- [x] Cloud Build SA `aegis-cloud-build@<GCP_PROJECT_ID>.iam.gserviceaccount.com` has all required IAM roles (tracked in `terraform/project/main.tf`)
 
 **Monitor recent builds:**
 ```bash
-gcloud builds list --project=aegis-prod-488120 --region=us-central1 --limit=5
+gcloud builds list --project=<GCP_PROJECT_ID> --region=us-central1 --limit=5
 ```
 
 **Re-run setup (idempotent):**
@@ -247,7 +247,7 @@ Terraform sets `FIRST_ADMIN_EMAIL` on the API Cloud Run service. On startup, if 
   gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"first-admin bootstrap: created admin user"' \
     --project=YOUR_PROJECT_ID --limit=5 --format='value(textPayload)'
   ```
-- [x] Open the admin dashboard — `matthewsenjem@gmail.com` logs in, sees dashboard without "403 user not registered" error
+- [x] Open the admin dashboard — `<your-google-account-email>` logs in, sees dashboard without "403 user not registered" error
 
 **To add more admins** after the first login: use the **Users** tab in the admin dashboard, or call the API directly:
 ```bash
@@ -261,7 +261,7 @@ curl -X POST https://<api_domain>/api/admin-users \
 
 ### GCP (Cloud SQL + Cloud Run API)
 
-- [x] Confirm DB password secret exists — `aegis-prod-db-password` in Secret Manager (`aegis-prod-488120`)
+- [x] Confirm DB password secret exists — `aegis-prod-db-password` in Secret Manager (`<GCP_PROJECT_ID>`)
 - [x] Confirm API service account has secret accessor — verified via Terraform IAM binding
 - [ ] Rotate DB password (dev drill — not yet done):
   ```bash
@@ -294,7 +294,7 @@ curl -X POST https://<api_domain>/api/admin-users \
   ```bash
   SSL_CERT_FILE=/etc/ssl/cert.pem python3 scripts/cloud_smoke_test.py \
     --base-url https://api.aegisimaging.ai \
-    --iap-email matthewsenjem@gmail.com
+    --iap-email <your-google-account-email>
   ```
 - [x] Verify suite exits with status code `0` and prints all PASS steps — **11/11 PASS in 2.56s** (2026-02-22):
   - `healthz` ✓ `auth.me` ✓ `admin.users.registered` ✓
