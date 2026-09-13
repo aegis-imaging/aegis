@@ -3,7 +3,7 @@
 # Built from the repo root so we can include the midi-b package as a
 # library dependency without publishing it to PyPI:
 #   docker build -f router/Dockerfile -t aegis-router .
-FROM python:3.12-slim AS base
+FROM python:3.14-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
