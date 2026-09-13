@@ -5,7 +5,7 @@
 # build context must be the monorepo root to give npm access to the root
 # package-lock.json and the client/ workspace package.
 
-FROM node:20-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /app
 
