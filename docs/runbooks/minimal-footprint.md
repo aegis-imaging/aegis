@@ -27,9 +27,12 @@ start to the first request after idle).
 
 ## Step 0 — find out what is there right now
 
-Run from a machine with `aws`, `az`, `terraform`, `docker` (with buildx) and
-`jq`. Each cloud ends up in one of two branches: **A. fresh** (nothing exists)
-or **B. in place** (resources exist, apply the trimmed profile over them).
+`scripts/aws_bootstrap_ci.sh` (AWS CloudShell) and
+`scripts/azure_bootstrap_ci.sh` (Azure Cloud Shell) run this check first and
+stop if resources exist without state. To do it by hand, run the commands
+below from a machine with `aws`, `az` and `terraform`. Each cloud ends up in
+one of two branches: **A. fresh** (nothing exists) or **B. in place**
+(resources exist, apply the trimmed profile over them).
 
 ### AWS
 
@@ -86,23 +89,15 @@ CNAME records in Cloudflare as DNS-only records.
 
 ### 2A. Fresh
 
-Everything runs from GitHub Actions (`ci-cd.md`): bootstrap the AWS identity
-once, put the tfvars in the `AWS_TERRAFORM_TFVARS` secret, set the variable
-`AWS_BUILD_SERVICES` to `api admin-dashboard`, then dispatch **Terraform AWS**
-with `APPLY` and approve `aws-prod`. When it finishes, dispatch **Deploy to
-AWS** once so the two images exist and the tasks start; every later merge to
-`main` rolls them automatically. Then create the first Cognito user
-(aws-deployment.md, Phase 8):
-
-```bash
-POOL=$(terraform -chdir=terraform/aws output -raw cognito_user_pool_id)
-aws cognito-idp admin-create-user --region us-east-1 --user-pool-id "$POOL" \
-  --username you@example.com \
-  --user-attributes Name=email,Value=you@example.com Name=email_verified,Value=true
-```
-
-The same address must be `first_admin_email` in tfvars so the API seeds it as
-an admin.
+Everything runs from GitHub Actions (`ci-cd.md`): `scripts/aws_bootstrap_ci.sh`
+in AWS CloudShell bootstraps the identity, the certificate and the tfvars and
+prints the secrets and variables (including `AWS_BUILD_SERVICES` =
+`api admin-dashboard`). Set them, then dispatch **Terraform AWS** with `APPLY`
+and approve `aws-prod`. When it finishes, dispatch **Deploy to AWS** once so
+the two images exist and the tasks start; every later merge to `main` rolls
+them automatically. Then `./scripts/aws_bootstrap_ci.sh --post-apply` creates
+the first Cognito user for `first_admin_email` (the API seeds that address as
+an admin) and prints the DNS records for step 3.
 
 ### 2B. In place
 
@@ -162,15 +157,18 @@ served by Cloudflare Pages from `frontend/landing`.
 
 ### 2A. Fresh
 
-Bootstrap the Azure identity once (`./scripts/azure_bootstrap_github_oidc.sh`,
-see `ci-cd.md`), put the tfvars in the `AZURE_TERRAFORM_TFVARS` secret, set
-the variable `AZURE_BUILD_SERVICES` to `api admin-dashboard`, then dispatch
-**Terraform Azure** with `APPLY` and approve `azure-prod`. That creates
-everything with the hello-world placeholder image. Set `AZURE_RESOURCE_GROUP`
-and `AZURE_ACR_LOGIN_SERVER` from the terraform outputs, then dispatch
-**Deploy to Azure** once: it builds the two images and points the apps at
-them. Terraform ignores image changes after creation, so the deploy workflow
-is the deploy path from here on.
+`scripts/azure_bootstrap_ci.sh` in Azure Cloud Shell bootstraps the state
+storage, the identity and the tfvars and prints every secret and variable
+(including `AZURE_BUILD_SERVICES` = `api admin-dashboard`,
+`AZURE_RESOURCE_GROUP` and `AZURE_ACR_LOGIN_SERVER`, which are deterministic).
+Set them, then dispatch **Terraform Azure** with `APPLY` and approve
+`azure-prod`. That creates everything with the hello-world placeholder image.
+Then dispatch **Deploy to Azure** once: it builds the two images and points
+the apps at them. Terraform ignores image changes after creation, so the
+deploy workflow is the deploy path from here on. Step 3 is
+`./scripts/azure_bootstrap_ci.sh --post-apply` (prints the records) followed
+by `--bind-domains` (requests the certificates) once the tfvars carry the
+domains.
 
 ### 2B. In place
 

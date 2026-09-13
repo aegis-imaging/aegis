@@ -81,18 +81,21 @@ gcloud builds triggers delete terraform-apply-on-develop --project <GCP_PROJECT_
 ### AWS
 
 The OIDC provider and both roles live in `terraform/aws/github_actions_oidc.tf`,
-so the first apply is a targeted one from a laptop with your own credentials:
+so the first apply is a targeted one with your own credentials. Open AWS
+CloudShell in the console (region us-east-1) and run:
 
 ```bash
-terraform -chdir=terraform/aws init
-terraform -chdir=terraform/aws apply \
-  -target=aws_iam_openid_connect_provider.github_actions \
-  -target=aws_iam_role.github_actions_terraform \
-  -target=aws_iam_role_policy_attachment.github_actions_terraform_admin \
-  -target=aws_iam_role.github_actions_deploy \
-  -target=aws_iam_role_policy_attachment.github_actions_deploy
-terraform -chdir=terraform/aws output github_actions_terraform_role_arn github_actions_deploy_role_arn
+git clone -b develop https://github.com/aegis-imaging/aegis.git && cd aegis
+./scripts/aws_bootstrap_ci.sh
 ```
+
+It creates the state bucket and lock table, requests the ACM certificate for
+the API and admin hostnames (add the validation CNAMEs it prints in Cloudflare,
+DNS only, and it waits for issuance), applies only the OIDC provider and
+roles, writes a minimal-footprint `terraform.tfvars`, and prints every secret
+and variable below with its value. After the first terraform apply and deploy,
+`./scripts/aws_bootstrap_ci.sh --post-apply` prints the load balancer CNAMEs
+and creates the first Cognito user.
 
 Secrets: `AWS_TERRAFORM_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_TERRAFORM_TFVARS`
 (full `terraform/aws/terraform.tfvars`). Variables: `AWS_CI_ENABLED=true`,
@@ -106,10 +109,19 @@ this repository's `main` and `develop` branches and pull requests.
 
 ### Azure
 
+Open Azure Cloud Shell (bash) in the portal and run:
+
 ```bash
-az login
-./scripts/azure_bootstrap_github_oidc.sh          # prints the three IDs to store as secrets
+git clone -b develop https://github.com/aegis-imaging/aegis.git && cd aegis
+./scripts/azure_bootstrap_ci.sh
 ```
+
+It creates the state storage named in `terraform/azure/backend.tf`, runs
+`scripts/azure_bootstrap_github_oidc.sh` for the identity, writes a
+minimal-footprint `terraform.tfvars` with a generated database password, and
+prints every secret and variable below with its value. After the first
+terraform apply and deploy, `--post-apply` prints the Cloudflare records for
+the custom hostnames and `--bind-domains` requests their managed certificates.
 
 Secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
 `AZURE_TERRAFORM_TFVARS`. Variables: `AZURE_CI_ENABLED=true`,
