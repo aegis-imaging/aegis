@@ -22,7 +22,7 @@ The GCP Cloud Monitoring dashboard is provisioned automatically when `enable_mon
 
 **GCP Console URL** (production):
 ```
-https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+https://console.cloud.google.com/monitoring/dashboards?project=<GCP_PROJECT_ID>
 ```
 
 ## Alert Policies

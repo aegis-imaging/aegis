@@ -132,3 +132,65 @@ func TestUpdateInstitution_RejectsInvalidType(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
+
+func TestListInstitutions_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "inst-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/institutions", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListInstitutions(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestListInstitutions_ResearcherWithProjectScopeAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	inst := seedInstitution(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "inst-researcher-ok@test.com", "researcher")
+
+	require.NoError(t, model.AddInstitutionToProject(context.Background(), db, &model.InstitutionProject{
+		InstitutionID: inst.ID,
+		ProjectID:     proj.ID,
+		Role:          "sender",
+	}))
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "coordinator",
+	}))
+
+	req := httptest.NewRequest("GET", "/api/institutions?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListInstitutions(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var out []model.Institution
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&out))
+	require.Len(t, out, 1)
+	assert.Equal(t, inst.ID, out[0].ID)
+}
+
+func TestListInstitutions_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "inst-researcher-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/institutions?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListInstitutions(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}

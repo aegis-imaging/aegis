@@ -13,12 +13,28 @@ jobs:
       - name: Check Terraform credential placeholders
         run: ./scripts/check-infra-placeholders.sh
 
+  access-matrix-guard:
+    name: Access matrix guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authenticated route coverage in access matrix
+        run: ./scripts/check-access-matrix-coverage.sh
+
+  migration-version-guard:
+    name: Migration version guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail on duplicate goose migration version numbers
+        run: ./scripts/check-migration-versions.sh
+
   terraform:
     name: "Terraform checks (${{ matrix.module }})"
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        module: [project, infra, aws]
+        module: [project, infra, aws, azure]
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -30,6 +46,8 @@ jobs:
         env:
           TF_VAR_acm_certificate_arn: "arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
           TF_VAR_cognito_domain_prefix: "aegis-ci"
+          TF_VAR_azure_ad_tenant_id: "00000000-0000-0000-0000-000000000000"
+          TF_VAR_db_admin_password: "ci-placeholder"
         run: terraform -chdir=terraform/${{ matrix.module }} validate
 
   go:
@@ -64,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, synth-service]
+        service: [defacing, dicom-tools, dimse-receiver, midi-b, analytics-service, sct-service]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -96,21 +114,60 @@ jobs:
           - scripts/gcp_build_push_images.sh
           - scripts/gcp_apply_infra.sh
           - scripts/gcp_install_poc.sh
-          - scripts/aws_build_push_images.sh
-          - scripts/aws_apply_infra.sh
-          - scripts/aws_install_poc.sh
+          - scripts/check-auth-guardrails.sh
+          - scripts/check-hipaa-day1-controls.sh
+          - scripts/check-runbook-readiness.sh
+          - scripts/check-terraform-security-baseline.sh
+          - scripts/check-migration-versions.sh
           - scripts/gcp_setup_cloudbuild.sh
+          - scripts/onprem_install.sh
     steps:
       - uses: actions/checkout@v4
       - name: Syntax check
         run: bash -n ${{ matrix.script }}
+
+  # Multi-cloud parity / conformance checks have been retired with the
+  # GCP-only consolidation. Re-introduce only if AWS/Azure deploys come
+  # back as supported targets.
+
+  auth-guardrails:
+    name: Authentication guardrails check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate non-dev auth invariants
+        run: ./scripts/check-auth-guardrails.sh
+
+  hipaa-day1-controls:
+    name: HIPAA day-1 baseline check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate HIPAA day-1 control baseline
+        run: ./scripts/check-hipaa-day1-controls.sh
+
+  runbook-readiness:
+    name: Runbook readiness check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate unified runbook and sign-off artifacts
+        run: ./scripts/check-runbook-readiness.sh
+
+  terraform-security-baseline:
+    name: Terraform security baseline check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate terraform security baseline signals
+        run: ./scripts/check-terraform-security-baseline.sh
 
   python-test:
     name: "Python tests (${{ matrix.service }})"
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [defacing, phi-detection, qc-service, bids-service, classification-service, protocol-service, dimse-receiver, synth-service]
+        service: [defacing, dicom-tools, dimse-receiver, midi-b, analytics-service, sct-service]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -129,9 +186,9 @@ jobs:
         app:
           - { dir: client, name: "@aegis/client", needs_client: false }
           - { dir: frontend/upload-portal, name: upload-portal, needs_client: true }
-          - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: false }
-          - { dir: frontend/landing, name: landing, needs_client: false }
+          - { dir: frontend/admin-dashboard, name: admin-dashboard, needs_client: true }
           - { dir: frontend/export-portal, name: export-portal, needs_client: false }
+          - { dir: frontend/landing, name: landing, needs_client: false }
           - { dir: mcp-server, name: mcp-server, needs_client: false }
     steps:
       - uses: actions/checkout@v4
@@ -166,19 +223,15 @@ jobs:
       matrix:
         service:
           - { context: api, name: api }
-          - { context: frontend/admin-dashboard, name: admin-dashboard }
-          # landing uses @aegis/client (workspace dep) so it builds from repo root
-          - { context: ".", dockerfile: frontend/landing/Dockerfile, name: landing }
+          # admin-dashboard uses @aegis/client (workspace dep) so it builds from repo root
+          - { context: ".", dockerfile: frontend/admin-dashboard/Dockerfile, name: admin-dashboard }
           - { context: defacing, name: defacing }
-          - { context: phi-detection, name: phi-detection }
-          - { context: qc-service, name: qc-service }
-          - { context: bids-service, name: bids-service }
-          - { context: classification-service, name: classification-service }
-          - { context: protocol-service, name: protocol-service }
+          - { context: dicom-tools, name: dicom-tools }
           - { context: dimse-receiver, name: dimse-receiver }
-          - { context: synth-service, name: synth-service }
+          - { context: analytics-service, name: analytics-service }
+          - { context: sct-service, name: sct-service }
           - { context: mcp-server, name: mcp-server }
-          - { context: weasis, name: weasis }
+          - { context: dwv, name: dwv }
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image (retry on transient registry errors)

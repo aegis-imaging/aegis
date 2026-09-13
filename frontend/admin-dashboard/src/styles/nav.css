@@ -1,0 +1,1256 @@
+/* XNAT-style nav chrome: top bar, breadcrumbs, page shells.
+ *
+ * Colors follow the project's colorblind-friendly palette (teal/orange) and
+ * stay neutral so this file can be themed via the existing dark-theme.css
+ * variables. Class prefix `aegis-` (eXperience nav) keeps this isolated from
+ * the existing admin dashboard classes.
+ */
+
+:root {
+  --aegis-bg: #f8f9fb;
+  --aegis-surface: #ffffff;
+  --aegis-border: #e2e8f0;
+  --aegis-text: #0f172a;
+  --aegis-muted: #64748b;
+  --aegis-link: #0d9488;
+  --aegis-link-hover: #0f766e;
+  --aegis-active-bg: #ccfbf1;
+  --aegis-error-bg: #ffedd5;
+  --aegis-error-text: #9a3412;
+}
+
+/* Document-level overflow guard. Without this, any wide child (long
+   table, search input at 360px, etc.) on a narrow viewport makes
+   <html> wider than the device. iOS Safari then applies its
+   "shrink-to-fit" heuristic and renders the WHOLE page zoomed out —
+   our @media (max-width: 768px) rules stop matching because the
+   computed viewport is wider than the physical screen, and the user
+   has to pinch-zoom to read anything. Pinning html/body to 100% and
+   hiding horizontal overflow keeps the mobile breakpoint active. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.aegis-shell {
+  min-height: 100vh;
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Belt-and-suspenders with the html/body rule above — keeps the
+     shell from getting wider than viewport even if a child uses
+     position: absolute or similar to escape the body's overflow
+     hidden. */
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+
+.aegis-topbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 24px;
+  background: var(--aegis-surface);
+  border-bottom: 1px solid var(--aegis-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.aegis-brand {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 16px;
+  color: var(--aegis-text);
+  text-decoration: none;
+}
+
+.aegis-topnav {
+  display: flex;
+  gap: 12px;
+}
+
+.aegis-topnav a {
+  color: var(--aegis-muted);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.aegis-topnav a:hover,
+.aegis-topnav a.aegis-active {
+  color: var(--aegis-text);
+  background: var(--aegis-active-bg);
+}
+
+.aegis-search-slot {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── Search ──────────────────────────────────────────────────────────── */
+
+.aegis-search {
+  position: relative;
+  width: 360px;
+  max-width: 100%;
+}
+
+/* Mobile topbar: hide search and primary nav links so the topbar can
+   fit a 393px viewport. Same destinations are reachable from the
+   hamburger drawer; topbar keeps brand + theme toggle. Placed AFTER
+   the base .aegis-topnav / .aegis-search-slot rules so source-order
+   tie-breaks favor the mobile override at equal specificity. */
+@media (max-width: 768px) {
+  .aegis-topbar {
+    gap: 12px;
+    padding: 10px 14px;
+  }
+  .aegis-topnav,
+  .aegis-search-slot {
+    display: none;
+  }
+}
+
+.aegis-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--aegis-border);
+  border-radius: 8px;
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
+}
+
+.aegis-search-input:focus {
+  outline: 2px solid var(--aegis-link);
+  outline-offset: -1px;
+}
+
+.aegis-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  max-height: 480px;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.aegis-search-status {
+  padding: 12px;
+  color: var(--aegis-muted);
+  font-size: 13px;
+}
+
+.aegis-search-section {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--aegis-border);
+}
+
+.aegis-search-section:last-child {
+  border-bottom: none;
+}
+
+.aegis-search-section-title {
+  padding: 6px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--aegis-muted);
+}
+
+.aegis-search-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--aegis-text);
+}
+
+.aegis-search-hit:hover {
+  background: var(--aegis-active-bg);
+}
+
+.aegis-search-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.aegis-search-secondary {
+  font-size: 12px;
+  color: var(--aegis-muted);
+  margin-top: 2px;
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────── */
+
+.aegis-breadcrumbs {
+  padding: 8px 24px;
+  background: var(--aegis-bg);
+  border-bottom: 1px solid var(--aegis-border);
+  font-size: 13px;
+  color: var(--aegis-muted);
+}
+
+.aegis-crumb a {
+  color: var(--aegis-link);
+  text-decoration: none;
+}
+
+.aegis-crumb a:hover {
+  color: var(--aegis-link-hover);
+  text-decoration: underline;
+}
+
+.aegis-crumb-sep {
+  margin: 0 8px;
+  color: var(--aegis-border);
+}
+
+/* Hide breadcrumbs on mobile — the hamburger Menu button sits at the
+   same vertical band and overlapped the crumb text on iPhone. The
+   drawer already shows where you are (active group + active item),
+   and the page header below carries the current title, so the
+   breadcrumb is redundant in the narrow layout. */
+@media (max-width: 768px) {
+  .aegis-breadcrumbs {
+    display: none;
+  }
+}
+
+/* ── Main content ────────────────────────────────────────────────────── */
+
+.aegis-main {
+  padding: 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.aegis-page-header h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.aegis-muted {
+  color: var(--aegis-muted);
+}
+
+.aegis-error {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--aegis-error-bg);
+  color: var(--aegis-error-text);
+  margin: 12px 0;
+  font-size: 14px;
+}
+
+/* Orange warning banner (colorblind-safe: orange, never red/green). */
+.aegis-warning-banner {
+  background: #ffedd5;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  padding: 8px 14px;
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+:root[data-theme="dark"] .aegis-warning-banner {
+  background: rgba(251, 146, 60, 0.12);
+  border-color: rgba(251, 146, 60, 0.35);
+  color: #fdba74;
+}
+
+/* Teal success note (colorblind-safe positive: teal, never green). */
+.aegis-success-note {
+  background: #ccfbf1;
+  border: 1px solid #99f6e4;
+  border-radius: 6px;
+  padding: 8px 14px;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+:root[data-theme="dark"] .aegis-success-note {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: rgba(45, 212, 191, 0.35);
+  color: #5eead4;
+}
+
+/* ── Sub-form inside a section (e.g. "Invite an uploader") ───────────── */
+
+.aegis-subform {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--aegis-border);
+}
+
+.aegis-subform h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.aegis-subform .aegis-form-row {
+  margin-bottom: 10px;
+}
+
+.aegis-subform .aegis-form-row select {
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--aegis-border);
+  border-radius: 6px;
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
+  max-width: 220px;
+}
+
+/* Inline notes (success/warning) rendered above a sub-form. */
+.aegis-note-block {
+  margin: 0 0 12px;
+}
+
+/* Readonly value + copy button row (e.g. invite redeem link). */
+.aegis-copy-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: stretch;
+}
+
+.aegis-copy-row .aegis-form-row {
+  flex: 1;
+}
+
+/* Compact button for table row actions. */
+.aegis-btn-compact {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* ── Home page cards ─────────────────────────────────────────────────── */
+
+.aegis-home-greeting h1 {
+  font-size: 28px;
+  margin: 0 0 4px;
+}
+
+.aegis-home-projects {
+  margin-top: 24px;
+}
+
+.aegis-home-projects h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.aegis-card-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.aegis-card {
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
+  border-radius: 12px;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.aegis-card:hover {
+  border-color: var(--aegis-link);
+  transform: translateY(-1px);
+}
+
+.aegis-card-link {
+  display: block;
+  padding: 16px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.aegis-card-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.aegis-card-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--aegis-muted);
+}
+
+.aegis-card-desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--aegis-muted);
+}
+
+.aegis-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Outline variant — pending/not-yet-active states on the teal axis. */
+.aegis-pill-outline {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--aegis-link);
+  color: var(--aegis-link-hover);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Section / table / defs ──────────────────────────────────────────── */
+
+.aegis-section {
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.aegis-section h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.aegis-section-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.aegis-filter {
+  padding: 6px 10px;
+  border: 1px solid var(--aegis-border);
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 220px;
+}
+
+.aegis-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.aegis-table thead th {
+  text-align: left;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--aegis-border);
+  color: var(--aegis-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.aegis-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--aegis-border);
+}
+
+.aegis-table tbody tr:hover {
+  background: var(--aegis-bg);
+}
+
+.aegis-table a {
+  color: var(--aegis-link);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.aegis-table a:hover {
+  color: var(--aegis-link-hover);
+  text-decoration: underline;
+}
+
+.aegis-defs {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.aegis-defs dt {
+  color: var(--aegis-muted);
+  font-size: 13px;
+}
+
+.aegis-defs dd {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* ── Section controls (filters, sort selectors) ──────────────────────── */
+
+.aegis-section-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.aegis-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aegis-control-label {
+  font-size: 12px;
+  color: var(--aegis-muted);
+}
+
+.aegis-control select {
+  padding: 5px 8px;
+  font-size: 13px;
+  border: 1px solid var(--aegis-border);
+  border-radius: 6px;
+  background: var(--aegis-surface);
+  color: var(--aegis-text);
+}
+
+.aegis-icon-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--aegis-text);
+}
+
+.aegis-icon-btn:hover {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+}
+
+/* ── Filter chips (modality, etc.) ───────────────────────────────────── */
+
+.aegis-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--aegis-border);
+}
+
+.aegis-chip-row-label {
+  font-size: 12px;
+  color: var(--aegis-muted);
+  margin-right: 4px;
+}
+
+.aegis-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--aegis-bg);
+  border: 1px solid var(--aegis-border);
+  color: var(--aegis-text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.aegis-chip:hover {
+  border-color: var(--aegis-link);
+}
+
+.aegis-chip-active {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+  border-color: var(--aegis-link);
+}
+
+.aegis-chip-clear {
+  padding: 4px 8px;
+  background: none;
+  border: 0;
+  font-size: 12px;
+  color: var(--aegis-muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.aegis-chip-clear:hover {
+  color: var(--aegis-link-hover);
+}
+
+/* ── Pipeline stage indicators ───────────────────────────────────────── */
+/*
+ * Glyph + color combo gives both color-vision-typical users a visual cue
+ * and colorblind users a recognizable shape. Palette stays on the
+ * project's teal/orange axis — never red/green.
+ */
+
+.aegis-stage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.aegis-stage-na {
+  color: var(--aegis-border);
+  font-weight: 400;
+}
+
+.aegis-stage-pending {
+  background: var(--aegis-bg);
+  color: var(--aegis-muted);
+  border: 1px solid var(--aegis-border);
+}
+
+.aegis-stage-running {
+  background: #fef3c7;
+  color: #a16207;
+  border: 1px solid #fde68a;
+}
+
+.aegis-stage-complete {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+  border: 1px solid var(--aegis-link);
+}
+
+.aegis-stage-partial {
+  background: #fef3c7;
+  color: #a16207;
+  border: 1px solid #d97706;
+}
+
+.aegis-stage-failed {
+  background: var(--aegis-error-bg);
+  color: var(--aegis-error-text);
+  border: 1px solid #ea580c;
+}
+
+/* ── Study status pill ───────────────────────────────────────────────── */
+
+.aegis-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.aegis-status-default {
+  background: var(--aegis-bg);
+  color: var(--aegis-muted);
+  border: 1px solid var(--aegis-border);
+}
+
+.aegis-status-active {
+  background: #fef3c7;
+  color: #a16207;
+}
+
+.aegis-status-approved {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+}
+
+.aegis-status-rejected {
+  background: var(--aegis-error-bg);
+  color: var(--aegis-error-text);
+}
+
+/* ── Table tweaks for dense subject pages ────────────────────────────── */
+
+.aegis-table-wrap {
+  overflow-x: auto;
+}
+
+.aegis-cell-truncate {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aegis-code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  background: var(--aegis-bg);
+  border-radius: 4px;
+}
+
+/* ── Buttons (primary / secondary) ────────────────────────────────────── */
+
+.aegis-btn-primary,
+.aegis-btn-secondary {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.aegis-btn-primary {
+  background: var(--aegis-link);
+  color: #ffffff;
+}
+
+.aegis-btn-primary:hover:not(:disabled) {
+  background: var(--aegis-link-hover);
+}
+
+.aegis-btn-primary:disabled {
+  background: var(--aegis-border);
+  color: var(--aegis-muted);
+  cursor: not-allowed;
+}
+
+.aegis-btn-secondary {
+  background: var(--aegis-surface);
+  color: var(--aegis-text);
+  border-color: var(--aegis-border);
+}
+
+.aegis-btn-secondary:hover:not(:disabled) {
+  border-color: var(--aegis-link);
+  color: var(--aegis-link-hover);
+}
+
+.aegis-btn-secondary:disabled {
+  color: var(--aegis-muted);
+  cursor: not-allowed;
+}
+
+/* ── New project form (inline on HomePage) ────────────────────────────── */
+
+.aegis-new-project {
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
+  border-radius: 10px;
+  padding: 20px;
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+}
+
+.aegis-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aegis-form-row label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--aegis-text);
+}
+
+.aegis-form-row input,
+.aegis-form-row textarea {
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--aegis-border);
+  border-radius: 6px;
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
+  font-family: inherit;
+}
+
+.aegis-form-row textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.aegis-form-row input:focus,
+.aegis-form-row textarea:focus {
+  outline: 2px solid var(--aegis-link);
+  outline-offset: -1px;
+}
+
+.aegis-form-hint {
+  font-size: 12px;
+  color: var(--aegis-muted);
+  margin-top: 2px;
+}
+
+.aegis-form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Dark theme overrides ────────────────────────────────────────────── */
+/*
+ * The admin dashboard sets `data-theme="dark"` on documentElement when dark
+ * mode is active (see the darkMode useEffect in App.tsx). Mirror that toggle
+ * for the aegis-* variable set so the new chrome adapts. Teal stays teal in
+ * dark mode (brighter for AA contrast on dark surfaces); orange stays orange.
+ */
+
+:root[data-theme="dark"] {
+  --aegis-bg: #0f172a;
+  --aegis-surface: #1e293b;
+  --aegis-border: #334155;
+  --aegis-text: #f1f5f9;
+  --aegis-muted: #94a3b8;
+  --aegis-link: #2dd4bf;
+  --aegis-link-hover: #5eead4;
+  --aegis-active-bg: rgba(45, 212, 191, 0.18);
+  --aegis-error-bg: rgba(234, 88, 12, 0.18);
+  --aegis-error-text: #fed7aa;
+}
+
+/* ── Page header strip (used on every admin tab + per-project pages) ── */
+
+.aegis-page-header {
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--aegis-border);
+}
+
+.aegis-page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.aegis-page-description {
+  margin: 4px 0 0;
+  color: var(--aegis-muted);
+  font-size: 13px;
+  max-width: 720px;
+  line-height: 1.5;
+}
+
+.aegis-page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ── Admin body: sidebar + content grid ──────────────────────────────── */
+/*
+ * Admin breaks out of the centered aegis-main column — research-grade tables
+ * need horizontal room. The grid is a sidebar (fixed) + a fluid content
+ * region. When collapsed, the sidebar shrinks to icon-only.
+ */
+
+.aegis-admin-body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: stretch;
+  min-height: calc(100vh - 95px);
+  background: var(--aegis-bg);
+}
+
+.aegis-admin-body.aegis-admin-body--collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.aegis-admin-content {
+  padding: 22px 28px 40px;
+  min-width: 0;
+}
+
+/* ── Sidebar nav ─────────────────────────────────────────────────────── */
+
+.aegis-sidenav {
+  background: var(--aegis-surface);
+  border-right: 1px solid var(--aegis-border);
+  position: sticky;
+  top: 53px;
+  align-self: start;
+  height: calc(100vh - 53px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 8px 16px;
+  gap: 4px;
+}
+
+/* Mobile sidebar: turn it into a slide-in drawer (hidden by default,
+   pushed in only when DashboardLayout sets --mobile-nav-open). Placed
+   AFTER the desktop .aegis-sidenav rule so source-order tie-breaks
+   favor the mobile override at equal specificity. The previous
+   placement (above the base rule) silently lost on every selector,
+   leaving the sidebar in desktop sticky mode on mobile and taking
+   up grid space below the topbar — which the user saw as a big
+   empty block above the content. */
+@media (max-width: 768px) {
+  .aegis-admin-body,
+  .aegis-admin-body.aegis-admin-body--collapsed {
+    grid-template-columns: 1fr;
+  }
+  .aegis-sidenav {
+    position: fixed;
+    inset: 53px 0 0 0;
+    z-index: 15;
+    width: 80vw;
+    max-width: 320px;
+    border-right: 1px solid var(--aegis-border);
+    /* The floating "✕ Close" toggle is at top: 60px (just below the
+       53px topbar). Without extra padding, the first sidebar group
+       label and its first item (Workspace > Home) get covered by
+       the Close button when the drawer is open. 56px pushes the
+       group label below the Close button's bottom edge. */
+    padding-top: 56px;
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+  }
+  .aegis-admin-body--mobile-nav-open .aegis-sidenav {
+    transform: translateX(0);
+  }
+}
+
+.aegis-sidenav-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--aegis-border);
+  padding-bottom: 10px;
+}
+
+.aegis-sidenav-search {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--aegis-muted);
+  background: var(--aegis-bg);
+  border: 1px solid var(--aegis-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.aegis-sidenav-search:hover {
+  border-color: var(--aegis-link);
+  color: var(--aegis-text);
+}
+
+.aegis-sidenav-search kbd {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--aegis-surface);
+  border: 1px solid var(--aegis-border);
+  border-radius: 3px;
+}
+
+.aegis-sidenav-iconbtn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--aegis-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.aegis-sidenav-iconbtn:hover {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+}
+
+.aegis-sidenav-group {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.aegis-sidenav-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--aegis-muted);
+  padding: 6px 10px 4px;
+  font-weight: 600;
+}
+
+.aegis-sidenav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  margin: 0 2px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--aegis-text);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  width: calc(100% - 4px);
+  position: relative;
+  /* iOS Safari fires a "click" 300ms after touchend by default. During
+     that window the tap state is held and a second tap can get
+     suppressed — contributed to "links die after one navigation" in
+     the mobile drawer. manipulation = pan + pinch-zoom only, no
+     double-tap-zoom, no synthetic delay. */
+  touch-action: manipulation;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+/*
+ * Hover and active states need to look distinct so the user can tell which
+ * tab they're ON versus which they're about to click. Hover gets a paler
+ * neutral wash; active gets the saturated teal tint + bold label + the
+ * left accent stripe rendered by the ::before below.
+ */
+
+.aegis-sidenav-item:hover {
+  background: var(--aegis-bg);
+  color: var(--aegis-text);
+}
+
+.aegis-sidenav-item--active,
+.aegis-sidenav-item--active:hover {
+  background: var(--aegis-active-bg);
+  color: var(--aegis-link-hover);
+  font-weight: 600;
+}
+
+.aegis-sidenav-item--active::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--aegis-link);
+  border-radius: 2px;
+}
+
+.aegis-sidenav-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.aegis-sidenav-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aegis-sidenav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--aegis-error-bg);
+  color: var(--aegis-error-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.aegis-admin-body--collapsed .aegis-sidenav-label,
+.aegis-admin-body--collapsed .aegis-sidenav-group-label,
+.aegis-admin-body--collapsed .aegis-sidenav-footer,
+.aegis-admin-body--collapsed .aegis-sidenav-search span,
+.aegis-admin-body--collapsed .aegis-sidenav-search kbd {
+  display: none;
+}
+
+.aegis-admin-body--collapsed .aegis-sidenav-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.aegis-admin-body--collapsed .aegis-sidenav-search {
+  justify-content: center;
+  padding: 6px;
+}
+
+.aegis-admin-body--collapsed .aegis-sidenav-item {
+  justify-content: center;
+  padding: 8px 6px;
+}
+
+.aegis-admin-body--collapsed .aegis-sidenav-item--active::before {
+  left: 0;
+}
+
+.aegis-admin-body--collapsed .aegis-sidenav-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  font-size: 9px;
+  padding: 0 3px;
+}
+
+/* ── Sidebar footer ──────────────────────────────────────────────────── */
+
+.aegis-sidenav-footer {
+  margin-top: auto;
+  padding: 12px 6px 4px;
+  border-top: 1px solid var(--aegis-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.aegis-sidenav-footer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aegis-sidenav-footer-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--aegis-muted);
+  font-weight: 600;
+  padding-left: 4px;
+}
+
+.aegis-sidenav-footer select,
+.aegis-sidenav-footer input[type="text"] {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 12.5px;
+  border: 1px solid var(--aegis-border);
+  border-radius: 6px;
+  background: var(--aegis-surface);
+  color: var(--aegis-text);
+}
+
+.aegis-sidenav-footer-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--aegis-bg);
+  border: 1px solid var(--aegis-border);
+  color: var(--aegis-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.aegis-sidenav-overlay {
+  position: fixed;
+  inset: 53px 0 0 0;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 14;
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .aegis-admin-body--mobile-nav-open .aegis-sidenav-overlay {
+    display: block;
+  }
+}
+
+/* Hamburger toggle — hidden on desktop, fixed-positioned on mobile so it
+   stays reachable as the user scrolls the content area. Pinned to the
+   top-left corner just below the topbar. */
+.aegis-mobile-nav-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .aegis-mobile-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: fixed;
+    top: 60px;
+    left: 12px;
+    z-index: 16;
+    padding: 8px 12px;
+    font-size: 16px;
+    line-height: 1;
+    background: var(--aegis-surface);
+    color: var(--aegis-text);
+    border: 1px solid var(--aegis-border);
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+  }
+  .aegis-mobile-nav-toggle-label {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  /* Push content down a touch so the fixed hamburger doesn't sit on top
+     of the first row of body content. Also tighten horizontal padding
+     so cards have breathing room at iPhone widths. */
+  .aegis-admin-content {
+    padding: 56px 14px 32px;
+  }
+}

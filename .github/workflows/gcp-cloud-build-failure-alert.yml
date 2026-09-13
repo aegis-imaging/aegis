@@ -1,0 +1,139 @@
+name: GCP Cloud Build Failure Alert
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      lookback_minutes:
+        description: "How far back to check for failed Cloud Build runs"
+        required: false
+        default: "60"
+        type: string
+      fail_on_detection:
+        description: "Fail this workflow when one or more failed builds are detected"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  alert:
+    name: Alert on recent Cloud Build failures
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ secrets['GCP_PROJECT_ID'] }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets['GCP_WORKLOAD_IDENTITY_PROVIDER'] }}
+      GCP_SERVICE_ACCOUNT: ${{ secrets['GCP_SERVICE_ACCOUNT'] }}
+      INPUT_LOOKBACK_MINUTES: ${{ github.event.inputs.lookback_minutes }}
+      INPUT_FAIL_ON_DETECTION: ${{ github.event.inputs.fail_on_detection }}
+
+    steps:
+      - name: Resolve check parameters
+        id: cfg
+        run: |
+          set -euo pipefail
+
+          LOOKBACK="${INPUT_LOOKBACK_MINUTES:-}"
+          if [ -z "${LOOKBACK}" ]; then
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              LOOKBACK="30"
+            else
+              LOOKBACK="60"
+            fi
+          fi
+
+          if ! [[ "${LOOKBACK}" =~ ^[0-9]+$ ]]; then
+            echo "lookback_minutes must be a non-negative integer, got: ${LOOKBACK}" >&2
+            exit 1
+          fi
+
+          FAIL_ON_DETECTION="${INPUT_FAIL_ON_DETECTION:-true}"
+          if [ -z "${FAIL_ON_DETECTION}" ]; then
+            FAIL_ON_DETECTION="true"
+          fi
+
+          echo "lookback=${LOOKBACK}" >> "$GITHUB_OUTPUT"
+          echo "fail_on_detection=${FAIL_ON_DETECTION}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate required GCP secrets
+        id: validate
+        run: |
+          set -euo pipefail
+
+          missing=()
+          [[ -n "${GCP_PROJECT_ID:-}" ]] || missing+=("GCP_PROJECT_ID (repo secret)")
+          [[ -n "${GCP_WORKLOAD_IDENTITY_PROVIDER:-}" ]] || missing+=("GCP_WORKLOAD_IDENTITY_PROVIDER (repo secret)")
+          [[ -n "${GCP_SERVICE_ACCOUNT:-}" ]] || missing+=("GCP_SERVICE_ACCOUNT (repo secret)")
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            {
+              echo "## GCP Cloud Build failure check skipped"
+              echo ""
+              echo "Missing GitHub Actions repo secrets:"
+              printf -- '- %s\n' "${missing[@]}"
+              echo ""
+              echo "Set these secrets to enable OIDC auth for Cloud Build inspection."
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Cloud (OIDC)
+        if: steps.validate.outputs.ready == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+
+      - name: Setup gcloud
+        if: steps.validate.outputs.ready == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Detect recent failed Cloud Build runs
+        if: steps.validate.outputs.ready == 'true'
+        id: detect
+        run: |
+          set -euo pipefail
+
+          LOOKBACK="${{ steps.cfg.outputs.lookback }}"
+          SINCE_UTC="$(date -u -d "-${LOOKBACK} minutes" +"%Y-%m-%dT%H:%M:%SZ")"
+
+          gcloud builds list \
+            --project "${GCP_PROJECT_ID}" \
+            --filter="createTime>=\"${SINCE_UTC}\" AND (status=FAILURE OR status=INTERNAL_ERROR OR status=TIMEOUT OR status=CANCELLED)" \
+            --sort-by="~createTime" \
+            --format=json > failed_builds.json
+
+          FAIL_COUNT="$(jq 'length' failed_builds.json)"
+          echo "count=${FAIL_COUNT}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## GCP Cloud Build failure check"
+            echo ""
+            echo "- Project: \`${GCP_PROJECT_ID}\`"
+            echo "- Lookback window: last \`${LOOKBACK}\` minutes"
+            echo "- Failed builds detected: \`${FAIL_COUNT}\`"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${FAIL_COUNT}" -eq 0 ]; then
+            echo "No failed Cloud Build runs detected in the current lookback window." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "### Failed builds" >> "$GITHUB_STEP_SUMMARY"
+          jq -r --arg p "${GCP_PROJECT_ID}" '.[:10][] | "- `\(.createTime)` | status=\(.status) | id=\(.id) | trigger=\((.substitutions.TRIGGER_NAME // .buildTriggerId // \"manual\")) | https://console.cloud.google.com/cloud-build/builds/\(.id)?project=\($p)"' failed_builds.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail workflow on detection
+        if: steps.validate.outputs.ready == 'true' && steps.detect.outputs.count != '0' && steps.cfg.outputs.fail_on_detection != 'false'
+        run: |
+          echo "One or more failed Cloud Build runs were detected in the lookback window." >&2
+          exit 1

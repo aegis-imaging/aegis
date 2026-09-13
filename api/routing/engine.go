@@ -216,6 +216,48 @@ func applyRule(ctx context.Context, db *sql.DB, store storage.Storage, r *model.
 			outcome = "export_required already true (no-op)"
 		}
 
+	case "require_pixel_redaction":
+		if !s.PixelRedactionRequired {
+			s.PixelRedactionRequired = true
+			s.PixelRedactionStatus = "pending"
+			if err := model.SetPixelRedactionRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set pixel_redaction_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "pixel_redaction_required set to true"
+			}
+		} else {
+			outcome = "pixel_redaction_required already true (no-op)"
+		}
+
+	case "require_analytics":
+		if !s.AnalyticsRequired {
+			s.AnalyticsRequired = true
+			s.AnalyticsStatus = "pending"
+			if err := model.SetAnalyticsRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set analytics_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "analytics_required set to true"
+			}
+		} else {
+			outcome = "analytics_required already true (no-op)"
+		}
+
+	case "require_sct":
+		if !s.SctRequired {
+			s.SctRequired = true
+			s.SctStatus = "pending"
+			if err := model.SetSctRequired(ctx, db, s.ID, true); err != nil {
+				log.Printf("routing: set sct_required (study=%s rule=%s): %v", s.ID, r.ID, err)
+				outcome = "error: " + err.Error()
+			} else {
+				outcome = "sct_required set to true"
+			}
+		} else {
+			outcome = "sct_required already true (no-op)"
+		}
+
 	case "route_to":
 		if r.DestinationID == nil {
 			outcome = "error: route_to rule has no destination_id"

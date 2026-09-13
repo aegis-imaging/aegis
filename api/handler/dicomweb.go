@@ -39,22 +39,35 @@ func dicomTagPN(name string) map[string]any {
 	return map[string]any{"vr": "PN", "Value": []any{map[string]any{"Alphabetic": name}}}
 }
 
+// derefOr returns *p when non-nil, otherwise fallback. Helper for emitting
+// optional string columns (subject_id, study_date, etc.) into DICOMweb tag
+// payloads where a missing value should serialize as an empty tag.
+func derefOr(p *string, fallback string) string {
+	if p == nil {
+		return fallback
+	}
+	return *p
+}
+
 // studyQIDO converts a Study to a DICOMweb QIDO-RS JSON object.
 // All patient-identifying fields are omitted — only anonymized UIDs and counts.
+// PatientID emits the stored anonymized identifier (e.g. SUBJ-a1b2c3d4) when
+// known so DICOMweb viewers and downstream consumers can show a stable subject
+// label without exposing PHI.
 func studyQIDO(s model.Study) map[string]any {
 	return map[string]any{
-		"0020000D": dicomTag("UI", s.StudyInstanceUID),   // StudyInstanceUID
-		"00080020": dicomTag("DA", ""),                   // StudyDate — anonymized
-		"00080030": dicomTag("TM", ""),                   // StudyTime — anonymized
-		"00080050": dicomTag("SH", ""),                   // AccessionNumber — anonymized
-		"00100010": dicomTagPN(""),                       // PatientName — anonymized
-		"00100020": dicomTag("LO", ""),                   // PatientID — anonymized
-		"00080060": dicomTag("CS", s.Modality),           // Modality
-		"00080061": dicomTag("CS", s.Modality),           // ModalitiesInStudy
-		"00081030": dicomTag("LO", s.StudyDescription),   // StudyDescription
-		"00200010": dicomTag("SH", ""),                   // StudyID
-		"00201206": dicomTagInt("IS", 1),                 // NumberOfStudyRelatedSeries
-		"00201208": dicomTagInt("IS", s.InstanceCount),   // NumberOfStudyRelatedInstances
+		"0020000D": dicomTag("UI", s.StudyInstanceUID),               // StudyInstanceUID
+		"00080020": dicomTag("DA", derefOr(s.StudyDate, "")),         // StudyDate
+		"00080030": dicomTag("TM", ""),                               // StudyTime — anonymized
+		"00080050": dicomTag("SH", ""),                               // AccessionNumber — anonymized
+		"00100010": dicomTagPN(""),                                   // PatientName — anonymized
+		"00100020": dicomTag("LO", derefOr(s.SubjectID, "")),         // PatientID — subject identifier (pseudonymized)
+		"00080060": dicomTag("CS", s.Modality),                       // Modality
+		"00080061": dicomTag("CS", s.Modality),                       // ModalitiesInStudy
+		"00081030": dicomTag("LO", s.StudyDescription),               // StudyDescription
+		"00200010": dicomTag("SH", ""),                               // StudyID
+		"00201206": dicomTagInt("IS", 1),                             // NumberOfStudyRelatedSeries
+		"00201208": dicomTagInt("IS", s.InstanceCount),               // NumberOfStudyRelatedInstances
 	}
 }
 

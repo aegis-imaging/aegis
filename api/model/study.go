@@ -8,53 +8,71 @@ import (
 )
 
 type Study struct {
-	ID               string    `json:"id"`
-	ProjectID        string    `json:"project_id"`
-	UploadSessionID  *string   `json:"upload_session_id,omitempty"`
-	InstitutionID    *string   `json:"institution_id,omitempty"`
-	StudyInstanceUID string    `json:"study_instance_uid"`
-	Modality         string    `json:"modality"`
-	BodyPart         string    `json:"body_part"`
-	StudyDescription string    `json:"study_description"`
-	SeriesCount      int       `json:"series_count"`
-	InstanceCount    int       `json:"instance_count"`
-	Status           string    `json:"status"`
-	DefacingRequired bool      `json:"defacing_required"`
-	DicomStore       string    `json:"dicom_store"`
-	Source           string    `json:"source"`
-	PhiScanRequired  bool      `json:"phi_scan_required"`
-	PhiScanStatus    string    `json:"phi_scan_status"`
-	QcRequired       bool      `json:"qc_required"`
-	QcStatus         string    `json:"qc_status"`
-	BidsRequired           bool      `json:"bids_required"`
-	BidsStatus             string    `json:"bids_status"`
-	ClassificationRequired bool      `json:"classification_required"`
-	ClassificationStatus   string    `json:"classification_status"`
-	ProtocolRequired       bool      `json:"protocol_required"`
-	ProtocolStatus         string    `json:"protocol_status"`
-	ExportRequired         bool      `json:"export_required"`
-	ExportStatus           string    `json:"export_status"`
-	DefaceQaScore          *float64  `json:"deface_qa_score,omitempty"`
-	SubjectID              *string   `json:"subject_id,omitempty"`
-	RejectionReason        *string   `json:"rejection_reason,omitempty"`
-	StudySizeBytes         int64     `json:"study_size_bytes"`
-	PriorityFlag           bool      `json:"priority_flag"`
-	CreatedAt              time.Time `json:"created_at"`
-	UpdatedAt              time.Time `json:"updated_at"`
+	ID                     string     `json:"id"`
+	ProjectID              string     `json:"project_id"`
+	UploadSessionID        *string    `json:"upload_session_id,omitempty"`
+	InstitutionID          *string    `json:"institution_id,omitempty"`
+	StudyInstanceUID       string     `json:"study_instance_uid"`
+	Modality               string     `json:"modality"`
+	BodyPart               string     `json:"body_part"`
+	StudyDescription       string     `json:"study_description"`
+	StudyDate              *string    `json:"study_date,omitempty"`
+	SeriesCount            int        `json:"series_count"`
+	InstanceCount          int        `json:"instance_count"`
+	Status                 string     `json:"status"`
+	DefacingRequired       bool       `json:"defacing_required"`
+	DicomStore             string     `json:"dicom_store"`
+	Source                 string     `json:"source"`
+	PhiScanRequired        bool       `json:"phi_scan_required"`
+	PhiScanStatus          string     `json:"phi_scan_status"`
+	QcRequired             bool       `json:"qc_required"`
+	QcStatus               string     `json:"qc_status"`
+	BidsRequired           bool       `json:"bids_required"`
+	BidsStatus             string     `json:"bids_status"`
+	ClassificationRequired bool       `json:"classification_required"`
+	ClassificationStatus   string     `json:"classification_status"`
+	ProtocolRequired       bool       `json:"protocol_required"`
+	ProtocolStatus         string     `json:"protocol_status"`
+	ExportRequired         bool       `json:"export_required"`
+	ExportStatus           string     `json:"export_status"`
+	PixelRedactionRequired bool       `json:"pixel_redaction_required"`
+	PixelRedactionStatus   string     `json:"pixel_redaction_status"`
+	AnalyticsRequired      bool       `json:"analytics_required"`
+	AnalyticsStatus        string     `json:"analytics_status"`
+	SctRequired            bool       `json:"sct_required"`
+	SctStatus              string     `json:"sct_status"`
+	DefaceQaScore          *float64   `json:"deface_qa_score,omitempty"`
+	SubjectID              *string    `json:"subject_id,omitempty"`
+	RejectionReason        *string    `json:"rejection_reason,omitempty"`
+	StudySizeBytes         int64      `json:"study_size_bytes"`
+	PriorityFlag           bool       `json:"priority_flag"`
+	AssignedTo             *string    `json:"assigned_to,omitempty"`
+	AssignedAt             *time.Time `json:"assigned_at,omitempty"`
+	DeletedAt              *time.Time `json:"deleted_at,omitempty"`
+	AutoShareURL           *string    `json:"auto_share_url,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 const studyColumns = `
 	id, project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
-	study_description, series_count, instance_count, status, defacing_required,
+	study_description, study_date, series_count, instance_count, status, defacing_required,
 	dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 	bids_required, bids_status, classification_required, classification_status,
 	protocol_required, protocol_status,
 	export_required, export_status,
+	pixel_redaction_required, pixel_redaction_status,
+	analytics_required, analytics_status,
+	sct_required, sct_status,
 	deface_qa_score,
 	subject_id,
 	rejection_reason,
 	study_size_bytes,
 	priority_flag,
+	assigned_to,
+	assigned_at,
+	deleted_at,
+	auto_share_url,
 	created_at, updated_at`
 
 type scannable interface {
@@ -64,40 +82,94 @@ type scannable interface {
 func scanStudy(row scannable, s *Study) error {
 	return row.Scan(
 		&s.ID, &s.ProjectID, &s.UploadSessionID, &s.InstitutionID, &s.StudyInstanceUID,
-		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.SeriesCount, &s.InstanceCount,
+		&s.Modality, &s.BodyPart, &s.StudyDescription, &s.StudyDate, &s.SeriesCount, &s.InstanceCount,
 		&s.Status, &s.DefacingRequired, &s.DicomStore, &s.Source,
 		&s.PhiScanRequired, &s.PhiScanStatus, &s.QcRequired, &s.QcStatus,
 		&s.BidsRequired, &s.BidsStatus,
 		&s.ClassificationRequired, &s.ClassificationStatus,
 		&s.ProtocolRequired, &s.ProtocolStatus,
 		&s.ExportRequired, &s.ExportStatus,
+		&s.PixelRedactionRequired, &s.PixelRedactionStatus,
+		&s.AnalyticsRequired, &s.AnalyticsStatus,
+		&s.SctRequired, &s.SctStatus,
 		&s.DefaceQaScore,
 		&s.SubjectID,
 		&s.RejectionReason,
 		&s.StudySizeBytes,
 		&s.PriorityFlag,
+		&s.AssignedTo,
+		&s.AssignedAt,
+		&s.DeletedAt,
+		&s.AutoShareURL,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
+}
+
+// UpdateStudyDicomMetadata writes DICOM-tag-derived metadata fields onto
+// an existing study row. Used by both the ingest path (after the first
+// .dcm is stored) and the admin backfill endpoint for legacy studies that
+// pre-date the extraction step.
+//
+// Pass nil to leave a field unchanged. subject_id only overwrites a
+// NULL/empty value — researcher-edited subject_ids are never clobbered.
+//
+// The $1::text / $2::text casts are required because under Postgres's
+// extended query protocol parameters are type-inferred at PREPARE time
+// (before any value is bound). When the orphan-seed path passes a nil
+// study_date, $2 has no anchor (the empty-string literal `''` it would
+// otherwise compare against is type `unknown`), so Postgres bails out
+// with SQLSTATE 42P08 "cannot determine data type of parameter". The
+// explicit casts give every reference a concrete type up front.
+//
+// Distinct from UpdateStudyMetadata, which the classification service
+// uses to update modality/body_part after model inference.
+func UpdateStudyDicomMetadata(ctx context.Context, db *sql.DB, studyID string, subjectID, studyDate *string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies
+		SET study_date = COALESCE($2::text, study_date),
+		    subject_id = CASE
+		                     WHEN (subject_id IS NULL OR subject_id = '')
+		                          AND $1::text IS NOT NULL AND $1::text <> ''
+		                     THEN $1::text
+		                     ELSE subject_id
+		                 END,
+		    updated_at = now()
+		WHERE id = $3`,
+		subjectID, studyDate, studyID)
+	return err
+}
+
+func SetStudyAutoShareURL(ctx context.Context, db *sql.DB, studyID, url string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE studies SET auto_share_url = $1, updated_at = now() WHERE id = $2`,
+		url, studyID)
+	return err
 }
 
 func CreateStudy(ctx context.Context, db *sql.DB, s *Study) error {
 	return db.QueryRowContext(ctx, `
 		INSERT INTO studies (project_id, upload_session_id, institution_id, study_instance_uid, modality, body_part,
-		                     study_description, series_count, instance_count, status, defacing_required,
+		                     study_description, study_date, subject_id, series_count, instance_count, status, defacing_required,
 		                     dicom_store, source, phi_scan_required, phi_scan_status, qc_required, qc_status,
 		                     bids_required, bids_status,
 		                     classification_required, classification_status,
 		                     protocol_required, protocol_status,
-		                     export_required, export_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+		                     export_required, export_status,
+		                     pixel_redaction_required, pixel_redaction_status,
+		                     analytics_required, analytics_status,
+		                     sct_required, sct_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
 		RETURNING id, created_at, updated_at`,
 		s.ProjectID, s.UploadSessionID, s.InstitutionID, s.StudyInstanceUID, s.Modality, s.BodyPart,
-		s.StudyDescription, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
+		s.StudyDescription, s.StudyDate, s.SubjectID, s.SeriesCount, s.InstanceCount, s.Status, s.DefacingRequired,
 		s.DicomStore, s.Source, s.PhiScanRequired, s.PhiScanStatus, s.QcRequired, s.QcStatus,
 		s.BidsRequired, s.BidsStatus,
 		s.ClassificationRequired, s.ClassificationStatus,
 		s.ProtocolRequired, s.ProtocolStatus,
-		s.ExportRequired, s.ExportStatus).
+		s.ExportRequired, s.ExportStatus,
+		s.PixelRedactionRequired, s.PixelRedactionStatus,
+		s.AnalyticsRequired, s.AnalyticsStatus,
+		s.SctRequired, s.SctStatus).
 		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
 }
 
@@ -123,21 +195,29 @@ func GetStudyByUID(ctx context.Context, db *sql.DB, uid string) (*Study, error) 
 
 // StudyFilters holds optional filter values for ListStudies / CountStudies.
 type StudyFilters struct {
-	ProjectID string
-	Status    string    // received|defacing|clean|defaced|approved|rejected
-	Modality  string    // MRI|CT|PET|… (case-insensitive exact match)
-	BodyPart  string    // HEAD|CHEST|… (case-insensitive exact match)
-	Source    string    // external|internal
-	Search    string    // substring match on study_instance_uid or study_description
-	SubjectID string    // exact match on subject_id
-	Label     string    // substring match on any study_labels.label value (case-insensitive)
-	DateFrom  time.Time // created_at >= DateFrom (zero = no lower bound)
-	DateTo    time.Time // created_at <= DateTo   (zero = no upper bound)
-	Flagged   *bool     // if non-nil, filter by priority_flag value
+	ProjectID     string
+	TenantID      string    // when non-empty, restrict to studies whose project belongs to this tenant (via JOIN through projects.tenant_id)
+	Status        string    // received|defacing|clean|defaced|approved|rejected
+	Modality      string    // MRI|CT|PET|… (case-insensitive exact match)
+	BodyPart      string    // HEAD|CHEST|… (case-insensitive exact match)
+	Source        string    // external|internal
+	Search        string    // substring match on study_instance_uid or study_description
+	SubjectID     string    // exact match on subject_id
+	Label         string    // substring match on any study_labels.label value (case-insensitive)
+	InstitutionID string    // exact match on institution_id (UUID)
+	DateFrom      time.Time // created_at >= DateFrom (zero = no lower bound)
+	DateTo        time.Time // created_at <= DateTo   (zero = no upper bound)
+	StudyDateFrom string    // study_date >= StudyDateFrom (YYYYMMDD, empty = no lower bound)
+	StudyDateTo   string    // study_date <= StudyDateTo   (YYYYMMDD, empty = no upper bound)
+	Flagged       *bool     // if non-nil, filter by priority_flag value
+	AssignedTo    string    // exact match on assigned_to UUID
+	SortBy        string    // created_at|updated_at|status|modality|body_part|source|instance_count|study_date (default: created_at)
+	SortDir       string    // asc|desc (default: desc)
 }
 
 func studyWhere(f StudyFilters) (string, []any) {
-	var clauses []string
+	// Always exclude soft-deleted studies from normal listings.
+	clauses := []string{"deleted_at IS NULL"}
 	var args []any
 	n := 1
 
@@ -183,6 +263,11 @@ func studyWhere(f StudyFilters) (string, []any) {
 		args = append(args, "%"+f.Label+"%")
 		n++
 	}
+	if f.InstitutionID != "" {
+		clauses = append(clauses, fmt.Sprintf(`institution_id = $%d`, n))
+		args = append(args, f.InstitutionID)
+		n++
+	}
 	if !f.DateFrom.IsZero() {
 		clauses = append(clauses, fmt.Sprintf(`created_at >= $%d`, n))
 		args = append(args, f.DateFrom.UTC())
@@ -193,9 +278,33 @@ func studyWhere(f StudyFilters) (string, []any) {
 		args = append(args, f.DateTo.UTC())
 		n++
 	}
+	if f.StudyDateFrom != "" {
+		clauses = append(clauses, fmt.Sprintf(`study_date >= $%d`, n))
+		args = append(args, f.StudyDateFrom)
+		n++
+	}
+	if f.StudyDateTo != "" {
+		clauses = append(clauses, fmt.Sprintf(`study_date <= $%d`, n))
+		args = append(args, f.StudyDateTo)
+		n++
+	}
 	if f.Flagged != nil {
 		clauses = append(clauses, fmt.Sprintf(`priority_flag = $%d`, n))
 		args = append(args, *f.Flagged)
+		n++
+	}
+	if f.AssignedTo != "" {
+		clauses = append(clauses, fmt.Sprintf(`assigned_to = $%d`, n))
+		args = append(args, f.AssignedTo)
+		n++
+	}
+	if f.TenantID != "" {
+		// Studies inherit their tenant from the parent project; we filter via
+		// a sub-select rather than a JOIN so the rest of the query (sort, count,
+		// pagination) keeps using the simple `FROM studies` form.
+		clauses = append(clauses, fmt.Sprintf(
+			`project_id IN (SELECT id FROM projects WHERE tenant_id = $%d)`, n))
+		args = append(args, f.TenantID)
 		n++
 	}
 	_ = n
@@ -210,11 +319,33 @@ func studyWhere(f StudyFilters) (string, []any) {
 	return where, args
 }
 
+// allowedStudySortCols maps safe sort_by values to their SQL column names.
+var allowedStudySortCols = map[string]string{
+	"created_at":      "created_at",
+	"updated_at":      "updated_at",
+	"status":          "status",
+	"modality":        "modality",
+	"body_part":       "body_part",
+	"source":          "source",
+	"instance_count":  "instance_count",
+	"assigned_at":     "assigned_at",
+	"study_date":      "study_date",
+	"subject_id":      "subject_id",
+}
+
 func ListStudies(ctx context.Context, db *sql.DB, f StudyFilters, limit, offset int) ([]Study, error) {
 	where, args := studyWhere(f)
 	argN := len(args) + 1
 
-	query := `SELECT` + studyColumns + ` FROM studies` + where + ` ORDER BY created_at DESC`
+	sortCol := "created_at"
+	if col, ok := allowedStudySortCols[f.SortBy]; ok {
+		sortCol = col
+	}
+	sortDir := "DESC"
+	if f.SortDir == "asc" {
+		sortDir = "ASC"
+	}
+	query := `SELECT` + studyColumns + ` FROM studies` + where + ` ORDER BY ` + sortCol + ` ` + sortDir
 
 	if limit > 0 {
 		query += fmt.Sprintf(` LIMIT $%d`, argN)
@@ -293,6 +424,22 @@ func SetDefacingRequired(ctx context.Context, db *sql.DB, id string, required bo
 	return err
 }
 
+// AssignStudy assigns a study to an admin user for review.
+func AssignStudy(ctx context.Context, db *sql.DB, studyID, userID string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET assigned_to = $1, assigned_at = now(), updated_at = now()
+		WHERE id = $2`, userID, studyID)
+	return err
+}
+
+// UnassignStudy removes the assignment from a study.
+func UnassignStudy(ctx context.Context, db *sql.DB, studyID string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET assigned_to = NULL, assigned_at = NULL, updated_at = now()
+		WHERE id = $1`, studyID)
+	return err
+}
+
 // SetPriorityFlag sets or clears the priority_flag on a study for high-priority triage.
 func SetPriorityFlag(ctx context.Context, db *sql.DB, id string, flagged bool) error {
 	_, err := db.ExecContext(ctx, `
@@ -358,6 +505,60 @@ func ListSubjects(ctx context.Context, db *sql.DB, projectID string) ([]SubjectS
 	for rows.Next() {
 		var s SubjectSummary
 		if err := rows.Scan(&s.SubjectID, &s.ProjectID, &s.StudyCount); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// StudyStub is a lightweight study reference for cross-study queries.
+type StudyStub struct {
+	ID               string  `json:"id"`
+	StudyInstanceUID string  `json:"study_instance_uid"`
+	SubjectID        *string `json:"subject_id,omitempty"`
+	StudyDate        *string `json:"study_date,omitempty"`
+}
+
+// ListStudiesBySubject returns study stubs for a subject, optionally filtered by project.
+func ListStudiesBySubject(ctx context.Context, db *sql.DB, subjectID, projectID string) ([]StudyStub, error) {
+	q := `SELECT id, study_instance_uid, subject_id, study_date FROM studies WHERE subject_id = $1`
+	args := []any{subjectID}
+	if projectID != "" {
+		q += ` AND project_id = $2`
+		args = append(args, projectID)
+	}
+	q += ` ORDER BY created_at`
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StudyStub
+	for rows.Next() {
+		var s StudyStub
+		if err := rows.Scan(&s.ID, &s.StudyInstanceUID, &s.SubjectID, &s.StudyDate); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// ListStudiesByProject returns study stubs for a project.
+func ListStudiesByProject(ctx context.Context, db *sql.DB, projectID string) ([]StudyStub, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, study_instance_uid, subject_id, study_date
+		FROM studies WHERE project_id = $1
+		ORDER BY created_at`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StudyStub
+	for rows.Next() {
+		var s StudyStub
+		if err := rows.Scan(&s.ID, &s.StudyInstanceUID, &s.SubjectID, &s.StudyDate); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -583,15 +784,111 @@ func ClaimExport(ctx context.Context, db *sql.DB, id string) (bool, error) {
 	return n > 0, nil
 }
 
+// SetPixelRedactionRequired sets the pixel_redaction_required flag and initialises pixel_redaction_status to "pending".
+func SetPixelRedactionRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET pixel_redaction_required = $1, pixel_redaction_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdatePixelRedactionStatus sets the pixel_redaction_status field on a study.
+func UpdatePixelRedactionStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET pixel_redaction_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// ClaimPixelRedaction atomically claims pixel redaction dispatch.
+func ClaimPixelRedaction(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET pixel_redaction_status = 'redacting', updated_at = now()
+		WHERE id = $1 AND pixel_redaction_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// SetAnalyticsRequired sets the analytics_required flag and initialises analytics_status to "pending".
+func SetAnalyticsRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET analytics_required = $1, analytics_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdateAnalyticsStatus sets the analytics_status field on a study.
+func UpdateAnalyticsStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET analytics_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// ClaimAnalytics atomically claims analytics dispatch.
+func ClaimAnalytics(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET analytics_status = 'analyzing', updated_at = now()
+		WHERE id = $1 AND analytics_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// SetSctRequired sets the sct_required flag and initialises sct_status to "pending".
+func SetSctRequired(ctx context.Context, db *sql.DB, id string, required bool) error {
+	status := ""
+	if required {
+		status = "pending"
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET sct_required = $1, sct_status = $2, updated_at = now()
+		WHERE id = $3`, required, status, id)
+	return err
+}
+
+// UpdateSctStatus sets the sct_status field on a study.
+func UpdateSctStatus(ctx context.Context, db *sql.DB, id, status string) error {
+	_, err := db.ExecContext(ctx, `
+		UPDATE studies SET sct_status = $1, updated_at = now()
+		WHERE id = $2`, status, id)
+	return err
+}
+
+// ClaimSct atomically claims SCT dispatch.
+func ClaimSct(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET sct_status = 'analyzing', updated_at = now()
+		WHERE id = $1 AND sct_status = 'pending'`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 // StudyStatusCounts holds per-status study counts for the dashboard overview.
 type StudyStatusCounts struct {
-	Received  int `json:"received"`
-	Defacing  int `json:"defacing"`
-	Clean     int `json:"clean"`
-	Defaced   int `json:"defaced"`
-	Approved  int `json:"approved"`
-	Rejected  int `json:"rejected"`
-	Total     int `json:"total"`
+	Received int `json:"received"`
+	Defacing int `json:"defacing"`
+	Clean    int `json:"clean"`
+	Defaced  int `json:"defaced"`
+	Approved int `json:"approved"`
+	Rejected int `json:"rejected"`
+	Total    int `json:"total"`
 }
 
 // GetStudyStatusCounts returns a snapshot count of studies by status.
@@ -636,11 +933,46 @@ func GetStudyStatusCounts(ctx context.Context, db *sql.DB, projectID ...string) 
 	return c, rows.Err()
 }
 
+func GetStudyStatusCountsForScope(ctx context.Context, db *sql.DB, projectID, institutionID string) (StudyStatusCounts, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT status, count(*) FROM studies WHERE project_id = $1::uuid AND ($2 = '' OR institution_id = NULLIF($2, '')::uuid) GROUP BY status`,
+		projectID, institutionID)
+	if err != nil {
+		return StudyStatusCounts{}, err
+	}
+	defer rows.Close()
+
+	var c StudyStatusCounts
+	for rows.Next() {
+		var status string
+		var n int
+		if err := rows.Scan(&status, &n); err != nil {
+			return StudyStatusCounts{}, err
+		}
+		switch status {
+		case "received":
+			c.Received = n
+		case "defacing":
+			c.Defacing = n
+		case "clean":
+			c.Clean = n
+		case "defaced":
+			c.Defaced = n
+		case "approved":
+			c.Approved = n
+		case "rejected":
+			c.Rejected = n
+		}
+		c.Total += n
+	}
+	return c, rows.Err()
+}
+
 // BreakdownRow is one cell in the modality × body_part cross-tab.
 type BreakdownRow struct {
-	Modality  string `json:"modality"`
-	BodyPart  string `json:"body_part"`
-	Count     int    `json:"count"`
+	Modality string `json:"modality"`
+	BodyPart string `json:"body_part"`
+	Count    int    `json:"count"`
 }
 
 // GetStudyBreakdown returns study counts grouped by (modality, body_part).
@@ -658,6 +990,30 @@ func GetStudyBreakdown(ctx context.Context, db *sql.DB, projectID ...string) ([]
 		FROM studies`+where+`
 		GROUP BY modality, body_part
 		ORDER BY count(*) DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []BreakdownRow
+	for rows.Next() {
+		var r BreakdownRow
+		if err := rows.Scan(&r.Modality, &r.BodyPart, &r.Count); err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
+func GetStudyBreakdownForScope(ctx context.Context, db *sql.DB, projectID, institutionID string) ([]BreakdownRow, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT coalesce(modality, ''), coalesce(body_part, ''), count(*)
+		FROM studies
+		WHERE project_id = $1::uuid
+		  AND ($2 = '' OR institution_id = NULLIF($2, '')::uuid)
+		GROUP BY modality, body_part
+		ORDER BY count(*) DESC`, projectID, institutionID)
 	if err != nil {
 		return nil, err
 	}
@@ -708,11 +1064,48 @@ func GetStorageStats(ctx context.Context, db *sql.DB, projectID ...string) (*Sto
 	return &s, nil
 }
 
+func GetStorageStatsForScope(ctx context.Context, db *sql.DB, projectID, institutionID string) (*StorageStats, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT
+		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'raw'),   0)::int,
+		  coalesce(sum(instance_count) FILTER (WHERE dicom_store = 'clean'), 0)::int,
+		  coalesce(sum(instance_count), 0)::int,
+		  count(*)::int,
+		  coalesce(sum(study_size_bytes), 0)::bigint
+		FROM studies
+		WHERE project_id = $1::uuid
+		  AND ($2 = '' OR institution_id = NULLIF($2, '')::uuid)`, projectID, institutionID)
+	var s StorageStats
+	if err := row.Scan(&s.RawFileCount, &s.CleanFileCount, &s.TotalFileCount, &s.TotalStudies, &s.TotalSizeBytes); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 // TimelineDay holds ingestion counts for a single UTC date.
 type TimelineDay struct {
-	Date     string `json:"date"`      // YYYY-MM-DD
-	Received int    `json:"received"`  // studies created that day
-	Approved int    `json:"approved"`  // studies approved that day
+	Date     string `json:"date"`     // YYYY-MM-DD
+	Received int    `json:"received"` // studies created that day
+	Approved int    `json:"approved"` // studies approved that day
+}
+
+// InstitutionAttributionProjectRow is one project row in the attribution gap report.
+type InstitutionAttributionProjectRow struct {
+	ProjectID         string  `json:"project_id"`
+	ProjectSlug       string  `json:"project_slug"`
+	ProjectName       string  `json:"project_name"`
+	TotalStudies      int     `json:"total_studies"`
+	UnattributedCount int     `json:"unattributed_count"`
+	UnattributedPct   float64 `json:"unattributed_pct"`
+}
+
+// InstitutionAttributionStats reports missing institution attribution in restricted projects.
+type InstitutionAttributionStats struct {
+	Days              int                                `json:"days"`
+	TotalRestricted   int                                `json:"total_restricted_studies"`
+	UnattributedTotal int                                `json:"unattributed_studies"`
+	UnattributedPct   float64                            `json:"unattributed_pct"`
+	Projects          []InstitutionAttributionProjectRow `json:"projects"`
 }
 
 // GetStudyTimeline returns daily ingestion counts for the last `days` calendar days.
@@ -755,6 +1148,251 @@ func GetStudyTimeline(ctx context.Context, db *sql.DB, days int, projectID ...st
 		result = []TimelineDay{}
 	}
 	return result, rows.Err()
+}
+
+func GetStudyTimelineForScope(ctx context.Context, db *sql.DB, days int, projectID, institutionID string) ([]TimelineDay, error) {
+	if days <= 0 || days > 365 {
+		days = 30
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+		  to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+		  count(*) FILTER (WHERE status <> 'approved')  +
+		    count(*) FILTER (WHERE status = 'approved')  AS received,
+		  count(*) FILTER (WHERE status = 'approved')   AS approved
+		FROM studies
+		WHERE created_at >= now() - ($1 * INTERVAL '1 day')
+		  AND project_id = $2::uuid
+		  AND ($3 = '' OR institution_id = NULLIF($3, '')::uuid)
+		GROUP BY day
+		ORDER BY day`, days, projectID, institutionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []TimelineDay
+	for rows.Next() {
+		var d TimelineDay
+		if err := rows.Scan(&d.Date, &d.Received, &d.Approved); err != nil {
+			return nil, err
+		}
+		result = append(result, d)
+	}
+	if result == nil {
+		result = []TimelineDay{}
+	}
+	return result, rows.Err()
+}
+
+// GetInstitutionAttributionStats returns unattributed study counts (institution_id IS NULL)
+// across restricted projects for the last `days` days.
+// Optional projectID narrows to one project; optional institutionID applies site-scope filter.
+func GetInstitutionAttributionStats(ctx context.Context, db *sql.DB, days int, projectID, institutionID string) (*InstitutionAttributionStats, error) {
+	if days <= 0 || days > 365 {
+		days = 7
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT
+			s.project_id,
+			p.slug,
+			p.name,
+			count(*)::int AS total_studies,
+			count(*) FILTER (WHERE s.institution_id IS NULL)::int AS unattributed_count
+		FROM studies s
+		JOIN projects p ON p.id = s.project_id
+		WHERE p.restricted = true
+		  AND s.created_at >= now() - ($1 * INTERVAL '1 day')
+		  AND ($2 = '' OR s.project_id = $2::uuid)
+		  AND ($3 = '' OR s.institution_id = NULLIF($3, '')::uuid)
+		GROUP BY s.project_id, p.slug, p.name
+		ORDER BY unattributed_count DESC, total_studies DESC, p.name ASC`, days, projectID, institutionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := &InstitutionAttributionStats{Days: days, Projects: []InstitutionAttributionProjectRow{}}
+	for rows.Next() {
+		var row InstitutionAttributionProjectRow
+		if err := rows.Scan(&row.ProjectID, &row.ProjectSlug, &row.ProjectName, &row.TotalStudies, &row.UnattributedCount); err != nil {
+			return nil, err
+		}
+		if row.TotalStudies > 0 {
+			row.UnattributedPct = (float64(row.UnattributedCount) / float64(row.TotalStudies)) * 100
+		}
+		out.TotalRestricted += row.TotalStudies
+		out.UnattributedTotal += row.UnattributedCount
+		out.Projects = append(out.Projects, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if out.TotalRestricted > 0 {
+		out.UnattributedPct = (float64(out.UnattributedTotal) / float64(out.TotalRestricted)) * 100
+	}
+	return out, nil
+}
+
+// ExpiringStudyRow extends Study with retention metadata for the expiry endpoint.
+type ExpiringStudyRow struct {
+	Study
+	RetentionDays   int    `json:"retention_days"`
+	ExpiresAt       string `json:"expires_at"`
+	DaysUntilExpiry int    `json:"days_until_expiry"`
+}
+
+// GetExpiringStudies returns approved studies that will be soft-expired within
+// the next `days` days, based on their project's retention_days setting.
+// Only projects with a non-null retention_days are included.
+// Results are ordered by expiry date ascending (soonest first).
+func GetExpiringStudies(ctx context.Context, db *sql.DB, projectID string, days, limit int) ([]ExpiringStudyRow, error) {
+	query := `
+		SELECT
+		  s.id, s.project_id, s.upload_session_id, s.institution_id, s.study_instance_uid,
+		  s.modality, s.body_part, s.study_description, s.series_count, s.instance_count,
+		  s.status, s.defacing_required, s.dicom_store, s.source,
+		  s.phi_scan_required, s.phi_scan_status, s.qc_required, s.qc_status,
+		  s.bids_required, s.bids_status, s.classification_required, s.classification_status,
+		  s.protocol_required, s.protocol_status, s.export_required, s.export_status,
+		  s.pixel_redaction_required, s.pixel_redaction_status,
+		  s.deface_qa_score, s.subject_id, s.rejection_reason, s.study_size_bytes,
+		  s.priority_flag, s.assigned_to, s.assigned_at, s.created_at, s.updated_at,
+		  p.retention_days,
+		  (s.created_at + (p.retention_days * INTERVAL '1 day'))                              AS expires_at,
+		  GREATEST(0, EXTRACT(DAY FROM (s.created_at + (p.retention_days * INTERVAL '1 day') - now()))::int) AS days_until_expiry
+		FROM studies s
+		JOIN projects p ON p.id = s.project_id
+		WHERE s.status = 'approved'
+		  AND p.retention_days IS NOT NULL
+		  AND s.created_at + (p.retention_days * INTERVAL '1 day') > now()
+		  AND s.created_at + (p.retention_days * INTERVAL '1 day') <= now() + ($1 * INTERVAL '1 day')
+		  AND ($2 = '' OR s.project_id = $2::uuid)
+		ORDER BY expires_at ASC
+		LIMIT $3`
+
+	rows, err := db.QueryContext(ctx, query, days, projectID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ExpiringStudyRow
+	for rows.Next() {
+		var row ExpiringStudyRow
+		var expiresAt time.Time
+		if err := func() error {
+			return rows.Scan(
+				&row.ID, &row.ProjectID, &row.UploadSessionID, &row.InstitutionID, &row.StudyInstanceUID,
+				&row.Modality, &row.BodyPart, &row.StudyDescription, &row.SeriesCount, &row.InstanceCount,
+				&row.Status, &row.DefacingRequired, &row.DicomStore, &row.Source,
+				&row.PhiScanRequired, &row.PhiScanStatus, &row.QcRequired, &row.QcStatus,
+				&row.BidsRequired, &row.BidsStatus,
+				&row.ClassificationRequired, &row.ClassificationStatus,
+				&row.ProtocolRequired, &row.ProtocolStatus,
+				&row.ExportRequired, &row.ExportStatus,
+				&row.PixelRedactionRequired, &row.PixelRedactionStatus,
+				&row.DefaceQaScore,
+				&row.SubjectID,
+				&row.RejectionReason,
+				&row.StudySizeBytes,
+				&row.PriorityFlag,
+				&row.AssignedTo,
+				&row.AssignedAt,
+				&row.CreatedAt, &row.UpdatedAt,
+				&row.RetentionDays,
+				&expiresAt,
+				&row.DaysUntilExpiry,
+			)
+		}(); err != nil {
+			return nil, err
+		}
+		row.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+// SoftDeleteStudy sets deleted_at on a study without removing it from the database.
+// The study is excluded from normal listings but can be retrieved via ListDeletedStudies
+// or restored with RestoreStudy.
+func SoftDeleteStudy(ctx context.Context, db *sql.DB, id string) error {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET deleted_at = now(), updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// RestoreStudy clears deleted_at on a soft-deleted study, making it visible
+// in normal listings again.
+func RestoreStudy(ctx context.Context, db *sql.DB, id string) error {
+	res, err := db.ExecContext(ctx, `
+		UPDATE studies SET deleted_at = NULL, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NOT NULL`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// ListDeletedStudies returns soft-deleted studies, newest first.
+// Optional projectID scopes the result to one project.
+func ListDeletedStudies(ctx context.Context, db *sql.DB, projectID string, limit, offset int) ([]Study, int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	where := "WHERE deleted_at IS NOT NULL"
+	args := []any{}
+	n := 1
+	if projectID != "" {
+		where += fmt.Sprintf(" AND project_id = $%d", n)
+		args = append(args, projectID)
+		n++
+	}
+
+	var total int
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM studies `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	offsetArg := n
+	limitArg := n + 1
+	args = append(args, offset, limit)
+	rows, err := db.QueryContext(ctx,
+		`SELECT `+studyColumns+` FROM studies `+where+
+			fmt.Sprintf(` ORDER BY deleted_at DESC OFFSET $%d LIMIT $%d`, offsetArg, limitArg),
+		args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var studies []Study
+	for rows.Next() {
+		var s Study
+		if err := scanStudy(rows, &s); err != nil {
+			return nil, 0, err
+		}
+		studies = append(studies, s)
+	}
+	if studies == nil {
+		studies = []Study{}
+	}
+	return studies, total, rows.Err()
 }
 
 // DeleteStudy permanently removes a study and all its dependent rows.

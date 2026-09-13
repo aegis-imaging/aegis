@@ -94,3 +94,59 @@ func TestGetStats_ActiveShareCount(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
 	assert.Equal(t, 2, result.ActiveShares)
 }
+
+func TestGetStats_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "stats-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/stats", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetStats(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestGetStats_ResearcherWithProjectScopeAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "stats-researcher-ok@test.com", "researcher")
+
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "coordinator",
+	}))
+
+	req := httptest.NewRequest("GET", "/api/stats?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetStats(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result statsResp
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, 1, result.StudyCounts.Total)
+}
+
+func TestGetStats_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "stats-researcher-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/stats?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetStats(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}

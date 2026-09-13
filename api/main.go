@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/audit_retention"
 	"github.com/aegis-imaging/aegis/api/config"
 	"github.com/aegis-imaging/aegis/api/digest"
 	"github.com/aegis-imaging/aegis/api/email"
@@ -19,6 +20,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/retention"
 	"github.com/aegis-imaging/aegis/api/sla"
+	"github.com/aegis-imaging/aegis/api/satellite_ca"
 	"github.com/aegis-imaging/aegis/api/storage"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -90,13 +92,43 @@ func main() {
 			log.Fatalf("init s3 storage: %v", err)
 		}
 		store = s3Store
+	case "azure":
+		azStore, err := storage.NewAzureBlob(context.Background(), cfg.AzureStorageAccount, cfg.AzureStorageContainer)
+		if err != nil {
+			log.Fatalf("init azure storage: %v", err)
+		}
+		store = azStore
 	default:
 		store = storage.NewLocal(cfg.LocalStorageDir, cfg.APIBaseURL)
 	}
 
 	srv := handler.NewServer(db, store, cfg)
+
+	// Satellite router CSR signer (issues mTLS client certs to enrolled spokes).
+	// Configured CA wins; otherwise mint an ephemeral CA in memory for dev.
+	// SATELLITE_CA_ENABLED=false disables the endpoint entirely.
+	if cfg.SatelliteCAEnabled {
+		signer, err := satellite_ca.Load(cfg.SatelliteCACertPath, cfg.SatelliteCAKeyPath, cfg.SatelliteCertValidityDays)
+		if err != nil {
+			log.Fatalf("load satellite CA: %v", err)
+		}
+		if signer == nil && cfg.SatelliteCAEphemeral {
+			signer, err = satellite_ca.NewEphemeral(cfg.SatelliteCertValidityDays)
+			if err != nil {
+				log.Fatalf("ephemeral satellite CA: %v", err)
+			}
+			log.Printf("satellite CA: using EPHEMERAL in-memory CA (set SATELLITE_CA_CERT_PATH+SATELLITE_CA_KEY_PATH for production)")
+		}
+		if signer != nil {
+			log.Printf("satellite enrollment enabled (CA source=%s, cert validity=%d days)", signer.Source(), cfg.SatelliteCertValidityDays)
+			srv.SetSatelliteCA(signer)
+		}
+	}
+
 	auth := middleware.RequireAuth(db, cfg)
 	adminOnly := middleware.RequireRole("admin", db, cfg)
+	optionalAuth := middleware.OptionalAuth(db, cfg)
+	requireUploader := middleware.RequireUploaderSession(db)
 
 	// Per-IP rate limiter for public endpoints (upload, ingest, contact).
 	// Enabled via RATE_LIMIT_ENABLED=true; defaults to 20 req/s, burst 50.
@@ -119,14 +151,30 @@ func main() {
 
 	mux.HandleFunc("GET /healthz", srv.Healthz)
 
-	// Upload portal needs project list and active anon profile.
-	mux.HandleFunc("GET /api/projects", srv.ListProjects)
+	// Upload portal and authenticated users — optionalAuth so unauthenticated callers
+	// still get the non-restricted project list while researchers get their scoped list.
+	mux.HandleFunc("GET /api/projects", optionalAuth(srv.ListProjects))
 	mux.HandleFunc("GET /api/projects/{slug}/active-anon-profile", srv.GetDefaultAnonProfile)
 
-	// Upload portal — public-facing, rate-limited.
-	mux.Handle("POST /api/upload/init", rateLimit(srv.UploadInit))
-	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(srv.UploadFile))
-	mux.Handle("POST /api/upload/complete", rateLimit(srv.UploadComplete))
+	// Satellite router enrollment — PUBLIC: the enrollment token IS the credential.
+	// Rate-limited to slow down brute-force token guessing.
+	mux.Handle("POST /api/satellites/enroll", rateLimit(srv.EnrollSatellite))
+
+	// Satellites overview — list institutions enrolled or with active enrollment
+	// tokens, with activity stats. Powers the admin-dashboard Satellites tab.
+	mux.HandleFunc("GET /api/satellites", auth(srv.ListSatellites))
+
+	// Upload portal — rate-limited; open when AUTH_ENABLED=false (local dev).
+	// Wrapped with satellite-mTLS so AEGIS Routers presenting a known client cert
+	// get their SatelliteIdentity attached to ctx (passive — never rejects).
+	// uploadAuth then requires ONE of: satellite identity, an uploader session
+	// cookie, or an Authorization: Bearer API key. UploadInit additionally
+	// checks project membership for session users (in the handler).
+	satelliteMTLS := middleware.WithSatelliteMTLS(db)
+	uploadAuth := middleware.RequireUploadAuth(db, cfg)
+	mux.Handle("POST /api/upload/init", rateLimit(satelliteMTLS(uploadAuth(srv.UploadInit))))
+	mux.Handle("PUT /api/upload/file/{sessionID}/{index}", rateLimit(satelliteMTLS(uploadAuth(srv.UploadFile))))
+	mux.Handle("POST /api/upload/complete", rateLimit(satelliteMTLS(uploadAuth(srv.UploadComplete))))
 
 	// Contact form — public, rate-limited.
 	mux.Handle("POST /api/contact", rateLimit(srv.ContactForm))
@@ -138,7 +186,7 @@ func main() {
 	// Local dev only: serve stored files over HTTP (in GCS mode, signed URLs are used instead).
 	mux.HandleFunc("GET /api/storage/{key...}", srv.ServeStorageFile)
 
-	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by Weasis viewer.
+	// DICOMweb proxy — QIDO-RS (metadata) + WADO-RS (retrieve), used by DWV viewer.
 	mux.HandleFunc("GET /dicomweb/studies", srv.DicomwebStudies)
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series", srv.DicomwebSeries)
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances", srv.DicomwebInstances)
@@ -146,7 +194,7 @@ func main() {
 	mux.HandleFunc("GET /dicomweb/studies/{studyUID}/series/{seriesUID}/instances/{sopUID}/metadata", srv.DicomwebInstanceMetadata)
 
 	// Raw DICOMweb proxy — identical to /dicomweb but WADO-RS always reads from the
-	// pre-defacing "raw" store. Used by the Weasis viewer (?store=raw) for
+	// pre-defacing "raw" store. Used by the DWV viewer (?store=raw) for
 	// side-by-side defacing review in the admin dashboard.
 	mux.HandleFunc("GET /dicomweb-raw/studies", srv.DicomwebStudies)
 	mux.HandleFunc("GET /dicomweb-raw/studies/{studyUID}/series", srv.DicomwebSeries)
@@ -163,16 +211,37 @@ func main() {
 	mux.HandleFunc("GET /api/stats", auth(srv.GetStats))
 	mux.HandleFunc("GET /api/stats/breakdown", auth(srv.GetBreakdownStats))
 	mux.HandleFunc("GET /api/stats/timeline", auth(srv.GetTimeline))
+	mux.HandleFunc("GET /api/stats/processing-times", auth(srv.GetProcessingTimes))
+	mux.HandleFunc("GET /api/stats/routing", auth(srv.GetRoutingStats))
+	mux.HandleFunc("GET /api/stats/routing-rules", auth(srv.GetRoutingRuleStats))
+	mux.HandleFunc("GET /api/stats/pipeline-funnel", auth(srv.GetPipelineFunnel))
+	mux.HandleFunc("GET /api/stats/project-health", auth(srv.GetProjectHealth))
+	mux.HandleFunc("GET /api/stats/daily-summary", auth(srv.GetDailySummary))
+	mux.HandleFunc("GET /api/stats/protocol-trend", auth(srv.GetProtocolTrend))
+	mux.HandleFunc("GET /api/stats/phi-trend", auth(srv.GetPhiTrend))
+	mux.HandleFunc("GET /api/stats/modality-trend", auth(srv.GetModalityTrend))
+	mux.HandleFunc("GET /api/stats/label-usage", auth(srv.GetLabelUsage))
+	mux.HandleFunc("GET /api/stats/source-trend", auth(srv.GetSourceTrend))
+	mux.HandleFunc("GET /api/stats/institution-attribution", auth(srv.GetInstitutionAttributionStats))
 	mux.HandleFunc("GET /api/storage/stats", auth(srv.GetStorageStats))
 
 	// System health summary — aggregated operational status panel.
 	mux.HandleFunc("GET /api/system/health-summary", auth(srv.GetSystemHealthSummary))
+
+	// Tenants — multi-tenant SaaS scaffolding (chunk 1). Platform admin only.
+	// Resolution + enforcement on downstream queries arrives in subsequent PRs.
+	mux.HandleFunc("GET /api/tenants", adminOnly(srv.ListTenants))
+	mux.HandleFunc("POST /api/tenants", adminOnly(srv.CreateTenant))
+	mux.HandleFunc("GET /api/tenants/{id}", adminOnly(srv.GetTenant))
+	mux.HandleFunc("PUT /api/tenants/{id}", adminOnly(srv.UpdateTenant))
+	mux.HandleFunc("DELETE /api/tenants/{id}", adminOnly(srv.DeleteTenant))
 
 	// Projects — create/update require admin; list is public (upload portal).
 	mux.HandleFunc("POST /api/projects", adminOnly(srv.CreateProject))
 	mux.HandleFunc("GET /api/projects/{id}", auth(srv.GetProject))
 	mux.HandleFunc("PUT /api/projects/{id}", adminOnly(srv.UpdateProject))
 	mux.HandleFunc("PUT /api/projects/{id}/retention", adminOnly(srv.SetProjectRetention))
+	mux.HandleFunc("GET /api/projects/{id}/retention-preview", auth(srv.GetRetentionPreview))
 	mux.HandleFunc("PUT /api/projects/{id}/sla-threshold", adminOnly(srv.SetProjectSLAThreshold))
 	mux.HandleFunc("PUT /api/projects/{id}/storage-quota", adminOnly(srv.SetStorageQuota))
 	mux.HandleFunc("GET /api/projects/{id}/storage-usage", auth(srv.GetStorageUsage))
@@ -182,6 +251,58 @@ func main() {
 	mux.HandleFunc("GET /api/projects/{id}/phi-config", auth(srv.GetProjectPhiConfig))
 	mux.HandleFunc("PUT /api/projects/{id}/phi-config", adminOnly(srv.UpdateProjectPhiConfig))
 	mux.HandleFunc("GET /api/projects/{id}/compliance-report", auth(srv.GetProjectComplianceReport))
+	mux.HandleFunc("GET /api/projects/{id}/compliance-report.csv", auth(srv.ExportComplianceReportCSV))
+	mux.HandleFunc("GET /api/projects/{id}/cohort-report", auth(srv.GetCohortReport))
+	mux.HandleFunc("GET /api/projects/{id}/institution-breakdown", auth(srv.GetInstitutionBreakdown))
+	mux.HandleFunc("POST /api/projects/{id}/re-evaluate-routing", adminOnly(srv.BulkReEvaluateRouting))
+	mux.HandleFunc("GET /api/projects/{id}/routing-rules/export", auth(srv.ExportRoutingRules))
+	mux.HandleFunc("POST /api/projects/{id}/routing-rules/import", adminOnly(srv.ImportRoutingRules))
+
+	// Project restricted flag — platform admin only.
+	mux.HandleFunc("PUT /api/projects/{id}/restricted", adminOnly(srv.SetProjectRestricted))
+
+	// Project members — list uses auth; write ops use auth + handler-level role check
+	// (platform admin OR project owner are both allowed to manage members).
+	mux.HandleFunc("GET /api/projects/{id}/members", auth(srv.ListProjectMembers))
+	mux.HandleFunc("POST /api/projects/{id}/members", auth(srv.AddProjectMember))
+	mux.HandleFunc("PUT /api/projects/{id}/members/{memberID}", auth(srv.UpdateProjectMember))
+	mux.HandleFunc("DELETE /api/projects/{id}/members/{memberID}", auth(srv.RemoveProjectMember))
+
+	// Project ACL — explicit per-user permissions on a project (read/write/admin).
+	mux.HandleFunc("GET /api/projects/{id}/acl", auth(srv.ListProjectACL))
+	mux.HandleFunc("POST /api/projects/{id}/acl", adminOnly(srv.SetProjectACL))
+	mux.HandleFunc("DELETE /api/projects/{id}/acl/{aclID}", adminOnly(srv.DeleteProjectACL))
+
+	// Project dashboard summary — compact KPI snapshot.
+	mux.HandleFunc("GET /api/projects/{id}/summary", auth(srv.GetProjectDashboardSummary))
+
+	// Project milestones — track project progress.
+	mux.HandleFunc("GET /api/projects/{id}/milestones", auth(srv.ListProjectMilestones))
+	mux.HandleFunc("POST /api/projects/{id}/milestones", adminOnly(srv.CreateProjectMilestone))
+	mux.HandleFunc("PATCH /api/projects/{id}/milestones/{milestoneID}", adminOnly(srv.UpdateProjectMilestone))
+	mux.HandleFunc("DELETE /api/projects/{id}/milestones/{milestoneID}", adminOnly(srv.DeleteProjectMilestone))
+
+	// Custom field definitions — per-project custom metadata fields.
+	mux.HandleFunc("GET /api/projects/{id}/custom-fields", auth(srv.ListCustomFieldDefinitions))
+	mux.HandleFunc("POST /api/projects/{id}/custom-fields", adminOnly(srv.CreateCustomFieldDefinition))
+	mux.HandleFunc("DELETE /api/projects/{id}/custom-fields/{fieldID}", adminOnly(srv.DeleteCustomFieldDefinition))
+
+	// Auto-share rules — automatically create shares when studies are approved.
+	mux.HandleFunc("GET /api/projects/{projectID}/auto-share-rules", auth(srv.ListAutoShareRules))
+	mux.HandleFunc("POST /api/projects/{projectID}/auto-share-rules", adminOnly(srv.CreateAutoShareRule))
+	mux.HandleFunc("PUT /api/auto-share-rules/{id}", adminOnly(srv.UpdateAutoShareRule))
+	mux.HandleFunc("DELETE /api/auto-share-rules/{id}", adminOnly(srv.DeleteAutoShareRule))
+
+	// Review checklist — per-project review checklist items.
+	mux.HandleFunc("GET /api/projects/{projectID}/review-checklist", auth(srv.ListReviewChecklist))
+	mux.HandleFunc("POST /api/projects/{projectID}/review-checklist", adminOnly(srv.CreateReviewChecklistItem))
+	mux.HandleFunc("PUT /api/review-checklist/{id}", adminOnly(srv.UpdateReviewChecklistItem))
+	mux.HandleFunc("DELETE /api/review-checklist/{id}", adminOnly(srv.DeleteReviewChecklistItem))
+
+	// Project tags — categorize projects with tags.
+	mux.HandleFunc("GET /api/projects/{id}/tags", auth(srv.ListProjectTags))
+	mux.HandleFunc("POST /api/projects/{id}/tags", adminOnly(srv.AddProjectTag))
+	mux.HandleFunc("DELETE /api/projects/{id}/tags/{tagID}", adminOnly(srv.DeleteProjectTag))
 
 	// Anonymization profiles — per-project DICOM tag retention overrides.
 	mux.HandleFunc("GET /api/projects/{projectID}/anon-profiles", auth(srv.ListAnonProfiles))
@@ -191,39 +312,56 @@ func main() {
 	mux.HandleFunc("PUT /api/anon-profiles/{id}", adminOnly(srv.UpdateAnonProfile))
 	mux.HandleFunc("DELETE /api/anon-profiles/{id}", adminOnly(srv.DeleteAnonProfile))
 
-	// Studies — list, detail, and shares readable by all; mutations require admin.
+	// Studies — list/detail are readable via auth; selected mutations enforce capability checks in handlers.
 	mux.HandleFunc("GET /api/studies", auth(srv.ListStudies))
 	mux.HandleFunc("GET /api/studies.csv", auth(srv.ExportStudiesCSV))
 	mux.HandleFunc("GET /api/studies/stuck", auth(srv.GetStuckStudies))
+	mux.HandleFunc("GET /api/studies/expiring", auth(srv.GetExpiringStudies))
+	mux.HandleFunc("GET /api/studies/deleted", auth(srv.ListDeletedStudies))
 	mux.HandleFunc("GET /api/studies/events", auth(srv.StudyEvents))
+	mux.HandleFunc("GET /api/studies/priority-queue", auth(srv.GetStudyPriorityQueue))
+	mux.HandleFunc("GET /api/studies/compare", auth(srv.CompareStudies))
+	mux.HandleFunc("GET /api/studies/duplicates", auth(srv.GetStudyDuplicates))
 	mux.HandleFunc("GET /api/studies/{id}", auth(srv.GetStudy))
 	mux.HandleFunc("DELETE /api/studies/{id}", adminOnly(srv.DeleteStudy))
 	mux.HandleFunc("GET /api/study-uid/{studyUID}", auth(srv.GetStudyByUID))
 	mux.HandleFunc("GET /api/studies/{id}/audit", auth(srv.ListStudyAudit))
+	mux.HandleFunc("GET /api/studies/{id}/audit.csv", auth(srv.ExportStudyAuditCSV))
 	mux.HandleFunc("POST /api/studies/{id}/viewed", auth(srv.RecordStudyView))
 	mux.HandleFunc("GET /api/studies/{id}/series", auth(srv.ListStudySeries))
+	mux.HandleFunc("GET /api/studies/{id}/series-metadata", auth(srv.ListStudySeriesMetadata))
+	mux.HandleFunc("GET /api/studies/{id}/files", auth(srv.GetStudyFileManifest))
 	mux.HandleFunc("GET /api/studies/{id}/diagnostics", auth(srv.GetStudyDiagnostics))
+	mux.HandleFunc("GET /api/studies/{id}/processing-summary", auth(srv.GetStudyProcessingSummary))
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-tags", auth(srv.InspectDicomTags))
 	mux.HandleFunc("GET /api/studies/{studyUID}/anonymization-diff", auth(srv.GetAnonDiff))
 	mux.HandleFunc("POST /api/studies/bulk", adminOnly(srv.BulkStudyAction))
 	mux.HandleFunc("POST /api/studies/bulk-pipeline-trigger", adminOnly(srv.BulkPipelineTrigger))
-	mux.HandleFunc("POST /api/studies/{id}/notes", adminOnly(srv.AddStudyNote))
-	mux.HandleFunc("PATCH /api/studies/{id}/flag", adminOnly(srv.PatchStudyFlag))
-	mux.HandleFunc("POST /api/studies/{id}/reset-pipeline-step", adminOnly(srv.ResetPipelineStep))
-	mux.HandleFunc("POST /api/studies/{id}/approve", adminOnly(srv.ApproveStudy))
-	mux.HandleFunc("POST /api/studies/{id}/reject", adminOnly(srv.RejectStudy))
-	mux.HandleFunc("POST /api/studies/{id}/reactivate", adminOnly(srv.ReactivateStudy))
+	mux.HandleFunc("POST /api/studies/bulk-status", adminOnly(srv.BulkStatusUpdate))
+	mux.HandleFunc("GET /api/studies/{id}/notes", auth(srv.ListStudyNotes))
+	mux.HandleFunc("POST /api/studies/{id}/notes", auth(srv.AddStudyNote))
+	mux.HandleFunc("PATCH /api/studies/{id}/flag", auth(srv.PatchStudyFlag))
+	mux.HandleFunc("POST /api/studies/{id}/reset-pipeline-step", auth(srv.ResetPipelineStep))
+	mux.HandleFunc("POST /api/studies/{id}/approve", auth(srv.ApproveStudy))
+	mux.HandleFunc("POST /api/studies/{id}/reject", auth(srv.RejectStudy))
+	mux.HandleFunc("POST /api/studies/{id}/reactivate", auth(srv.ReactivateStudy))
+	mux.HandleFunc("POST /api/studies/{id}/soft-delete", adminOnly(srv.SoftDeleteStudy))
+	mux.HandleFunc("POST /api/studies/{id}/restore", adminOnly(srv.RestoreStudy))
 	mux.HandleFunc("POST /api/studies/{id}/share", adminOnly(srv.CreateShare))
 	mux.HandleFunc("GET /api/studies/{id}/shares", auth(srv.ListShares))
 
 	mux.HandleFunc("GET /api/shares", auth(srv.ListAllShares))
+	mux.HandleFunc("GET /api/export-shares.csv", auth(srv.ExportSharesCSV))
 	mux.HandleFunc("GET /api/shares/{shareID}/downloads", auth(srv.GetShareDownloads))
 	mux.HandleFunc("GET /api/export-analytics", auth(srv.GetExportAnalytics))
 	mux.HandleFunc("DELETE /api/shares/{shareID}", adminOnly(srv.RevokeShare))
 	mux.HandleFunc("PATCH /api/shares/{shareID}/extend", adminOnly(srv.ExtendShare))
 
 	// DICOMweb STOW-RS receiver — cross-cloud ingest endpoint, API-key authenticated.
+	// /api/stow          — AEGIS-specific path (legacy / direct)
+	// /api/stow/studies  — DICOMweb-standard path (routing engine appends /studies to dest URL)
 	mux.Handle("POST /api/stow", rateLimit(srv.StowReceiver))
+	mux.Handle("POST /api/stow/studies", rateLimit(srv.StowReceiver))
 
 	// Internal enterprise ingestion path.
 	mux.HandleFunc("POST /api/ingest", adminOnly(srv.InternalIngest))
@@ -232,8 +370,11 @@ func main() {
 	mux.HandleFunc("POST /api/import/batch", adminOnly(srv.BatchImport))
 
 	// TCIA (Cancer Imaging Archive) — browse public brain MRI collections and import series.
+	// Researcher-accessible: TCIA data is already de-identified at the DICOM tag
+	// level by TCIA, so no admin gate on import. Destination project is picked
+	// per-call and validated by the importer.
 	mux.HandleFunc("GET /api/tcia/series", auth(srv.GetTCIASeries))
-	mux.HandleFunc("POST /api/tcia/import", adminOnly(srv.ImportTCIASeries))
+	mux.HandleFunc("POST /api/tcia/import", auth(srv.ImportTCIASeries))
 
 	mux.HandleFunc("GET /api/audit", auth(srv.ListAudit))
 	mux.HandleFunc("GET /api/audit.csv", auth(srv.ExportAuditCSV))
@@ -244,25 +385,65 @@ func main() {
 	mux.HandleFunc("POST /api/institutions", adminOnly(srv.CreateInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}", auth(srv.GetInstitution))
 	mux.HandleFunc("GET /api/institutions/{id}/stats", auth(srv.GetInstitutionStats))
+	mux.HandleFunc("GET /api/institutions/{id}/sla", auth(srv.GetInstitutionSLA))
 	mux.HandleFunc("PUT /api/institutions/{id}", adminOnly(srv.UpdateInstitution))
 	mux.HandleFunc("DELETE /api/institutions/{id}", adminOnly(srv.DeleteInstitution))
+	mux.HandleFunc("GET /api/institutions/{id}/installer-invites", auth(srv.ListInstitutionInstallerInvites))
 	mux.HandleFunc("GET /api/institutions/{id}/projects", auth(srv.ListInstitutionProjects))
 	mux.HandleFunc("POST /api/institutions/{id}/projects", adminOnly(srv.AddInstitutionProject))
 	mux.HandleFunc("DELETE /api/institutions/{id}/projects/{projectID}", adminOnly(srv.RemoveInstitutionProject))
 
+	// Institution activity — audit log per institution.
+	mux.HandleFunc("GET /api/institutions/{id}/activity", auth(srv.GetInstitutionActivity))
+
+	// Institution contacts — contact directory per institution.
+	mux.HandleFunc("GET /api/institutions/{id}/contacts", auth(srv.ListInstitutionContacts))
+	mux.HandleFunc("POST /api/institutions/{id}/contacts", adminOnly(srv.CreateInstitutionContact))
+	mux.HandleFunc("DELETE /api/institutions/{id}/contacts/{contactID}", adminOnly(srv.DeleteInstitutionContact))
+
+	// Browser upload allowlist — per-institution allow/deny of upload methods.
+	// Chunk 1 ships the table + API; chunk 2 wires IsUploadMethodAllowed
+	// into each upload handler.
+	mux.HandleFunc("GET /api/institutions/{id}/upload-allowlist", auth(srv.ListInstitutionUploadAllowlist))
+	mux.HandleFunc("PUT /api/institutions/{id}/upload-allowlist/{methodID}", adminOnly(srv.PutInstitutionUploadAllowlist))
+	mux.HandleFunc("DELETE /api/institutions/{id}/upload-allowlist/{methodID}", adminOnly(srv.DeleteInstitutionUploadAllowlist))
+
+	// Satellite mTLS — enroll/revoke a client cert for a sender institution so an
+	// AEGIS Router at that satellite can authenticate without an API key.
+	mux.HandleFunc("PUT /api/institutions/{id}/client-cert", adminOnly(srv.SetInstitutionClientCert))
+	mux.HandleFunc("DELETE /api/institutions/{id}/client-cert", adminOnly(srv.RevokeInstitutionClientCert))
+
+	// Satellite enrollment tokens — short-lived one-time secrets that a satellite
+	// router exchanges for a signed client cert via POST /api/satellites/enroll.
+	mux.HandleFunc("GET /api/institutions/{id}/enrollment-tokens", auth(srv.ListInstitutionEnrollmentTokens))
+	mux.HandleFunc("POST /api/institutions/{id}/enrollment-tokens", adminOnly(srv.CreateInstitutionEnrollmentToken))
+	mux.HandleFunc("DELETE /api/institutions/{id}/enrollment-tokens/{tokenID}", adminOnly(srv.RevokeInstitutionEnrollmentToken))
+
 	// Destinations — external DICOM endpoints studies can be forwarded to.
 	mux.HandleFunc("GET /api/destinations", auth(srv.ListDestinations))
+	mux.HandleFunc("GET /api/destinations/health", auth(srv.GetAllDestinationsHealth))
 	mux.HandleFunc("POST /api/destinations", adminOnly(srv.CreateDestination))
 	mux.HandleFunc("PUT /api/destinations/{id}", adminOnly(srv.UpdateDestination))
 	mux.HandleFunc("DELETE /api/destinations/{id}", adminOnly(srv.DeleteDestination))
 	mux.HandleFunc("POST /api/destinations/{id}/test", adminOnly(srv.TestDestination))
+	mux.HandleFunc("GET /api/destinations/{id}/stats", auth(srv.GetDestinationStats))
+	mux.HandleFunc("GET /api/destinations/{id}/health", auth(srv.GetDestinationHealth))
+
+	// Destination maintenance — planned downtime windows during which a destination is paused.
+	mux.HandleFunc("GET /api/destinations/{id}/maintenance", auth(srv.ListDestinationMaintenance))
+	mux.HandleFunc("POST /api/destinations/{id}/maintenance", adminOnly(srv.CreateDestinationMaintenance))
+	mux.HandleFunc("DELETE /api/destinations/{id}/maintenance/{windowID}", adminOnly(srv.DeleteDestinationMaintenance))
 
 	// Routing rules — condition → action mappings evaluated on study ingest.
 	mux.HandleFunc("GET /api/routing-rules", auth(srv.ListRoutingRules))
+	mux.HandleFunc("POST /api/routing-rules/simulate", auth(srv.SimulateRoutingRules))           // must be before {id} patterns
+	mux.HandleFunc("POST /api/routing-rules/reorder", adminOnly(srv.ReorderRoutingRules))        // must be before {id} patterns
+	mux.HandleFunc("POST /api/routing-rules/bulk-toggle", adminOnly(srv.BulkToggleRoutingRules)) // must be before {id} patterns
 	mux.HandleFunc("POST /api/routing-rules", adminOnly(srv.CreateRoutingRule))
 	mux.HandleFunc("PUT /api/routing-rules/{id}", adminOnly(srv.UpdateRoutingRule))
 	mux.HandleFunc("DELETE /api/routing-rules/{id}", adminOnly(srv.DeleteRoutingRule))
 	mux.HandleFunc("POST /api/routing-rules/evaluate/{studyID}", adminOnly(srv.EvaluateRoutingRules))
+	mux.HandleFunc("GET /api/routing-rules/{id}/changelog", auth(srv.GetRoutingRuleChangelog))
 	mux.HandleFunc("GET /api/studies/{studyID}/routing-log", auth(srv.GetStudyRoutingLog))
 
 	// DIMSE retry control proxy — admin-only API façade over sidecar /ingest/retry* endpoints.
@@ -271,11 +452,55 @@ func main() {
 	mux.HandleFunc("POST /api/dimse/retry", adminOnly(srv.DimseRetryProxy))
 	mux.HandleFunc("POST /api/dimse/retry/{path...}", adminOnly(srv.DimseRetryProxy))
 
+	// DIMSE C-FIND SCU — query a remote PACS/AE for matching studies/series/instances.
+	mux.HandleFunc("POST /api/dimse/query", adminOnly(srv.DimseQuery))
+
+	// DIMSE C-MOVE SCU — request a remote PACS to push a study to the AEGIS SCP.
+	mux.HandleFunc("POST /api/dimse/retrieve", adminOnly(srv.DimseRetrieve))
+
+	// DIMSE batch C-MOVE — retrieve multiple studies (up to 50) in one request.
+	mux.HandleFunc("POST /api/dimse/retrieve-batch", adminOnly(srv.DimseRetrieveBatch))
+
 	// Email digest subscriptions — periodic summary emails per project.
 	mux.HandleFunc("GET /api/digest-subscriptions", auth(srv.ListDigestSubscriptions))
 	mux.HandleFunc("GET /api/projects/{projectID}/digest-subscriptions", auth(srv.ListDigestSubscriptions))
 	mux.HandleFunc("POST /api/projects/{projectID}/digest-subscriptions", adminOnly(srv.CreateDigestSubscription))
 	mux.HandleFunc("DELETE /api/digest-subscriptions/{id}", adminOnly(srv.DeleteDigestSubscription))
+
+	// Desktop installer registry + email distribution.
+	// Public endpoints (no auth) handle the recipient-facing install landing
+	// page and the one-time pairing exchange that bootstraps an API key onto
+	// the freshly-installed desktop app.
+	mux.HandleFunc("GET /api/desktop-installers", auth(srv.ListDesktopInstallers))
+	mux.HandleFunc("POST /api/desktop-installers", adminOnly(srv.CreateDesktopInstaller))
+	mux.HandleFunc("PATCH /api/desktop-installers/{id}", adminOnly(srv.UpdateDesktopInstaller))
+	mux.HandleFunc("DELETE /api/desktop-installers/{id}", adminOnly(srv.DeleteDesktopInstaller))
+	mux.HandleFunc("GET /api/desktop-installers/{id}/download", auth(srv.DownloadDesktopInstaller))
+	// auth (not adminOnly): the handler enforces admin for unscoped invites,
+	// and admin-or-project-owner for project-scoped invites (project_id in body).
+	mux.HandleFunc("POST /api/desktop-installers/{id}/email", auth(srv.EmailDesktopInstallerInvite))
+	mux.HandleFunc("GET /api/desktop-installers/invites", auth(srv.ListDesktopInstallerInvites))
+	mux.HandleFunc("GET /install/{token}", srv.InstallLandingPage)
+	mux.HandleFunc("POST /api/install/pair", srv.PairDesktopInstaller)
+
+	// Uploader auth — native password login for outside data contributors
+	// (per-project, separate cookie scope from admin IAP).
+	// Rate-limited: login is a password oracle, so slow down credential stuffing.
+	mux.Handle("POST /api/auth/uploader-login", rateLimit(srv.UploaderLogin))
+	mux.HandleFunc("POST /api/auth/uploader-logout", srv.UploaderLogout)
+	mux.HandleFunc("GET /api/auth/uploader-me", requireUploader(srv.UploaderMe))
+
+	// Uploader invitations — public read + redeem flow.
+	// Rate-limited to slow down brute-force token guessing.
+	mux.Handle("GET /api/uploader-invites/{token}", rateLimit(srv.GetUploaderInvite))
+	mux.Handle("POST /api/uploader-invites/{token}/redeem", rateLimit(srv.RedeemUploaderInvite))
+
+	// Project uploader management — admin or project-owner researcher only;
+	// handler does the per-project authz check itself so we wrap with just
+	// the baseline auth middleware here.
+	mux.HandleFunc("POST /api/projects/{id}/uploaders", auth(srv.InviteProjectUploader))
+	mux.HandleFunc("GET /api/projects/{id}/uploaders", auth(srv.ListProjectUploaders))
+	mux.HandleFunc("DELETE /api/projects/{id}/uploaders/{userId}", auth(srv.RevokeProjectUploader))
 
 	// API keys — long-lived machine-to-machine credentials.
 	mux.HandleFunc("GET /api/api-keys", auth(srv.ListAPIKeys))
@@ -285,11 +510,63 @@ func main() {
 	mux.HandleFunc("POST /api/api-keys/{id}/rotate", adminOnly(srv.RotateAPIKey))
 	mux.HandleFunc("DELETE /api/api-keys/{id}", adminOnly(srv.DeleteAPIKey))
 
+	// Study assignment — assign studies to admin users for peer review.
+	mux.HandleFunc("POST /api/studies/{id}/assign", adminOnly(srv.AssignStudy))
+	mux.HandleFunc("DELETE /api/studies/{id}/assign", adminOnly(srv.UnassignStudy))
+
+	// Study comments — threaded discussion on studies.
+	mux.HandleFunc("GET /api/studies/{id}/comments", auth(srv.ListStudyComments))
+	mux.HandleFunc("POST /api/studies/{id}/comments", adminOnly(srv.CreateStudyComment))
+	mux.HandleFunc("PUT /api/comments/{id}", adminOnly(srv.EditStudyComment))
+	mux.HandleFunc("GET /api/comments/{id}/history", auth(srv.ListCommentEditHistory))
+	mux.HandleFunc("DELETE /api/studies/{id}/comments/{commentID}", adminOnly(srv.DeleteStudyComment))
+
+	// Study approval signatures — sign-off history.
+	mux.HandleFunc("GET /api/studies/{id}/approvals", auth(srv.ListStudyApprovals))
+	mux.HandleFunc("POST /api/studies/{id}/approvals", adminOnly(srv.RecordStudyApproval))
+
+	// Study pinned notes — sticky notes visible at top of detail panel.
+	mux.HandleFunc("GET /api/studies/{id}/pinned-notes", auth(srv.ListStudyPinnedNotes))
+	mux.HandleFunc("POST /api/studies/{id}/pinned-notes", adminOnly(srv.CreateStudyPinnedNote))
+	mux.HandleFunc("PATCH /api/studies/{id}/pinned-notes/{noteID}", adminOnly(srv.UpdateStudyPinnedNote))
+	mux.HandleFunc("DELETE /api/studies/{id}/pinned-notes/{noteID}", adminOnly(srv.DeleteStudyPinnedNote))
+
+	// Study activity timeline — unified feed of audit + comments.
+	mux.HandleFunc("GET /api/studies/{id}/activity", auth(srv.GetStudyActivity))
+
+	// Study tags — short labels for grouping/filtering studies within a project.
+	mux.HandleFunc("GET /api/studies/{id}/tags", auth(srv.ListStudyTags))
+	mux.HandleFunc("POST /api/studies/{id}/tags", adminOnly(srv.AddStudyTag))
+	mux.HandleFunc("DELETE /api/studies/{id}/tags/{tagID}", adminOnly(srv.DeleteStudyTag))
+	mux.HandleFunc("GET /api/projects/{id}/tag-taxonomy", auth(srv.GetProjectTagTaxonomy))
+
+	// Study transfer log — provenance tracking for project moves.
+	mux.HandleFunc("GET /api/studies/{id}/transfers", auth(srv.ListStudyTransfers))
+	mux.HandleFunc("POST /api/studies/{id}/transfer", adminOnly(srv.TransferStudy))
+
+	// Study custom fields — per-study metadata from project-defined fields.
+	mux.HandleFunc("GET /api/studies/{id}/custom-fields", auth(srv.ListStudyCustomFields))
+	mux.HandleFunc("POST /api/studies/{id}/custom-fields", adminOnly(srv.SetStudyCustomField))
+
+	// Study watchers — subscribe to study events.
+	mux.HandleFunc("GET /api/studies/{id}/watchers", auth(srv.ListStudyWatchers))
+	mux.HandleFunc("POST /api/studies/{id}/watch", auth(srv.WatchStudy))
+	mux.HandleFunc("DELETE /api/studies/{id}/watch", auth(srv.UnwatchStudy))
+
+	// Study review checklist — per-study checklist responses.
+	mux.HandleFunc("GET /api/studies/{id}/checklist", auth(srv.ListStudyChecklistResponses))
+	mux.HandleFunc("POST /api/studies/{id}/checklist", adminOnly(srv.UpsertStudyChecklistResponse))
+
+	// Bulk study reassignment between projects.
+	mux.HandleFunc("POST /api/studies/bulk-reassign", adminOnly(srv.BulkReassignStudies))
+
 	// Study labels — free-text tags applied by admin users for structured triage.
 	mux.HandleFunc("GET /api/studies/{id}/labels", auth(srv.ListStudyLabels))
 	mux.HandleFunc("POST /api/studies/{id}/labels", adminOnly(srv.AddStudyLabel))
 	mux.HandleFunc("DELETE /api/studies/{id}/labels/{labelID}", adminOnly(srv.DeleteStudyLabel))
 	mux.HandleFunc("POST /api/studies/bulk-label", adminOnly(srv.BulkLabelStudies))
+	mux.HandleFunc("POST /api/studies/bulk-share", adminOnly(srv.BulkCreateShares))
+	mux.HandleFunc("POST /api/studies/bulk-custom-field", adminOnly(srv.BulkSetCustomField))
 
 	// Study relationships — link studies as baseline/follow_up/comparison/replicate pairs.
 	mux.HandleFunc("GET /api/studies/{id}/relationships", auth(srv.ListStudyRelationships))
@@ -313,6 +590,14 @@ func main() {
 	mux.HandleFunc("PUT /api/studies/{id}/subject", adminOnly(srv.SetStudySubject))
 	mux.HandleFunc("PUT /api/studies/{id}/project", adminOnly(srv.ReassignStudy))
 
+	// XNAT-style nested resource paths for project → subject drill-down.
+	// XNAT inspires the URL shape; handler code is original.
+	mux.HandleFunc("GET /api/projects/{id}/subjects", auth(srv.ListProjectSubjects))
+	mux.HandleFunc("GET /api/projects/{id}/subjects/{subjectID}", auth(srv.GetProjectSubject))
+
+	// Cross-entity top-bar search (projects + subjects + studies).
+	mux.HandleFunc("GET /api/search", auth(srv.Search))
+
 	// Federation peers — trusted remote AEGIS instances (stub for future cross-tenant federation).
 	mux.HandleFunc("GET /api/federation-peers", auth(srv.ListFederationPeers))
 	mux.HandleFunc("POST /api/federation-peers", adminOnly(srv.CreateFederationPeer))
@@ -320,16 +605,69 @@ func main() {
 	mux.HandleFunc("PUT /api/federation-peers/{id}", adminOnly(srv.UpdateFederationPeer))
 	mux.HandleFunc("DELETE /api/federation-peers/{id}", adminOnly(srv.DeleteFederationPeer))
 
+	// Dashboard notifications — in-app notification bell.
+	mux.HandleFunc("GET /api/notifications", auth(srv.ListNotifications))
+	mux.HandleFunc("POST /api/notifications", adminOnly(srv.CreateNotification))
+	mux.HandleFunc("POST /api/notifications/{id}/read", auth(srv.MarkNotificationRead))
+	mux.HandleFunc("POST /api/notifications/read-all", auth(srv.MarkAllNotificationsRead))
+
+	// Audit bookmarks — save important audit entries for compliance tracking.
+	mux.HandleFunc("GET /api/audit-bookmarks", auth(srv.ListAuditBookmarks))
+	mux.HandleFunc("POST /api/audit-bookmarks", auth(srv.CreateAuditBookmark))
+	mux.HandleFunc("DELETE /api/audit-bookmarks/{id}", auth(srv.DeleteAuditBookmark))
+
+	// Audit annotations — operator notes attached to specific audit entries.
+	mux.HandleFunc("GET /api/audit/{id}/annotations", auth(srv.ListAuditAnnotations))
+	mux.HandleFunc("POST /api/audit/{id}/annotations", auth(srv.CreateAuditAnnotation))
+	mux.HandleFunc("DELETE /api/audit/{id}/annotations/{annotationID}", auth(srv.DeleteAuditAnnotation))
+
 	// Admin users — authorised dashboard users and their roles.
+	mux.HandleFunc("GET /api/admin-users/activity", auth(srv.GetAdminUserActivity))
 	mux.HandleFunc("GET /api/admin-users", auth(srv.ListAdminUsers))
 	mux.HandleFunc("POST /api/admin-users", adminOnly(srv.CreateAdminUser))
 	mux.HandleFunc("PUT /api/admin-users/{id}", adminOnly(srv.UpdateAdminUser))
 	mux.HandleFunc("DELETE /api/admin-users/{id}", adminOnly(srv.DeleteAdminUser))
+	mux.HandleFunc("POST /api/admin-users/{id}/send-invite", adminOnly(srv.SendAdminUserInvite))
 	mux.HandleFunc("GET /api/admin-users/{id}/preferences", auth(srv.GetUserPreferences))
 	mux.HandleFunc("PUT /api/admin-users/{id}/preferences", auth(srv.UpdateUserPreferences))
+	mux.HandleFunc("GET /api/admin-users/{id}/sessions", auth(srv.ListSessions))
+
+	// Admin maintenance — one-shot backfills + data fixers; admin-only.
+	mux.HandleFunc("POST /api/admin/backfill-study-metadata", adminOnly(srv.BackfillStudyMetadata))
+
+	// Auth session tracking.
+	mux.HandleFunc("POST /api/auth/session", auth(srv.RecordSession))
+
+	// Comment reactions — emoji reactions on study comments.
+	mux.HandleFunc("GET /api/comments/{id}/reactions", auth(srv.ListCommentReactions))
+	mux.HandleFunc("POST /api/comments/{id}/reactions", auth(srv.AddCommentReaction))
+	mux.HandleFunc("DELETE /api/comments/{id}/reactions", auth(srv.DeleteCommentReaction))
+
+	// Comment mentions — @user mentions in comments.
+	mux.HandleFunc("GET /api/comments/{id}/mentions", auth(srv.ListCommentMentions))
+	mux.HandleFunc("POST /api/comments/{id}/mentions", adminOnly(srv.AddCommentMention))
+	mux.HandleFunc("GET /api/mentions", auth(srv.ListMyMentions))
+
+	// Dashboard saved views — server-side filter presets.
+	mux.HandleFunc("GET /api/saved-views", auth(srv.ListSavedViews))
+	mux.HandleFunc("POST /api/saved-views", auth(srv.CreateSavedView))
+	mux.HandleFunc("PUT /api/saved-views/{id}", auth(srv.UpdateSavedView))
+	mux.HandleFunc("DELETE /api/saved-views/{id}", auth(srv.DeleteSavedView))
+
+	// Export share templates — reusable share configurations.
+	mux.HandleFunc("GET /api/export-share-templates", auth(srv.ListExportShareTemplates))
+	mux.HandleFunc("POST /api/export-share-templates", adminOnly(srv.CreateExportShareTemplate))
+	mux.HandleFunc("DELETE /api/export-share-templates/{id}", adminOnly(srv.DeleteExportShareTemplate))
+
+	// Routing rule templates — shareable rule configurations.
+	mux.HandleFunc("GET /api/routing-rule-templates", auth(srv.ListRoutingRuleTemplates))
+	mux.HandleFunc("POST /api/routing-rule-templates", adminOnly(srv.CreateRoutingRuleTemplate))
+	mux.HandleFunc("DELETE /api/routing-rule-templates/{id}", adminOnly(srv.DeleteRoutingRuleTemplate))
 
 	// Project-level batch export — dispatch all eligible approved studies.
 	mux.HandleFunc("POST /api/projects/{id}/export-batch", adminOnly(srv.ExportBatch))
+	mux.HandleFunc("GET /api/projects/{id}/bids-export", auth(srv.ServeProjectBidsExport))
+	mux.HandleFunc("GET /api/projects/{id}/bids-info", auth(srv.GetProjectBidsInfo))
 
 	// Protocol templates — per-project MRI acquisition parameter expectations.
 	mux.HandleFunc("GET /api/projects/{projectID}/protocol-templates", auth(srv.ListProtocolTemplates))
@@ -343,13 +681,44 @@ func main() {
 	// Async processing triggers — admin-initiated pipeline actions.
 	mux.HandleFunc("POST /api/deface/{studyUID}", adminOnly(srv.TriggerDeface))
 	mux.HandleFunc("POST /api/studies/{studyUID}/phi-scan", adminOnly(srv.TriggerPhiScan))
+	mux.HandleFunc("POST /api/studies/{studyUID}/pixel-redaction", adminOnly(srv.TriggerPixelRedaction))
 	mux.HandleFunc("POST /api/studies/{studyUID}/qc-check", adminOnly(srv.TriggerQcCheck))
 	mux.HandleFunc("POST /api/studies/{studyUID}/bids-convert", adminOnly(srv.TriggerBidsConversion))
 	mux.HandleFunc("GET /api/studies/{studyUID}/bids-download", auth(srv.ServeBidsDownload))
 	mux.HandleFunc("POST /api/studies/{studyUID}/classify", adminOnly(srv.TriggerClassification))
 	mux.HandleFunc("POST /api/studies/{studyUID}/protocol-check", adminOnly(srv.TriggerProtocolCheck))
 	mux.HandleFunc("GET /api/studies/{studyUID}/dicom-download", auth(srv.ServeDicomDownload))
+	mux.HandleFunc("POST /api/studies/{studyUID}/analytics", adminOnly(srv.TriggerAnalytics))
+	mux.HandleFunc("POST /api/studies/{studyUID}/longitudinal-analytics", adminOnly(srv.TriggerLongitudinalAnalytics))
+	mux.HandleFunc("POST /api/studies/{studyUID}/run-sct", adminOnly(srv.TriggerSct))
 	mux.HandleFunc("POST /api/studies/{studyUID}/trigger-export", adminOnly(srv.TriggerExport))
+
+	// Biomarker database — ROI results, composite scores, longitudinal data.
+	mux.HandleFunc("GET /api/studies/{id}/roi-results", auth(srv.ListROIResults))
+	mux.HandleFunc("GET /api/studies/{id}/roi-results/summary", auth(srv.GetROIResultsSummary))
+	mux.HandleFunc("GET /api/studies/{id}/composite-scores", auth(srv.ListCompositeScores))
+	mux.HandleFunc("GET /api/studies/{id}/longitudinal-roi-results", auth(srv.ListLongitudinalROIResults))
+	mux.HandleFunc("DELETE /api/studies/{id}/roi-results", adminOnly(srv.DeleteROIResults))
+	mux.HandleFunc("GET /api/subjects/{subjectID}/roi-results", auth(srv.ListSubjectROIResults))
+	mux.HandleFunc("GET /api/subjects/{subjectID}/roi-export", auth(srv.ExportSubjectROIData))
+	mux.HandleFunc("GET /api/projects/{id}/roi-export", auth(srv.ExportProjectROIData))
+
+	// Analyst QC ratings — human quality assessments for studies.
+	mux.HandleFunc("GET /api/studies/{id}/qc-ratings", auth(srv.ListQCRatings))
+	mux.HandleFunc("POST /api/studies/{id}/qc-ratings", adminOnly(srv.SubmitQCRating))
+	mux.HandleFunc("PUT /api/qc-ratings/{id}", adminOnly(srv.UpdateQCRating))
+	mux.HandleFunc("DELETE /api/qc-ratings/{id}", adminOnly(srv.DeleteQCRating))
+
+	// Subject demographics — de-identified research metadata.
+	mux.HandleFunc("GET /api/subjects/{subjectID}/demographics", auth(srv.GetSubjectDemographics))
+	mux.HandleFunc("PUT /api/subjects/{subjectID}/demographics", adminOnly(srv.UpsertSubjectDemographics))
+	mux.HandleFunc("GET /api/projects/{id}/demographics", auth(srv.ListProjectDemographics))
+	mux.HandleFunc("GET /api/projects/{id}/demographics.csv", auth(srv.ExportProjectDemographicsCSV))
+
+	// Analytics output files — browse, stream, and bulk-download NIfTI/surface/stats files.
+	mux.HandleFunc("GET /api/studies/{id}/analytics-files", auth(srv.ListAnalyticsFiles))
+	mux.HandleFunc("GET /api/studies/{id}/analytics-files/{path...}", auth(srv.ServeAnalyticsFile))
+	mux.HandleFunc("GET /api/studies/{id}/analytics-download", auth(srv.ServeAnalyticsDownload))
 
 	// Synthetic MRI generation — creates a new synthetic brain MRI study.
 	mux.HandleFunc("POST /api/studies/generate-synthetic", adminOnly(srv.GenerateSyntheticStudy))
@@ -369,12 +738,21 @@ func main() {
 	mux.HandleFunc("POST /api/invite-codes/{id}/revoke", adminOnly(srv.RevokeInviteCode))
 	mux.HandleFunc("DELETE /api/invite-codes/{id}", adminOnly(srv.DeleteInviteCode))
 	mux.HandleFunc("POST /api/invite-codes/{id}/send", adminOnly(srv.SendInviteCode))
+	mux.HandleFunc("GET /api/invite-codes/{id}/activity", auth(srv.GetInviteCodeActivity))
+	mux.HandleFunc("POST /api/invite-codes/{id}/send-admin-invite", adminOnly(srv.SendAdminInvite))
 	// Invite requests — stored in DB, manageable from admin dashboard.
 	mux.HandleFunc("GET /api/invite/requests", auth(srv.ListInviteRequestsAdmin))
 	mux.HandleFunc("POST /api/invite/requests/{id}/approve", adminOnly(srv.ApproveInviteRequestAdmin))
 	mux.HandleFunc("POST /api/invite/requests/{id}/deny", adminOnly(srv.DenyInviteRequestAdmin))
 
 	var h http.Handler = mux
+	// Tenant resolution runs *inside* CORS and logging so any 404 it emits
+	// for an unknown/disabled tenant slug is still logged. It runs *before*
+	// the per-route auth middleware so handler code can read the resolved
+	// tenant alongside the authenticated user. Legacy single-tenant
+	// requests (no X-AEGIS-Tenant header, no matching subdomain) pass
+	// through with no tenant in context — same behavior as before.
+	h = middleware.ResolveTenant(db)(h)
 	h = middleware.Recover(h)
 	h = middleware.Logging(h)
 	h = middleware.CORS(h, cfg.AllowedOrigins)
@@ -399,10 +777,20 @@ func main() {
 	defer slaCancel()
 	sla.Start(slaCtx, db, mailer, cfg.SLAPipelineMinutes, cfg.SLACooldownHours, cfg.SLAAlertEmail)
 
+	// Start the destination health probe scheduler (no-op when DEST_HEALTH_INTERVAL=0).
+	probeCtx, probeCancel := context.WithCancel(context.Background())
+	defer probeCancel()
+	srv.StartDestinationProbeScheduler(probeCtx, time.Duration(cfg.DestHealthInterval)*time.Second, cfg.DestHealthAlertEmail)
+
 	// Start the study retention worker (daily sweep, no-op when no projects have retention_days set).
 	retentionCtx, retentionCancel := context.WithCancel(context.Background())
 	defer retentionCancel()
 	retention.Start(retentionCtx, db)
+
+	// Start the audit log purge worker (daily sweep, no-op when AUDIT_RETENTION_DAYS=0).
+	auditRetentionCtx, auditRetentionCancel := context.WithCancel(context.Background())
+	defer auditRetentionCancel()
+	audit_retention.Start(auditRetentionCtx, db, cfg.AuditRetentionDays)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)

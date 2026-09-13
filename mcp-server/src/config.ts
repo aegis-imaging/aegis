@@ -19,6 +19,8 @@ export type McpConfig = {
   agentLlmMaxTokens: number;
   agentLlmUseGcpAuth: boolean;
   agentLlmGcpProject?: string;
+  agentLlmUseAwsBedrock: boolean;
+  agentLlmAwsRegion?: string;
 };
 
 function getRequiredEnv(name: string): string {
@@ -87,8 +89,10 @@ export function loadConfig(): McpConfig {
     agentLlmApiKey: process.env.MCP_AGENT_LLM_API_KEY?.trim() || undefined,
     agentLlmModel: process.env.MCP_AGENT_LLM_MODEL?.trim() || "gpt-4.1-mini",
     agentLlmTemperature: getFloatEnv("MCP_AGENT_LLM_TEMPERATURE", 0.2),
-    agentLlmMaxTokens: getPositiveIntEnv("MCP_AGENT_LLM_MAX_TOKENS", 1500),
+    agentLlmMaxTokens: getPositiveIntEnv("MCP_AGENT_LLM_MAX_TOKENS", 4096),
     agentLlmUseGcpAuth: process.env.MCP_AGENT_LLM_USE_GCP_AUTH === "true",
-    agentLlmGcpProject: process.env.MCP_AGENT_LLM_GCP_PROJECT?.trim() || undefined
+    agentLlmGcpProject: process.env.MCP_AGENT_LLM_GCP_PROJECT?.trim() || undefined,
+    agentLlmUseAwsBedrock: process.env.MCP_AGENT_LLM_USE_AWS_BEDROCK === "true",
+    agentLlmAwsRegion: process.env.MCP_AGENT_LLM_AWS_REGION?.trim() || undefined
   };
 }

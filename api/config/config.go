@@ -11,10 +11,11 @@ import (
 type Config struct {
 	Port            string
 	DatabaseURL     string
-	StorageMode     string // "local", "gcs", or "s3"
+	StorageMode     string // "local", "gcs", "s3", or "azure"
 	LocalStorageDir string
 	APIBaseURL          string // for generating local upload URLs
 	ExportPortalBaseURL string // base URL of the export portal UI — used in share email links
+	UploadPortalBaseURL string // UPLOAD_PORTAL_BASE_URL — base URL of the upload portal UI; used in uploader-invite redeem links (empty = fall back to LandingBaseURL path)
 	AppTimezone         string // database session + server log timezone (default UTC)
 
 	// GCP (only used when StorageMode = "gcs")
@@ -28,6 +29,10 @@ type Config struct {
 	S3Bucket   string
 	S3Region   string
 	S3Endpoint string // optional — set for S3-compatible stores (MinIO, LocalStack)
+
+	// Azure (only used when StorageMode = "azure")
+	AzureStorageAccount   string // AZURE_STORAGE_ACCOUNT — e.g. aegisproddicom
+	AzureStorageContainer string // AZURE_STORAGE_CONTAINER — default "dicom"
 
 	// Defacing service (Python Cloud Run sidecar)
 	// Empty string disables the defacing service call (pipeline still records status).
@@ -57,6 +62,14 @@ type Config struct {
 	DimseReceiverURL string
 	// Optional operator key used by API when proxying DIMSE retry-control endpoints.
 	DimseOperatorAPIKey string
+
+	// Neuroimaging analytics service (Python Cloud Run sidecar) — FreeSurfer, FSL, ANTs, SPM.
+	// Empty string disables the service call (studies stay in "pending" until service is configured).
+	AnalyticsServiceURL string
+
+	// Spinal Cord Toolbox service (Python Cloud Run sidecar) — SCT CLI tools.
+	// Empty string disables the service call (studies stay in "pending" until service is configured).
+	SctServiceURL string
 
 	// Synthetic MRI generation service (Python Cloud Run sidecar).
 	// Empty string disables the endpoint (returns 503 until configured).
@@ -108,12 +121,33 @@ type Config struct {
 
 	// Pipeline failure alerting — sends email whenever a pipeline service step fails.
 	// Disabled when PipelineAlertEmail is empty or SMTP is not configured.
-	PipelineAlertEmail string // PIPELINE_ALERT_EMAIL — recipient for pipeline step failure alerts
+	PipelineAlertEmail  string // PIPELINE_ALERT_EMAIL — recipient for pipeline step failure alerts
+	AutoShareExpiryDays int    // AUTO_SHARE_EXPIRY_DAYS — days until auto-generated share link expires (default 30)
+
+	// Destination health probe scheduler — automatically probes all enabled destinations.
+	// Disabled when DestHealthInterval is 0.
+	DestHealthInterval  int    // DEST_HEALTH_INTERVAL — probe interval in seconds (0 = disabled)
+	DestHealthAlertEmail string // DEST_HEALTH_ALERT_EMAIL — email for failure transition alerts
+
+	// Audit log retention — purge audit_trail rows older than N days.
+	// 0 (default) = keep forever.
+	AuditRetentionDays int // AUDIT_RETENTION_DAYS
 
 	// First-admin bootstrap — seeds the first admin user on startup when admin_users is empty.
 	// Idempotent: has no effect once any admin user exists.
 	FirstAdminEmail string // FIRST_ADMIN_EMAIL
 	FirstAdminName  string // FIRST_ADMIN_NAME (optional; defaults to email address)
+
+	// Satellite router enrollment (POST /api/satellites/enroll).
+	// SatelliteCAEnabled gates the endpoint entirely. When the cert/key paths are
+	// empty and SatelliteCAEphemeral=true the API mints a self-signed CA in
+	// memory at startup — useful for dev/test, not durable across restarts.
+	SatelliteCAEnabled       bool   // SATELLITE_CA_ENABLED — default true
+	SatelliteCACertPath      string // SATELLITE_CA_CERT_PATH
+	SatelliteCAKeyPath       string // SATELLITE_CA_KEY_PATH
+	SatelliteCAEphemeral     bool   // SPOKE_CA_EPHEMERAL — when paths unset, generate in-memory CA (default true)
+	SatelliteCertValidityDays int   // SPOKE_CERT_VALIDITY_DAYS — default 365
+	SatelliteEnrollmentTokenTTLHours int // SPOKE_ENROLLMENT_TOKEN_TTL_HOURS — default 72
 }
 
 func Load() *Config {
@@ -144,6 +178,7 @@ func Load() *Config {
 		LocalStorageDir: envOr("LOCAL_STORAGE_DIR", "./data"),
 		APIBaseURL:          envOr("API_BASE_URL", "http://localhost:8080"),
 		ExportPortalBaseURL: os.Getenv("EXPORT_PORTAL_BASE_URL"), // e.g. https://export.aegisimaging.ai
+		UploadPortalBaseURL: os.Getenv("UPLOAD_PORTAL_BASE_URL"), // e.g. https://upload.aegisimaging.ai
 		AppTimezone:         envOr("APP_TIMEZONE", "UTC"),
 
 		GCPProject:      os.Getenv("GCP_PROJECT"),
@@ -156,15 +191,20 @@ func Load() *Config {
 		S3Region:   envOr("S3_REGION", "us-east-1"),
 		S3Endpoint: os.Getenv("S3_ENDPOINT"), // e.g. http://localhost:4566 for LocalStack
 
+		AzureStorageAccount:   os.Getenv("AZURE_STORAGE_ACCOUNT"),
+		AzureStorageContainer: envOr("AZURE_STORAGE_CONTAINER", "dicom"),
+
 		DefacingServiceURL:       os.Getenv("DEFACING_SERVICE_URL"),       // e.g. http://localhost:8081
-		PhiDetectionServiceURL:   os.Getenv("PHI_DETECTION_SERVICE_URL"),  // e.g. http://localhost:8082
-		QcServiceURL:             os.Getenv("QC_SERVICE_URL"),             // e.g. http://localhost:8083
-		BidsServiceURL:           os.Getenv("BIDS_SERVICE_URL"),           // e.g. http://localhost:8084
-		ClassificationServiceURL: os.Getenv("CLASSIFICATION_SERVICE_URL"), // e.g. http://localhost:8085
-		ProtocolServiceURL:       os.Getenv("PROTOCOL_SERVICE_URL"),       // e.g. http://localhost:8086
-		DimseReceiverURL:         os.Getenv("DIMSE_RECEIVER_URL"),         // e.g. http://localhost:8087
+		PhiDetectionServiceURL:   sidecarURL("PHI_DETECTION_SERVICE_URL",   "phi"),
+		QcServiceURL:             sidecarURL("QC_SERVICE_URL",              "qc"),
+		BidsServiceURL:           sidecarURL("BIDS_SERVICE_URL",            "bids"),
+		ClassificationServiceURL: sidecarURL("CLASSIFICATION_SERVICE_URL",  "classify"),
+		ProtocolServiceURL:       sidecarURL("PROTOCOL_SERVICE_URL",        "protocol"),
+		SynthServiceURL:          sidecarURL("SYNTH_SERVICE_URL",           "synth"),
+		DimseReceiverURL:         os.Getenv("DIMSE_RECEIVER_URL"),          // e.g. http://localhost:8087
 		DimseOperatorAPIKey:      os.Getenv("DIMSE_OPERATOR_API_KEY"),
-		SynthServiceURL:          os.Getenv("SYNTH_SERVICE_URL"),          // e.g. http://localhost:8088
+		AnalyticsServiceURL:      os.Getenv("ANALYTICS_SERVICE_URL"),       // e.g. http://localhost:8089
+		SctServiceURL:            os.Getenv("SCT_SERVICE_URL"),             // e.g. http://localhost:8090
 
 		PipelineAuto: os.Getenv("PIPELINE_AUTO") != "false",
 
@@ -172,7 +212,7 @@ func Load() *Config {
 		RateLimitRPS:     floatEnvOr("RATE_LIMIT_RPS", 20),
 		RateLimitBurst:   envInt("RATE_LIMIT_BURST", 50),
 
-		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,https://aegisimaging.ai,https://www.aegisimaging.ai"), ","),
+		AllowedOrigins: strings.Split(envOr("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3006,https://aegisimaging.ai,https://www.aegisimaging.ai"), ","),
 
 		AuthEnabled:  os.Getenv("AUTH_ENABLED") == "true",
 		AuthProvider: envOr("AUTH_PROVIDER", "auto"),
@@ -196,10 +236,23 @@ func Load() *Config {
 		SLAPipelineMinutes: envInt("SLA_PIPELINE_MINUTES", 0),
 		SLACooldownHours:   envInt("SLA_COOLDOWN_HOURS", 24),
 		SLAAlertEmail:      os.Getenv("SLA_ALERT_EMAIL"),
-		PipelineAlertEmail: os.Getenv("PIPELINE_ALERT_EMAIL"),
+		PipelineAlertEmail:  os.Getenv("PIPELINE_ALERT_EMAIL"),
+		AutoShareExpiryDays: envInt("AUTO_SHARE_EXPIRY_DAYS", 30),
+
+		DestHealthInterval:   envInt("DEST_HEALTH_INTERVAL", 0),
+		DestHealthAlertEmail: os.Getenv("DEST_HEALTH_ALERT_EMAIL"),
+
+		AuditRetentionDays: envInt("AUDIT_RETENTION_DAYS", 0),
 
 		FirstAdminEmail: os.Getenv("FIRST_ADMIN_EMAIL"),
 		FirstAdminName:  envOr("FIRST_ADMIN_NAME", os.Getenv("FIRST_ADMIN_EMAIL")),
+
+		SatelliteCAEnabled:               os.Getenv("SATELLITE_CA_ENABLED") != "false",
+		SatelliteCACertPath:              os.Getenv("SATELLITE_CA_CERT_PATH"),
+		SatelliteCAKeyPath:               os.Getenv("SATELLITE_CA_KEY_PATH"),
+		SatelliteCAEphemeral:             os.Getenv("SPOKE_CA_EPHEMERAL") != "false",
+		SatelliteCertValidityDays:        envInt("SPOKE_CERT_VALIDITY_DAYS", 365),
+		SatelliteEnrollmentTokenTTLHours: envInt("SPOKE_ENROLLMENT_TOKEN_TTL_HOURS", 72),
 	}
 }
 
@@ -217,6 +270,26 @@ func floatEnvOr(key string, fallback float64) float64 {
 		}
 	}
 	return fallback
+}
+
+// sidecarURL resolves the per-sidecar base URL from environment.
+// Legacy override: if the per-sidecar env var (e.g. PHI_DETECTION_SERVICE_URL)
+// is set, use it unchanged — preserves backward compatibility for any local
+// dev setup that still runs the old standalone containers.
+// Otherwise derive it from the unified DICOM_TOOLS_URL by appending the
+// sub-module's prefix (e.g. DICOM_TOOLS_URL + "/phi"). This is the path that
+// will be taken in production once the consolidated dicom-tools Cloud Run
+// service is deployed.
+// Returns empty string if neither is set, which keeps the existing
+// "feature disabled" semantics on the consuming handlers.
+func sidecarURL(legacyEnvKey, prefix string) string {
+	if v := os.Getenv(legacyEnvKey); v != "" {
+		return v
+	}
+	if base := os.Getenv("DICOM_TOOLS_URL"); base != "" {
+		return base + "/" + prefix
+	}
+	return ""
 }
 
 func envInt(key string, fallback int) int {

@@ -87,6 +87,16 @@ func TestLocal_GenerateUploadURL(t *testing.T) {
 	assert.Equal(t, "http://localhost:8080/api/upload/file/session/0", url)
 }
 
+func TestLocal_GenerateUploadURL_StagingKeyMatchesRoute(t *testing.T) {
+	// UploadInit stages files at uploads/{sessionID}/{index}.dcm; the URL must
+	// map onto PUT /api/upload/file/{sessionID}/{index} (two path segments) or
+	// the Go mux 404s and browser uploads break in local storage mode.
+	s := NewLocal("/data", "http://localhost:8080")
+	url, err := s.GenerateUploadURL(context.Background(), "uploads/abc-123/7.dcm", 0)
+	require.NoError(t, err)
+	assert.Equal(t, "http://localhost:8080/api/upload/file/abc-123/7", url)
+}
+
 func TestLocal_GenerateDownloadURL(t *testing.T) {
 	s := NewLocal("/data", "http://localhost:8080")
 	url, err := s.GenerateDownloadURL(context.Background(), "dicom/raw/1.2.3/0.dcm", 0)

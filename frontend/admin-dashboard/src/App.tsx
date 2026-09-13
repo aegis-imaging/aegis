@@ -1,16 +1,105 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
-import './App.css'
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment, DragEvent } from 'react'
+import {
+  isDicomFile, parseDicomFile, buildStudySummary, deidentify, uploadStudy, groupByStudy,
+} from '@aegis/client'
+import type { ParsedDicomFile, StudySummary } from '@aegis/client'
+import './styles/layout.css'
+import './styles/components.css'
+import './styles/forms-shares.css'
+import './styles/viewers.css'
+import './styles/panels.css'
+import './styles/dark-theme.css'
 import { AgentPanel } from './components/AgentPanel'
 import { ViewerPanel } from './components/ViewerPanel'
-import { TCIAPanel } from './components/TCIAPanel'
+import { NiivueViewer } from './components/NiivueViewer'
+import { SatellitesPanel } from './components/SatellitesPanel'
 import { SynthPanel } from './components/SynthPanel'
 import { SystemHealthPanel } from './components/SystemHealthPanel'
 import { ComplianceReportPanel } from './components/ComplianceReportPanel'
+import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { useStudyEvents } from './hooks/useStudyEvents'
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useDarkMode } from './hooks/useDarkMode'
+import { TopBar } from './layout/TopBar'
+import { Breadcrumbs } from './layout/Breadcrumbs'
+
+// PageHeader renders the title/description strip at the top of each admin
+// tab body. Keeps every tab visually consistent without forcing each block
+// to repeat the same markup.
+function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string
+  description?: string
+  actions?: React.ReactNode
+}) {
+  return (
+    <header className="aegis-page-header">
+      <div className="aegis-page-header-row">
+        <div>
+          <h1>{title}</h1>
+          {description && <p className="aegis-page-description">{description}</p>}
+        </div>
+        {actions && <div className="aegis-page-header-actions">{actions}</div>}
+      </div>
+    </header>
+  )
+}
+
+// Per-tab title + description rendered into the PageHeader. Wording matches
+// the operator-facing intent of each tab so a first-time visitor understands
+// what the screen is for without reading the body.
+const TAB_META: Record<string, { title: string; description: string }> = {
+  studies: { title: 'Studies', description: 'Global pipeline triage. Browse, approve, and act on incoming studies across every project.' },
+  audit: { title: 'Audit Log', description: 'Append-only record of every mutation across the platform.' },
+  agent: { title: 'AI Agent', description: 'Ask questions about studies, pipeline state, and routing in natural language.' },
+  shares: { title: 'Shares', description: 'Outgoing share links and per-share download statistics.' },
+  routing: { title: 'Routing Rules', description: 'Priority-ordered rules that decide which actions fire on each new study.' },
+  dimse_ops: { title: 'DIMSE Operations', description: 'Receiver health, retry queues, and dead-letter inspection for DICOM C-STORE.' },
+  projects: { title: 'Projects', description: 'Global project registry, PHI configuration, retention, and storage quotas.' },
+  institutions: { title: 'Institutions', description: 'Hospitals, research sites, and other organizational scopes.' },
+  satellites: { title: 'Satellites', description: 'On-prem AEGIS Satellite enrollment and pairing tokens.' },
+  profiles: { title: 'Anonymization Profiles', description: 'Tag-level de-identification rules per profile.' },
+  protocol_templates: { title: 'Protocol Templates', description: 'Expected MRI/CT acquisition parameters used for protocol compliance checks.' },
+  notifications: { title: 'Notifications', description: 'Digest email subscriptions and webhook delivery configuration.' },
+  federation: { title: 'Federation', description: 'Peer AEGIS instance registry for cross-site exchange.' },
+  system: { title: 'System', description: 'Infrastructure health, service status, and pipeline configuration.' },
+  users: { title: 'Users', description: 'Global user registry, roles, and access.' },
+  api_keys: { title: 'API Keys', description: 'Programmatic access tokens for the AEGIS API.' },
+  invite_codes: { title: 'Invite Codes', description: 'Self-service registration tokens and pending requests.' },
+  downloads: { title: 'Downloads', description: 'Bulk study export, archive packaging, and desktop installers.' },
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'tcia_import' | 'users' | 'api_keys' | 'invite_codes' | 'system'
+type AppTab = 'studies' | 'agent' | 'audit' | 'shares' | 'routing' | 'dimse_ops' | 'institutions' | 'satellites' | 'profiles' | 'protocol_templates' | 'notifications' | 'projects' | 'federation' | 'users' | 'api_keys' | 'invite_codes' | 'downloads' | 'system'
+
+const ADMIN_TABS: AppTab[] = [
+  'studies', 'agent', 'audit', 'shares', 'routing', 'dimse_ops',
+  'institutions', 'satellites', 'profiles', 'protocol_templates', 'notifications',
+  'projects', 'federation', 'users', 'api_keys', 'invite_codes',
+  'downloads', 'system',
+]
+
+// parseAdminTab pulls the tab segment out of the pathname (e.g. /audit →
+// 'audit', /institutions/abc123 → 'institutions'). Unknown or missing
+// segments fall through to 'studies' so the app always has a coherent
+// active tab.
+//
+// Legacy /admin/<tab> URLs are handled by AdminTabRedirect before App
+// renders, so by the time this function runs the pathname is always
+// in root form (/<tab>). The /admin/ fallback below is defence-in-depth
+// in case some code path slips a /admin/* pathname through.
+function parseAdminTab(pathname: string): AppTab {
+  const rootMatch = pathname.match(/^\/([^/]+)/)
+  const rootCandidate = rootMatch?.[1] as AppTab | undefined
+  if (rootCandidate && ADMIN_TABS.includes(rootCandidate)) return rootCandidate
+  const adminMatch = pathname.match(/^\/admin\/([^/]+)/)
+  const adminCandidate = adminMatch?.[1] as AppTab | undefined
+  return adminCandidate && ADMIN_TABS.includes(adminCandidate) ? adminCandidate : 'studies'
+}
 
 type APIKey = {
   id: string
@@ -22,6 +111,42 @@ type APIKey = {
   expires_at: string | null
   created_at: string
   updated_at: string
+}
+
+type DesktopInstaller = {
+  id: string
+  product: 'uploader' | 'dimse-bridge'
+  platform: string
+  version: string
+  storage_key?: string
+  external_url?: string
+  filename: string
+  size_bytes: number
+  sha256: string
+  changelog?: string
+  is_current: boolean
+  released_at: string
+  created_by: string
+  created_at: string
+}
+
+type DesktopInstallerInvite = {
+  id: string
+  installer_id: string
+  recipient_email: string
+  recipient_name?: string
+  token: string
+  expires_at: string
+  sent_at: string
+  sent_by: string
+  first_clicked_at: string | null
+  last_clicked_at: string | null
+  click_count: number
+  paired_at: string | null
+  paired_api_key_id: string | null
+  product?: string
+  platform?: string
+  version?: string
 }
 
 type StudyLabel = {
@@ -41,6 +166,46 @@ type SeriesRow = {
   body_part: string
   instance_count: number
   created_at: string
+}
+
+// SeriesMetadata mirrors api/model.SeriesMetadata — the per-series DICOM
+// acquisition / device / geometry parameters captured at ingest time.
+// Every nullable field on the server is rendered as `null` in JSON; any
+// "string" fields without a `?: string | null` are server-required.
+type SeriesMetadata = {
+  id: string
+  study_id: string
+  series_instance_uid: string
+  series_number?: number | null
+  series_description?: string | null
+  protocol_name?: string | null
+  modality?: string | null
+  body_part_examined?: string | null
+  repetition_time?: number | null
+  echo_time?: number | null
+  inversion_time?: number | null
+  flip_angle?: number | null
+  slice_thickness?: number | null
+  spacing_between_slices?: number | null
+  pixel_bandwidth?: number | null
+  magnetic_field_strength?: number | null
+  echo_train_length?: number | null
+  number_of_averages?: number | null
+  rows?: number | null
+  columns?: number | null
+  pixel_spacing_row?: number | null
+  pixel_spacing_col?: number | null
+  scanning_sequence?: string | null
+  sequence_variant?: string | null
+  mr_acquisition_type?: string | null
+  sequence_name?: string | null
+  manufacturer?: string | null
+  manufacturer_model_name?: string | null
+  software_versions?: string | null
+  imaging_frequency?: number | null
+  instance_count: number
+  created_at: string
+  updated_at: string
 }
 
 type RelatedStudySummary = {
@@ -80,6 +245,7 @@ type Study = {
   modality: string
   body_part: string
   study_description: string
+  study_date?: string
   series_count: number
   source: string
   status: string
@@ -96,6 +262,8 @@ type Study = {
   protocol_status: string
   export_required: boolean
   export_status: string
+  analytics_required: boolean
+  analytics_status: string
   dicom_store: string
   instance_count: number
   study_size_bytes: number
@@ -103,6 +271,7 @@ type Study = {
   deface_qa_score?: number
   subject_id?: string
   rejection_reason?: string
+  auto_share_url?: string
   created_at: string
   updated_at: string
 }
@@ -201,7 +370,23 @@ type Project = {
   stuck_threshold_minutes?: number | null
   storage_quota_bytes?: number | null
   archived?: boolean
+  restricted?: boolean
+  member_count?: number
   created_at: string
+}
+
+type ProjectMember = {
+  id: string
+  project_id: string
+  admin_user_id: string
+  role: 'owner' | 'coordinator' | 'reviewer' | 'site_coordinator' | 'site_viewer'
+  institution_id: string | null
+  notes: string
+  user_email: string
+  user_name: string
+  institution_name?: string
+  created_at: string
+  updated_at: string
 }
 
 type AnonProfile = {
@@ -252,7 +437,7 @@ type AdminUser = {
   id: string
   email: string
   name: string
-  role: 'admin' | 'viewer'
+  role: 'admin' | 'viewer' | 'researcher'
   enabled: boolean
   notes: string
   created_at: string
@@ -277,6 +462,26 @@ type AuthIdentity = {
   email: string
   name: string
   role: string
+}
+
+type ProjectRole = ProjectMember['role']
+
+type ProjectCapabilities = {
+  canStudyMutation: boolean
+  canApproveReject: boolean
+  canManageProject: boolean
+}
+
+function capabilitiesForProjectRole(role: ProjectRole | null | undefined): ProjectCapabilities {
+  return {
+    canStudyMutation: role === 'owner' || role === 'coordinator' || role === 'reviewer' || role === 'site_coordinator',
+    canApproveReject: role === 'owner' || role === 'coordinator' || role === 'reviewer',
+    canManageProject: role === 'owner',
+  }
+}
+
+function isSiteScopedRole(role: ProjectRole | null | undefined): boolean {
+  return role === 'site_coordinator' || role === 'site_viewer'
 }
 
 type DimseRetrySnapshot = {
@@ -579,7 +784,7 @@ function formatBytes(bytes: number): string {
   return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i]
 }
 
-function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' | 'export' }) {
+function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' | 'phi' | 'qc' | 'bids' | 'classify' | 'protocol' | 'export' | 'analytics' }) {
   const modifier =
     (prefix === 'phi' && label === 'clean') ? 'phi-clean' :
     (prefix === 'qc' && label === 'pass') ? 'qc-pass' :
@@ -589,26 +794,15 @@ function Badge({ label, prefix }: { label: string; prefix: 'status' | 'source' |
     (prefix === 'protocol' && label === 'minor_deviations') ? 'protocol-minor_deviations' :
     (prefix === 'protocol' && label === 'non_compliant') ? 'protocol-non_compliant' :
     (prefix === 'export') ? `export-${label}` :
+    (prefix === 'analytics' && label === 'complete') ? 'analytics-complete' :
+    (prefix === 'analytics' && label === 'partial') ? 'analytics-partial' :
+    (prefix === 'analytics') ? `analytics-${label}` :
     label
   const cls = `badge badge--${modifier}`
   return <span className={cls}>{label}</span>
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────────────
-
-const ACTION_GROUPS: Record<string, string> = {
-  'upload.init':      'upload',
-  'upload.complete':  'upload',
-  'ingest.internal':  'upload',
-  'study.approved':   'study-ok',
-  'study.rejected':   'study-err',
-  'share.created':    'share',
-  'share.revoked':    'share-revoked',
-  'export.redeemed':  'share',
-  'deface.triggered': 'deface',
-  'deface.complete':  'deface',
-  'deface.failed':    'deface-err',
-}
 
 const AUDIT_PAGE_SIZE = 100
 const AUDIT_CATEGORIES = ['study', 'admin_user', 'pipeline', 'phi_scan', 'qc_check', 'bids', 'classification', 'protocol_check', 'export', 'routing', 'institution', 'project', 'digest', 'destination']
@@ -707,13 +901,30 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
   })()
 
   return (
-    <div>
-      <div className="audit-toolbar">
-        <div className="audit-filters">
-          <span className="audit-filter-label">Category:</span>
+    <>
+      {/* Filters */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>Filters</h2>
+          <div className="aegis-section-controls">
+            <button
+              type="button"
+              className="aegis-icon-btn"
+              onClick={() => fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page)}
+              title="Refresh audit log"
+              aria-label="Refresh audit log"
+            >
+              ↻
+            </button>
+            <a href={auditCsvUrl} download="audit.csv" className="aegis-btn-secondary">Export CSV</a>
+          </div>
+        </div>
+
+        <div className="aegis-chip-row">
+          <span className="aegis-chip-row-label">Category:</span>
           <button
             type="button"
-            className={`audit-filter-btn${actionFilter === '' ? ' audit-filter-btn--active' : ''}`}
+            className={`aegis-chip${actionFilter === '' ? ' aegis-chip-active' : ''}`}
             onClick={() => setCategory('')}
           >
             All
@@ -722,150 +933,189 @@ function AuditLog({ projectId = '' }: { projectId?: string }) {
             <button
               key={cat}
               type="button"
-              className={`audit-filter-btn${actionFilter === cat ? ' audit-filter-btn--active' : ''}`}
+              className={`aegis-chip${actionFilter === cat ? ' aegis-chip-active' : ''}`}
               onClick={() => setCategory(cat === actionFilter ? '' : cat)}
             >
               {cat}
             </button>
           ))}
         </div>
-        <div className="audit-actor-filter">
-          <input
-            type="text"
-            placeholder="Filter by actor (email)…"
-            value={actorInput}
-            onChange={e => setActorInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && applyActorFilter()}
-            className="audit-actor-input"
-          />
-          <button type="button" className="btn-secondary" onClick={applyActorFilter}>Apply</button>
-          {actorFilter && <button type="button" className="btn-secondary" onClick={clearActorFilter}>Clear</button>}
-        </div>
-        <div className="audit-actor-filter">
-          <input
-            type="text"
-            placeholder="Search across actor, action, resource…"
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && applySearch()}
-            className="audit-actor-input"
-            style={{minWidth:'220px'}}
-          />
-          <button type="button" className="btn-secondary" onClick={applySearch}>Search</button>
-          {(searchFilter || dateFrom || dateTo) && <button type="button" className="btn-secondary" onClick={clearSearch}>Clear</button>}
-        </div>
-        <div className="audit-actor-filter" style={{gap:'6px'}}>
-          <label style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>From</label>
-          <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(0) }} className="audit-actor-input" style={{width:'130px'}} />
-          <label style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>To</label>
-          <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0) }} className="audit-actor-input" style={{width:'130px'}} />
-        </div>
-        <button type="button" className="btn-refresh" onClick={() => fetchAudit(actionFilter, actorFilter, searchFilter, dateFrom, dateTo, page)}>Refresh</button>
-        <a href={auditCsvUrl} download="audit.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
-      </div>
 
-      {/* Recent actors summary */}
-      <div style={{marginBottom:'8px'}}>
-        <button type="button" className="btn-secondary" onClick={loadActors} style={{fontSize:'0.8rem'}}>
-          {showActors ? '▲ Hide activity summary' : '▼ Recent admin activity'}
-        </button>
+        <div className="aegis-section-controls" style={{ marginTop: 12, alignItems: 'center' }}>
+          <div className="aegis-control">
+            <span className="aegis-control-label">Actor</span>
+            <input
+              type="text"
+              className="aegis-filter"
+              placeholder="email…"
+              value={actorInput}
+              onChange={e => setActorInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && applyActorFilter()}
+              style={{ minWidth: 180 }}
+            />
+            <button type="button" className="aegis-btn-secondary" onClick={applyActorFilter}>Apply</button>
+            {actorFilter && <button type="button" className="aegis-btn-secondary" onClick={clearActorFilter}>Clear</button>}
+          </div>
+          <div className="aegis-control">
+            <span className="aegis-control-label">Search</span>
+            <input
+              type="text"
+              className="aegis-filter"
+              placeholder="actor / action / resource…"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && applySearch()}
+              style={{ minWidth: 220 }}
+            />
+            <button type="button" className="aegis-btn-secondary" onClick={applySearch}>Search</button>
+            {(searchFilter || dateFrom || dateTo) && (
+              <button type="button" className="aegis-btn-secondary" onClick={clearSearch}>Clear</button>
+            )}
+          </div>
+          <div className="aegis-control">
+            <span className="aegis-control-label">From</span>
+            <input
+              type="date"
+              className="aegis-filter"
+              value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPage(0) }}
+              style={{ minWidth: 140 }}
+            />
+          </div>
+          <div className="aegis-control">
+            <span className="aegis-control-label">To</span>
+            <input
+              type="date"
+              className="aegis-filter"
+              value={dateTo}
+              onChange={e => { setDateTo(e.target.value); setPage(0) }}
+              style={{ minWidth: 140 }}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Recent actors */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>Recent admin activity</h2>
+          <button type="button" className="aegis-btn-secondary" onClick={loadActors}>
+            {showActors ? 'Hide' : 'Show'}
+          </button>
+        </div>
         {showActors && actors && (
-          <div style={{marginTop:'6px',overflowX:'auto'}}>
-            <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'700px'}}>
-              <thead><tr><th>Actor</th><th>Actions (30d)</th><th>Last action</th><th>Last seen</th></tr></thead>
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
+              <thead>
+                <tr><th>Actor</th><th>Actions (30d)</th><th>Last action</th><th>Last seen</th></tr>
+              </thead>
               <tbody>
-                {actors.length === 0
-                  ? <tr><td colSpan={4} className="td-muted">No activity in last 30 days.</td></tr>
-                  : actors.map(a => (
-                    <tr key={a.actor}>
-                      <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{a.actor}</td>
-                      <td>{a.action_count}</td>
-                      <td style={{fontFamily:'monospace',fontSize:'0.8rem'}}>{a.last_action}</td>
-                      <td className="td-date">{fmtDate(a.last_seen_at)}</td>
-                    </tr>
-                  ))}
+                {actors.length === 0 ? (
+                  <tr><td colSpan={4} className="aegis-muted">No activity in last 30 days.</td></tr>
+                ) : actors.map(a => (
+                  <tr key={a.actor}>
+                    <td><code className="aegis-code">{a.actor}</code></td>
+                    <td>{a.action_count}</td>
+                    <td><code className="aegis-code">{a.last_action}</code></td>
+                    <td>{fmtDate(a.last_seen_at)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </section>
 
-      {loading && <div className="state-loading">Loading audit log…</div>}
-      {error   && <div className="state-error">{error}</div>}
+      {/* Entries */}
+      <section className="aegis-section">
+        {loading && <div className="aegis-muted">Loading audit log…</div>}
+        {error && <div className="aegis-error">{error}</div>}
 
-      {!loading && !error && entries.length === 0 && (
-        <div className="state-empty">No audit entries yet.</div>
-      )}
+        {!loading && !error && entries.length === 0 && (
+          <div className="aegis-muted">No audit entries yet.</div>
+        )}
 
-      {!loading && !error && entries.length > 0 && (
-        <div className="audit-table-wrap">
-          <div className="audit-pagination-bar">
-            <span className="audit-total">{total} entries</span>
-            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
-          </div>
-          <table className="audit-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Actor</th>
-                <th>Resource</th>
-                <th>IP</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map(e => {
-                const group = ACTION_GROUPS[e.action] ?? 'neutral'
-                const hasDetail = e.detail && Object.keys(e.detail).length > 0
-                const isExpanded = expandedId === e.id
-                return (
-                  <>
-                    <tr key={e.id} className="audit-row">
-                      <td className="audit-time">{fmtDate(e.created_at)}</td>
-                      <td><span className={`audit-action audit-action--${group}`}>{e.action}</span></td>
-                      <td className="audit-actor">{e.actor || '—'}</td>
-                      <td className="audit-resource">
-                        <span className="audit-resource-type">{e.resource_type}</span>
-                        <span className="audit-resource-id">{uidShort(e.resource_id)}</span>
-                      </td>
-                      <td className="audit-ip">{e.ip_address || '—'}</td>
-                      <td>
-                        {hasDetail ? (
-                          <button
-                            type="button"
-                            className="audit-detail-toggle"
-                            onClick={() => setExpandedId(isExpanded ? null : e.id)}
-                          >
-                            {isExpanded ? 'hide' : 'show'}
-                          </button>
-                        ) : (
-                          <span className="audit-no-detail">—</span>
+        {!loading && !error && entries.length > 0 && (
+          <>
+            <div className="aegis-section-bar">
+              <span className="aegis-muted">{total} entries</span>
+              <div className="aegis-section-controls">
+                <button type="button" className="aegis-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                <span className="aegis-muted">Page {page + 1} of {totalPages}</span>
+                <button type="button" className="aegis-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+              </div>
+            </div>
+
+            <div className="aegis-table-wrap">
+              <table className="aegis-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Resource</th>
+                    <th>IP</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map(e => {
+                    const hasDetail = e.detail && Object.keys(e.detail).length > 0
+                    const isExpanded = expandedId === e.id
+                    return (
+                      <Fragment key={e.id}>
+                        <tr>
+                          <td>{fmtDate(e.created_at)}</td>
+                          <td><span className="aegis-pill">{e.action}</span></td>
+                          <td>{e.actor || '—'}</td>
+                          <td>
+                            <span className="aegis-muted" style={{ marginRight: 6 }}>{e.resource_type}</span>
+                            <code className="aegis-code">{uidShort(e.resource_id)}</code>
+                          </td>
+                          <td>{e.ip_address || '—'}</td>
+                          <td>
+                            {hasDetail ? (
+                              <button
+                                type="button"
+                                className="aegis-btn-secondary"
+                                style={{ padding: '2px 8px', fontSize: 12 }}
+                                onClick={() => setExpandedId(isExpanded ? null : e.id)}
+                              >
+                                {isExpanded ? 'hide' : 'show'}
+                              </button>
+                            ) : (
+                              <span className="aegis-muted">—</span>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && hasDetail && (
+                          <tr>
+                            <td colSpan={6}>
+                              <pre style={{ whiteSpace: 'pre-wrap', margin: 0, padding: 12, background: 'var(--aegis-bg)', borderRadius: 6, fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace', fontSize: 12 }}>
+                                {JSON.stringify(e.detail, null, 2)}
+                              </pre>
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                    </tr>
-                    {isExpanded && hasDetail && (
-                      <tr key={`${e.id}-detail`} className="audit-detail-row">
-                        <td colSpan={6}>
-                          <pre className="audit-detail-pre">{JSON.stringify(e.detail, null, 2)}</pre>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                )
-              })}
-            </tbody>
-          </table>
-          <div className="audit-pagination-bar audit-pagination-bar--bottom">
-            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-            <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
-          </div>
-        </div>
-      )}
-    </div>
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="aegis-section-bar" style={{ marginTop: 12 }}>
+              <span />
+              <div className="aegis-section-controls">
+                <button type="button" className="aegis-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+                <span className="aegis-muted">Page {page + 1} of {totalPages}</span>
+                <button type="button" className="aegis-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+    </>
   )
 }
 
@@ -1056,7 +1306,17 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
             onChange={e => setEmailSearch(e.target.value)}
           />
         </div>
-        <button type="button" className="btn-refresh" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {isAdmin && (
+            <a
+              href={`/api/export-shares.csv${statusFilter ? `?status=${statusFilter}` : ''}`}
+              className="btn btn--secondary"
+              download
+              title="Download all shares as CSV"
+            >↓ CSV</a>
+          )}
+          <button type="button" className="aegis-icon-btn" onClick={() => fetchShares(statusFilter, page)}>Refresh</button>
+        </div>
       </div>
 
       {analytics && (
@@ -1077,19 +1337,19 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
         </div>
       )}
 
-      {loading && <div className="state-loading">Loading shares…</div>}
-      {error && <div className="state-error">{error}</div>}
+      {loading && <div className="aegis-muted">Loading shares…</div>}
+      {error && <div className="aegis-error">{error}</div>}
       {!loading && !error && shares.length === 0 && (
-        <div className="state-empty">No export shares found.</div>
+        <div className="aegis-muted">No export shares found.</div>
       )}
 
       {!loading && !error && shares.length > 0 && (
         <div className="audit-table-wrap">
           <div className="audit-pagination-bar">
             <span className="audit-total">{total} shares</span>
-            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <button type="button" className="aegis-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
             <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button type="button" className="aegis-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
           <table className="audit-table">
             <thead>
@@ -1119,7 +1379,7 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
                     <td>
                       <button
                         type="button"
-                        className="btn-secondary"
+                        className="aegis-btn-secondary"
                         onClick={() => toggleDownloads(s.id)}
                         title="View download history"
                       >
@@ -1134,10 +1394,10 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
                     <td className="audit-time">{fmtDate(s.created_at)}</td>
                     <td>
                       {isAdmin && (s.status === 'active' || s.status === 'expired') ? (
-                        <div className="actions-cell">
+                        <div className="aegis-section-controls">
                           <button
                             type="button"
-                            className="btn-secondary"
+                            className="aegis-btn-secondary"
                             disabled={extending === s.id}
                             onClick={() => extendShare(s.id)}
                             title="Extend share expiry"
@@ -1194,9 +1454,9 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
             </tbody>
           </table>
           <div className="audit-pagination-bar audit-pagination-bar--bottom">
-            <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <button type="button" className="aegis-btn-secondary" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
             <span className="audit-page-label">Page {page + 1} of {totalPages}</span>
-            <button type="button" className="btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button type="button" className="aegis-btn-secondary" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
         </div>
       )}
@@ -1223,20 +1483,55 @@ function GlobalSharesPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; proj
 
 // ── Defacing Review Panel ─────────────────────────────────────────────────────
 
-const WEASIS_BASE_DEFACE = import.meta.env.VITE_WEASIS_BASE_URL || 'http://localhost:3005'
+const DWV_BASE_DEFACE = import.meta.env.VITE_DWV_BASE_URL || 'http://localhost:3005'
+
+function buildDefacePopupHtml(beforeUrl: string, afterUrl: string, uid: string): string {
+  // All interpolated values are URL strings (beforeUrl/afterUrl) or a DICOM UID
+  // (digits + dots only). Escaping is belt-and-suspenders.
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return [
+    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/>',
+    `<title>Defacing Review \u2014 ${esc(uid)}</title>`,
+    '<style>',
+    '*{margin:0;padding:0;box-sizing:border-box}',
+    'body{background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}',
+    'header{padding:6px 14px;background:#16213e;display:flex;align-items:center;border-bottom:1px solid #1f2d4a;flex-shrink:0}',
+    '.title{font-size:13px;font-weight:600;color:#fde68a}',
+    '.uid{font-family:monospace;font-size:11px;color:#9ca3af;margin-left:8px}',
+    '.hint{font-size:11px;color:#9ca3af;padding:4px 14px;background:#16213e;border-bottom:1px solid #1f2d4a;flex-shrink:0}',
+    '.viewers{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0}',
+    '.col{display:flex;flex-direction:column;border-right:1px solid #1f2d4a}',
+    '.col:last-child{border-right:none}',
+    '.lbl{padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:#0f172a}',
+    '.lbl-b{color:#94a3b8}.lbl-a{color:#0d9488}',
+    'iframe{flex:1;border:none;min-height:0}',
+    '</style></head><body>',
+    '<header><span class="title">Defacing Review</span>',
+    `<span class="uid">${esc(uid)}</span></header>`,
+    '<p class="hint">Verify that facial features have been removed. Approve only if the right panel (defaced) shows no identifiable face.</p>',
+    '<div class="viewers">',
+    `<div class="col"><div class="lbl lbl-b">Before (raw)</div><iframe src="${esc(beforeUrl)}" allow="fullscreen"></iframe></div>`,
+    `<div class="col"><div class="lbl lbl-a">After (defaced)</div><iframe src="${esc(afterUrl)}" allow="fullscreen"></iframe></div>`,
+    '</div></body></html>',
+  ].join('')
+}
 
 function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => void }) {
-  const beforeUrl = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=raw`
-  const afterUrl  = `${WEASIS_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=clean`
+  const beforeUrl = `${DWV_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=raw`
+  const afterUrl  = `${DWV_BASE_DEFACE}/viewer?studyUID=${study.study_instance_uid}&store=clean`
   const [yokeEnabled, setYokeEnabled] = useState(true)
+  const [currentK, setCurrentK] = useState<number | null>(null)
   const beforeRef = useRef<HTMLIFrameElement>(null)
   const afterRef  = useRef<HTMLIFrameElement>(null)
+  const totalSlices = study.instance_count ?? null
 
+  // Yoke sync + slice position tracking via postMessage
   useEffect(() => {
-    if (!yokeEnabled) return
     const handler = (e: MessageEvent) => {
       if (!e.data || e.data.type !== 'dwv-position') return
       if (typeof e.data.k !== 'number') return
+      setCurrentK(e.data.k)
+      if (!yokeEnabled) return
       const cmd = { type: 'dwv-goto', k: e.data.k }
       if (e.source === beforeRef.current?.contentWindow) {
         afterRef.current?.contentWindow?.postMessage(cmd, '*')
@@ -1248,6 +1543,23 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
     return () => window.removeEventListener('message', handler)
   }, [yokeEnabled])
 
+  function stepSlice(delta: number) {
+    const next = (currentK ?? 0) + delta
+    const cmd = { type: 'dwv-goto', k: next }
+    beforeRef.current?.contentWindow?.postMessage(cmd, '*')
+    afterRef.current?.contentWindow?.postMessage(cmd, '*')
+    setCurrentK(next)
+  }
+
+  function openPopup() {
+    const html = buildDefacePopupHtml(beforeUrl, afterUrl, study.study_instance_uid)
+    const blob = new Blob([html], { type: 'text/html' })
+    const blobUrl = URL.createObjectURL(blob)
+    window.open(blobUrl, '_blank', 'width=1440,height=860,menubar=no,toolbar=no,location=no,scrollbars=no')
+    // Revoke after the new window has had time to load
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 15000)
+  }
+
   return (
     <div className="deface-panel">
       <div className="deface-panel-header">
@@ -1256,6 +1568,13 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
           <span className="deface-panel-uid">{uidShort(study.study_instance_uid)}</span>
         </div>
         <div className="deface-header-actions">
+          <div className="deface-slice-nav">
+            <button type="button" className="deface-slice-btn" onClick={() => stepSlice(1)} title="Next slice">▲</button>
+            <span className="deface-slice-counter">
+              {currentK !== null ? currentK + 1 : '\u2014'}{totalSlices ? `\u00a0/\u00a0${totalSlices}` : ''}
+            </span>
+            <button type="button" className="deface-slice-btn" onClick={() => stepSlice(-1)} title="Previous slice">▼</button>
+          </div>
           <button
             type="button"
             className={`deface-yoke-btn${yokeEnabled ? ' deface-yoke-btn--on' : ''}`}
@@ -1264,7 +1583,10 @@ function DefacingReviewPanel({ study, onClose }: { study: Study; onClose: () => 
           >
             {yokeEnabled ? '⛓ Yoked' : '⛓ Free'}
           </button>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">×</button>
+          <button type="button" className="deface-yoke-btn" onClick={openPopup} title="Open in new window">
+            &#x2922; Pop out
+          </button>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close review panel">&times;</button>
         </div>
       </div>
       <p className="deface-panel-hint">
@@ -1553,14 +1875,14 @@ function pipelineColorClass(status: string): string {
 
 const IN_FLIGHT_STATUSES = ['scanning', 'checking', 'converting', 'classifying', 'defacing', 'exporting']
 
-function PipelineNode({ stage, studyId, isAdmin, onRerun }: {
+function PipelineNode({ stage, studyId, canRerunPipeline, onRerun }: {
   stage: PipelineStage
   studyId: string
-  isAdmin: boolean
+  canRerunPipeline: boolean
   onRerun: () => void
 }) {
   const [rerunning, setRerunning] = useState(false)
-  const canRerun = isAdmin && stage.required && !IN_FLIGHT_STATUSES.includes(stage.status) && stage.status !== 'pending'
+  const canRerun = canRerunPipeline && stage.required && !IN_FLIGHT_STATUSES.includes(stage.status) && stage.status !== 'pending'
 
   const handleRerun = async () => {
     setRerunning(true)
@@ -1594,11 +1916,12 @@ function PipelineNode({ stage, studyId, isAdmin, onRerun }: {
   )
 }
 
-function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
+function StudyDetailPanel({ studyId, onBack, onAction, isAdmin, currentUser }: {
   studyId: string
   onBack: () => void
   onAction: () => void
   isAdmin: boolean
+  currentUser: AuthIdentity | null
 }) {
   const [study, setStudy] = useState<Study | null>(null)
   const [audit, setAudit] = useState<AuditEntry[]>([])
@@ -1607,9 +1930,13 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [diagnostics, setDiagnostics] = useState<StudyDiagnosticsResponse | null>(null)
   const [labels, setLabels] = useState<StudyLabel[]>([])
   const [seriesList, setSeriesList] = useState<SeriesRow[]>([])
+  const [seriesMeta, setSeriesMeta] = useState<SeriesMetadata[]>([])
+  const [seriesMetaOpen, setSeriesMetaOpen] = useState(true)
   const [relationships, setRelationships] = useState<RelationshipWithStudy[]>([])
   const [loading, setLoading] = useState(true)
-  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships'>('audit')
+  const [detailTab, setDetailTab] = useState<'audit' | 'routing' | 'shares' | 'diagnostics' | 'labels' | 'series' | 'relationships' | 'notes' | 'analytics' | 'analytics_results'>('audit')
+  type StudyNoteEntry = { id: string; actor: string; note: string; created_at: string }
+  const [studyNotes, setStudyNotes] = useState<StudyNoteEntry[]>([])
   const [newLabel, setNewLabel] = useState('')
   const [labelSaving, setLabelSaving] = useState(false)
 
@@ -1681,10 +2008,14 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const [shareResult, setShareResult] = useState<NewShareResult | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
+  // Copy-to-clipboard state (F9)
+  const [uidCopied, setUidCopied] = useState(false)
+
   // Internal note state
   const [noteText, setNoteText] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
   const [noteSaved, setNoteSaved] = useState(false)
+  const [projectRole, setProjectRole] = useState<ProjectRole | null>(null)
 
   // Subject ID editor state
   const [subjectEdit, setSubjectEdit] = useState(false)
@@ -1698,6 +2029,25 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   // Reject reason modal state
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [rejectReasonText, setRejectReasonText] = useState('')
+
+  // Longitudinal analytics state
+  const [longAnalyticsOpen, setLongAnalyticsOpen] = useState(false)
+  const [longBaselineId, setLongBaselineId] = useState('')
+  const [longWorking, setLongWorking] = useState(false)
+
+  // Analytics tool dropdown state (study detail panel)
+  const [analyticsDetailMenuOpen, setAnalyticsDetailMenuOpen] = useState(false)
+  const analyticsDetailMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!analyticsDetailMenuOpen) return
+    function onOutsideClick(e: MouseEvent) {
+      if (analyticsDetailMenuRef.current && !analyticsDetailMenuRef.current.contains(e.target as Node)) {
+        setAnalyticsDetailMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick)
+    return () => document.removeEventListener('mousedown', onOutsideClick)
+  }, [analyticsDetailMenuOpen])
 
   // Link study form state (for relationships tab)
   const [linkStudyUID, setLinkStudyUID] = useState('')
@@ -1716,8 +2066,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       fetch(`/api/studies/${studyId}/diagnostics`).then(r => r.ok ? r.json() : null),
       fetch(`/api/studies/${studyId}/labels`).then(r => r.ok ? r.json() : []),
       fetch(`/api/studies/${studyId}/series`).then(r => r.ok ? r.json() : { series: [] }),
+      fetch(`/api/studies/${studyId}/series-metadata`).then(r => r.ok ? r.json() : { series: [] }),
       fetch(`/api/studies/${studyId}/relationships`).then(r => r.ok ? r.json() : { relationships: [] }),
-    ]).then(([s, a, rl, sh, diag, lbls, sr, relData]) => {
+      fetch(`/api/studies/${studyId}/notes`).then(r => r.ok ? r.json() : { notes: [] }),
+    ]).then(([s, a, rl, sh, diag, lbls, sr, smRes, relData, notesData]) => {
       const now = Date.now()
       setStudy(s)
       setAudit(a ?? [])
@@ -1727,13 +2079,35 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       setDiagnostics(diag ?? null)
       setLabels(lbls ?? [])
       setSeriesList((sr?.series ?? []) as SeriesRow[])
+      setSeriesMeta((smRes?.series ?? []) as SeriesMetadata[])
       setRelationships((relData?.relationships ?? []) as RelationshipWithStudy[])
+      setStudyNotes((notesData?.notes ?? []) as StudyNoteEntry[])
       setNowMs(now)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [studyId])
 
   useEffect(() => { loadData() }, [loadData])
+
+  useEffect(() => {
+    if (!study || !currentUser || currentUser.role !== 'researcher') {
+      setProjectRole(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/projects/${study.project_id}/members`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (cancelled || !data) return
+        const members = (data.members ?? []) as ProjectMember[]
+        const me = members.find(m => m.admin_user_id === currentUser.id || m.user_email === currentUser.email)
+        setProjectRole((me?.role as ProjectRole | undefined) ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setProjectRole(null)
+      })
+    return () => { cancelled = true }
+  }, [study, currentUser])
 
   const hasLiveShareCountdown = shares.some(
     s => shareStatusLabel(s, nowMs) === 'active' && shareRemainingSeconds(s, nowMs) !== null,
@@ -1746,8 +2120,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     return () => window.clearInterval(id)
   }, [hasLiveShareCountdown])
 
-  if (loading) return <div className="state-loading">Loading study details…</div>
-  if (!study) return <div className="state-error">Study not found. <button type="button" className="btn btn--secondary" onClick={onBack}>Back</button></div>
+  if (loading) return <div className="aegis-muted">Loading study details…</div>
+  if (!study) return <div className="aegis-error">Study not found. <button type="button" className="aegis-btn-secondary" onClick={onBack}>Back</button></div>
 
   const stages: PipelineStage[] = [
     { label: 'Classification', required: study.classification_required, status: study.classification_status, step: 'classify' },
@@ -1756,6 +2130,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
     { label: 'Defacing', required: study.defacing_required, status: study.status === 'defaced' ? 'defaced' : study.status === 'defacing' ? 'defacing' : study.defacing_required ? 'pending' : '', step: 'deface' },
     { label: 'QC', required: study.qc_required, status: study.qc_status, step: 'qc' },
     { label: 'BIDS', required: study.bids_required, status: study.bids_status, step: 'bids' },
+    { label: 'Analytics', required: study.analytics_required, status: study.analytics_status, step: 'analytics' },
     { label: 'Export', required: study.export_required, status: study.export_status, step: 'export' },
   ]
 
@@ -1770,6 +2145,10 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
   const canBidsDownload = study.bids_status === 'complete'
   const canClassify = study.classification_required && study.classification_status === 'pending'
   const canProtocolCheck = study.protocol_required && study.protocol_status === 'pending'
+  const projectCaps = isAdmin ? { canStudyMutation: true, canApproveReject: true, canManageProject: true } : capabilitiesForProjectRole(projectRole)
+  // Downloads are role-gated server-side: non-members (no project role and
+  // not admin) get a 403 — hide the buttons instead of surfacing dead links.
+  const canDownloadFiles = isAdmin || projectRole !== null
 
   const doAction = async (url: string) => {
     await fetch(url, { method: 'POST' })
@@ -1842,6 +2221,16 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <button type="button" className="btn btn--secondary study-detail__back" onClick={onBack}>← Back to studies</button>
         <div className="study-detail__title-row">
           <h2 className="study-detail__title">{study.study_instance_uid}</h2>
+          <button
+            type="button"
+            className={`btn-copy-uid${uidCopied ? ' btn-copy-uid--copied' : ''}`}
+            title={uidCopied ? 'Copied!' : 'Copy full UID to clipboard'}
+            onClick={() => {
+              navigator.clipboard.writeText(study.study_instance_uid)
+              setUidCopied(true)
+              setTimeout(() => setUidCopied(false), 2000)
+            }}
+          >{uidCopied ? '✓' : '⎘'}</button>
           <Badge label={study.status} prefix="status" />
           <Badge label={study.source} prefix="source" />
           {study.priority_flag && <span className="badge badge--flagged">★ Priority</span>}
@@ -1853,6 +2242,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       <div className="study-detail__meta">
         <div className="study-detail__meta-item"><strong>Modality</strong> {study.modality || '—'}</div>
         <div className="study-detail__meta-item"><strong>Body Part</strong> {study.body_part || '—'}</div>
+        <div className="study-detail__meta-item"><strong>Study Date</strong> {study.study_date ? study.study_date.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : '—'}</div>
         <div className="study-detail__meta-item"><strong>Files</strong> {study.instance_count}</div>
         <div className="study-detail__meta-item"><strong>Series</strong> {study.series_count}</div>
         <div className="study-detail__meta-item"><strong>Size</strong> {study.study_size_bytes > 0 ? formatBytes(study.study_size_bytes) : '—'}</div>
@@ -1888,7 +2278,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                 setSubjectEdit(false)
                 loadData()
               }}>Save</button>
-              <button type="button" className="btn btn--sm" onClick={() => setSubjectEdit(false)}>✕</button>
+              <button type="button" className="btn btn--sm" onClick={() => setSubjectEdit(false)} aria-label="Cancel subject edit">✕</button>
             </span>
           ) : (
             <span>
@@ -1917,35 +2307,183 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         <div className="pipeline-row">
           {stages.map((stage, i) => (
             <div key={stage.label} className="pipeline-step">
-              <PipelineNode stage={stage} studyId={study.id} isAdmin={isAdmin} onRerun={loadData} />
+              <PipelineNode stage={stage} studyId={study.id} canRerunPipeline={projectCaps.canStudyMutation} onRerun={loadData} />
               {i < stages.length - 1 && <div className="pipeline-arrow">→</div>}
             </div>
           ))}
         </div>
       </div>
 
+      {/* Per-series DICOM metadata (TR / TE / protocol / sequence) */}
+      {seriesMeta.length > 0 && (
+        <div className="study-detail__section">
+          <h3
+            className="study-detail__section-title"
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setSeriesMetaOpen(o => !o)}
+            title={seriesMetaOpen ? 'Hide series details' : 'Show series details'}
+          >
+            <span style={{ display: 'inline-block', width: '1em' }}>{seriesMetaOpen ? '▾' : '▸'}</span>
+            Series ({seriesMeta.length})
+          </h3>
+          {seriesMetaOpen && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="detail-table" style={{ fontSize: '0.85em' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '3em' }}>#</th>
+                    <th>Description</th>
+                    <th>Protocol</th>
+                    <th>Sequence</th>
+                    <th style={{ textAlign: 'right' }}>TR (ms)</th>
+                    <th style={{ textAlign: 'right' }}>TE (ms)</th>
+                    <th style={{ textAlign: 'right' }}>Slices</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {seriesMeta.map((sm, i) => {
+                    const seqLabel = sm.sequence_name
+                      || [sm.scanning_sequence, sm.sequence_variant].filter(Boolean).join(' / ')
+                      || sm.mr_acquisition_type
+                      || ''
+                    return (
+                      <tr key={sm.id}>
+                        <td style={{ color: 'var(--color-gray-500)' }}>{sm.series_number ?? i + 1}</td>
+                        <td title={sm.series_instance_uid}>{sm.series_description || '—'}</td>
+                        <td>{sm.protocol_name || '—'}</td>
+                        <td>{seqLabel || '—'}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {sm.repetition_time != null ? Number(sm.repetition_time).toFixed(1) : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {sm.echo_time != null ? Number(sm.echo_time).toFixed(1) : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {sm.instance_count}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="study-detail__section">
         <h3 className="study-detail__section-title">Actions</h3>
         <div className="study-detail__actions">
-          {isAdmin && canApprove && <button type="button" className="btn btn--approve" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
-          {isAdmin && canReject && <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>}
-          {isAdmin && canReactivate && <button type="button" className="btn btn--approve" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
+          {projectCaps.canApproveReject && canApprove && <button type="button" className="aegis-btn-primary" onClick={() => doAction(`/api/studies/${study.id}/approve`)}>Approve</button>}
+          {projectCaps.canApproveReject && canReject && <button type="button" className="aegis-btn-secondary" onClick={handleReject}>Reject</button>}
+          {projectCaps.canApproveReject && canReactivate && <button type="button" className="aegis-btn-primary" onClick={() => { if (confirm('Reactivate this expired study?')) doAction(`/api/studies/${study.id}/reactivate`) }} title="Restore expired study to approved">Reactivate</button>}
           {isAdmin && canClassify && <button type="button" className="btn btn--classify" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/classify`)}>Classify</button>}
           {isAdmin && canPhiScan && <button type="button" className="btn btn--phi-scan" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/phi-scan`)}>Scan for PHI</button>}
           {isAdmin && canProtocolCheck && <button type="button" className="btn btn--protocol-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/protocol-check`)}>Check Protocol</button>}
           {isAdmin && canQcCheck && <button type="button" className="btn btn--qc-check" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/qc-check`)}>Run QC</button>}
           {isAdmin && canBidsConvert && <button type="button" className="btn btn--bids-convert" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/bids-convert`)}>Convert to BIDS</button>}
-          {canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
-          {study.status === 'approved' && <a href={`/api/studies/${study.study_instance_uid}/dicom-download`} className="btn btn--dicom-download" download>Download DICOM</a>}
+          {canDownloadFiles && canBidsDownload && <a href={`/api/studies/${study.study_instance_uid}/bids-download`} className="btn btn--bids-download" download>Download BIDS</a>}
+          {isAdmin && study.bids_status === 'complete' && study.analytics_status !== 'analyzing' && (
+            <button type="button" className="aegis-btn-secondary" onClick={() => setLongAnalyticsOpen(o => !o)}>{longAnalyticsOpen ? 'Cancel' : 'Longitudinal Analytics'}</button>
+          )}
+          {isAdmin && study.analytics_status !== 'analyzing' && (
+            <div ref={analyticsDetailMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
+              <button
+                type="button"
+                className="aegis-btn-secondary"
+                onClick={() => setAnalyticsDetailMenuOpen(o => !o)}
+                title="Run a neuroimaging analytics tool on this study"
+              >
+                Run Analytics ▾
+              </button>
+              {analyticsDetailMenuOpen && (
+                <div style={{
+                  position: 'absolute', left: 0, top: '100%', zIndex: 100,
+                  background: '#1e1e1e', border: '1px solid #444', borderRadius: 6,
+                  minWidth: 210, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                }}>
+                  {ANALYTICS_TOOL_GROUPS.map(grp => {
+                    const isSpine = /spine|cord/i.test(study.body_part || '')
+                    return (
+                      <div key={grp.group}>
+                        <div style={{
+                          padding: '4px 12px', fontSize: '0.68rem', color: '#888',
+                          borderBottom: '1px solid #333', textTransform: 'uppercase', letterSpacing: '0.05em',
+                          background: isSpine && grp.group === 'Spine Tools' ? 'rgba(13,148,136,0.1)' : undefined,
+                        }}>
+                          {grp.group}
+                          {isSpine && grp.group === 'Spine Tools' && (
+                            <span style={{ marginLeft: 6, color: '#0d9488', fontSize: '0.65rem' }}>● detected</span>
+                          )}
+                        </div>
+                        {grp.tools.map(t => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            style={{
+                              display: 'block', width: '100%', textAlign: 'left',
+                              padding: '6px 14px', fontSize: '0.8rem', color: '#ddd',
+                              background: 'transparent', border: 'none', cursor: 'pointer',
+                            }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.07)' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                            onClick={async () => {
+                              setAnalyticsDetailMenuOpen(false)
+                              await fetch(`/api/studies/${study.study_instance_uid}/analytics`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ tool: t.id }),
+                              })
+                              loadData()
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {canDownloadFiles && (study.analytics_status === 'complete' || study.analytics_status === 'partial') && (
+            <a href={`/api/studies/${study.id}/analytics-download`} className="btn btn--bids-download" download title="Download all analytics output files as a ZIP archive">
+              Download Analytics
+            </a>
+          )}
+          {canDownloadFiles && study.status === 'approved' && <a href={`/api/studies/${study.study_instance_uid}/dicom-download`} className="btn btn--dicom-download" download>Download DICOM</a>}
           {isAdmin && study.export_required && (study.export_status === 'pending' || study.export_status === 'failed') && study.status === 'approved' && (
             <button type="button" className="btn btn--export" onClick={() => doAction(`/api/studies/${study.study_instance_uid}/trigger-export`)}>Export</button>
           )}
           {canReviewDeface && <button type="button" className="btn btn--deface" onClick={() => setDefaceOpen(o => !o)}>{defaceOpen ? 'Close review' : 'Review defacing'}</button>}
+          {/* Re-run defacing — the tiny ↺ icon on the pipeline node above
+              is hard to find on mobile, so duplicate the action here
+              where users actually look. Only meaningful when defacing
+              has already completed AND the user has write access. */}
+          {projectCaps.canStudyMutation && study.defacing_required && ['defaced', 'received', 'rejected'].includes(study.status) && (
+            <button
+              type="button"
+              className="aegis-btn-secondary"
+              onClick={async () => {
+                await fetch(`/api/studies/${study.id}/reset-pipeline-step`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ step: 'deface' }),
+                })
+                loadData()
+                onAction()
+              }}
+              title="Reset the defacing step and re-run the pipeline. Useful when the clean store has empty / corrupt files from an earlier run."
+            >
+              ↺ Re-run defacing
+            </button>
+          )}
           <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>{viewOpen ? 'Close viewer' : 'View'}</button>
-          <button type="button" className="btn btn--secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
-          <button type="button" className="btn btn--secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
-          {isAdmin && <button type="button" className="btn btn--secondary" onClick={openReassign}>Move to Project</button>}
+          <button type="button" className="aegis-btn-secondary" onClick={openDicomTags}>{tagsOpen ? 'Hide DICOM tags' : 'DICOM tags'}</button>
+          <button type="button" className="aegis-btn-secondary" onClick={openAnonDiff}>{anonDiffOpen ? 'Hide Anon Diff' : 'Anonymization Changes'}</button>
+          {isAdmin && <button type="button" className="aegis-btn-secondary" onClick={openReassign}>Move to Project</button>}
         </div>
         {isAdmin && reassignOpen && (
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1959,11 +2497,64 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <button type="button" className="btn btn--approve" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
-            <button type="button" className="btn btn--secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
+            <button type="button" className="aegis-btn-primary" disabled={!reassignTarget} onClick={handleReassign}>Move</button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setReassignOpen(false)}>Cancel</button>
           </div>
         )}
-        {isAdmin && rejectModalOpen && (
+        {isAdmin && longAnalyticsOpen && (
+          <div style={{ marginTop: 12, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '12px 16px' }}>
+            <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#1e40af' }}>Longitudinal Analytics (TBM-SyN + FreeSurfer)</p>
+            <p style={{ margin: '0 0 8px', fontSize: 13, color: '#374151' }}>Select the baseline study to compare against this follow-up. Scan interval is auto-computed from study dates when available.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 13, fontWeight: 500 }}>Baseline Study ID:</label>
+              <input
+                className="form-input"
+                style={{ width: 320, padding: '4px 8px', fontSize: 13 }}
+                value={longBaselineId}
+                onChange={e => setLongBaselineId(e.target.value)}
+                placeholder="Baseline study UUID"
+              />
+              <button
+                type="button"
+                className="aegis-btn-primary"
+                disabled={longWorking || !longBaselineId.trim()}
+                onClick={async () => {
+                  setLongWorking(true)
+                  try {
+                    const res = await fetch(`/api/studies/${study.study_instance_uid}/longitudinal-analytics`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ baseline_study_id: longBaselineId.trim() }),
+                    })
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+                      alert(`Longitudinal analytics failed: ${err.error || res.status}`)
+                    } else {
+                      setLongAnalyticsOpen(false)
+                      setLongBaselineId('')
+                      loadData()
+                    }
+                  } finally {
+                    setLongWorking(false)
+                  }
+                }}
+              >{longWorking ? 'Starting…' : 'Start Analysis'}</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => { setLongAnalyticsOpen(false); setLongBaselineId('') }}>Cancel</button>
+            </div>
+            {relationships.length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+                Related studies: {relationships.map(r => (
+                  <span key={r.id} style={{ marginRight: 8 }}>
+                    <button type="button" className="link-btn" style={{ fontSize: 12 }} onClick={() => setLongBaselineId(r.related_study_id)}>
+                      {r.relationship}: {r.related_study.study_instance_uid.slice(0, 20)}…
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {projectCaps.canApproveReject && rejectModalOpen && (
           <div style={{ marginTop: 12, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 6, padding: '12px 16px' }}>
             <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#9a3412' }}>Reject study</p>
             <textarea
@@ -1974,8 +2565,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               onChange={e => setRejectReasonText(e.target.value)}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button type="button" className="btn btn--reject" onClick={confirmReject}>Confirm Reject</button>
-              <button type="button" className="btn btn--secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={confirmReject}>Confirm Reject</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
             </div>
           </div>
         )}
@@ -1984,8 +2575,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       {/* DICOM tag inspection panel */}
       {tagsOpen && (
         <div className="dicom-tags-panel">
-          {tagsLoading && <div className="state-loading">Loading tags…</div>}
-          {!tagsLoading && dicomTags && dicomTags.length === 0 && <div className="state-empty">No tags found.</div>}
+          {tagsLoading && <div className="aegis-muted">Loading tags…</div>}
+          {!tagsLoading && dicomTags && dicomTags.length === 0 && <div className="aegis-muted">No tags found.</div>}
           {!tagsLoading && dicomTags && dicomTags.length > 0 && (
             <table className="audit-table dicom-tags-table">
               <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Value</th></tr></thead>
@@ -2007,12 +2598,12 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       {/* Anonymization diff panel */}
       {anonDiffOpen && (
         <div className="dicom-tags-panel">
-          {anonDiffLoading && <div className="state-loading">Loading diff…</div>}
-          {!anonDiffLoading && anonDiffMsg && <div className="state-empty">{anonDiffMsg}</div>}
+          {anonDiffLoading && <div className="aegis-muted">Loading diff…</div>}
+          {!anonDiffLoading && anonDiffMsg && <div className="aegis-muted">{anonDiffMsg}</div>}
           {!anonDiffLoading && anonDiff && (() => {
             const { removed, modified, added } = anonDiff.diff
             const totalChanges = removed.length + modified.length + added.length
-            if (totalChanges === 0) return <div className="state-empty">No tag differences found — files appear identical.</div>
+            if (totalChanges === 0) return <div className="aegis-muted">No tag differences found — files appear identical.</div>
             return (
               <div>
                 {removed.length > 0 && (
@@ -2103,7 +2694,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               style={{ width: 160 }}
               title="Leave blank for unlimited downloads"
             />
-            <button type="button" className="btn btn--approve" disabled={!shareEmail} onClick={handleShare}>Send</button>
+            <button type="button" className="aegis-btn-primary" disabled={!shareEmail} onClick={handleShare}>Send</button>
           </div>
           {shareResult && (
             <div className="share-result">
@@ -2114,7 +2705,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
       )}
 
       {/* Internal admin note (admin only) */}
-      {isAdmin && (
+      {projectCaps.canStudyMutation && (
         <div className="study-detail__section">
           <h3 className="study-detail__section-title">Add Internal Note</h3>
           <div className="note-inline">
@@ -2130,7 +2721,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               <span className="note-char-count">{noteText.length}/2000</span>
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="aegis-btn-secondary"
                 disabled={!noteText.trim() || noteSaving}
                 onClick={async () => {
                   setNoteSaving(true)
@@ -2179,25 +2770,49 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
           <button type="button" className={`tab-btn${detailTab === 'relationships' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('relationships')}>
             Related Studies ({relationships.length})
           </button>
+          <button type="button" className={`tab-btn${detailTab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('notes')}>
+            Notes {studyNotes.length > 0 ? `(${studyNotes.length})` : ''}
+          </button>
+          {(study.bids_status === 'complete' || study.analytics_status === 'complete' || study.analytics_status === 'partial') && (
+            <button type="button" className={`tab-btn${detailTab === 'analytics' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('analytics')}>
+              NIfTI Viewer
+            </button>
+          )}
+          {(study.analytics_status === 'complete' || study.analytics_status === 'partial') && (
+            <button type="button" className={`tab-btn${detailTab === 'analytics_results' ? ' tab-btn--active' : ''}`} onClick={() => setDetailTab('analytics_results')}>
+              Analytics Results
+            </button>
+          )}
         </div>
 
         {detailTab === 'audit' && (
-          <table className="detail-table">
-            <thead>
-              <tr><th>Time</th><th>Action</th><th>Actor</th><th>Detail</th></tr>
-            </thead>
-            <tbody>
-              {audit.length === 0 && <tr><td colSpan={4}>No audit entries.</td></tr>}
-              {audit.map(e => (
-                <tr key={e.id}>
-                  <td className="td-date">{fmtDate(e.created_at)}</td>
-                  <td><code>{e.action}</code></td>
-                  <td>{e.actor}</td>
-                  <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>
+              <a
+                href={`/api/studies/${studyId}/audit.csv`}
+                className="aegis-btn-secondary"
+                download
+                title="Download audit trail as CSV"
+                style={{fontSize:'0.8rem'}}
+              >↓ Export CSV</a>
+            </div>
+            <table className="detail-table">
+              <thead>
+                <tr><th>Time</th><th>Action</th><th>Actor</th><th>Detail</th></tr>
+              </thead>
+              <tbody>
+                {audit.length === 0 && <tr><td colSpan={4}>No audit entries.</td></tr>}
+                {audit.map(e => (
+                  <tr key={e.id}>
+                    <td className="">{fmtDate(e.created_at)}</td>
+                    <td><code>{e.action}</code></td>
+                    <td>{e.actor}</td>
+                    <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
 
         {detailTab === 'routing' && (
@@ -2209,7 +2824,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               {routingLog.length === 0 && <tr><td colSpan={4}>No routing log entries.</td></tr>}
               {routingLog.map(e => (
                 <tr key={e.id}>
-                  <td className="td-date">{fmtDate(e.created_at)}</td>
+                  <td className="">{fmtDate(e.created_at)}</td>
                   <td><code>{e.action}</code></td>
                   <td><Badge label={e.outcome} prefix="status" /></td>
                   <td className="td-detail">{e.detail ? <pre className="detail-json">{JSON.stringify(e.detail, null, 2)}</pre> : '—'}</td>
@@ -2220,6 +2835,31 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
         )}
 
         {detailTab === 'shares' && (
+          <>
+          {study?.auto_share_url && (
+            <div style={{
+              border: '1px solid #0d9488',
+              borderRadius: 6,
+              background: '#f0fdfa',
+              padding: '10px 14px',
+              marginBottom: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ color: '#0f766e', fontWeight: 600, fontSize: 13 }}>● Auto-generated share link — ready to send</span>
+              <code style={{ fontSize: 11, color: '#0f766e', flex: 1, wordBreak: 'break-all' }}>{study.auto_share_url}</code>
+              <button
+                type="button"
+                className="aegis-btn-secondary"
+                style={{ fontSize: 12, padding: '2px 10px', whiteSpace: 'nowrap' }}
+                onClick={() => navigator.clipboard.writeText(study.auto_share_url!)}
+              >
+                Copy link
+              </button>
+            </div>
+          )}
           <table className="detail-table">
             <thead>
               <tr><th>Recipient</th><th>Created</th><th>Expires</th><th>Status</th><th>Downloads</th><th>Note</th></tr>
@@ -2241,8 +2881,8 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                 return (
                   <tr key={s.id}>
                     <td>{s.recipient_email}</td>
-                    <td className="td-date">{fmtDate(s.created_at)}</td>
-                    <td className="td-date">
+                    <td className="">{fmtDate(s.created_at)}</td>
+                    <td className="">
                       {fmtDate(s.expires_at)}
                       {remainingLabel && <div className="td-subtle">({remainingLabel} remaining)</div>}
                     </td>
@@ -2254,6 +2894,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
               })}
             </tbody>
           </table>
+          </>
         )}
 
         {detailTab === 'labels' && (
@@ -2304,7 +2945,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                   value={newLabel}
                   onChange={e => setNewLabel(e.target.value)}
                 />
-                <button type="submit" className="btn-primary" disabled={labelSaving || !newLabel.trim()}>
+                <button type="submit" className="aegis-btn-primary" disabled={labelSaving || !newLabel.trim()}>
                   {labelSaving ? 'Adding…' : 'Add'}
                 </button>
               </form>
@@ -2365,7 +3006,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                     )}
                     {rel.notes && <span className="routing-desc" style={{ fontStyle: 'italic' }}>{rel.notes}</span>}
                     {isAdmin && (
-                      <button type="button" className="btn btn--revoke" style={{ marginLeft: 'auto' }}
+                      <button type="button" className="aegis-btn-secondary" style={{ marginLeft: 'auto' }}
                         title="Remove this relationship link"
                         onClick={async () => {
                           await fetch(`/api/studies/${studyId}/relationships/${rel.id}`, { method: 'DELETE' })
@@ -2382,7 +3023,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             {isAdmin && (
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
                 <div style={{ fontWeight: 500, fontSize: '0.875rem', marginBottom: '8px' }}>Link a study</div>
-                {linkError && <div className="form-error" style={{ marginBottom: '8px' }}>{linkError}</div>}
+                {linkError && <div className="aegis-error" style={{ marginBottom: '8px' }}>{linkError}</div>}
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <input className="form-input" style={{ flex: '1 1 260px' }}
                     placeholder="Study UUID or DICOM UID"
@@ -2398,7 +3039,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                     placeholder="Notes (optional)"
                     value={linkNotes}
                     onChange={e => setLinkNotes(e.target.value)} />
-                  <button type="button" className="btn-primary" disabled={linkSaving || !linkStudyUID.trim()}
+                  <button type="button" className="aegis-btn-primary" disabled={linkSaving || !linkStudyUID.trim()}
                     onClick={async () => {
                       setLinkSaving(true)
                       setLinkError(null)
@@ -2437,7 +3078,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
 
         {detailTab === 'diagnostics' && (
           <div className="diagnostics-panel">
-            {!diagnostics && <p className="state-empty">Diagnostics not available.</p>}
+            {!diagnostics && <p className="aegis-muted">Diagnostics not available.</p>}
             {diagnostics && (
               <>
                 <div className={`diagnostics-summary diagnostics-summary--${diagnostics.summary.stuck ? 'stuck' : diagnostics.summary.terminal ? 'terminal' : 'ok'}`}>
@@ -2488,7 +3129,7 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
                       {diagnostics.recent_audit.length === 0 && <tr><td colSpan={3}>No entries.</td></tr>}
                       {diagnostics.recent_audit.map(e => (
                         <tr key={e.id}>
-                          <td className="td-date">{fmtDate(e.created_at)}</td>
+                          <td className="">{fmtDate(e.created_at)}</td>
                           <td><code>{e.action}</code></td>
                           <td>{e.actor}</td>
                         </tr>
@@ -2500,12 +3141,288 @@ function StudyDetailPanel({ studyId, onBack, onAction, isAdmin }: {
             )}
           </div>
         )}
+
+        {detailTab === 'notes' && (
+          <div style={{padding: '10px 0'}}>
+            {studyNotes.length === 0 ? (
+              <p style={{color: '#6b7280', fontSize: '0.85rem'}}>No notes recorded for this study.</p>
+            ) : (
+              <table className="detail-table" style={{fontSize: '0.85rem'}}>
+                <thead>
+                  <tr><th style={{width: 140}}>Time</th><th style={{width: 160}}>Author</th><th>Note</th></tr>
+                </thead>
+                <tbody>
+                  {studyNotes.map(n => (
+                    <tr key={n.id}>
+                      <td className="">{fmtDate(n.created_at)}</td>
+                      <td>{n.actor}</td>
+                      <td style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{n.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {isAdmin && (
+              <div style={{marginTop: 12, display: 'flex', gap: 8, alignItems: 'flex-start'}}>
+                <textarea
+                  className="note-textarea"
+                  placeholder="Add a note…"
+                  value={noteText}
+                  onChange={e => { setNoteText(e.target.value); setNoteSaved(false) }}
+                  rows={2}
+                  maxLength={2000}
+                  style={{flex: 1, fontSize: '0.82rem'}}
+                />
+                <div style={{display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end'}}>
+                  <button
+                    type="button"
+                    className="aegis-btn-secondary"
+                    disabled={!noteText.trim() || noteSaving}
+                    onClick={async () => {
+                      setNoteSaving(true)
+                      await fetch(`/api/studies/${study.id}/notes`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ note: noteText }),
+                      })
+                      setNoteText('')
+                      setNoteSaved(true)
+                      setNoteSaving(false)
+                      loadData()
+                    }}
+                  >
+                    {noteSaving ? 'Saving…' : 'Add Note'}
+                  </button>
+                  {noteSaved && <span className="note-saved" style={{fontSize: '0.75rem'}}>Saved ✓</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {detailTab === 'analytics' && (
+          <NiivueViewer studyId={study.id} />
+        )}
+
+        {detailTab === 'analytics_results' && (
+          <AnalyticsResultsPanel studyId={study.id} studyUID={study.study_instance_uid} />
+        )}
       </div>
     </div>
   )
 }
 
+// ── Analytics Results Panel ───────────────────────────────────────────────────
+
+type CompositeScore = {
+  id: string
+  tool: string
+  score_name: string
+  score_value: number
+  score_unit?: string
+}
+
+type ROISummary = {
+  total_results: number
+  tools: string[]
+  atlases: string[]
+  metric_types: string[]
+}
+
+type ROIResult = {
+  id: string
+  tool: string
+  atlas_name: string
+  roi_name: string
+  metric_type: string
+  metric_value: number
+  hemisphere: string
+}
+
+function AnalyticsResultsPanel({ studyId, studyUID }: { studyId: string; studyUID: string }) {
+  const [scores, setScores] = useState<CompositeScore[]>([])
+  const [summary, setSummary] = useState<ROISummary | null>(null)
+  const [roiResults, setRoiResults] = useState<ROIResult[]>([])
+  const [roiOpen, setRoiOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [roiLoading, setRoiLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      fetch(`/api/studies/${studyId}/composite-scores`).then(r => r.ok ? r.json() : { scores: [] }),
+      fetch(`/api/studies/${studyId}/roi-results/summary`).then(r => r.ok ? r.json() : null),
+    ]).then(([scoresData, summaryData]) => {
+      setScores(scoresData.scores || [])
+      setSummary(summaryData)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [studyId])
+
+  const loadROI = async () => {
+    if (roiResults.length > 0) { setRoiOpen(o => !o); return }
+    setRoiLoading(true)
+    const r = await fetch(`/api/studies/${studyId}/roi-results?limit=500`)
+    if (r.ok) {
+      const data = await r.json()
+      setRoiResults(data.results || [])
+    }
+    setRoiLoading(false)
+    setRoiOpen(true)
+  }
+
+  if (loading) return <div className="aegis-muted" style={{ padding: 24 }}>Loading analytics results…</div>
+
+  return (
+    <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Summary row */}
+      {summary && (
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+          <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: 8, padding: '12px 20px', minWidth: 140 }}>
+            <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Total ROIs</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0d9488' }}>{summary.total_results.toLocaleString()}</div>
+          </div>
+          {summary.tools?.length > 0 && (
+            <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: 8, padding: '12px 20px', minWidth: 160 }}>
+              <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Tools Run</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {summary.tools.map(t => (
+                  <span key={t} style={{ background: '#0d9488', color: '#fff', borderRadius: 4, padding: '1px 7px', fontSize: '0.72rem', fontWeight: 600 }}>{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {summary.atlases?.length > 0 && (
+            <div style={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: 8, padding: '12px 20px', minWidth: 160 }}>
+              <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Atlases</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {summary.atlases.map(a => (
+                  <span key={a} style={{ background: '#374151', color: '#d1d5db', borderRadius: 4, padding: '1px 7px', fontSize: '0.72rem' }}>{a}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Composite scores */}
+      {scores.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#ccc', marginBottom: 8 }}>Composite Scores</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #333' }}>
+                <th style={{ textAlign: 'left', padding: '4px 8px', color: '#888', fontWeight: 500 }}>Metric</th>
+                <th style={{ textAlign: 'left', padding: '4px 8px', color: '#888', fontWeight: 500 }}>Tool</th>
+                <th style={{ textAlign: 'right', padding: '4px 8px', color: '#888', fontWeight: 500 }}>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scores.map(s => (
+                <tr key={s.id} style={{ borderBottom: '1px solid #222' }}>
+                  <td style={{ padding: '5px 8px', color: '#e5e7eb' }}>{s.score_name}</td>
+                  <td style={{ padding: '5px 8px', color: '#9ca3af' }}>{s.tool}</td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', color: '#0d9488', fontWeight: 600, fontFamily: 'monospace' }}>
+                    {typeof s.score_value === 'number' ? s.score_value.toFixed(4) : s.score_value}
+                    {s.score_unit && <span style={{ color: '#6b7280', marginLeft: 4, fontSize: '0.75rem' }}>{s.score_unit}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ROI results (collapsible) */}
+      {summary && summary.total_results > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={loadROI}
+            style={{ background: 'none', border: '1px solid #444', color: '#ccc', borderRadius: 6, padding: '5px 14px', cursor: 'pointer', fontSize: '0.8rem' }}
+          >
+            {roiLoading ? 'Loading ROI data…' : roiOpen ? `▲ Hide ROI results (${roiResults.length})` : `▼ Show ROI results (${summary.total_results.toLocaleString()} rows)`}
+          </button>
+          {roiOpen && roiResults.length > 0 && (
+            <div style={{ marginTop: 10, maxHeight: 400, overflowY: 'auto', border: '1px solid #333', borderRadius: 6 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                <thead style={{ position: 'sticky', top: 0, background: '#1a1a1a', zIndex: 1 }}>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Tool</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Atlas</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>ROI</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Hemi</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Metric</th>
+                    <th style={{ textAlign: 'right', padding: '5px 8px', color: '#888', fontWeight: 500, borderBottom: '1px solid #333' }}>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roiResults.map(r => (
+                    <tr key={r.id} style={{ borderBottom: '1px solid #1f1f1f' }}>
+                      <td style={{ padding: '3px 8px', color: '#9ca3af' }}>{r.tool}</td>
+                      <td style={{ padding: '3px 8px', color: '#9ca3af' }}>{r.atlas_name}</td>
+                      <td style={{ padding: '3px 8px', color: '#e5e7eb' }}>{r.roi_name}</td>
+                      <td style={{ padding: '3px 8px', color: '#9ca3af' }}>{r.hemisphere || '—'}</td>
+                      <td style={{ padding: '3px 8px', color: '#9ca3af' }}>{r.metric_type}</td>
+                      <td style={{ padding: '3px 8px', textAlign: 'right', color: '#0d9488', fontFamily: 'monospace' }}>{r.metric_value.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {summary.total_results > 500 && (
+                <div style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#888', borderTop: '1px solid #333' }}>
+                  Showing first 500 of {summary.total_results.toLocaleString()} rows.
+                  Use <a href={`/api/studies/${studyId}/analytics-download`} style={{ color: '#0d9488' }} download>Download Analytics ZIP</a> for the full dataset.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Downloads */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <a
+          href={`/api/studies/${studyId}/analytics-download`}
+          className="btn btn--bids-download"
+          download
+          title="Download all analytics output files as a ZIP archive"
+        >
+          ↓ Download Analytics ZIP
+        </a>
+      </div>
+
+      {scores.length === 0 && (!summary || summary.total_results === 0) && (
+        <div style={{ color: '#888', fontSize: '0.85rem' }}>No structured results available. Check the NIfTI Viewer tab to explore output files directly.</div>
+      )}
+    </div>
+  )
+}
+
 // ── Study Row ─────────────────────────────────────────────────────────────────
+
+const ANALYTICS_TOOL_GROUPS = [
+  { group: 'Auto', tools: [{ id: '', label: 'Auto (best available)' }] },
+  { group: 'Brain Tools', tools: [
+    { id: 'synthseg',         label: 'SynthSeg' },
+    { id: 'freesurfer',       label: 'FreeSurfer' },
+    { id: 'fsl',              label: 'FSL' },
+    { id: 'ants',             label: 'ANTs' },
+    { id: 'totalsegmentator', label: 'TotalSegmentator' },
+    { id: 'nnunet',           label: 'nnU-Net' },
+    { id: 'atlas_roi',        label: 'Atlas ROI' },
+  ]},
+  { group: 'Spine Tools', tools: [
+    { id: 'totalspineseg', label: 'TotalSpineSeg' },
+    { id: 'spineps',       label: 'SPINEPS' },
+  ]},
+  { group: 'Other', tools: [
+    { id: 'petsurfer',   label: 'PETSurfer' },
+    { id: 'basil',       label: 'BASIL (ASL)' },
+    { id: 'qsm',         label: 'QSM' },
+    { id: 'monai_label', label: 'MONAI Label' },
+  ]},
+]
 
 function StudyRow({
   study,
@@ -2513,22 +3430,47 @@ function StudyRow({
   onSelect,
   onAskAgent,
   isAdmin,
+  projectRole,
   checked,
-  onToggle
+  onToggle,
+  showDescCol
 }: {
   study: Study
   onAction: () => void
   onSelect: () => void
   onAskAgent: () => void
   isAdmin: boolean
+  projectRole: ProjectRole | null
   checked: boolean
   onToggle: () => void
+  showDescCol?: boolean
 }) {
-  const [shareOpen,      setShareOpen]      = useState(false)
-  const [viewOpen,       setViewOpen]       = useState(false)
-  const [defaceOpen,     setDefaceOpen]     = useState(false)
-  const [rejectRowOpen,  setRejectRowOpen]  = useState(false)
-  const [rejectRowText,  setRejectRowText]  = useState('')
+  const [shareOpen,         setShareOpen]         = useState(false)
+  const [viewOpen,          setViewOpen]          = useState(false)
+  const [defaceOpen,        setDefaceOpen]        = useState(false)
+  const [rejectRowOpen,     setRejectRowOpen]     = useState(false)
+  const [rejectRowText,     setRejectRowText]     = useState('')
+  const [uidCopied,         setUidCopied]         = useState(false)
+  const [analyticsMenuOpen, setAnalyticsMenuOpen] = useState(false)
+  const analyticsMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!analyticsMenuOpen) return
+    function onOutsideClick(e: MouseEvent) {
+      if (analyticsMenuRef.current && !analyticsMenuRef.current.contains(e.target as Node)) {
+        setAnalyticsMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick)
+    return () => document.removeEventListener('mousedown', onOutsideClick)
+  }, [analyticsMenuOpen])
+
+  const copyUid = () => {
+    navigator.clipboard.writeText(study.study_instance_uid).then(() => {
+      setUidCopied(true)
+      setTimeout(() => setUidCopied(false), 1800)
+    })
+  }
 
   const handleApprove = async () => {
     await fetch(`/api/studies/${study.id}/approve`, { method: 'POST' })
@@ -2569,6 +3511,7 @@ function StudyRow({
   const canBidsDownload = study.bids_status === 'complete'
   const canClassify = study.classification_required && study.classification_status === 'pending'
   const canProtocolCheck = study.protocol_required && study.protocol_status === 'pending'
+  const projectCaps = isAdmin ? { canStudyMutation: true, canApproveReject: true, canManageProject: true } : capabilitiesForProjectRole(projectRole)
 
   const handlePhiScan = async () => {
     await fetch(`/api/studies/${study.study_instance_uid}/phi-scan`, { method: 'POST' })
@@ -2616,16 +3559,36 @@ function StudyRow({
           <button
             type="button"
             className={`btn-flag${study.priority_flag ? ' btn-flag--on' : ''}`}
-            onClick={isAdmin ? handleToggleFlag : undefined}
-            title={isAdmin ? (study.priority_flag ? 'Remove priority flag' : 'Mark as priority') : (study.priority_flag ? 'Priority' : '')}
-            style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+            onClick={projectCaps.canStudyMutation ? handleToggleFlag : undefined}
+            title={projectCaps.canStudyMutation ? (study.priority_flag ? 'Remove priority flag' : 'Mark as priority') : (study.priority_flag ? 'Priority' : '')}
+            style={{ cursor: projectCaps.canStudyMutation ? 'pointer' : 'default' }}
           >
             {study.priority_flag ? '★' : '☆'}
           </button>
         </td>
-        <td className="td-uid"><button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{uidShort(study.study_instance_uid)}</button></td>
+        <td className="td-uid">
+          <button type="button" className="btn-link" onClick={onSelect} title={study.study_instance_uid}>{study.subject_id || uidShort(study.study_instance_uid)}</button>
+          <button
+            type="button"
+            className={`btn-copy-uid${uidCopied ? ' btn-copy-uid--copied' : ''}`}
+            onClick={copyUid}
+            title={uidCopied ? 'Copied!' : 'Copy full Study UID to clipboard'}
+          >
+            {uidCopied ? '✓' : '⎘'}
+          </button>
+        </td>
+        {showDescCol && (
+          <td className="td-desc" title={study.study_description || ''}>
+            {study.study_description
+              ? study.study_description.length > 42
+                ? study.study_description.slice(0, 42) + '…'
+                : study.study_description
+              : <span className="td-desc__empty">—</span>}
+          </td>
+        )}
         <td>{study.modality || '—'}</td>
         <td>{study.body_part || '—'}</td>
+        <td>{study.study_date ? study.study_date.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : '—'}</td>
         <td><Badge label={study.source} prefix="source" /></td>
         <td><Badge label={study.status} prefix="status" /></td>
         <td>{study.phi_scan_required ? <Badge label={study.phi_scan_status || 'n/a'} prefix="phi" /> : '—'}</td>
@@ -2634,17 +3597,18 @@ function StudyRow({
         <td>{study.classification_required ? <Badge label={study.classification_status || 'n/a'} prefix="classify" /> : '—'}</td>
         <td>{study.protocol_required ? <Badge label={study.protocol_status || 'n/a'} prefix="protocol" /> : '—'}</td>
         <td>{study.export_required ? <Badge label={study.export_status || 'n/a'} prefix="export" /> : '—'}</td>
+        <td>{study.analytics_required ? <Badge label={study.analytics_status || 'pending'} prefix="analytics" /> : '—'}</td>
         <td className="td-num">{study.instance_count}</td>
         <td className="td-date">{fmtDate(study.created_at)}</td>
         <td>
           <div className="actions-cell">
-            {isAdmin && canApprove && (
+            {projectCaps.canApproveReject && canApprove && (
               <button type="button" className="btn btn--approve" onClick={handleApprove}>Approve</button>
             )}
-            {isAdmin && canReject && (
+            {projectCaps.canApproveReject && canReject && (
               <button type="button" className="btn btn--reject" onClick={handleReject}>Reject</button>
             )}
-            {isAdmin && canReactivate && (
+            {projectCaps.canApproveReject && canReactivate && (
               <button type="button" className="btn btn--approve" onClick={async () => { if (confirm('Reactivate this expired study?')) { await fetch(`/api/studies/${study.id}/reactivate`, { method: 'POST' }); onAction() } }} title="Restore expired study to approved">Reactivate</button>
             )}
             {isAdmin && canShare && (
@@ -2684,6 +3648,67 @@ function StudyRow({
             <button type="button" className="btn btn--view" onClick={() => setViewOpen(o => !o)}>
               {viewOpen ? 'Close viewer' : 'View'}
             </button>
+            {isAdmin && study.analytics_status !== 'analyzing' && (
+              <div ref={analyticsMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => setAnalyticsMenuOpen(o => !o)}
+                  title="Run a neuroimaging analytics tool on this study"
+                >
+                  Analytics ▾
+                </button>
+                {analyticsMenuOpen && (
+                  <div style={{
+                    position: 'absolute', right: 0, top: '100%', zIndex: 100,
+                    background: '#1e1e1e', border: '1px solid #444', borderRadius: 6,
+                    minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                  }}>
+                    {ANALYTICS_TOOL_GROUPS.map(grp => {
+                      const isSpine = /spine|cord/i.test(study.body_part || '')
+                      return (
+                        <div key={grp.group}>
+                          <div style={{
+                            padding: '4px 12px', fontSize: '0.68rem', color: '#888',
+                            borderBottom: '1px solid #333', textTransform: 'uppercase', letterSpacing: '0.05em',
+                            background: isSpine && grp.group === 'Spine Tools' ? 'rgba(13,148,136,0.1)' : undefined,
+                          }}>
+                            {grp.group}
+                            {isSpine && grp.group === 'Spine Tools' && (
+                              <span style={{ marginLeft: 6, color: '#0d9488', fontSize: '0.65rem' }}>● detected</span>
+                            )}
+                          </div>
+                          {grp.tools.map(t => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              style={{
+                                display: 'block', width: '100%', textAlign: 'left',
+                                padding: '6px 14px', fontSize: '0.8rem', color: '#ddd',
+                                background: 'transparent', border: 'none', cursor: 'pointer',
+                              }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.07)' }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                              onClick={async () => {
+                                setAnalyticsMenuOpen(false)
+                                await fetch(`/api/studies/${study.study_instance_uid}/analytics`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ tool: t.id }),
+                                })
+                                onAction()
+                              }}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             <button type="button" className="btn btn--agent" onClick={onAskAgent}>
               Ask agent
             </button>
@@ -2771,6 +3796,196 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
   const [destTestResults, setDestTestResults] = useState<Record<string, DestTestResult>>({})
   const [destTesting, setDestTesting]         = useState<Record<string, boolean>>({})
 
+  // Destination historical health summaries (loaded once when Routing tab opens)
+  type DestHealthStatus = { destination_id: string; status: string; test_count: number; success_rate: number; last_tested_at: string | null; last_error: string }
+  const [destHealthSummaries, setDestHealthSummaries] = useState<Record<string, DestHealthStatus>>({})
+  function loadDestinationHealth() {
+    fetch('/api/destinations/health')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.destinations) return
+        const byId: Record<string, DestHealthStatus> = {}
+        for (const s of d.destinations) byId[s.destination_id] = s
+        setDestHealthSummaries(byId)
+      })
+      .catch(() => {})
+  }
+
+  // Routing health stats
+  type DestRoutingSummary = { destination_id: string; destination_name: string; destination_type: string; attempts: number; successful: number; failed: number; success_rate: number; last_attempt_at: string | null }
+  type RoutingTotals = { attempts: number; successful: number; failed: number; success_rate: number }
+  type RoutingHealth = { period_days: number; totals: RoutingTotals; by_destination: DestRoutingSummary[] }
+  const [routingHealth, setRoutingHealth]     = useState<RoutingHealth | null>(null)
+  const [healthDays, setHealthDays]           = useState(30)
+  const [healthLoading, setHealthLoading]     = useState(false)
+  const [healthOpen, setHealthOpen]           = useState(false)
+
+  // Rule analytics
+  type RuleHitEntry = { rule_id: string; rule_name: string; rule_action: string; rule_enabled: boolean; destination_name: string | null; hit_count: number; last_matched_at: string | null }
+  type UnusedRuleEntry = { rule_id: string; rule_name: string; rule_action: string; rule_enabled: boolean }
+  type RuleStats = { period_days: number; total_hits: number; active_rules: number; by_rule: RuleHitEntry[]; unused_rules: UnusedRuleEntry[] }
+  const [ruleStats, setRuleStats]             = useState<RuleStats | null>(null)
+  const [ruleStatsDays, setRuleStatsDays]     = useState(30)
+  const [ruleStatsLoading, setRuleStatsLoading] = useState(false)
+  const [ruleStatsOpen, setRuleStatsOpen]     = useState(false)
+
+  // Routing simulation
+  type SimMatchedRule = { id: string; name: string; priority: number; action: string; destination_id?: string; destination_name?: string }
+  type SimActionSummary = { require_defacing: boolean; require_phi_scan: boolean; require_qc_check: boolean; require_bids_conversion: boolean; require_classification: boolean; require_protocol_check: boolean; require_export: boolean; auto_approve: boolean; reject: boolean }
+  type SimResult = { matched_rules: SimMatchedRule[]; skipped_rules: SimMatchedRule[]; action_summary: SimActionSummary }
+  const [simOpen, setSimOpen]               = useState(false)
+  const [simModality, setSimModality]       = useState('')
+  const [simBodyPart, setSimBodyPart]       = useState('')
+  const [simSource, setSimSource]           = useState('external')
+  const [simResult, setSimResult]           = useState<SimResult | null>(null)
+  const [simLoading, setSimLoading]         = useState(false)
+  const [simError, setSimError]             = useState<string | null>(null)
+
+  async function runSimulation() {
+    setSimLoading(true)
+    setSimError(null)
+    setSimResult(null)
+    try {
+      const res = await fetch('/api/routing-rules/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modality: simModality.trim().toUpperCase() || undefined, body_part: simBodyPart.trim().toUpperCase() || undefined, source: simSource }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setSimResult(await res.json())
+    } catch (e: unknown) {
+      setSimError(e instanceof Error ? e.message : 'Simulation failed')
+    } finally {
+      setSimLoading(false)
+    }
+  }
+
+  // Routing rules import/export
+  const rulesImportRef = useRef<HTMLInputElement>(null)
+  const [rulesImporting, setRulesImporting] = useState(false)
+  const [rulesImportMsg, setRulesImportMsg] = useState<string | null>(null)
+
+  async function handleRulesImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !projectId) return
+    e.target.value = ''
+    setRulesImporting(true)
+    setRulesImportMsg(null)
+    try {
+      const text = await file.text()
+      const res = await fetch(`/api/projects/${projectId}/routing-rules/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: text,
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setRulesImportMsg(`Import failed: ${data.error ?? res.statusText}`)
+      } else {
+        setRulesImportMsg(`Imported ${data.imported} rule${data.imported === 1 ? '' : 's'}, skipped ${data.skipped} duplicate${data.skipped === 1 ? '' : 's'}`)
+        fetchAll()
+      }
+    } catch (err) {
+      setRulesImportMsg('Import failed: network error')
+    } finally {
+      setRulesImporting(false)
+    }
+  }
+
+  // Priority reorder
+  const [reordering, setReordering] = useState(false)
+
+  async function moveRule(ruleId: string, direction: 'up' | 'down') {
+    // Get the current filtered sorted list (same filter as the table).
+    const visible = rules.filter(r => !projectId || !r.project_id || r.project_id === projectId)
+    const idx = visible.findIndex(r => r.id === ruleId)
+    if (idx < 0) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= visible.length) return
+
+    const a = visible[idx]
+    const b = visible[swapIdx]
+    // Swap priorities between the two rules.
+    const newPriorityA = b.priority
+    const newPriorityB = a.priority === b.priority ? b.priority + (direction === 'up' ? -1 : 1) : a.priority
+
+    setReordering(true)
+    try {
+      const res = await fetch('/api/routing-rules/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rules: [{ id: a.id, priority: newPriorityA }, { id: b.id, priority: newPriorityB }] }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.rules) setRules(data.rules)
+      }
+    } finally {
+      setReordering(false)
+    }
+  }
+
+  // Bulk re-evaluate routing
+  const [bulkReEvalLoading, setBulkReEvalLoading] = useState(false)
+  const [bulkReEvalResult, setBulkReEvalResult]   = useState<{evaluated: number; errors: string[]} | null>(null)
+
+  // Bulk toggle routing rules
+  const [selectedRuleIds, setSelectedRuleIds]     = useState<Set<string>>(new Set())
+  const [bulkToggleLoading, setBulkToggleLoading] = useState(false)
+  const [bulkToggleMsg, setBulkToggleMsg]         = useState<string | null>(null)
+
+  function toggleRuleSelection(id: string) {
+    setSelectedRuleIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function selectAllVisibleRules() {
+    const visible = rules.filter(r => !projectId || !r.project_id || r.project_id === projectId)
+    setSelectedRuleIds(new Set(visible.map(r => r.id)))
+  }
+
+  async function runBulkToggle(enabled: boolean) {
+    if (selectedRuleIds.size === 0) return
+    setBulkToggleLoading(true)
+    setBulkToggleMsg(null)
+    try {
+      const res = await fetch('/api/routing-rules/bulk-toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rule_ids: Array.from(selectedRuleIds), enabled }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setBulkToggleMsg(`${enabled ? 'Enabled' : 'Disabled'} ${data.updated} rule${data.updated === 1 ? '' : 's'}`)
+      setSelectedRuleIds(new Set())
+      fetchAll()
+    } catch (e: unknown) {
+      setBulkToggleMsg(e instanceof Error ? e.message : 'Bulk toggle failed')
+    } finally {
+      setBulkToggleLoading(false)
+    }
+  }
+
+  async function runBulkReEval() {
+    if (!projectId) { alert('Select a project first.'); return }
+    if (!confirm(`Re-evaluate routing rules for all studies in this project? This re-applies the current routing rules to every study.`)) return
+    setBulkReEvalLoading(true)
+    setBulkReEvalResult(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/re-evaluate-routing`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setBulkReEvalResult(await res.json())
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Re-evaluation failed')
+    } finally {
+      setBulkReEvalLoading(false)
+    }
+  }
+
   // Rule form
   const [ruleForm, setRuleForm]         = useState<Omit<RoutingRule, 'id' | 'created_at'>>(EMPTY_RULE)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
@@ -2797,7 +4012,31 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
     }
   }, [])
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  useEffect(() => { fetchAll(); loadDestinationHealth() }, [fetchAll])
+
+  const fetchRoutingHealth = useCallback(async (days: number) => {
+    setHealthLoading(true)
+    try {
+      const res = await fetch(`/api/stats/routing?days=${days}`)
+      if (res.ok) setRoutingHealth(await res.json())
+    } finally {
+      setHealthLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { if (healthOpen) fetchRoutingHealth(healthDays) }, [healthOpen, healthDays, fetchRoutingHealth])
+
+  const fetchRuleStats = useCallback(async (days: number) => {
+    setRuleStatsLoading(true)
+    try {
+      const res = await fetch(`/api/stats/routing-rules?days=${days}`)
+      if (res.ok) setRuleStats(await res.json())
+    } finally {
+      setRuleStatsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { if (ruleStatsOpen) fetchRuleStats(ruleStatsDays) }, [ruleStatsOpen, ruleStatsDays, fetchRuleStats])
 
   // ── Destination CRUD ────────────────────────────────────────────────────────
 
@@ -2917,64 +4156,64 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className="state-loading">Loading routing configuration…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading routing configuration…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
-    <div className="routing-panel">
+    <div >
 
       {/* ── Destinations ── */}
-      <section className="routing-section">
-        <div className="routing-section-header">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Destinations</h2>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openNewDest}>+ Add destination</button>}
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNewDest}>+ Add destination</button>}
         </div>
         <p className="routing-hint">External DICOM endpoints that studies can be forwarded to via <code>route_to</code> rules.</p>
 
         {isAdmin && showDestForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>{editingDestId ? 'Edit destination' : 'New destination'}</h3>
-            {destError && <div className="form-error">{destError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Name *" value={destForm.name}
+            {destError && <div className="aegis-error">{destError}</div>}
+            <div className="">
+              <input className="aegis-filter" placeholder="Name *" value={destForm.name}
                 onChange={e => setDestForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="form-input" placeholder="Slug (auto-generated if blank)" value={destForm.slug}
+              <input className="aegis-filter" placeholder="Slug (auto-generated if blank)" value={destForm.slug}
                 onChange={e => setDestForm(f => ({ ...f, slug: e.target.value }))} />
-              <select className="form-select" aria-label="Type" value={destForm.type}
+              <select className="" aria-label="Type" value={destForm.type}
                 onChange={e => setDestForm(f => ({ ...f, type: e.target.value as 'dicomweb' | 'dimse' }))}>
                 <option value="dicomweb">DICOMweb (STOW-RS)</option>
                 <option value="dimse">DIMSE (C-STORE)</option>
               </select>
-              <input className="form-input" placeholder="Description" value={destForm.description}
+              <input className="aegis-filter" placeholder="Description" value={destForm.description}
                 onChange={e => setDestForm(f => ({ ...f, description: e.target.value }))} />
               {destForm.type === 'dicomweb' && (
-                <input className="form-input form-input--wide" placeholder="DICOMweb base URL *" value={destForm.dicomweb_url}
+                <input className="aegis-filter" placeholder="DICOMweb base URL *" value={destForm.dicomweb_url}
                   onChange={e => setDestForm(f => ({ ...f, dicomweb_url: e.target.value }))} />
               )}
               {destForm.type === 'dimse' && (
                 <>
-                  <input className="form-input" placeholder="AE Title" value={destForm.ae_title}
+                  <input className="aegis-filter" placeholder="AE Title" value={destForm.ae_title}
                     onChange={e => setDestForm(f => ({ ...f, ae_title: e.target.value }))} />
-                  <input className="form-input" placeholder="Host" value={destForm.host}
+                  <input className="aegis-filter" placeholder="Host" value={destForm.host}
                     onChange={e => setDestForm(f => ({ ...f, host: e.target.value }))} />
-                  <input className="form-input" placeholder="Port" type="number" value={destForm.port || ''}
+                  <input className="aegis-filter" placeholder="Port" type="number" value={destForm.port || ''}
                     onChange={e => setDestForm(f => ({ ...f, port: Number(e.target.value) }))} />
                 </>
               )}
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveDest} disabled={destSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveDest} disabled={destSaving}>
                 {destSaving ? 'Saving…' : editingDestId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowDestForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowDestForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {destinations.length === 0 && !showDestForm ? (
-          <div className="state-empty">No destinations yet.</div>
+          <div className="aegis-muted">No destinations yet.</div>
         ) : destinations.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -2988,11 +4227,31 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               {destinations.map(d => {
                 const testResult = destTestResults[d.id]
                 const testing = destTesting[d.id]
+                const healthSummary = destHealthSummaries[d.id]
+                const healthColor = (status: string) => ({
+                  healthy: { bg: '#ccfbf1', color: '#0f766e', border: '#5eead4' },
+                  degraded: { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
+                  failing: { bg: '#ffedd5', color: '#9a3412', border: '#fed7aa' },
+                  unknown: { bg: '#f3f4f6', color: '#6b7280', border: '#e5e7eb' },
+                }[status] ?? { bg: '#f3f4f6', color: '#6b7280', border: '#e5e7eb' })
                 return (
                   <tr key={d.id} className={d.enabled ? '' : 'routing-row--disabled'}>
                     <td>
-                      <div className="routing-name">{d.name}</div>
-                      {d.description && <div className="routing-desc">{d.description}</div>}
+                      <div className="">{d.name}</div>
+                      {d.description && <div className="aegis-muted">{d.description}</div>}
+                      {healthSummary && healthSummary.test_count > 0 && (
+                        <div style={{
+                          marginTop: 4, fontSize: 11, padding: '2px 6px', borderRadius: 4,
+                          display: 'inline-block', marginRight: 4,
+                          ...healthColor(healthSummary.status),
+                          border: `1px solid ${healthColor(healthSummary.status).border}`,
+                        }} title={healthSummary.last_error ? `Last error: ${healthSummary.last_error}` : `${healthSummary.test_count} tests, ${(healthSummary.success_rate * 100).toFixed(0)}% success`}>
+                          {healthSummary.status === 'healthy' ? '● healthy' :
+                           healthSummary.status === 'degraded' ? '◐ degraded' :
+                           healthSummary.status === 'failing' ? '● failing' : '○ unknown'}
+                          {' '}({(healthSummary.success_rate * 100).toFixed(0)}%)
+                        </div>
+                      )}
                       {testResult && (
                         <div style={{
                           marginTop: 4,
@@ -3020,14 +4279,14 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                       </span>
                     </td>
                     <td>
-                      <div className="actions-cell">
+                      <div className="aegis-section-controls">
                         <button type="button" className="btn btn--secondary" onClick={() => testDest(d.id)} disabled={testing}>
                           {testing ? 'Testing…' : 'Test'}
                         </button>
                         {isAdmin && (
                           <>
-                            <button type="button" className="btn btn--edit" onClick={() => openEditDest(d)}>Edit</button>
-                            <button type="button" className="btn btn--revoke" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
+                            <button type="button" className="aegis-btn-secondary" onClick={() => openEditDest(d)}>Edit</button>
+                            <button type="button" className="aegis-btn-secondary" onClick={() => deleteDest(d.id, d.name)}>Delete</button>
                           </>
                         )}
                       </div>
@@ -3041,35 +4300,72 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
       </section>
 
       {/* ── Routing Rules ── */}
-      <section className="routing-section">
-        <div className="routing-section-header">
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
           <h2>Routing Rules</h2>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openNewRule}>+ Add rule</button>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {projectId && (
+              <a
+                className="btn btn--secondary"
+                href={`/api/projects/${projectId}/routing-rules/export`}
+                download="routing-rules.json"
+                title="Download all project-scoped routing rules as JSON"
+              >
+                Export JSON
+              </a>
+            )}
+            {isAdmin && projectId && (
+              <>
+                <input
+                  ref={rulesImportRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleRulesImport}
+                />
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => rulesImportRef.current?.click()}
+                  disabled={rulesImporting}
+                  title="Import routing rules from a JSON file (duplicates skipped)"
+                >
+                  {rulesImporting ? 'Importing…' : 'Import JSON'}
+                </button>
+              </>
+            )}
+            {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNewRule}>+ Add rule</button>}
+          </div>
         </div>
+        {rulesImportMsg && (
+          <div style={{ padding: '6px 12px', fontSize: 13, color: rulesImportMsg.startsWith('Import failed') ? '#9a3412' : '#0f766e', background: rulesImportMsg.startsWith('Import failed') ? '#ffedd5' : '#ccfbf1', borderRadius: 4, marginTop: 4 }}>
+            {rulesImportMsg}
+          </div>
+        )}
         <p className="routing-hint">
           Rules are evaluated in <strong>priority order</strong> (lower = first) on every study ingest.
           All matching rules fire — not just the first.
         </p>
 
         {isAdmin && showRuleForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>{editingRuleId ? 'Edit rule' : 'New rule'}</h3>
-            {ruleError && <div className="form-error">{ruleError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Rule name *" value={ruleForm.name}
+            {ruleError && <div className="aegis-error">{ruleError}</div>}
+            <div className="">
+              <input className="aegis-filter" placeholder="Rule name *" value={ruleForm.name}
                 onChange={e => setRuleForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="form-input" placeholder="Description" value={ruleForm.description}
+              <input className="aegis-filter" placeholder="Description" value={ruleForm.description}
                 onChange={e => setRuleForm(f => ({ ...f, description: e.target.value }))} />
-              <input className="form-input" placeholder="Priority (default 100)" type="number" value={ruleForm.priority}
+              <input className="aegis-filter" placeholder="Priority (default 100)" type="number" value={ruleForm.priority}
                 onChange={e => setRuleForm(f => ({ ...f, priority: Number(e.target.value) }))} />
             </div>
             <div className="routing-form-section-label">Conditions (leave blank = match any)</div>
-            <div className="form-grid">
-              <input className="form-input" placeholder="Modality (e.g. MRI, CT, PET)" value={ruleForm.modality ?? ''}
+            <div className="">
+              <input className="aegis-filter" placeholder="Modality (e.g. MRI, CT, PET)" value={ruleForm.modality ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, modality: e.target.value || null }))} />
-              <input className="form-input" placeholder="Body part (e.g. HEAD, CHEST)" value={ruleForm.body_part ?? ''}
+              <input className="aegis-filter" placeholder="Body part (e.g. HEAD, CHEST)" value={ruleForm.body_part ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, body_part: e.target.value || null }))} />
-              <select className="form-select" aria-label="Source filter" value={ruleForm.source ?? ''}
+              <select className="" aria-label="Source filter" value={ruleForm.source ?? ''}
                 onChange={e => setRuleForm(f => ({ ...f, source: e.target.value || null }))}>
                 <option value="">Any source</option>
                 <option value="external">external</option>
@@ -3077,8 +4373,8 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               </select>
             </div>
             <div className="routing-form-section-label">Action</div>
-            <div className="form-grid">
-              <select className="form-select" aria-label="Action" value={ruleForm.action}
+            <div className="">
+              <select className="" aria-label="Action" value={ruleForm.action}
                 onChange={e => setRuleForm(f => ({ ...f, action: e.target.value, destination_id: null }))}>
                 <option value="require_qa">require_qa — hold for manual review (default)</option>
                 <option value="require_defacing">require_defacing — force defacing even if not head</option>
@@ -3093,7 +4389,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 <option value="route_to">route_to — forward to external destination</option>
               </select>
               {ruleForm.action === 'route_to' && (
-                <select className="form-select" aria-label="Destination" value={ruleForm.destination_id ?? ''}
+                <select className="" aria-label="Destination" value={ruleForm.destination_id ?? ''}
                   onChange={e => setRuleForm(f => ({ ...f, destination_id: e.target.value || null }))}>
                   <option value="">Select destination…</option>
                   {destinations.map(d => (
@@ -3102,21 +4398,41 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 </select>
               )}
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveRule} disabled={ruleSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveRule} disabled={ruleSaving}>
                 {ruleSaving ? 'Saving…' : editingRuleId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowRuleForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowRuleForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {rules.length === 0 && !showRuleForm ? (
-          <div className="state-empty">No routing rules yet. Studies follow the default pipeline.</div>
+          <div className="aegis-muted">No routing rules yet. Studies follow the default pipeline.</div>
         ) : rules.length > 0 && (
-          <table className="routing-table">
+          <>
+          {isAdmin && selectedRuleIds.size > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', marginBottom: 8, background: '#0f172a', borderRadius: 6, border: '1px solid #1e293b', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>{selectedRuleIds.size} rule{selectedRuleIds.size === 1 ? '' : 's'} selected</span>
+              <button type="button" className="btn btn--sm" disabled={bulkToggleLoading} onClick={() => runBulkToggle(true)} style={{ color: '#0d9488', borderColor: '#0d9488' }}>Enable selected</button>
+              <button type="button" className="btn btn--sm" disabled={bulkToggleLoading} onClick={() => runBulkToggle(false)} style={{ color: '#ea580c', borderColor: '#ea580c' }}>Disable selected</button>
+              <button type="button" className="btn btn--sm" onClick={() => setSelectedRuleIds(new Set())} style={{ color: '#64748b' }}>Clear selection</button>
+              {bulkToggleMsg && <span style={{ fontSize: '0.8rem', color: bulkToggleMsg.startsWith('HTTP') || bulkToggleMsg.includes('failed') ? '#ea580c' : '#0d9488' }}>{bulkToggleMsg}</span>}
+            </div>
+          )}
+          <table className="aegis-table">
             <thead>
               <tr>
+                <th style={{ width: 32 }}>
+                  {isAdmin && (
+                    <input
+                      type="checkbox"
+                      title="Select all visible rules"
+                      checked={selectedRuleIds.size > 0 && rules.filter(r => !projectId || !r.project_id || r.project_id === projectId).every(r => selectedRuleIds.has(r.id))}
+                      onChange={e => e.target.checked ? selectAllVisibleRules() : setSelectedRuleIds(new Set())}
+                    />
+                  )}
+                </th>
                 <th>Priority</th>
                 <th>Rule</th>
                 <th>Conditions</th>
@@ -3137,10 +4453,39 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                 ].filter(Boolean)
                 return (
                   <tr key={r.id} className={r.enabled ? '' : 'routing-row--disabled'}>
-                    <td className="routing-priority">{r.priority}</td>
+                    <td style={{ width: 32, textAlign: 'center' }}>
+                      {isAdmin && (
+                        <input
+                          type="checkbox"
+                          checked={selectedRuleIds.has(r.id)}
+                          onChange={() => toggleRuleSelection(r.id)}
+                        />
+                      )}
+                    </td>
+                    <td className="routing-priority">
+                      {r.priority}
+                      {isAdmin && (
+                        <span style={{ display: 'inline-flex', flexDirection: 'column', marginLeft: 4, gap: 1 }}>
+                          <button
+                            type="button"
+                            style={{ padding: '0 3px', fontSize: 10, lineHeight: '12px', cursor: 'pointer', border: '1px solid #d1d5db', borderRadius: 2, background: 'transparent' }}
+                            title="Move up (lower priority number)"
+                            disabled={reordering}
+                            onClick={() => moveRule(r.id, 'up')}
+                          >▲</button>
+                          <button
+                            type="button"
+                            style={{ padding: '0 3px', fontSize: 10, lineHeight: '12px', cursor: 'pointer', border: '1px solid #d1d5db', borderRadius: 2, background: 'transparent' }}
+                            title="Move down (higher priority number)"
+                            disabled={reordering}
+                            onClick={() => moveRule(r.id, 'down')}
+                          >▼</button>
+                        </span>
+                      )}
+                    </td>
                     <td>
-                      <div className="routing-name">{r.name}</div>
-                      {r.description && <div className="routing-desc">{r.description}</div>}
+                      <div className="">{r.name}</div>
+                      {r.description && <div className="aegis-muted">{r.description}</div>}
                     </td>
                     <td className="routing-conditions">
                       {conditions.length > 0
@@ -3149,7 +4494,7 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                     </td>
                     <td>
                       <code className={`routing-action routing-action--${r.action}`}>{r.action}</code>
-                      {destName && <div className="routing-desc">→ {destName}</div>}
+                      {destName && <div className="aegis-muted">→ {destName}</div>}
                     </td>
                     <td>
                       <span className={`badge badge--${r.enabled ? 'enabled' : 'disabled'}`}>
@@ -3158,12 +4503,12 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
                     </td>
                     <td>
                       {isAdmin && (
-                        <div className="actions-cell">
-                          <button type="button" className="btn btn--edit" onClick={() => openEditRule(r)}>Edit</button>
+                        <div className="aegis-section-controls">
+                          <button type="button" className="aegis-btn-secondary" onClick={() => openEditRule(r)}>Edit</button>
                           <button type="button" className="btn btn--secondary" onClick={() => toggleRule(r)}>
                             {r.enabled ? 'Disable' : 'Enable'}
                           </button>
-                          <button type="button" className="btn btn--revoke" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
+                          <button type="button" className="aegis-btn-secondary" onClick={() => deleteRule(r.id, r.name)}>Delete</button>
                         </div>
                       )}
                     </td>
@@ -3172,8 +4517,328 @@ function RoutingPanel({ isAdmin, projectId = '' }: { isAdmin: boolean; projectId
               })}
             </tbody>
           </table>
+          </>
         )}
       </section>
+
+      {/* ── Rule Analytics ── */}
+      <section className="aegis-section">
+        <div
+          className="aegis-section-bar"
+          style={{ cursor: 'pointer' }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={ruleStatsOpen}
+          onClick={() => setRuleStatsOpen(o => !o)}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); setRuleStatsOpen(o => !o) } }}
+        >
+          <h2>Rule Analytics {ruleStatsOpen ? '▲' : '▼'}</h2>
+          <select
+            className=""
+            aria-label="Period"
+            style={{ width: 'auto', marginLeft: 'auto' }}
+            value={ruleStatsDays}
+            onClick={e => e.stopPropagation()}
+            onChange={e => { const d = Number(e.target.value); setRuleStatsDays(d); if (ruleStatsOpen) fetchRuleStats(d) }}
+          >
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </select>
+        </div>
+        {ruleStatsOpen && (
+          <div>
+            {ruleStatsLoading && <div className="aegis-muted">Loading rule analytics…</div>}
+            {!ruleStatsLoading && ruleStats && (
+              <>
+                <div style={{ display: 'flex', gap: '16px', margin: '12px 0', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Total rule hits', value: ruleStats.total_hits },
+                    { label: 'Active rules', value: ruleStats.active_rules },
+                    { label: 'Unused rules', value: ruleStats.unused_rules.length }
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 20px', minWidth: '120px' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>{label}</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {ruleStats.by_rule.length === 0
+                  ? <p className="routing-hint">No rule hits recorded in this period.</p>
+                  : (
+                    <>
+                      <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '16px 0 8px', color: '#374151' }}>Rules by hit count</h3>
+                      <table className="aegis-table">
+                        <thead>
+                          <tr>
+                            <th>Rule</th>
+                            <th>Action</th>
+                            <th>Destination</th>
+                            <th>Hits</th>
+                            <th>Last matched</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ruleStats.by_rule.map(r => (
+                            <tr key={r.rule_id}>
+                              <td><span className="">{r.rule_name}</span></td>
+                              <td><code style={{ fontSize: '0.8rem' }}>{r.rule_action}</code></td>
+                              <td className="td-subtle">{r.destination_name ?? '—'}</td>
+                              <td style={{ fontWeight: 600 }}>{r.hit_count}</td>
+                              <td className="td-subtle">{r.last_matched_at ? new Date(r.last_matched_at).toLocaleString() : '—'}</td>
+                              <td><span className={`badge badge--${r.rule_enabled ? 'enabled' : 'disabled'}`}>{r.rule_enabled ? 'enabled' : 'disabled'}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )
+                }
+
+                {ruleStats.unused_rules.length > 0 && (
+                  <>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '16px 0 8px', color: '#b45309' }}>Unused rules (no hits in period)</h3>
+                    <table className="aegis-table">
+                      <thead>
+                        <tr>
+                          <th>Rule</th>
+                          <th>Action</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ruleStats.unused_rules.map(r => (
+                          <tr key={r.rule_id}>
+                            <td><span className="">{r.rule_name}</span></td>
+                            <td><code style={{ fontSize: '0.8rem' }}>{r.rule_action}</code></td>
+                            <td><span className={`badge badge--${r.rule_enabled ? 'enabled' : 'disabled'}`}>{r.rule_enabled ? 'enabled' : 'disabled'}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ── Routing Health ── */}
+      <section className="aegis-section">
+        <div
+          className="aegis-section-bar"
+          style={{ cursor: 'pointer' }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={healthOpen}
+          onClick={() => setHealthOpen(o => !o)}
+          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); setHealthOpen(o => !o) } }}
+        >
+          <h2>Routing Health {healthOpen ? '▲' : '▼'}</h2>
+          <select
+            className=""
+            aria-label="Period"
+            style={{ width: 'auto', marginLeft: 'auto' }}
+            value={healthDays}
+            onClick={e => e.stopPropagation()}
+            onChange={e => { const d = Number(e.target.value); setHealthDays(d); if (healthOpen) fetchRoutingHealth(d) }}
+          >
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </select>
+        </div>
+        {healthOpen && (
+          <div>
+            {healthLoading && <div className="aegis-muted">Loading routing health…</div>}
+            {!healthLoading && routingHealth && (
+              <>
+                <div style={{ display: 'flex', gap: '24px', margin: '12px 0', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Total attempts', value: routingHealth.totals.attempts },
+                    { label: 'Successful', value: routingHealth.totals.successful },
+                    { label: 'Failed', value: routingHealth.totals.failed },
+                    { label: 'Success rate', value: routingHealth.totals.attempts > 0
+                        ? `${(routingHealth.totals.success_rate * 100).toFixed(1)}%`
+                        : '—' }
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 20px', minWidth: '120px' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>{label}</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+                {routingHealth.by_destination.length === 0
+                  ? <div className="aegis-muted">No routing attempts recorded in this period.</div>
+                  : (
+                    <table className="aegis-table">
+                      <thead>
+                        <tr>
+                          <th>Destination</th>
+                          <th>Type</th>
+                          <th>Attempts</th>
+                          <th>Successful</th>
+                          <th>Failed</th>
+                          <th>Success rate</th>
+                          <th>Last attempt</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {routingHealth.by_destination.map(d => {
+                          const rate = d.attempts > 0 ? d.success_rate * 100 : null
+                          const rateColor = rate === null ? 'inherit' : rate >= 95 ? '#0f766e' : rate >= 80 ? '#b45309' : '#9a3412'
+                          return (
+                            <tr key={d.destination_id}>
+                              <td><span className="">{d.destination_name}</span></td>
+                              <td><span className={`badge badge--${d.destination_type}`}>{d.destination_type}</span></td>
+                              <td>{d.attempts}</td>
+                              <td style={{ color: '#0f766e' }}>{d.successful}</td>
+                              <td style={{ color: d.failed > 0 ? '#9a3412' : 'inherit' }}>{d.failed}</td>
+                              <td style={{ color: rateColor, fontWeight: 600 }}>{rate !== null ? `${rate.toFixed(1)}%` : '—'}</td>
+                              <td className="td-subtle">{d.last_attempt_at ? new Date(d.last_attempt_at).toLocaleString() : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  )
+                }
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ── Routing Rule Simulator ── */}
+      <section className="section-block" style={{ marginTop: 12 }}>
+        <div className="section-header" style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setSimOpen(v => !v)}>
+          <h2>Rule Simulator {simOpen ? '▲' : '▼'}</h2>
+          <p>Dry-run: see which rules would fire for a hypothetical study</p>
+        </div>
+        {simOpen && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Modality
+                <input value={simModality} onChange={e => setSimModality(e.target.value)}
+                  placeholder="MRI, CT, PET…"
+                  style={{ padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13, width: 100 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Body Part
+                <input value={simBodyPart} onChange={e => setSimBodyPart(e.target.value)}
+                  placeholder="HEAD, CHEST…"
+                  style={{ padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13, width: 110 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Source
+                <select value={simSource} onChange={e => setSimSource(e.target.value)}
+                  style={{ padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13 }}>
+                  <option value="external">external</option>
+                  <option value="internal">internal</option>
+                </select>
+              </label>
+              <button type="button" onClick={runSimulation} disabled={simLoading}
+                style={{ padding: '6px 16px', fontSize: 13, fontWeight: 600, background: '#0d9488', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' }}>
+                {simLoading ? 'Running…' : 'Simulate'}
+              </button>
+            </div>
+            {simError && (
+              <div className="aegis-warning-banner" style={{ marginBottom: 10 }}>
+                {simError}
+              </div>
+            )}
+            {simResult && (
+              <div>
+                {/* Matched rules */}
+                <div style={{ fontWeight: 600, fontSize: 12, color: '#374151', marginBottom: 6 }}>
+                  {simResult.matched_rules.length === 0
+                    ? 'No rules matched — study would proceed with no special handling.'
+                    : `${simResult.matched_rules.length} rule${simResult.matched_rules.length === 1 ? '' : 's'} matched:`}
+                </div>
+                {simResult.matched_rules.length > 0 && (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 12 }}>
+                    <thead>
+                      <tr style={{ background: '#f9fafb' }}>
+                        {['Priority', 'Rule', 'Action', 'Destination'].map(h => (
+                          <th key={h} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {simResult.matched_rules.map(r => (
+                        <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '6px 10px', color: '#6b7280' }}>{r.priority}</td>
+                          <td style={{ padding: '6px 10px', fontWeight: 500 }}>{r.name}</td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <span style={{ background: '#ccfbf1', color: '#0f766e', borderRadius: 3, padding: '2px 6px', fontSize: 11, fontWeight: 600 }}>
+                              {r.action}
+                            </span>
+                          </td>
+                          <td style={{ padding: '6px 10px', color: '#6b7280' }}>{r.destination_name || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {/* Action summary chips */}
+                {simResult.matched_rules.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                    {Object.entries(simResult.action_summary).filter(([, v]) => v).map(([k]) => (
+                      <span key={k} style={{ background: '#ccfbf1', color: '#0f766e', borderRadius: 12, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>
+                        {k.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                    {Object.values(simResult.action_summary).every(v => !v) && (
+                      <span style={{ color: '#9ca3af', fontSize: 11 }}>no pipeline actions triggered</span>
+                    )}
+                  </div>
+                )}
+                {/* Skipped rules count */}
+                {simResult.skipped_rules.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                    {simResult.skipped_rules.length} rule{simResult.skipped_rules.length === 1 ? '' : 's'} did not match (conditions not satisfied)
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ── Bulk Re-evaluate Routing ── */}
+      {isAdmin && projectId && (
+        <section className="section-block" style={{ marginTop: 12 }}>
+          <div className="section-header">
+            <h2>Bulk Re-evaluate Routing</h2>
+            <p>Re-apply all enabled routing rules to every study in this project. Use after adding or changing routing rules.</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn--sm"
+              onClick={runBulkReEval}
+              disabled={bulkReEvalLoading}
+            >
+              {bulkReEvalLoading ? 'Re-evaluating…' : 'Re-evaluate all studies'}
+            </button>
+            {bulkReEvalResult && (
+              <span style={{ fontSize: '0.82rem', color: '#0f766e' }}>
+                ✓ Re-evaluated {bulkReEvalResult.evaluated} {bulkReEvalResult.evaluated === 1 ? 'study' : 'studies'}
+                {bulkReEvalResult.errors?.length > 0 && (
+                  <span style={{ color: '#ea580c', marginLeft: 8 }}>
+                    ({bulkReEvalResult.errors.length} error{bulkReEvalResult.errors.length === 1 ? '' : 's'})
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
     </div>
   )
 }
@@ -3300,29 +4965,29 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
   const projectName = (id: string) => projects.find(p => p.id === id)?.name ?? id
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">Anonymization Profiles</div>
-            <div className="routing-section-sub">
+            <div className="">Anonymization Profiles</div>
+            <div className="aegis-muted">
               Named DICOM tag retention overrides applied during upload de-identification.
               The project's default profile is automatically used by the upload portal.
             </div>
           </div>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New profile</button>}
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openCreate}>+ New profile</button>}
         </div>
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>{editingId ? 'Edit profile' : 'New profile'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Profile name *"
+            {formError && <div className="aegis-error">{formError}</div>}
+            <div className="">
+              <input className="aegis-filter" placeholder="Profile name *"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               {!editingId && (
-                <select className="form-select" aria-label="Project"
+                <select className="" aria-label="Project"
                   value={formProject}
                   onChange={e => setFormProject(e.target.value)}>
                   {projects.map(p => (
@@ -3330,10 +4995,10 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                   ))}
                 </select>
               )}
-              <input className="form-input form-input--wide" placeholder="Description"
+              <input className="aegis-filter" placeholder="Description"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-              <input className="form-input form-input--wide"
+              <input className="aegis-filter"
                 placeholder="Retained tags — comma-separated DICOM keywords (e.g. PatientAge, StudyDate)"
                 value={tagsInput}
                 onChange={e => setTagsInput(e.target.value)} />
@@ -3343,24 +5008,24 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                 {' '}Enabled
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
         {!loading && !error && profiles.length === 0 && (
-          <div className="state-empty">No profiles yet. Create one to override tag retention per project.</div>
+          <div className="aegis-muted">No profiles yet. Create one to override tag retention per project.</div>
         )}
         {!loading && !error && profiles.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -3377,27 +5042,27 @@ function ProfilesPanel({ isAdmin }: { isAdmin: boolean }) {
                 return (
                   <tr key={p.id} className={p.enabled ? '' : 'routing-row--disabled'}>
                     <td>
-                      <div className="routing-name">{p.name}</div>
-                      {p.description && <div className="routing-desc">{p.description}</div>}
+                      <div className="">{p.name}</div>
+                      {p.description && <div className="aegis-muted">{p.description}</div>}
                       {isDefault && <span className="badge badge--status-approved">default</span>}
                     </td>
                     <td>{projectName(p.project_id)}</td>
                     <td>
                       {p.retained_tags?.length > 0
                         ? <span title={p.retained_tags.join(', ')}>{p.retained_tags.length} tag{p.retained_tags.length !== 1 ? 's' : ''}</span>
-                        : <span className="routing-desc">none (full strip)</span>
+                        : <span className="aegis-muted">none (full strip)</span>
                       }
                     </td>
                     <td>{p.enabled ? 'Yes' : 'No'}</td>
                     <td>
                       {isAdmin && (
-                        <div className="actions-cell">
-                          <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
+                        <div className="aegis-section-controls">
+                          <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
                           <button type="button" className="btn btn--secondary"
                             onClick={() => setDefault(p.project_id, p.id, p.name)}>
                             {isDefault ? 'Clear default' : 'Set default'}
                           </button>
-                          <button type="button" className="btn btn--revoke" onClick={() => del(p.id, p.name)}>Delete</button>
+                          <button type="button" className="aegis-btn-secondary" onClick={() => del(p.id, p.name)}>Delete</button>
                         </div>
                       )}
                     </td>
@@ -3567,17 +5232,17 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
   }
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">Protocol Templates</div>
-            <div className="routing-section-sub">
+            <div className="">Protocol Templates</div>
+            <div className="aegis-muted">
               Define expected acquisition parameters per manufacturer/model/sequence.
               Studies are checked against matching templates when protocol compliance is required.
             </div>
           </div>
-          <div className="actions-cell">
+          <div className="aegis-section-controls">
             {projects.length > 0 && (
               <a
                 className="btn btn--secondary"
@@ -3608,7 +5273,7 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 </button>
               </>
             )}
-            {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New template</button>}
+            {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openCreate}>+ New template</button>}
           </div>
         </div>
         {importMsg && (
@@ -3618,15 +5283,15 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
         )}
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>{editingId ? 'Edit template' : 'New template'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Template name *"
+            {formError && <div className="aegis-error">{formError}</div>}
+            <div className="">
+              <input className="aegis-filter" placeholder="Template name *"
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               {!editingId && (
-                <select className="form-select" aria-label="Project"
+                <select className="" aria-label="Project"
                   value={formProject}
                   onChange={e => setFormProject(e.target.value)}>
                   {projects.map(p => (
@@ -3634,28 +5299,28 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                   ))}
                 </select>
               )}
-              <input className="form-input form-input--wide" placeholder="Description"
+              <input className="aegis-filter" placeholder="Description"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             <div className="routing-form-section-label">Scanner Match Criteria</div>
-            <div className="form-grid">
-              <input className="form-input" placeholder="Manufacturer (e.g. Siemens)"
+            <div className="">
+              <input className="aegis-filter" placeholder="Manufacturer (e.g. Siemens)"
                 value={form.manufacturer}
                 onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))} />
-              <input className="form-input" placeholder="Model (e.g. Prisma)"
+              <input className="aegis-filter" placeholder="Model (e.g. Prisma)"
                 value={form.model}
                 onChange={e => setForm(f => ({ ...f, model: e.target.value }))} />
-              <input className="form-input" placeholder="Software version (e.g. syngo MR E11)"
+              <input className="aegis-filter" placeholder="Software version (e.g. syngo MR E11)"
                 value={form.software_version}
                 onChange={e => setForm(f => ({ ...f, software_version: e.target.value }))} />
-              <input className="form-input" placeholder="Sequence type (e.g. T1w, FLAIR, DWI)"
+              <input className="aegis-filter" placeholder="Sequence type (e.g. T1w, FLAIR, DWI)"
                 value={form.sequence_type}
                 onChange={e => setForm(f => ({ ...f, sequence_type: e.target.value }))} />
             </div>
             <div className="routing-form-section-label">Compliance Rules (JSON)</div>
-            <div className="form-grid">
-              <textarea className="form-input form-input--wide" rows={6}
+            <div className="">
+              <textarea className="aegis-filter" rows={6}
                 placeholder='{"SliceThickness":{"min":0.5,"max":1.5},"RepetitionTime":{"min":1900,"max":2200}}'
                 value={form.rules}
                 onChange={e => setForm(f => ({ ...f, rules: e.target.value }))} />
@@ -3665,24 +5330,24 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                 onChange={e => setForm(f => ({ ...f, enabled: e.target.checked }))} />
               {' '}Enabled
             </label>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
         {!loading && !error && templates.length === 0 && (
-          <div className="state-empty">No protocol templates yet. Create one to define expected acquisition parameters.</div>
+          <div className="aegis-muted">No protocol templates yet. Create one to define expected acquisition parameters.</div>
         )}
         {!loading && !error && templates.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -3699,8 +5364,8 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
               {templates.map(t => (
                 <tr key={t.id} className={t.enabled ? '' : 'routing-row--disabled'}>
                   <td>
-                    <div className="routing-name">{t.name}</div>
-                    {t.description && <div className="routing-desc">{t.description}</div>}
+                    <div className="">{t.name}</div>
+                    {t.description && <div className="aegis-muted">{t.description}</div>}
                   </td>
                   <td>{projectName(t.project_id)}</td>
                   <td>{t.manufacturer || '—'}</td>
@@ -3710,9 +5375,9 @@ function ProtocolTemplatesPanel({ isAdmin }: { isAdmin: boolean }) {
                   <td>{t.enabled ? 'Yes' : 'No'}</td>
                   <td>
                     {isAdmin && (
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEdit(t)}>Edit</button>
-                        <button type="button" className="btn btn--revoke" onClick={() => del(t.id, t.name)}>Delete</button>
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(t)}>Edit</button>
+                        <button type="button" className="aegis-btn-secondary" onClick={() => del(t.id, t.name)}>Delete</button>
                       </div>
                     )}
                   </td>
@@ -3946,59 +5611,59 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
   }
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">Email Digest Subscriptions</div>
-            <div className="routing-section-sub">
+            <div className="">Email Digest Subscriptions</div>
+            <div className="aegis-muted">
               Periodic study summary emails sent per project. Weekly digests send every 7 days;
               monthly every 30 days. No PHI is included.
             </div>
           </div>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openCreate}>+ New subscription</button>}
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openCreate}>+ New subscription</button>}
         </div>
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>New subscription</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" type="email" placeholder="Email address *"
+            {formError && <div className="aegis-error">{formError}</div>}
+            <div className="">
+              <input className="aegis-filter" type="email" placeholder="Email address *"
                 value={formEmail}
                 onChange={e => setFormEmail(e.target.value)} />
-              <select className="form-select" aria-label="Project"
+              <select className="" aria-label="Project"
                 value={formProject}
                 onChange={e => setFormProject(e.target.value)}>
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
-              <select className="form-select" aria-label="Frequency"
+              <select className="" aria-label="Frequency"
                 value={formFrequency}
                 onChange={e => setFormFrequency(e.target.value as 'weekly' | 'monthly')}>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
               </select>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : 'Subscribe'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
         {!loading && !error && subs.length === 0 && (
-          <div className="state-empty">No subscriptions yet.</div>
+          <div className="aegis-muted">No subscriptions yet.</div>
         )}
         {!loading && !error && subs.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Email</th>
@@ -4014,11 +5679,11 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                   <td>{sub.email}</td>
                   <td>{sub.project_name}</td>
                   <td className="text-capitalize">{sub.frequency}</td>
-                  <td>{sub.last_sent_at ? fmtDate(sub.last_sent_at) : <span className="routing-desc">never</span>}</td>
+                  <td>{sub.last_sent_at ? fmtDate(sub.last_sent_at) : <span className="aegis-muted">never</span>}</td>
                   <td>
                     {isAdmin && (
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--revoke"
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary"
                           onClick={() => del(sub.id, sub.email)}>Remove</button>
                       </div>
                     )}
@@ -4031,30 +5696,30 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
       </div>
 
       {/* ── Webhook subscriptions ── */}
-      <div className="routing-section">
-        <div className="routing-section-header">
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">Webhook Subscriptions</div>
-            <div className="routing-section-sub">
+            <div className="">Webhook Subscriptions</div>
+            <div className="aegis-muted">
               HTTP POST callbacks fired on study events, signed with HMAC-SHA256 when a secret is set.
             </div>
           </div>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openWebhookCreate}>+ New webhook</button>}
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openWebhookCreate}>+ New webhook</button>}
         </div>
 
         {isAdmin && showWebhookForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>{whEditId ? 'Edit webhook' : 'New webhook'}</h3>
-            {whFormError && <div className="form-error">{whFormError}</div>}
-            <div className="form-grid">
-              <input className="form-input" type="url" placeholder="Endpoint URL (https://…) *"
+            {whFormError && <div className="aegis-error">{whFormError}</div>}
+            <div className="">
+              <input className="aegis-filter" type="url" placeholder="Endpoint URL (https://…) *"
                 value={whURL} onChange={e => setWhURL(e.target.value)} />
-              <select className="form-select" aria-label="Project scope"
+              <select className="" aria-label="Project scope"
                 value={whProject} onChange={e => setWhProject(e.target.value)}>
                 <option value="">All projects</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <input className="form-input" type="text" placeholder="Secret (optional, for HMAC signing)"
+              <input className="aegis-filter" type="text" placeholder="Secret (optional, for HMAC signing)"
                 value={whSecret} onChange={e => setWhSecret(e.target.value)} />
             </div>
             <div className="form-row" style={{ gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
@@ -4072,23 +5737,23 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                 Enabled
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveWebhook} disabled={whSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveWebhook} disabled={whSaving}>
                 {whSaving ? 'Saving…' : (whEditId ? 'Update' : 'Create')}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowWebhookForm(false)}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowWebhookForm(false)}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
         {!loading && !error && webhooks.length === 0 && (
-          <div className="state-empty">No webhook subscriptions yet.</div>
+          <div className="aegis-muted">No webhook subscriptions yet.</div>
         )}
         {!loading && !error && webhooks.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>URL</th>
@@ -4104,32 +5769,32 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                   <tr key={wh.id}>
                     <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all' }}>{wh.url}</td>
                     <td style={{ fontSize: '0.8rem' }}>{wh.events.join(', ')}</td>
-                    <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="routing-desc">all</span>}</td>
+                    <td>{wh.project_id ? (projects.find(p => p.id === wh.project_id)?.name ?? wh.project_id) : <span className="aegis-muted">all</span>}</td>
                     <td>
                       <span className={`status-badge status-badge--${wh.enabled ? 'clean' : 'failed'}`}>
                         {wh.enabled ? 'enabled' : 'disabled'}
                       </span>
                     </td>
                     <td>
-                      <div className="actions-cell">
-                        <button type="button" className="btn-secondary"
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary"
                           onClick={() => showStats(wh.id)}
                           title="View delivery statistics">
                           {statsWhId === wh.id ? 'Hide Stats' : 'Stats'}
                         </button>
-                        <button type="button" className="btn-secondary"
+                        <button type="button" className="aegis-btn-secondary"
                           onClick={() => showDeliveries(wh.id)}
                           title="View delivery log">
                           {deliveryWhId === wh.id ? 'Hide Log' : 'Log'}
                         </button>
                         {isAdmin && (
                           <>
-                            <button type="button" className="btn btn--action"
+                            <button type="button" className="aegis-btn-secondary"
                               title="Send a test study.approved payload"
                               onClick={() => testWebhook(wh.id, wh.url)}>Test</button>
-                            <button type="button" className="btn btn--action"
+                            <button type="button" className="aegis-btn-secondary"
                               onClick={() => openWebhookEdit(wh)}>Edit</button>
-                            <button type="button" className="btn btn--revoke"
+                            <button type="button" className="aegis-btn-secondary"
                               onClick={() => deleteWebhook(wh.id, wh.url)}>Remove</button>
                           </>
                         )}
@@ -4196,11 +5861,11 @@ function NotificationsPanel({ isAdmin, projectId }: { isAdmin: boolean; projectI
                                     </span>
                                     {d.error_message && <span className="td-subtle"> {d.error_message}</span>}
                                   </td>
-                                  <td className="td-date">{fmtDate(d.delivered_at)}</td>
+                                  <td className="">{fmtDate(d.delivered_at)}</td>
                                   {isAdmin && (
                                     <td>
                                       {!d.success && (
-                                        <button type="button" className="btn btn--action"
+                                        <button type="button" className="aegis-btn-secondary"
                                           title="Re-deliver this payload"
                                           onClick={() => retryDelivery(d.id, wh.id)}>Retry</button>
                                       )}
@@ -4231,7 +5896,608 @@ const EMPTY_INSTITUTION: Omit<Institution, 'id' | 'created_at'> = {
   contact_name: '', contact_email: '', ip_ranges: '', ae_title: '', enabled: true,
 }
 
-function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
+// InstitutionDetailPanel is the per-institution view at /admin/institutions/:id.
+// Step 1 of the Institutions/Satellites hierarchy restructure: an Institution
+// owns deployment methods (Satellites + browser upload allowlist + desktop
+// installer in future). This view is intentionally narrower than the global
+// admin Satellites list — it shows just what's scoped to one institution.
+function InstitutionDetailPanel({ institutionId, isAdmin }: { institutionId: string; isAdmin: boolean }) {
+  type SatelliteRow = {
+    id: string
+    institution_id: string
+    institution_name: string
+    institution_slug: string
+    site_id: string
+    cert_thumbprint: string | null
+    cert_expires_at: string | null
+    last_seen_at: string | null
+    active_token_count: number
+    cert_subject_dn: string | null
+  }
+
+  type UploadMethod = {
+    id: string
+    label: string
+    description: string
+  }
+  type AllowlistEntry = {
+    method: UploadMethod
+    enabled: boolean
+    is_default: boolean
+    note: string
+    updated_at?: string
+    updated_by?: string
+  }
+
+  const [inst, setInst]         = useState<Institution | null>(null)
+  const [satellites, setSats]   = useState<SatelliteRow[]>([])
+  const [projects, setProjects] = useState<InstitutionProject[]>([])
+  const [stats, setStats]       = useState<{ total_studies: number; last_study_at?: string } | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
+  const [allowlist, setAllowlist] = useState<AllowlistEntry[]>([])
+  const [editingMethod, setEditingMethod] = useState<string | null>(null)
+  const [editEnabled, setEditEnabled] = useState(true)
+  const [editNote, setEditNote] = useState('')
+  const [allowlistSaving, setAllowlistSaving] = useState(false)
+  const [allowlistError, setAllowlistError] = useState<string | null>(null)
+
+  // Inline "add satellite" workflow — mints an enrollment token scoped to
+  // this institution. The token itself is returned only once and must be
+  // handed to the on-prem site admin to run the bootstrap.
+  const [showAddSat, setShowAddSat]   = useState(false)
+  const [satLabel, setSatLabel]       = useState('')
+  const [satTtlHours, setSatTtlHours] = useState(72)
+  const [minting, setMinting]         = useState(false)
+  const [mintError, setMintError]     = useState<string | null>(null)
+  const [mintedToken, setMintedToken] = useState<{ token: string; expires_at: string } | null>(null)
+  const [copied, setCopied]           = useState(false)
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [instRes, satRes, projRes, statsRes, allowRes] = await Promise.all([
+        fetch(`/api/institutions`),
+        fetch(`/api/satellites`),
+        fetch(`/api/institutions/${institutionId}/projects`),
+        fetch(`/api/institutions/${institutionId}/stats`),
+        fetch(`/api/institutions/${institutionId}/upload-allowlist`),
+      ])
+      if (!instRes.ok) throw new Error(`institutions: HTTP ${instRes.status}`)
+
+      const allInsts: Institution[] = await instRes.json()
+      const target = allInsts.find(i => i.id === institutionId) ?? null
+      if (!target) throw new Error('Institution not found')
+      setInst(target)
+
+      if (satRes.ok) {
+        const body = await satRes.json()
+        const rows: SatelliteRow[] = body.satellites ?? body.spokes ?? []
+        setSats(rows.filter(s => s.institution_id === institutionId))
+      }
+      if (projRes.ok) setProjects(await projRes.json())
+      if (statsRes.ok) setStats(await statsRes.json())
+      if (allowRes.ok) {
+        const body = await allowRes.json()
+        setAllowlist(body.entries ?? [])
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [institutionId])
+
+  function startEditAllowlist(entry: AllowlistEntry) {
+    setEditingMethod(entry.method.id)
+    setEditEnabled(entry.enabled)
+    setEditNote(entry.note)
+    setAllowlistError(null)
+  }
+
+  function cancelEditAllowlist() {
+    setEditingMethod(null)
+    setAllowlistError(null)
+  }
+
+  async function saveAllowlist(methodID: string) {
+    setAllowlistSaving(true)
+    setAllowlistError(null)
+    try {
+      const res = await fetch(
+        `/api/institutions/${institutionId}/upload-allowlist/${encodeURIComponent(methodID)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: editEnabled, note: editNote }),
+        },
+      )
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(`HTTP ${res.status}: ${body}`)
+      }
+      setEditingMethod(null)
+      void fetchAll()
+    } catch (err) {
+      setAllowlistError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setAllowlistSaving(false)
+    }
+  }
+
+  async function resetAllowlist(methodID: string) {
+    setAllowlistSaving(true)
+    setAllowlistError(null)
+    try {
+      const res = await fetch(
+        `/api/institutions/${institutionId}/upload-allowlist/${encodeURIComponent(methodID)}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok && res.status !== 404) {
+        const body = await res.text()
+        throw new Error(`HTTP ${res.status}: ${body}`)
+      }
+      setEditingMethod(null)
+      void fetchAll()
+    } catch (err) {
+      setAllowlistError(err instanceof Error ? err.message : 'Reset failed')
+    } finally {
+      setAllowlistSaving(false)
+    }
+  }
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  async function mintSatelliteToken() {
+    setMinting(true)
+    setMintError(null)
+    setMintedToken(null)
+    try {
+      const res = await fetch(`/api/institutions/${institutionId}/enrollment-tokens`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: satLabel.trim() || undefined, ttl_hours: satTtlHours }),
+      })
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(`HTTP ${res.status}: ${body}`)
+      }
+      const data = await res.json()
+      setMintedToken({ token: data.token, expires_at: data.expires_at })
+      // Refresh the satellite list so the new pending-token count reflects.
+      void fetchAll()
+    } catch (err) {
+      setMintError(err instanceof Error ? err.message : 'Failed to mint token')
+    } finally {
+      setMinting(false)
+    }
+  }
+
+  function closeAddSat() {
+    setShowAddSat(false)
+    setSatLabel('')
+    setSatTtlHours(72)
+    setMintError(null)
+    setMintedToken(null)
+    setCopied(false)
+  }
+
+  async function copyToken() {
+    if (!mintedToken) return
+    try {
+      await navigator.clipboard.writeText(mintedToken.token)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard API may be unavailable; the token is still visible in the
+      // text box for manual copy.
+    }
+  }
+
+  if (loading) return <div className="aegis-muted">Loading institution…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
+  if (!inst)   return <div className="aegis-muted">Institution not found.</div>
+
+  return (
+    <>
+      {/* Back link + heading */}
+      <div style={{ marginBottom: 16 }}>
+        <Link
+          to="/institutions"
+          style={{ color: 'var(--aegis-link)', fontSize: 13, textDecoration: 'none' }}
+        >
+          ← All institutions
+        </Link>
+      </div>
+
+      {/* Overview section */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <div>
+            <h2 style={{ margin: 0 }}>{inst.name}</h2>
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <code className="aegis-code">{inst.slug}</code>
+              <span className="aegis-pill">{inst.institution_type}</span>
+              {!inst.enabled && <span className="aegis-muted" style={{ fontSize: 12 }}>disabled</span>}
+            </div>
+          </div>
+          {isAdmin && (
+            <Link
+              to="/institutions"
+              className="aegis-btn-secondary"
+              style={{ textDecoration: 'none' }}
+            >
+              Manage in list
+            </Link>
+          )}
+        </div>
+        {inst.description && <p className="aegis-muted" style={{ marginTop: 12 }}>{inst.description}</p>}
+        <dl className="aegis-defs" style={{ marginTop: 12 }}>
+          {inst.contact_name && <><dt>Contact</dt><dd>{inst.contact_name}</dd></>}
+          {inst.contact_email && <><dt>Email</dt><dd>{inst.contact_email}</dd></>}
+          {inst.ip_ranges && <><dt>IP ranges</dt><dd><code className="aegis-code">{inst.ip_ranges}</code></dd></>}
+          {inst.ae_title && <><dt>DICOM AE title</dt><dd><code className="aegis-code">{inst.ae_title}</code></dd></>}
+          <dt>Status</dt><dd>{inst.enabled ? 'Enabled' : 'Disabled'}</dd>
+        </dl>
+      </section>
+
+      {/* Satellites scoped to this institution */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>Satellites ({satellites.length})</h2>
+          <div className="aegis-section-controls">
+            {isAdmin && !showAddSat && (
+              <button
+                type="button"
+                className="aegis-btn-primary"
+                onClick={() => setShowAddSat(true)}
+              >
+                + Add satellite
+              </button>
+            )}
+            <Link to="/satellites" className="aegis-btn-secondary" style={{ textDecoration: 'none' }}>
+              Manage all
+            </Link>
+          </div>
+        </div>
+
+        {/* Inline mint-token form */}
+        {showAddSat && !mintedToken && (
+          <div
+            style={{
+              border: '1px solid var(--aegis-border)',
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 16,
+              background: 'var(--aegis-bg)',
+            }}
+          >
+            <h3 style={{ marginTop: 0, fontSize: 14 }}>Enrollment token</h3>
+            <p className="aegis-muted" style={{ fontSize: 13, marginTop: 4 }}>
+              Mint a one-time token for this institution. Hand it to the on-prem site
+              admin running the satellite bootstrap. Tokens expire automatically.
+            </p>
+            {mintError && <div className="aegis-error">{mintError}</div>}
+            <div className="aegis-form-row">
+              <label htmlFor="sat-label">Label</label>
+              <input
+                id="sat-label"
+                type="text"
+                value={satLabel}
+                onChange={e => setSatLabel(e.target.value)}
+                placeholder="e.g. UMN MRI Lab — primary"
+              />
+              <span className="aegis-form-hint">Free-text identifier for your records.</span>
+            </div>
+            <div className="aegis-form-row">
+              <label htmlFor="sat-ttl">Token TTL (hours)</label>
+              <input
+                id="sat-ttl"
+                type="number"
+                min={1}
+                max={720}
+                value={satTtlHours}
+                onChange={e => setSatTtlHours(parseInt(e.target.value, 10) || 72)}
+              />
+              <span className="aegis-form-hint">Default 72 (3 days). Maximum 720 (30 days).</span>
+            </div>
+            <div className="aegis-form-actions">
+              <button
+                type="button"
+                className="aegis-btn-primary"
+                onClick={mintSatelliteToken}
+                disabled={minting}
+              >
+                {minting ? 'Minting…' : 'Mint token'}
+              </button>
+              <button type="button" className="aegis-btn-secondary" onClick={closeAddSat}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Show minted token once — copy-paste UI */}
+        {mintedToken && (
+          <div
+            style={{
+              border: '1px solid var(--aegis-link)',
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 16,
+              background: 'var(--aegis-active-bg)',
+            }}
+          >
+            <h3 style={{ marginTop: 0, fontSize: 14, color: 'var(--aegis-link-hover)' }}>
+              Token minted — copy it now
+            </h3>
+            <p className="aegis-muted" style={{ fontSize: 13, marginTop: 4 }}>
+              This token is shown <strong>once</strong>. AEGIS only stores its hash — if you
+              lose it, mint another. Expires {new Date(mintedToken.expires_at).toLocaleString()}.
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <input
+                readOnly
+                value={mintedToken.token}
+                onFocus={e => e.currentTarget.select()}
+                style={{
+                  flex: 1,
+                  padding: '8px 10px',
+                  fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+                  fontSize: 13,
+                  border: '1px solid var(--aegis-border)',
+                  borderRadius: 6,
+                  background: 'var(--aegis-surface)',
+                  color: 'var(--aegis-text)',
+                }}
+              />
+              <button type="button" className="aegis-btn-primary" onClick={copyToken}>
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="aegis-form-actions" style={{ marginTop: 12 }}>
+              <button type="button" className="aegis-btn-secondary" onClick={closeAddSat}>
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {satellites.length === 0 && !showAddSat ? (
+          <div className="aegis-muted">
+            No satellites enrolled at this institution yet.
+            {isAdmin && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  onClick={() => setShowAddSat(true)}
+                  style={{
+                    background: 'none',
+                    border: 0,
+                    padding: 0,
+                    color: 'var(--aegis-link)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Mint a token →
+                </button>
+              </>
+            )}
+          </div>
+        ) : satellites.length > 0 && (
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
+              <thead>
+                <tr><th>Site ID</th><th>Cert</th><th>Last seen</th><th>Pending tokens</th></tr>
+              </thead>
+              <tbody>
+                {satellites.map(s => (
+                  <tr key={s.id}>
+                    <td><code className="aegis-code">{s.site_id || s.id.slice(0, 8)}</code></td>
+                    <td>
+                      {s.cert_thumbprint
+                        ? <span className="aegis-pill">enrolled</span>
+                        : <span className="aegis-muted">pending</span>}
+                    </td>
+                    <td className="aegis-muted">
+                      {s.last_seen_at ? new Date(s.last_seen_at).toLocaleString() : '—'}
+                    </td>
+                    <td>{s.active_token_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Browser upload allowlist — per-institution allow/deny of
+          upload flows. Chunk 1 ships the UI + API + table; chunk 2
+          wires IsUploadMethodAllowed into each handler call site. */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>
+            Browser upload allowlist
+            {' '}
+            <span className="aegis-muted" style={{ fontSize: 12, fontWeight: 'normal' }}>
+              ({allowlist.filter(e => e.enabled).length} of {allowlist.length} methods enabled)
+            </span>
+          </h2>
+          <span className="aegis-muted" style={{ fontSize: 12 }}>
+            UI live; enforcement lands in chunk 2.
+          </span>
+        </div>
+
+        {allowlistError && (
+          <div className="aegis-error" style={{ marginBottom: 8 }}>{allowlistError}</div>
+        )}
+
+        {allowlist.length === 0 ? (
+          <div className="aegis-muted">No upload methods registered.</div>
+        ) : (
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 32 }}></th>
+                  <th>Method</th>
+                  <th>State</th>
+                  <th>Note</th>
+                  {isAdmin && <th style={{ width: 120 }}></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {allowlist.map(entry => {
+                  const isEditing = editingMethod === entry.method.id
+                  return (
+                    <tr key={entry.method.id}>
+                      <td>{entry.enabled ? '☑' : '☐'}</td>
+                      <td>
+                        <div>{entry.method.label}</div>
+                        <div className="aegis-muted" style={{ fontSize: 12 }}>
+                          {entry.method.description}
+                        </div>
+                      </td>
+                      <td>
+                        {entry.is_default
+                          ? <span className="aegis-pill">default</span>
+                          : entry.enabled
+                            ? <span className="aegis-pill">enabled</span>
+                            : <span className="aegis-pill aegis-pill--warn">disabled</span>}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editNote}
+                            onChange={e => setEditNote(e.target.value)}
+                            placeholder="why this is on/off"
+                            style={{ width: '100%' }}
+                          />
+                        ) : (
+                          <span className="aegis-muted">{entry.note || '—'}</span>
+                        )}
+                      </td>
+                      {isAdmin && (
+                        <td>
+                          {isEditing ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <label style={{ fontSize: 12 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={editEnabled}
+                                  onChange={e => setEditEnabled(e.target.checked)}
+                                  disabled={allowlistSaving}
+                                />
+                                {' '}enabled
+                              </label>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button
+                                  type="button"
+                                  className="aegis-btn-primary"
+                                  onClick={() => saveAllowlist(entry.method.id)}
+                                  disabled={allowlistSaving}
+                                  style={{ fontSize: 12 }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  className="aegis-btn"
+                                  onClick={cancelEditAllowlist}
+                                  disabled={allowlistSaving}
+                                  style={{ fontSize: 12 }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              {!entry.is_default && (
+                                <button
+                                  type="button"
+                                  className="aegis-btn"
+                                  onClick={() => resetAllowlist(entry.method.id)}
+                                  disabled={allowlistSaving}
+                                  style={{ fontSize: 12 }}
+                                  title="Remove explicit row → reverts to default-on"
+                                >
+                                  Reset to default
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="aegis-btn"
+                              onClick={() => startEditAllowlist(entry)}
+                              style={{ fontSize: 12 }}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Linked projects */}
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>Linked projects ({projects.length})</h2>
+          {stats && stats.total_studies > 0 && (
+            <span className="aegis-muted" style={{ fontSize: 12 }}>
+              {stats.total_studies} total studies
+              {stats.last_study_at && ` · last ${new Date(stats.last_study_at).toLocaleDateString()}`}
+            </span>
+          )}
+        </div>
+        {projects.length === 0 ? (
+          <div className="aegis-muted">No projects linked to this institution yet.</div>
+        ) : (
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
+              <thead>
+                <tr><th>Project</th><th>Role</th><th>Linked</th></tr>
+              </thead>
+              <tbody>
+                {projects.map(p => (
+                  <tr key={`${p.project_id}-${p.role}`}>
+                    <td>
+                      <Link
+                        to={`/projects/${p.project_id}`}
+                        style={{ color: 'var(--aegis-link)', textDecoration: 'none' }}
+                      >
+                        {p.project_name || p.project_id.slice(0, 8)}
+                      </Link>
+                    </td>
+                    <td><span className="aegis-pill">{p.role}</span></td>
+                    <td className="aegis-muted">{new Date(p.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  )
+}
+
+function InstitutionsPanel({ isAdmin, detailInstitutionId }: { isAdmin: boolean; detailInstitutionId?: string | null }) {
+  // When a specific institution is selected via the URL, render the
+  // detail page instead of the list. This is step 1 of the Institutions-
+  // as-parent hierarchy restructure — see docs/followups.
+  if (detailInstitutionId) {
+    return <InstitutionDetailPanel institutionId={detailInstitutionId} isAdmin={isAdmin} />
+  }
+
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState<string | null>(null)
@@ -4378,16 +6644,24 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
     fetchInstProjects(selectedInst.id)
   }
 
-  if (loading) return <div className="state-loading">Loading institutions…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading institutions…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
     <div className="institutions-panel">
-      <div className="routing-section-header">
+      <div className="aegis-section-bar">
         <h2>Institutions</h2>
-        <div className="actions-cell">
-          <button type="button" className="btn-refresh" onClick={fetchInstitutions}>Refresh</button>
-          {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ Add institution</button>}
+        <div className="aegis-section-controls">
+          <Link
+            to="/satellites"
+            className="aegis-btn-secondary"
+            style={{ textDecoration: 'none' }}
+            title="Fleet-wide satellite view (read-only enrollment status across all institutions)"
+          >
+            Manage satellites
+          </Link>
+          <button type="button" className="aegis-icon-btn" onClick={fetchInstitutions}>Refresh</button>
+          {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNew}>+ Add institution</button>}
         </div>
       </div>
       <p className="routing-hint">
@@ -4396,51 +6670,51 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
 
       {/* Create / Edit form */}
       {isAdmin && showForm && (
-        <div className="routing-form">
+        <div className="aegis-section">
           <h3>{editingId ? 'Edit institution' : 'New institution'}</h3>
-          {formError && <div className="form-error">{formError}</div>}
-          <div className="form-grid">
-            <input className="form-input" placeholder="Name *" value={form.name}
+          {formError && <div className="aegis-error">{formError}</div>}
+          <div className="">
+            <input className="aegis-filter" placeholder="Name *" value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-            <input className="form-input" placeholder="Slug (auto-generated)" value={form.slug}
+            <input className="aegis-filter" placeholder="Slug (auto-generated)" value={form.slug}
               onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-            <select className="form-select" aria-label="Type" value={form.institution_type}
+            <select className="" aria-label="Type" value={form.institution_type}
               onChange={e => setForm(f => ({ ...f, institution_type: e.target.value as Institution['institution_type'] }))}>
               <option value="sender">Sender (uploads studies)</option>
               <option value="receiver">Receiver (receives studies)</option>
               <option value="both">Both</option>
             </select>
-            <input className="form-input form-input--wide" placeholder="Description" value={form.description}
+            <input className="aegis-filter" placeholder="Description" value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div className="routing-form-section-label">Contact</div>
-          <div className="form-grid">
-            <input className="form-input" placeholder="Contact name" value={form.contact_name}
+          <div className="">
+            <input className="aegis-filter" placeholder="Contact name" value={form.contact_name}
               onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))} />
-            <input className="form-input" type="email" placeholder="Contact email" value={form.contact_email}
+            <input className="aegis-filter" type="email" placeholder="Contact email" value={form.contact_email}
               onChange={e => setForm(f => ({ ...f, contact_email: e.target.value }))} />
           </div>
           <div className="routing-form-section-label">Network Identity</div>
-          <div className="form-grid">
-            <input className="form-input" placeholder="IP ranges (CIDR, comma-separated)" value={form.ip_ranges}
+          <div className="">
+            <input className="aegis-filter" placeholder="IP ranges (CIDR, comma-separated)" value={form.ip_ranges}
               onChange={e => setForm(f => ({ ...f, ip_ranges: e.target.value }))} />
-            <input className="form-input" placeholder="DICOM AE title" value={form.ae_title}
+            <input className="aegis-filter" placeholder="DICOM AE title" value={form.ae_title}
               onChange={e => setForm(f => ({ ...f, ae_title: e.target.value }))} />
           </div>
-          <div className="form-row form-row--actions">
-            <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+          <div className="aegis-form-actions">
+            <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
               {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
             </button>
-            <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </div>
       )}
 
       {/* Institutions table */}
       {institutions.length === 0 && !showForm ? (
-        <div className="state-empty">No institutions yet.</div>
+        <div className="aegis-muted">No institutions yet.</div>
       ) : institutions.length > 0 && (
-        <table className="routing-table">
+        <table className="aegis-table">
           <thead>
             <tr>
               <th>Institution</th>
@@ -4461,9 +6735,16 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                 ].join(' ')}
               >
                 <td>
-                  <div className="routing-name">{inst.name}</div>
-                  {inst.description && <div className="routing-desc">{inst.description}</div>}
-                  <code className="inst-slug">{inst.slug}</code>
+                  <div>
+                    <Link
+                      to={`/institutions/${inst.id}`}
+                      style={{ color: 'var(--aegis-link)', textDecoration: 'none', fontWeight: 500 }}
+                    >
+                      {inst.name}
+                    </Link>
+                  </div>
+                  {inst.description && <div className="aegis-muted">{inst.description}</div>}
+                  <code className="aegis-code">{inst.slug}</code>
                 </td>
                 <td>
                   <span className={`routing-action routing-action--${inst.institution_type}`}>
@@ -4472,9 +6753,9 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                 </td>
                 <td>
                   {inst.contact_name && <div>{inst.contact_name}</div>}
-                  {inst.contact_email && <div className="routing-desc">{inst.contact_email}</div>}
+                  {inst.contact_email && <div className="aegis-muted">{inst.contact_email}</div>}
                 </td>
-                <td className="routing-desc">
+                <td className="aegis-muted">
                   {inst.ip_ranges && <div>{inst.ip_ranges}</div>}
                   {inst.ae_title  && <div>AE: {inst.ae_title}</div>}
                 </td>
@@ -4484,18 +6765,18 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                   </span>
                 </td>
                 <td>
-                  <div className="actions-cell">
+                  <div className="aegis-section-controls">
                     <button type="button" className="btn btn--share"
                       onClick={() => selectedInst?.id === inst.id ? setSelectedInst(null) : selectInst(inst)}>
                       {selectedInst?.id === inst.id ? 'Close' : 'Projects'}
                     </button>
-                    {isAdmin && <button type="button" className="btn btn--edit" onClick={() => openEdit(inst)}>Edit</button>}
+                    {isAdmin && <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(inst)}>Edit</button>}
                     {isAdmin && (
                       <button type="button" className="btn btn--secondary" onClick={() => toggleInst(inst)}>
                         {inst.enabled ? 'Disable' : 'Enable'}
                       </button>
                     )}
-                    {isAdmin && <button type="button" className="btn btn--revoke" onClick={() => deleteInst(inst.id, inst.name)}>Delete</button>}
+                    {isAdmin && <button type="button" className="aegis-btn-secondary" onClick={() => deleteInst(inst.id, inst.name)}>Delete</button>}
                   </div>
                 </td>
               </tr>
@@ -4531,17 +6812,17 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
           {isAdmin && (
             <>
               <div className="routing-form-section-label">Link to project</div>
-              {linkError && <div className="form-error">{linkError}</div>}
+              {linkError && <div className="aegis-error">{linkError}</div>}
               <div className="form-row">
-                <input className="form-input" placeholder="Project ID (UUID)"
+                <input className="aegis-filter" placeholder="Project ID (UUID)"
                   value={linkProjectID} onChange={e => setLinkProjectID(e.target.value)} />
-                <select className="form-select" aria-label="Role" value={linkRole}
+                <select className="" aria-label="Role" value={linkRole}
                   onChange={e => setLinkRole(e.target.value as 'sender' | 'receiver' | 'admin')}>
                   <option value="sender">sender</option>
                   <option value="receiver">receiver</option>
                   <option value="admin">admin</option>
                 </select>
-                <button type="button" className="btn-primary" onClick={linkProject} disabled={linkSaving}>
+                <button type="button" className="aegis-btn-primary" onClick={linkProject} disabled={linkSaving}>
                   {linkSaving ? 'Linking…' : 'Link'}
                 </button>
               </div>
@@ -4549,11 +6830,11 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
           )}
 
           {projLoading ? (
-            <div className="state-loading">Loading…</div>
+            <div className="aegis-muted">Loading…</div>
           ) : instProjects.length === 0 ? (
-            <div className="state-empty">No projects linked yet.</div>
+            <div className="aegis-muted">No projects linked yet.</div>
           ) : (
-            <table className="routing-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Project</th>
@@ -4566,13 +6847,13 @@ function InstitutionsPanel({ isAdmin }: { isAdmin: boolean }) {
                 {instProjects.map(ip => (
                   <tr key={ip.project_id}>
                     <td>
-                      <div className="routing-name">{ip.project_name || ip.project_id}</div>
+                      <div className="">{ip.project_name || ip.project_id}</div>
                     </td>
                     <td><code className={`routing-action routing-action--${ip.role}`}>{ip.role}</code></td>
-                    <td className="td-date">{fmtDate(ip.created_at)}</td>
+                    <td className="">{fmtDate(ip.created_at)}</td>
                     <td>
                       {isAdmin && (
-                        <button type="button" className="btn btn--revoke" onClick={() => unlinkProject(ip.project_id)}>
+                        <button type="button" className="aegis-btn-secondary" onClick={() => unlinkProject(ip.project_id)}>
                           Unlink
                         </button>
                       )}
@@ -4623,6 +6904,11 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [retentionDraft, setRetentionDraft]           = useState<string>('')
   const [retentionSaving, setRetentionSaving]         = useState(false)
   const [retentionError, setRetentionError]           = useState<string | null>(null)
+  const [retentionPreview, setRetentionPreview]       = useState<{
+    would_expire_count: number; total_approved: number;
+    age_distribution: Array<{label: string; min_days: number; count: number; would_expire: boolean}>
+  } | null>(null)
+  const [retentionPreviewing, setRetentionPreviewing] = useState(false)
 
   // SLA threshold editor state
   const [slaProjectId, setSlaProjectId]   = useState<string | null>(null)
@@ -4640,8 +6926,17 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
   // Archive/restore state
   const [archiving, setArchiving] = useState<string | null>(null)
 
+  // Restricted toggle state
+  const [restrictedToggling, setRestrictedToggling] = useState<string | null>(null)
+
   // Compliance report modal
   const [complianceProjectId, setComplianceProjectId] = useState<string | null>(null)
+
+  // Health panel modal
+  const [healthProject, setHealthProject] = useState<{ id: string; name: string } | null>(null)
+
+  // Members panel modal
+  const [membersProject, setMembersProject] = useState<{ id: string; name: string } | null>(null)
 
   async function openPhiConfig(projectId: string) {
     setPhiProjectId(projectId)
@@ -4677,6 +6972,21 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
     setRetentionProjectId(p.id)
     setRetentionDraft(p.retention_days != null ? String(p.retention_days) : '')
     setRetentionError(null)
+    setRetentionPreview(null)
+  }
+
+  async function previewRetention() {
+    if (!retentionProjectId) return
+    const days = parseInt(retentionDraft, 10)
+    if (isNaN(days) || days <= 0) { setRetentionError('Enter a positive integer to preview'); return }
+    setRetentionError(null)
+    setRetentionPreviewing(true)
+    try {
+      const res = await fetch(`/api/projects/${retentionProjectId}/retention-preview?days=${days}`)
+      if (res.ok) setRetentionPreview(await res.json())
+    } catch { /* non-fatal */ } finally {
+      setRetentionPreviewing(false)
+    }
   }
 
   async function saveRetention() {
@@ -4805,6 +7115,28 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  const toggleRestricted = async (p: Project) => {
+    const newValue = !p.restricted
+    const label = newValue ? 'restrict' : 'open'
+    if (!confirm(`${newValue ? 'Restrict' : 'Un-restrict'} project "${p.name}"?\n\n${newValue
+      ? 'Only project members and platform admins will be able to see this project.'
+      : 'All authenticated users will be able to see this project.'}`)) return
+    setRestrictedToggling(p.id)
+    try {
+      const res = await fetch(`/api/projects/${p.id}/restricted`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restricted: newValue }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      fetchProjects()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : `Failed to ${label} project`)
+    } finally {
+      setRestrictedToggling(null)
+    }
+  }
+
   const fetchProjects = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -4854,141 +7186,174 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  if (loading) return <div className="state-loading">Loading projects…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading projects…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">Projects</div>
-            <div className="routing-section-sub">
+            <div className="">Projects</div>
+            <div className="aegis-muted">
               Projects group studies and control anonymization profiles. Each upload is associated with one project.
             </div>
           </div>
-          <div className="actions-cell">
-            <button type="button" className="btn-refresh" onClick={fetchProjects}>Refresh</button>
-            {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ New project</button>}
+          <div className="aegis-section-controls">
+            <button type="button" className="aegis-icon-btn" onClick={fetchProjects}>Refresh</button>
+            {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNew}>+ New project</button>}
           </div>
         </div>
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>{editingId ? 'Edit project' : 'New project'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Name *"
+            {formError && <div className="aegis-error">{formError}</div>}
+            <div className="">
+              <input className="aegis-filter" placeholder="Name *"
                 value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="form-input" placeholder="Slug (auto-generated if blank)"
+              <input className="aegis-filter" placeholder="Slug (auto-generated if blank)"
                 value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-              <input className="form-input form-input--wide" placeholder="Description"
+              <input className="aegis-filter" placeholder="Description"
                 value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             {editingId && (
               <div className="routing-hint">Note: changing the slug will break existing upload portal URLs for this project.</div>
             )}
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline PHI config editor */}
         {phiProjectId && phiConfig && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
+          <div className="aegis-section" style={{ marginTop: '16px' }}>
             <h3>PHI Scan Config — {projects.find(p => p.id === phiProjectId)?.name}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+            <div className="aegis-muted" style={{ marginBottom: '12px' }}>
               Override the PHI detection sensitivity thresholds for this project.
               These values are read by the PHI detection service at scan time.
             </div>
-            {phiError && <div className="form-error">{phiError}</div>}
-            <div className="form-grid">
+            {phiError && <div className="aegis-error">{phiError}</div>}
+            <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Confidence threshold (0–1, default 0.4)
-                <input className="form-input" type="number" min="0" max="1" step="0.05"
+                <input className="aegis-filter" type="number" min="0" max="1" step="0.05"
                   value={phiConfig.confidence_threshold}
                   onChange={e => setPhiConfig(c => c ? { ...c, confidence_threshold: parseFloat(e.target.value) } : c)} />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Min text length (chars, default 3)
-                <input className="form-input" type="number" min="1" step="1"
+                <input className="aegis-filter" type="number" min="1" step="1"
                   value={phiConfig.min_text_length}
                   onChange={e => setPhiConfig(c => c ? { ...c, min_text_length: parseInt(e.target.value, 10) } : c)} />
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={savePhiConfig} disabled={phiSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={savePhiConfig} disabled={phiSaving}>
                 {phiSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setPhiProjectId(null)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setPhiProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline retention policy editor */}
         {retentionProjectId && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
+          <div className="aegis-section" style={{ marginTop: '16px' }}>
             <h3>Retention Policy — {projects.find(p => p.id === retentionProjectId)?.name}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+            <div className="aegis-muted" style={{ marginBottom: '12px' }}>
               Approved studies older than this threshold are automatically marked as expired.
-              Leave blank to keep studies indefinitely.
+              Leave blank to keep studies indefinitely. Use "Preview" to see impact before saving.
             </div>
-            {retentionError && <div className="form-error">{retentionError}</div>}
-            <div className="form-grid">
+            {retentionError && <div className="aegis-error">{retentionError}</div>}
+            <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Retention period (days, blank = unlimited)
-                <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 90"
+                <input className="aegis-filter" type="number" min="1" step="1" placeholder="e.g. 90"
                   value={retentionDraft}
-                  onChange={e => setRetentionDraft(e.target.value)} />
+                  onChange={e => { setRetentionDraft(e.target.value); setRetentionPreview(null) }} />
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveRetention} disabled={retentionSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveRetention} disabled={retentionSaving}>
                 {retentionSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setRetentionProjectId(null)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={previewRetention} disabled={retentionPreviewing || !retentionDraft}>
+                {retentionPreviewing ? 'Checking…' : 'Preview impact'}
+              </button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => { setRetentionProjectId(null); setRetentionPreview(null) }}>Cancel</button>
             </div>
+            {retentionPreview && (
+              <div style={{ marginTop: 12, padding: '10px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                  Impact at {retentionDraft}-day retention:
+                  {' '}<span style={{ color: retentionPreview.would_expire_count > 0 ? '#ea580c' : '#0d9488' }}>
+                    {retentionPreview.would_expire_count} of {retentionPreview.total_approved} approved {retentionPreview.total_approved === 1 ? 'study' : 'studies'} would be expired
+                  </span>
+                </div>
+                <table style={{ fontSize: 12, borderCollapse: 'collapse', width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '3px 8px', color: '#6b7280' }}>Age bucket</th>
+                      <th style={{ textAlign: 'right', padding: '3px 8px', color: '#6b7280' }}>Studies</th>
+                      <th style={{ textAlign: 'left', padding: '3px 8px', color: '#6b7280' }}>Effect</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {retentionPreview.age_distribution.map(b => (
+                      <tr key={b.label} style={{ background: b.would_expire && b.count > 0 ? '#fff7ed' : 'transparent' }}>
+                        <td style={{ padding: '3px 8px', color: '#374151' }}>{b.label}</td>
+                        <td style={{ padding: '3px 8px', textAlign: 'right', fontWeight: b.count > 0 ? 600 : 400, color: '#111827' }}>{b.count}</td>
+                        <td style={{ padding: '3px 8px', color: b.would_expire ? '#ea580c' : '#6b7280', fontSize: 11 }}>
+                          {b.would_expire ? (b.count > 0 ? 'Would expire' : 'Would expire (none)') : 'Kept'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
         {/* Inline SLA threshold editor */}
         {slaProjectId && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
+          <div className="aegis-section" style={{ marginTop: '16px' }}>
             <h3>SLA Threshold — {projects.find(p => p.id === slaProjectId)?.name}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+            <div className="aegis-muted" style={{ marginBottom: '12px' }}>
               Studies idle beyond this threshold are surfaced as "stuck". Leave blank to use the global default (60 min).
             </div>
-            {slaError && <div className="form-error">{slaError}</div>}
-            <div className="form-grid">
+            {slaError && <div className="aegis-error">{slaError}</div>}
+            <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Stuck threshold (minutes, blank = global default)
-                <input className="form-input" type="number" min="1" step="1" placeholder="e.g. 120"
+                <input className="aegis-filter" type="number" min="1" step="1" placeholder="e.g. 120"
                   value={slaDraft}
                   onChange={e => setSlaDraft(e.target.value)} />
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveSla} disabled={slaSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveSla} disabled={slaSaving}>
                 {slaSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setSlaProjectId(null)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setSlaProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Inline storage quota editor */}
         {quotaProjectId && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
+          <div className="aegis-section" style={{ marginTop: '16px' }}>
             <h3>Storage Quota — {projects.find(p => p.id === quotaProjectId)?.name}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
+            <div className="aegis-muted" style={{ marginBottom: '12px' }}>
               Maximum total storage for this project. Uploads are rejected when the quota is reached.
               Leave blank to allow unlimited storage.
             </div>
-            {quotaError && <div className="form-error">{quotaError}</div>}
+            {quotaError && <div className="aegis-error">{quotaError}</div>}
             {quotaUsage && (
               <div style={{ marginBottom: '12px' }}>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
@@ -5009,27 +7374,27 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 )}
               </div>
             )}
-            <div className="form-grid">
+            <div className="">
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
                 Storage limit (GB, blank = unlimited)
-                <input className="form-input" type="number" min="0.1" step="0.1" placeholder="e.g. 10"
+                <input className="aegis-filter" type="number" min="0.1" step="0.1" placeholder="e.g. 10"
                   value={quotaDraft}
                   onChange={e => setQuotaDraft(e.target.value)} />
               </label>
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={saveQuota} disabled={quotaSaving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={saveQuota} disabled={quotaSaving}>
                 {quotaSaving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setQuotaProjectId(null)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setQuotaProjectId(null)}>Cancel</button>
             </div>
           </div>
         )}
 
         {projects.length === 0 && !showForm ? (
-          <div className="state-empty">No projects yet.</div>
+          <div className="aegis-muted">No projects yet.</div>
         ) : projects.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Project</th>
@@ -5038,6 +7403,8 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                 <th>Retention</th>
                 <th>SLA</th>
                 <th>Quota</th>
+                <th>Access</th>
+                <th>Members</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -5046,39 +7413,49 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
               {projects.map(p => (
                 <tr key={p.id}>
                   <td>
-                    <div className="routing-name">
+                    <div className="">
                       {p.name}
                       {p.archived && <span className="badge badge--neutral" style={{marginLeft:'6px'}}>archived</span>}
                     </div>
-                    {p.description && <div className="routing-desc">{p.description}</div>}
+                    {p.description && <div className="aegis-muted">{p.description}</div>}
                   </td>
-                  <td><code className="inst-slug">{p.slug}</code></td>
+                  <td><code className="aegis-code">{p.slug}</code></td>
                   <td>
                     {p.default_anon_profile_id
-                      ? <span className="badge badge--enabled">profile set</span>
-                      : <span className="routing-desc">none</span>}
+                      ? <span className="aegis-pill">profile set</span>
+                      : <span className="aegis-muted">none</span>}
                   </td>
                   <td>
                     {p.retention_days != null
                       ? <span className="badge badge--status">{p.retention_days}d</span>
-                      : <span className="routing-desc">unlimited</span>}
+                      : <span className="aegis-muted">unlimited</span>}
                   </td>
                   <td>
                     {p.stuck_threshold_minutes != null
                       ? <span className="badge badge--status">{p.stuck_threshold_minutes}m</span>
-                      : <span className="routing-desc">60m</span>}
+                      : <span className="aegis-muted">60m</span>}
                   </td>
                   <td>
                     {p.storage_quota_bytes != null
                       ? <span className="badge badge--status">{formatBytes(p.storage_quota_bytes)}</span>
-                      : <span className="routing-desc">unlimited</span>}
+                      : <span className="aegis-muted">unlimited</span>}
                   </td>
-                  <td className="td-date">{fmtDate(p.created_at)}</td>
+                  <td>
+                    {p.restricted
+                      ? <span className="badge badge--warn" title="Only project members can see this project">Restricted</span>
+                      : <span className="aegis-muted">Open</span>}
+                  </td>
+                  <td>
+                    {p.member_count != null
+                      ? <span className="badge badge--neutral">{p.member_count}</span>
+                      : <span className="aegis-muted">—</span>}
+                  </td>
+                  <td className="">{fmtDate(p.created_at)}</td>
                   <td>
                     {isAdmin && (
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
-                        <button type="button" className="btn btn--action"
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="aegis-btn-secondary"
                           title="Dispatch export forwarding for all approved studies in this project"
                           onClick={async () => {
                             const res = await fetch(`/api/projects/${p.id}/export-batch`, { method: 'POST' })
@@ -5089,22 +7466,22 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           }}>
                           Export Batch
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Configure PHI scan sensitivity for this project"
                           onClick={() => openPhiConfig(p.id)}>
                           PHI Config
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Set study retention period for this project"
                           onClick={() => openRetention(p)}>
                           Retention
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Set per-project SLA threshold for stuck studies"
                           onClick={() => openSla(p)}>
                           SLA
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Set per-project storage quota"
                           onClick={() => openQuota(p)}>
                           Quota
@@ -5116,16 +7493,50 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
                           onClick={() => toggleArchive(p)}>
                           {archiving === p.id ? '…' : p.archived ? 'Restore' : 'Archive'}
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="aegis-btn-secondary"
                           title="Duplicate this project with all settings (routing rules, profiles, templates)"
                           onClick={() => cloneProject(p)}>
                           Clone
                         </button>
-                        <button type="button" className="btn btn--action"
+                        <button type="button" className="aegis-btn-secondary"
+                          title="Manage project members and their access levels"
+                          onClick={() => setMembersProject({ id: p.id, name: p.name })}>
+                          Members
+                        </button>
+                        <button type="button"
+                          className={p.restricted ? 'btn btn--action' : 'btn btn--action'}
+                          title={p.restricted ? 'Click to open this project to all authenticated users' : 'Click to restrict this project to members only'}
+                          disabled={restrictedToggling === p.id}
+                          style={p.restricted ? { borderColor: '#ea580c', color: '#9a3412' } : {}}
+                          onClick={() => toggleRestricted(p)}>
+                          {restrictedToggling === p.id ? '…' : p.restricted ? 'Restricted' : 'Restrict'}
+                        </button>
+                        <button type="button" className="aegis-btn-secondary"
                           title="View compliance metrics for this project"
                           onClick={() => setComplianceProjectId(p.id)}>
                           Compliance
                         </button>
+                        {isAdmin && (
+                          <a
+                            href={`/api/projects/${p.id}/compliance-report.csv`}
+                            className="btn btn--secondary"
+                            title="Download compliance report as CSV"
+                            download>
+                            ↓ CSV
+                          </a>
+                        )}
+                        <button type="button" className="aegis-btn-secondary"
+                          title="View pipeline health snapshot for this project"
+                          onClick={() => setHealthProject({ id: p.id, name: p.name })}>
+                          Health
+                        </button>
+                        <a
+                          href={`/api/projects/${p.id}/bids-export`}
+                          className="btn btn--bids-download"
+                          title="Download all BIDS-converted approved studies for this project as a ZIP archive"
+                          download>
+                          ↓ BIDS
+                        </a>
                       </div>
                     )}
                   </td>
@@ -5142,6 +7553,277 @@ function ProjectsPanel({ isAdmin }: { isAdmin: boolean }) {
           onClose={() => setComplianceProjectId(null)}
         />
       )}
+
+      {healthProject && (
+        <ProjectHealthPanel
+          projectId={healthProject.id}
+          projectName={healthProject.name}
+          onClose={() => setHealthProject(null)}
+        />
+      )}
+
+      {membersProject && (
+        <ProjectMembersPanel
+          projectId={membersProject.id}
+          projectName={membersProject.name}
+          onClose={() => setMembersProject(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Project Members Panel ─────────────────────────────────────────────────────
+
+const PROJECT_MEMBER_ROLES: Array<{ value: ProjectMember['role']; label: string; needsInstitution: boolean }> = [
+  { value: 'owner',            label: 'Owner (Principal Investigator)',           needsInstitution: false },
+  { value: 'coordinator',      label: 'Coordinator (Data Manager)',               needsInstitution: false },
+  { value: 'reviewer',         label: 'Reviewer (QC / Statistician)',             needsInstitution: false },
+  { value: 'site_coordinator', label: 'Site Coordinator (uploader, own site)',    needsInstitution: true  },
+  { value: 'site_viewer',      label: 'Site Viewer (read-only, own site)',        needsInstitution: true  },
+]
+
+function ProjectMembersPanel({ projectId, projectName, onClose }: { projectId: string; projectName: string; onClose: () => void }) {
+  const [members, setMembers]         = useState<ProjectMember[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState<string | null>(null)
+
+  // For add/edit form
+  const [showForm, setShowForm]       = useState(false)
+  const [editingMember, setEditingMember] = useState<ProjectMember | null>(null)
+  const [users, setUsers]             = useState<AdminUser[]>([])
+  const [institutions, setInstitutions] = useState<Institution[]>([])
+  const [formUserId, setFormUserId]   = useState('')
+  const [formRole, setFormRole]       = useState<ProjectMember['role']>('reviewer')
+  const [formInstId, setFormInstId]   = useState('')
+  const [formNotes, setFormNotes]     = useState('')
+  const [formError, setFormError]     = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
+  const [removing, setRemoving]       = useState<string | null>(null)
+
+  const roleInfo = PROJECT_MEMBER_ROLES.find(r => r.value === formRole)
+  const needsInst = roleInfo?.needsInstitution ?? false
+
+  const fetchMembers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/members`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setMembers(data.members ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load members')
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId])
+
+  useEffect(() => { fetchMembers() }, [fetchMembers])
+
+  async function openAddForm() {
+    setEditingMember(null)
+    setFormUserId('')
+    setFormRole('reviewer')
+    setFormInstId('')
+    setFormNotes('')
+    setFormError(null)
+    setShowForm(true)
+    // Load users + institutions if not already loaded
+    if (users.length === 0) {
+      const [ur, ir] = await Promise.all([
+        fetch('/api/admin-users'),
+        fetch('/api/institutions'),
+      ])
+      if (ur.ok) setUsers(await ur.json())
+      if (ir.ok) setInstitutions(await ir.json())
+    }
+  }
+
+  function openEditForm(m: ProjectMember) {
+    setEditingMember(m)
+    setFormUserId(m.admin_user_id)
+    setFormRole(m.role)
+    setFormInstId(m.institution_id ?? '')
+    setFormNotes(m.notes)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  async function saveMember() {
+    if (!editingMember && !formUserId) { setFormError('Select a user'); return }
+    if (needsInst && !formInstId) { setFormError('Site roles require an institution'); return }
+    setSaving(true)
+    setFormError(null)
+    try {
+      const body: Record<string, unknown> = {
+        role: formRole,
+        institution_id: needsInst ? (formInstId || null) : null,
+        notes: formNotes,
+      }
+      if (!editingMember) body.admin_user_id = formUserId
+
+      const url = editingMember
+        ? `/api/projects/${projectId}/members/${editingMember.id}`
+        : `/api/projects/${projectId}/members`
+      const method = editingMember ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Save failed') }
+      setShowForm(false)
+      fetchMembers()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function removeMember(m: ProjectMember) {
+    if (!confirm(`Remove ${m.user_name || m.user_email} from this project?`)) return
+    setRemoving(m.id)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/members/${m.id}`, { method: 'DELETE' })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? 'Remove failed') }
+      fetchMembers()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Remove failed')
+    } finally {
+      setRemoving(null)
+    }
+  }
+
+  const roleBadgeClass = (role: string) => {
+    switch (role) {
+      case 'owner':            return 'badge badge--enabled'
+      case 'coordinator':      return 'badge badge--status'
+      case 'reviewer':         return 'badge badge--neutral'
+      case 'site_coordinator': return 'badge badge--status'
+      case 'site_viewer':      return 'badge badge--neutral'
+      default:                 return 'badge badge--neutral'
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-panel" style={{ maxWidth: '780px' }}>
+        <div className="modal-header">
+          <h2>Project Members — {projectName}</h2>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close panel">✕</button>
+        </div>
+
+        <div className="modal-body">
+          <div className="routing-section-sub" style={{ marginBottom: '16px' }}>
+            Coordinating center roles (Owner / Coordinator / Reviewer) see all studies.
+            Site roles (Site Coordinator / Site Viewer) are scoped to a single institution's studies.
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+            <button type="button" className="btn-primary" onClick={openAddForm}>+ Add member</button>
+          </div>
+
+          {showForm && (
+            <div className="routing-form" style={{ marginBottom: '16px' }}>
+              <h3>{editingMember ? 'Edit member' : 'Add member'}</h3>
+              {formError && <div className="form-error">{formError}</div>}
+              <div className="form-grid">
+                {!editingMember && (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                    User
+                    <select className="form-input" value={formUserId} onChange={e => setFormUserId(e.target.value)}>
+                      <option value="">— select user —</option>
+                      {users.filter(u => u.enabled).map(u => (
+                        <option key={u.id} value={u.id}>{u.name} ({u.email}) — {u.role}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {editingMember && (
+                  <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                    User: <strong>{editingMember.user_name || editingMember.user_email}</strong>
+                  </div>
+                )}
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                  Role
+                  <select className="form-input" value={formRole} onChange={e => setFormRole(e.target.value as ProjectMember['role'])}>
+                    {PROJECT_MEMBER_ROLES.map(r => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                </label>
+                {needsInst && (
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
+                    Institution (site)
+                    <select className="form-input" value={formInstId} onChange={e => setFormInstId(e.target.value)}>
+                      <option value="">— select institution —</option>
+                      {institutions.filter(i => i.enabled && (i.institution_type === 'sender' || i.institution_type === 'both')).map(i => (
+                        <option key={i.id} value={i.id}>{i.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <input className="form-input form-input--wide" placeholder="Notes (optional)"
+                  value={formNotes} onChange={e => setFormNotes(e.target.value)} />
+              </div>
+              <div className="form-row form-row--actions">
+                <button type="button" className="btn-primary" onClick={saveMember} disabled={saving}>
+                  {saving ? 'Saving…' : editingMember ? 'Save changes' : 'Add'}
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {loading && <div className="state-loading">Loading members…</div>}
+          {error && <div className="state-error">{error}</div>}
+          {!loading && !error && members.length === 0 && (
+            <div className="state-empty">No members yet. Add members to control who can access this project.</div>
+          )}
+          {!loading && members.length > 0 && (
+            <table className="routing-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Scoped to</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map(m => (
+                  <tr key={m.id}>
+                    <td>
+                      <div className="routing-name">{m.user_name || m.user_email}</div>
+                      {m.user_name && <div className="routing-desc">{m.user_email}</div>}
+                    </td>
+                    <td><span className={roleBadgeClass(m.role)}>{m.role.replace(/_/g, ' ')}</span></td>
+                    <td>
+                      {m.institution_name
+                        ? <span className="badge badge--status">{m.institution_name}</span>
+                        : <span className="routing-desc">All sites</span>}
+                    </td>
+                    <td><span className="routing-desc">{m.notes || '—'}</span></td>
+                    <td>
+                      <div className="actions-cell">
+                        <button type="button" className="btn btn--edit" onClick={() => openEditForm(m)}>Edit</button>
+                        <button type="button" className="btn btn--reject"
+                          disabled={removing === m.id}
+                          onClick={() => removeMember(m)}>
+                          {removing === m.id ? '…' : 'Remove'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -5158,6 +7840,14 @@ type InviteCode = {
   created_at: string
   used_at?: string
   used_by_ip?: string
+  user_email?: string
+  last_seen_at?: string
+}
+
+type InviteCodeActivity = {
+  email: string
+  entries: { id: string; action: string; resource_type: string; resource_id: string; ip_address: string; created_at: string }[]
+  total: number
 }
 
 type InviteRequest = {
@@ -5192,6 +7882,16 @@ function InviteCodesPanel() {
   const [sendName, setSendName]     = useState('')
   const [sending, setSending]       = useState(false)
   const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  // Activity panel
+  const [activityId, setActivityId]       = useState<string | null>(null)
+  const [activityData, setActivityData]   = useState<InviteCodeActivity | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
+  // Admin dashboard invite
+  const [adminInviteId, setAdminInviteId]       = useState<string | null>(null)
+  const [adminInviteRole, setAdminInviteRole]   = useState<'viewer' | 'admin'>('viewer')
+  const [adminInviteSending, setAdminInviteSending] = useState(false)
+  const [adminInviteResult, setAdminInviteResult]   = useState<{ ok: boolean; msg: string } | null>(null)
+  const [adminInviteHelpCloud, setAdminInviteHelpCloud] = useState<'gcp' | 'aws' | 'azure'>('gcp')
 
   // ── Requests state ───────────────────────────────────────────────────────
   const [requests, setRequests]     = useState<InviteRequest[]>([])
@@ -5284,6 +7984,38 @@ function InviteCodesPanel() {
     }
   }
 
+  async function fetchActivity(ic: InviteCode) {
+    if (activityId === ic.id) { setActivityId(null); return }
+    setActivityId(ic.id); setActivityData(null); setActivityLoading(true)
+    try {
+      const res = await fetch(`/api/invite-codes/${ic.id}/activity`)
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error ?? `HTTP ${res.status}`) }
+      setActivityData(await res.json())
+    } catch (err) {
+      setActivityData({ email: ic.user_email ?? '', entries: [], total: 0 })
+    } finally { setActivityLoading(false) }
+  }
+
+  async function sendAdminInvite(ic: InviteCode) {
+    setAdminInviteSending(true); setAdminInviteResult(null)
+    try {
+      const res = await fetch(`/api/invite-codes/${ic.id}/send-admin-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: adminInviteRole }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`)
+      const msg = d.admin_user_created
+        ? `Dashboard access granted (${adminInviteRole}) and invite sent to ${d.email}`
+        : `Invite resent to ${d.email} (already had dashboard access)`
+      setAdminInviteResult({ ok: true, msg })
+      setTimeout(() => { setAdminInviteId(null); setAdminInviteResult(null) }, 3500)
+    } catch (err) {
+      setAdminInviteResult({ ok: false, msg: err instanceof Error ? err.message : 'Failed' })
+    } finally { setAdminInviteSending(false) }
+  }
+
   function copy(text: string, key: string) {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(key)
@@ -5314,13 +8046,13 @@ function InviteCodesPanel() {
     } finally { setSending(false) }
   }
 
-  const SITE = 'https://aegisimaging.ai'
+  const SITE = window.location.origin
 
-  if (loading) return <div className="state-loading">Loading…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
-    <div className="routing-panel">
+    <div >
       {/* Sub-tab switcher */}
       <div style={{ display: 'flex', gap: '4px', padding: '0 0 16px 0', borderBottom: '1px solid #e2e8f0', marginBottom: '16px' }}>
         {(['codes', 'requests'] as const).map(t => (
@@ -5341,36 +8073,36 @@ function InviteCodesPanel() {
 
       {/* ── Access Requests tab ──────────────────────────────────────────── */}
       {subTab === 'requests' && (
-        <div className="routing-section">
-          <div className="routing-section-header">
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
             <div>
-              <div className="routing-section-title">Access Requests</div>
-              <div className="routing-section-sub">
+              <div className="">Access Requests</div>
+              <div className="aegis-muted">
                 Users who submitted an access request form. Approve to generate and email an invite code; deny to reject.
               </div>
             </div>
-            <div className="actions-cell">
+            <div className="aegis-section-controls">
               <select
                 value={reqFilter}
                 onChange={e => setReqFilter(e.target.value as typeof reqFilter)}
-                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', background: '#fff' }}
+                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--aegis-border)', fontSize: '0.85rem', background: 'var(--aegis-surface)' }}
               >
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
                 <option value="denied">Denied</option>
                 <option value="all">All</option>
               </select>
-              <button type="button" className="btn-refresh" onClick={loadRequests}>Refresh</button>
+              <button type="button" className="aegis-icon-btn" onClick={loadRequests}>Refresh</button>
             </div>
           </div>
 
-          {reqLoading && <div className="state-loading">Loading…</div>}
-          {reqError   && <div className="state-error">{reqError}</div>}
+          {reqLoading && <div className="aegis-muted">Loading…</div>}
+          {reqError   && <div className="aegis-error">{reqError}</div>}
           {!reqLoading && !reqError && requests.length === 0 && (
-            <div className="state-empty">No {reqFilter !== 'all' ? reqFilter : ''} requests.</div>
+            <div className="aegis-muted">No {reqFilter !== 'all' ? reqFilter : ''} requests.</div>
           )}
           {!reqLoading && !reqError && requests.length > 0 && (
-            <table className="routing-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Requester</th>
@@ -5407,10 +8139,10 @@ function InviteCodesPanel() {
                     </td>
                     <td>
                       {req.status === 'pending' ? (
-                        <div className="actions-cell">
+                        <div className="aegis-section-controls">
                           <button
                             type="button"
-                            className="btn-sm"
+                            className="aegis-btn-secondary"
                             disabled={reqActing[req.id]}
                             onClick={() => approveRequest(req.id)}
                             style={{ background: '#0d9488', color: '#fff', border: 'none' }}
@@ -5419,7 +8151,7 @@ function InviteCodesPanel() {
                           </button>
                           <button
                             type="button"
-                            className="btn-sm btn-warning"
+                            className="aegis-btn-secondary"
                             disabled={reqActing[req.id]}
                             onClick={() => denyRequest(req.id, req.email)}
                           >
@@ -5441,30 +8173,30 @@ function InviteCodesPanel() {
       )}
 
       {/* ── Invite Codes tab ─────────────────────────────────────────────── */}
-      {subTab === 'codes' && <div className="routing-section">
-        <div className="routing-section-header">
+      {subTab === 'codes' && <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">Invite Codes</div>
-            <div className="routing-section-sub">
+            <div className="">Invite Codes</div>
+            <div className="aegis-muted">
               Per-person codes for landing page access. Each code is unique and can be individually revoked.
               Share the direct link (<code style={{ fontSize: '0.8rem' }}>{SITE}/?invite=CODE</code>) for one-click admission.
             </div>
           </div>
-          <div className="actions-cell">
-            <button type="button" className="btn-refresh" onClick={load}>Refresh</button>
-            <button type="button" className="btn-primary" onClick={() => { setShowForm(true); setNewCode(null) }}>
+          <div className="aegis-section-controls">
+            <button type="button" className="aegis-icon-btn" onClick={load}>Refresh</button>
+            <button type="button" className="aegis-btn-primary" onClick={() => { setShowForm(true); setNewCode(null) }}>
               + New code
             </button>
           </div>
         </div>
 
         {showForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>New invite code</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
+            {formError && <div className="aegis-error">{formError}</div>}
+            <div className="">
               <input
-                className="form-input"
+                className="aegis-filter"
                 placeholder="Label (e.g. Dr. Jane Smith) *"
                 value={formLabel}
                 onChange={e => setFormLabel(e.target.value)}
@@ -5472,26 +8204,26 @@ function InviteCodesPanel() {
                 autoFocus
               />
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={create} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={create} disabled={saving}>
                 {saving ? 'Creating…' : 'Generate code'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {newCode && (
-          <div className="routing-form" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
+          <div className="aegis-section" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
             <strong style={{ color: '#0f766e' }}>New invite code — share with your recipient:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
               <code style={{ background: '#ccfbf1', padding: '6px 12px', borderRadius: '6px', fontSize: '0.95rem', letterSpacing: '0.1em', flex: 1 }}>
                 {newCode}
               </code>
-              <button type="button" className="btn-secondary" onClick={() => copy(newCode, 'code')}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => copy(newCode, 'code')}>
                 {copied === 'code' ? 'Copied!' : 'Copy code'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => copy(`${SITE}/?invite=${newCode}`, 'link')}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => copy(`${SITE}/?invite=${newCode}`, 'link')}>
                 {copied === 'link' ? 'Copied!' : 'Copy link'}
               </button>
             </div>
@@ -5499,9 +8231,9 @@ function InviteCodesPanel() {
         )}
 
         {codes.length === 0 && !showForm ? (
-          <div className="state-empty">No invite codes yet. Create one to grant landing page access.</div>
+          <div className="aegis-muted">No invite codes yet. Create one to grant landing page access.</div>
         ) : codes.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Code</th>
@@ -5509,6 +8241,7 @@ function InviteCodesPanel() {
                 <th>Status</th>
                 <th>Created</th>
                 <th>Used</th>
+                <th>Last Seen</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -5521,7 +8254,7 @@ function InviteCodesPanel() {
                       <code style={{ fontSize: '0.85rem', letterSpacing: '0.08em' }}>{ic.code}</code>
                       <button
                         type="button"
-                        className="btn-sm"
+                        className="aegis-btn-secondary"
                         title="Copy code"
                         onClick={() => copy(ic.code, ic.id + '-code')}
                         style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -5530,7 +8263,7 @@ function InviteCodesPanel() {
                       </button>
                       <button
                         type="button"
-                        className="btn-sm"
+                        className="aegis-btn-secondary"
                         title="Copy invite link"
                         onClick={() => copy(`${SITE}/?invite=${ic.code}`, ic.id + '-link')}
                         style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -5540,7 +8273,7 @@ function InviteCodesPanel() {
                       {ic.enabled && (
                         <button
                           type="button"
-                          className="btn-sm"
+                          className="aegis-btn-secondary"
                           title="Email this invite code"
                           onClick={() => { setSendId(ic.id); setSendEmail(''); setSendName(''); setSendResult(null) }}
                           style={{ fontSize: '0.7rem', padding: '2px 6px' }}
@@ -5572,22 +8305,194 @@ function InviteCodesPanel() {
                       ? <span title={ic.used_by_ip ?? ''}>{new Date(ic.used_at).toLocaleDateString()}{ic.used_by_ip ? ` (${ic.used_by_ip})` : ''}</span>
                       : <span style={{ color: '#64748b' }}>Unused</span>}
                   </td>
+                  <td style={{ fontSize: '0.8rem' }}>
+                    {!ic.user_email
+                      ? <span style={{ color: '#64748b' }} title="No email linked to this code">—</span>
+                      : ic.last_seen_at
+                        ? <span title={`${ic.user_email} · ${new Date(ic.last_seen_at).toLocaleString()}`} style={{ color: '#94a3b8' }}>
+                            {new Date(ic.last_seen_at).toLocaleDateString()}
+                          </span>
+                        : <span style={{ color: '#64748b' }} title={ic.user_email}>Never</span>
+                    }
+                  </td>
                   <td>
-                    <div className="actions-cell">
+                    <div className="aegis-section-controls">
+                      {ic.user_email && (
+                        <button
+                          type="button"
+                          className="aegis-btn-secondary"
+                          title={`View audit activity for ${ic.user_email}`}
+                          style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                          onClick={() => { fetchActivity(ic); setAdminInviteId(null); setSendId(null) }}
+                        >
+                          {activityId === ic.id ? 'Hide' : 'Activity'}
+                        </button>
+                      )}
+                      {ic.user_email && (
+                        <button
+                          type="button"
+                          className="aegis-btn-secondary"
+                          title={`Invite ${ic.user_email} to admin dashboard`}
+                          style={{ fontSize: '0.7rem', padding: '2px 6px', color: '#0d9488', borderColor: '#0d9488' }}
+                          onClick={() => { setAdminInviteId(adminInviteId === ic.id ? null : ic.id); setAdminInviteResult(null); setSendId(null); setActivityId(null) }}
+                        >
+                          {adminInviteId === ic.id ? 'Cancel' : '⊕ Dashboard'}
+                        </button>
+                      )}
                       {ic.enabled && (
-                        <button type="button" className="btn-sm btn-warning" onClick={() => revoke(ic)}>
+                        <button type="button" className="aegis-btn-secondary" onClick={() => revoke(ic)}>
                           Revoke
                         </button>
                       )}
-                      <button type="button" className="btn-sm btn-danger" onClick={() => del(ic)}>
+                      <button type="button" className="aegis-btn-secondary" onClick={() => del(ic)}>
                         Delete
                       </button>
                     </div>
                   </td>
                 </tr>
+                {activityId === ic.id && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '8px 12px', background: '#0f172a' }}>
+                      {activityLoading
+                        ? <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Loading activity…</span>
+                        : activityData && (
+                          <div>
+                            <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: 6 }}>
+                              Activity for <strong style={{ color: '#e2e8f0' }}>{activityData.email}</strong>
+                              {' '}— {activityData.total} entries
+                              <button
+                                type="button"
+                                className="aegis-btn-secondary"
+                                style={{ marginLeft: 8, fontSize: '0.65rem', padding: '1px 5px' }}
+                                onClick={() => setActivityId(null)}
+                                aria-label="Close activity view"
+                              >✕</button>
+                            </div>
+                            {activityData.entries.length === 0
+                              ? <div style={{ color: '#64748b', fontSize: '0.8rem' }}>No admin activity recorded for this user.</div>
+                              : <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr style={{ color: '#64748b' }}>
+                                      <th style={{ textAlign: 'left', padding: '2px 6px', fontWeight: 600 }}>Date</th>
+                                      <th style={{ textAlign: 'left', padding: '2px 6px', fontWeight: 600 }}>Action</th>
+                                      <th style={{ textAlign: 'left', padding: '2px 6px', fontWeight: 600 }}>Resource</th>
+                                      <th style={{ textAlign: 'left', padding: '2px 6px', fontWeight: 600 }}>IP</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {activityData.entries.map(e => (
+                                      <tr key={e.id} style={{ borderTop: '1px solid #1e293b' }}>
+                                        <td style={{ padding: '3px 6px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{new Date(e.created_at).toLocaleString()}</td>
+                                        <td style={{ padding: '3px 6px', color: '#e2e8f0' }}>{e.action}</td>
+                                        <td style={{ padding: '3px 6px', color: '#94a3b8' }}>{e.resource_type}{e.resource_id ? ` · ${e.resource_id.slice(0, 8)}` : ''}</td>
+                                        <td style={{ padding: '3px 6px', color: '#64748b' }}>{e.ip_address || '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                            }
+                          </div>
+                        )
+                      }
+                    </td>
+                  </tr>
+                )}
+                {adminInviteId === ic.id && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '8px 12px', background: '#0f172a' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                          Invite <strong style={{ color: '#e2e8f0' }}>{ic.user_email}</strong> to admin dashboard as:
+                        </span>
+                        <select
+                          value={adminInviteRole}
+                          onChange={e => setAdminInviteRole(e.target.value as 'viewer' | 'admin')}
+                          style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid #374151',
+                                   background: '#1f2937', color: '#f9fafb', fontSize: '0.8rem' }}
+                        >
+                          <option value="viewer">Viewer (read-only)</option>
+                          <option value="admin">Admin (full access)</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="aegis-btn-primary"
+                          onClick={() => sendAdminInvite(ic)}
+                          disabled={adminInviteSending}
+                        >{adminInviteSending ? 'Sending…' : 'Send Invite'}</button>
+                        <button
+                          type="button"
+                          className="aegis-btn-secondary"
+                          onClick={() => { setAdminInviteId(null); setAdminInviteResult(null) }}
+                        >Cancel</button>
+                        {adminInviteResult && (
+                          <span style={{ fontSize: '0.75rem', color: adminInviteResult.ok ? '#0d9488' : '#ea580c' }}>
+                            {adminInviteResult.msg}
+                          </span>
+                        )}
+                      </div>
+                      {/* Cloud access help */}
+                      <div style={{ borderTop: '1px solid #1e293b', paddingTop: 10, marginTop: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 600 }}>
+                            ⚠ Cloud access also required
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>— sending the invite email is not enough; grant auth below too</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+                          {(['gcp', 'aws', 'azure'] as const).map(cloud => (
+                            <button
+                              key={cloud}
+                              type="button"
+                              className="aegis-btn-secondary"
+                              onClick={() => setAdminInviteHelpCloud(cloud)}
+                              style={{
+                                fontSize: '0.7rem', padding: '2px 8px',
+                                color: adminInviteHelpCloud === cloud ? '#0d9488' : '#64748b',
+                                borderColor: adminInviteHelpCloud === cloud ? '#0d9488' : '#374151',
+                                background: adminInviteHelpCloud === cloud ? '#0f2e2c' : 'transparent',
+                              }}
+                            >{cloud.toUpperCase()}</button>
+                          ))}
+                        </div>
+                        {adminInviteHelpCloud === 'gcp' && (
+                          <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.73rem', color: '#94a3b8', lineHeight: 1.7 }}>
+                            <li>Open <a href="https://console.cloud.google.com/security/iap" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Cloud Console → Security → IAP</a></li>
+                            <li>Find <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3 }}>aegis-prod-admin-dashboard</code>, tick its checkbox</li>
+                            <li>Click <strong style={{ color: '#e2e8f0' }}>Add Principal</strong> → paste <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code></li>
+                            <li>Role: <strong style={{ color: '#e2e8f0' }}>Cloud IAP → IAP-secured Web App User</strong></li>
+                            <li>Click <strong style={{ color: '#e2e8f0' }}>Save</strong></li>
+                          </ol>
+                        )}
+                        {adminInviteHelpCloud === 'aws' && (
+                          <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.73rem', color: '#94a3b8', lineHeight: 1.7 }}>
+                            <li>Open <a href="https://us-east-1.console.aws.amazon.com/cognito/v2/idp/user-pools" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Cognito → User Pools</a> (us-east-1)</li>
+                            <li>Click the AEGIS user pool → <strong style={{ color: '#e2e8f0' }}>Users</strong> tab → <strong style={{ color: '#e2e8f0' }}>Create user</strong></li>
+                            <li>Email: <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code> — check <em>Send an email invitation</em></li>
+                            <li>Set a temporary password (user changes it on first login)</li>
+                            <li>Click <strong style={{ color: '#e2e8f0' }}>Create user</strong></li>
+                          </ol>
+                        )}
+                        {adminInviteHelpCloud === 'azure' && (
+                          <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.73rem', color: '#94a3b8', lineHeight: 1.7 }}>
+                            <li>Open <a href="https://portal.azure.com/#view/Microsoft_AAD_IAM/UsersManagementMenuBlade/~/AllUsers" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Azure AD → Users</a></li>
+                            <li>Click <strong style={{ color: '#e2e8f0' }}>+ New user → Invite external user</strong></li>
+                            <li>Email: <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code> → click <strong style={{ color: '#e2e8f0' }}>Review + invite</strong></li>
+                            <li>After they accept the invite, go to <a href="https://portal.azure.com/#view/Microsoft_AAD_IAM/StartboardApplicationsMenuBlade/~/AppAppsPreview" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Enterprise Applications</a> → find the AEGIS admin app → <strong style={{ color: '#e2e8f0' }}>Users and groups → Add user</strong></li>
+                            <li>Select <code style={{ background: '#1e293b', padding: '0 3px', borderRadius: 3, color: '#a5f3fc' }}>{ic.user_email}</code> → assign role → <strong style={{ color: '#e2e8f0' }}>Assign</strong></li>
+                          </ol>
+                        )}
+                        <div style={{ fontSize: '0.68rem', color: '#475569', marginTop: 8 }}>
+                          {adminInviteHelpCloud === 'gcp' && 'If the user has no Google account, they can create one at accounts.google.com — no Gmail address required.'}
+                          {adminInviteHelpCloud === 'aws' && 'The user will receive a Cognito invitation email and must set a permanent password before first login.'}
+                          {adminInviteHelpCloud === 'azure' && 'If the user already exists in your Azure AD tenant, skip steps 2–3 and go straight to step 4.'}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 {sendId === ic.id && (
                   <tr>
-                    <td colSpan={6} style={{ padding: '8px 12px', background: '#0f172a' }}>
+                    <td colSpan={7} style={{ padding: '8px 12px', background: '#0f172a' }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <input
                           type="email"
@@ -5610,13 +8515,13 @@ function InviteCodesPanel() {
                         />
                         <button
                           type="button"
-                          className="btn-primary btn-sm"
+                          className="aegis-btn-primary"
                           onClick={() => sendCode(ic)}
                           disabled={sending}
                         >{sending ? 'Sending…' : 'Send'}</button>
                         <button
                           type="button"
-                          className="btn-secondary btn-sm"
+                          className="aegis-btn-secondary"
                           onClick={() => { setSendId(null); setSendResult(null) }}
                         >Cancel</button>
                         {sendResult && (
@@ -5703,38 +8608,38 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
     fetchPeers()
   }
 
-  if (loading) return <div className="state-loading">Loading…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  if (loading) return <div className="aegis-muted">Loading…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">Federation Peers</div>
-            <div className="routing-section-sub">
+            <div className="">Federation Peers</div>
+            <div className="aegis-muted">
               Trusted remote AEGIS instances for future cross-tenant study federation.
               No data flows between peers yet — this is a configuration stub.
             </div>
           </div>
-          <div className="actions-cell">
-            <button type="button" className="btn-refresh" onClick={fetchPeers}>Refresh</button>
-            {isAdmin && <button type="button" className="btn-primary" onClick={openNew}>+ Add peer</button>}
+          <div className="aegis-section-controls">
+            <button type="button" className="aegis-icon-btn" onClick={fetchPeers}>Refresh</button>
+            {isAdmin && <button type="button" className="aegis-btn-primary" onClick={openNew}>+ Add peer</button>}
           </div>
         </div>
 
         {isAdmin && showForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>{editingId ? 'Edit peer' : 'New federation peer'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" placeholder="Name *"
+            {formError && <div className="aegis-error">{formError}</div>}
+            <div className="">
+              <input className="aegis-filter" placeholder="Name *"
                 value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <input className="form-input" placeholder="Slug (auto-generated)"
+              <input className="aegis-filter" placeholder="Slug (auto-generated)"
                 value={form.slug} onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-              <input className="form-input form-input--wide" placeholder="API URL * (e.g. https://peer.example.com)"
+              <input className="aegis-filter" placeholder="API URL * (e.g. https://peer.example.com)"
                 value={form.api_url} onChange={e => setForm(f => ({ ...f, api_url: e.target.value }))} />
-              <input className="form-input form-input--wide" placeholder="Notes"
+              <input className="aegis-filter" placeholder="Notes"
                 value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
             {editingId && (
@@ -5744,19 +8649,19 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
                 Enabled
               </label>
             )}
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add peer'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
         {peers.length === 0 && !showForm ? (
-          <div className="state-empty">No federation peers configured.</div>
+          <div className="aegis-muted">No federation peers configured.</div>
         ) : peers.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Peer</th>
@@ -5771,22 +8676,22 @@ function FederationPanel({ isAdmin }: { isAdmin: boolean }) {
               {peers.map(p => (
                 <tr key={p.id}>
                   <td>
-                    <div className="routing-name">{p.name}</div>
-                    {p.notes && <div className="routing-desc">{p.notes}</div>}
+                    <div className="">{p.name}</div>
+                    {p.notes && <div className="aegis-muted">{p.notes}</div>}
                   </td>
-                  <td><code className="inst-slug">{p.slug}</code></td>
+                  <td><code className="aegis-code">{p.slug}</code></td>
                   <td><a href={p.api_url} target="_blank" rel="noopener noreferrer">{p.api_url}</a></td>
                   <td>
                     {p.enabled
-                      ? <span className="badge badge--enabled">enabled</span>
-                      : <span className="badge badge--disabled">disabled</span>}
+                      ? <span className="aegis-pill">enabled</span>
+                      : <span className="aegis-muted">disabled</span>}
                   </td>
-                  <td className="td-date">{fmtDate(p.created_at)}</td>
+                  <td className="">{fmtDate(p.created_at)}</td>
                   {isAdmin && (
                     <td>
-                      <div className="actions-cell">
-                        <button type="button" className="btn btn--edit" onClick={() => openEdit(p)}>Edit</button>
-                        <button type="button" className="btn btn--delete" onClick={() => deletePeer(p)}>Delete</button>
+                      <div className="aegis-section-controls">
+                        <button type="button" className="aegis-btn-secondary" onClick={() => openEdit(p)}>Edit</button>
+                        <button type="button" className="aegis-btn-secondary" onClick={() => deletePeer(p)}>Delete</button>
                       </div>
                     </td>
                   )}
@@ -5806,6 +8711,9 @@ const EMPTY_USER: Omit<AdminUser, 'id' | 'created_at'> = {
   email: '', name: '', role: 'admin', enabled: true, notes: '',
 }
 
+type AdminSession = { id: string; user_id: string; ip_address: string; user_agent: string; created_at: string }
+type UserActivityAudit = { id: string; action: string; resource_type: string; resource_id: string; ip_address: string; created_at: string }
+
 function UsersPanel() {
   const [users, setUsers]         = useState<AdminUser[]>([])
   const [loading, setLoading]     = useState(true)
@@ -5824,6 +8732,18 @@ function UsersPanel() {
   const [prefsEvents, setPrefsEvents]           = useState<string[]>([])
   const [prefsSaving, setPrefsSaving]           = useState(false)
   const [prefsError, setPrefsError]             = useState<string | null>(null)
+
+  // Send invite state
+  const [inviteSendingId, setInviteSendingId]   = useState<string | null>(null)
+  const [inviteSentMsg, setInviteSentMsg]       = useState<Record<string, string>>({})
+
+  // Per-user activity panel state
+  const [activityUserId, setActivityUserId]     = useState<string | null>(null)
+  const [activityUserName, setActivityUserName] = useState('')
+  const [activityEmail, setActivityEmail]       = useState('')
+  const [activitySessions, setActivitySessions] = useState<AdminSession[]>([])
+  const [activityAudit, setActivityAudit]       = useState<UserActivityAudit[]>([])
+  const [activityLoading, setActivityLoading]   = useState(false)
 
   const NOTIFY_EVENT_OPTIONS: {value: string; label: string}[] = [
     { value: 'study.stuck',       label: 'Study stuck (idle beyond SLA)' },
@@ -5933,142 +8853,511 @@ function UsersPanel() {
     setPrefsEvents(prev => prev.includes(ev) ? prev.filter(e => e !== ev) : [...prev, ev])
   }
 
-  if (loading) return <div className="state-loading">Loading users…</div>
-  if (error)   return <div className="state-error">{error}</div>
+  async function sendInvite(u: AdminUser) {
+    setInviteSendingId(u.id)
+    setInviteSentMsg(prev => ({ ...prev, [u.id]: '' }))
+    try {
+      const res = await fetch(`/api/admin-users/${u.id}/send-invite`, { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
+      setInviteSentMsg(prev => ({
+        ...prev,
+        [u.id]: res.ok ? `Invite sent to ${u.email}` : (body.error ?? 'Send failed'),
+      }))
+    } catch {
+      setInviteSentMsg(prev => ({ ...prev, [u.id]: 'Send failed' }))
+    } finally {
+      setInviteSendingId(null)
+    }
+  }
+
+  async function openActivity(u: AdminUser) {
+    if (activityUserId === u.id) { setActivityUserId(null); return }
+    setActivityUserId(u.id)
+    setActivityUserName(u.name || u.email)
+    setActivityEmail(u.email)
+    setActivitySessions([])
+    setActivityAudit([])
+    setActivityLoading(true)
+    const [sessRes, auditRes] = await Promise.all([
+      fetch(`/api/admin-users/${u.id}/sessions?limit=20`),
+      fetch(`/api/audit?actor=${encodeURIComponent(u.email)}&limit=20`),
+    ])
+    if (sessRes.ok) setActivitySessions(await sessRes.json())
+    if (auditRes.ok) {
+      const d = await auditRes.json()
+      setActivityAudit(d.entries ?? d ?? [])
+    }
+    setActivityLoading(false)
+  }
+
+  if (loading) return <div className="aegis-muted">Loading users…</div>
+  if (error)   return <div className="aegis-error">{error}</div>
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
-          <div>
-            <div className="routing-section-title">Admin Users</div>
-            <div className="routing-section-sub">
-              Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production.
-            </div>
-          </div>
-          <div className="actions-cell">
-            <button type="button" className="btn-refresh" onClick={fetchUsers}>Refresh</button>
-            <button type="button" className="btn-primary" onClick={openNew}>+ Add user</button>
+    <>
+      <section className="aegis-section">
+        <div className="aegis-section-bar">
+          <h2>Admin Users</h2>
+          <div className="aegis-section-controls">
+            <button type="button" className="aegis-icon-btn" onClick={fetchUsers} title="Refresh" aria-label="Refresh">↻</button>
+            <button type="button" className="aegis-btn-primary" onClick={openNew}>+ Add user</button>
           </div>
         </div>
-
-        {showForm && (
-          <div className="routing-form">
-            <h3>{editingId ? 'Edit user' : 'New user'}</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" type="email" placeholder="Email address *"
-                value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-              <input className="form-input" placeholder="Display name"
-                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              <select className="form-select" aria-label="Role" value={form.role}
-                onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'viewer' }))}>
-                <option value="admin">admin — full access</option>
-                <option value="viewer">viewer — read-only</option>
-              </select>
-              <input className="form-input form-input--wide" placeholder="Notes (optional)"
-                value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={save} disabled={saving}>
-                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        {/* Inline notification preferences editor */}
-        {prefsUserId && (
-          <div className="routing-form" style={{ marginTop: '16px' }}>
-            <h3>Notification Preferences — {prefsUserName}</h3>
-            <div className="routing-section-sub" style={{ marginBottom: '12px' }}>
-              Controls digest email frequency and which events trigger notifications for this user.
-            </div>
-            {prefsError && <div className="form-error">{prefsError}</div>}
-            <div className="form-grid">
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.875rem' }}>
-                Digest frequency
-                <select className="form-select" value={prefsFreq} onChange={e => setPrefsFreq(e.target.value)}>
-                  <option value="none">None — no digest emails</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </label>
-            </div>
-            <div style={{ marginTop: '12px', fontSize: '0.875rem' }}>
-              <div style={{ marginBottom: '6px', fontWeight: 500 }}>Notify on events</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {NOTIFY_EVENT_OPTIONS.map(opt => (
-                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={prefsEvents.includes(opt.value)}
-                      onChange={() => togglePrefsEvent(opt.value)} />
-                    <span>{opt.label}</span>
-                    <code style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{opt.value}</code>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="form-row form-row--actions" style={{ marginTop: '12px' }}>
-              <button type="button" className="btn-primary" onClick={savePrefs} disabled={prefsSaving}>
-                {prefsSaving ? 'Saving…' : 'Save'}
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => setPrefsUserId(null)}>Cancel</button>
-            </div>
-          </div>
-        )}
+        <p className="aegis-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: 13 }}>
+          Authorised dashboard users and their roles. Authentication is handled by GCP IAP in production.
+        </p>
 
         {users.length === 0 && !showForm ? (
-          <div className="state-empty">No users yet.</div>
+          <div className="aegis-muted">No users yet.</div>
         ) : users.length > 0 && (
-          <table className="routing-table">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Notes</th>
-                <th>Added</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u => (
-                <tr key={u.id} className={u.enabled ? '' : 'routing-row--disabled'}>
-                  <td>
-                    <div className="routing-name">{u.name || u.email}</div>
-                    {u.name && <div className="routing-desc">{u.email}</div>}
-                  </td>
-                  <td>
-                    <span className={`routing-action routing-action--${u.role}`}>{u.role}</span>
-                  </td>
-                  <td>
-                    <span className={`badge badge--${u.enabled ? 'enabled' : 'disabled'}`}>
-                      {u.enabled ? 'enabled' : 'disabled'}
-                    </span>
-                  </td>
-                  <td className="routing-desc">{u.notes || '—'}</td>
-                  <td className="td-date">{fmtDate(u.created_at)}</td>
-                  <td>
-                    <div className="actions-cell">
-                      <button type="button" className="btn btn--edit" onClick={() => openEdit(u)}>Edit</button>
-                      <button type="button" className="btn btn--action" onClick={() => openPrefs(u)}
-                        title="Configure digest frequency and notification event preferences">
-                        Preferences
-                      </button>
-                      <button type="button" className="btn btn--secondary" onClick={() => toggleUser(u)}>
-                        {u.enabled ? 'Disable' : 'Enable'}
-                      </button>
-                      <button type="button" className="btn btn--revoke" onClick={() => deleteUser(u.id, u.email)}>Delete</button>
-                    </div>
-                  </td>
+          <div className="aegis-table-wrap">
+            <table className="aegis-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  <th>Added</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <Fragment key={u.id}>
+                    <tr style={{ opacity: u.enabled ? 1 : 0.5 }}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{u.name || u.email}</div>
+                        {u.name && <div className="aegis-muted" style={{ fontSize: 12 }}>{u.email}</div>}
+                      </td>
+                      <td><span className="aegis-pill">{u.role}</span></td>
+                      <td>
+                        {u.enabled
+                          ? <span className="aegis-pill">enabled</span>
+                          : <span className="aegis-muted" style={{ fontSize: 12 }}>disabled</span>}
+                      </td>
+                      <td className="aegis-muted">{u.notes || '—'}</td>
+                      <td>{fmtDate(u.created_at)}</td>
+                      <td>
+                        <div className="aegis-section-controls">
+                          <button type="button" className="aegis-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openEdit(u)}>Edit</button>
+                          <button type="button" className="aegis-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openPrefs(u)}
+                            title="Configure digest frequency and notification event preferences">Prefs</button>
+                          <button type="button" className="aegis-btn-secondary"
+                            disabled={inviteSendingId === u.id}
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            onClick={() => sendInvite(u)}
+                            title="Email a dashboard sign-in invite to this user">
+                            {inviteSendingId === u.id ? 'Sending…' : 'Send Invite'}
+                          </button>
+                          <button type="button"
+                            className={activityUserId === u.id ? 'aegis-btn-primary' : 'aegis-btn-secondary'}
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            onClick={() => openActivity(u)}
+                            title="View login sessions and recent audit activity for this user">
+                            Activity
+                          </button>
+                          <button type="button" className="aegis-btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => toggleUser(u)}>
+                            {u.enabled ? 'Disable' : 'Enable'}
+                          </button>
+                          <button type="button" className="aegis-btn-secondary" style={{ padding: '4px 10px', fontSize: 12, color: 'var(--aegis-error-text)', borderColor: 'var(--aegis-error-text)' }} onClick={() => deleteUser(u.id, u.email)}>Delete</button>
+                        </div>
+                        {inviteSentMsg[u.id] && (
+                          <div className="aegis-muted" style={{ fontSize: 11, marginTop: 4 }}>
+                            {inviteSentMsg[u.id]}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    {activityUserId === u.id && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: 0, background: 'var(--aegis-bg)' }}>
+                          <div style={{ padding: 16 }}>
+                            <div className="aegis-section-bar">
+                              <h3 style={{ margin: 0, fontSize: 14 }}>
+                                Activity — {activityUserName}
+                                <span className="aegis-muted" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>{activityEmail}</span>
+                              </h3>
+                              <button type="button" className="aegis-btn-secondary" onClick={() => setActivityUserId(null)}>Close</button>
+                            </div>
+                            {activityLoading ? (
+                              <div className="aegis-muted">Loading activity…</div>
+                            ) : (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                                <div>
+                                  <div className="aegis-control-label" style={{ marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                                    Login Sessions (last 20)
+                                  </div>
+                                  {activitySessions.length === 0 ? (
+                                    <div className="aegis-muted" style={{ fontSize: 12 }}>No sessions recorded yet.</div>
+                                  ) : (
+                                    <div className="aegis-table-wrap">
+                                      <table className="aegis-table" style={{ fontSize: 12 }}>
+                                        <thead><tr><th>When</th><th>IP</th><th>Browser</th></tr></thead>
+                                        <tbody>
+                                          {activitySessions.map(s => (
+                                            <tr key={s.id}>
+                                              <td>{fmtDate(s.created_at)}</td>
+                                              <td><code className="aegis-code">{s.ip_address || '—'}</code></td>
+                                              <td className="aegis-cell-truncate" title={s.user_agent}>
+                                                {s.user_agent ? s.user_agent.replace(/\s*\(.*?\)\s*/g, ' ').trim().slice(0, 40) : '—'}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="aegis-control-label" style={{ marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                                    Recent Actions (last 20)
+                                  </div>
+                                  {activityAudit.length === 0 ? (
+                                    <div className="aegis-muted" style={{ fontSize: 12 }}>No audit entries found.</div>
+                                  ) : (
+                                    <div className="aegis-table-wrap">
+                                      <table className="aegis-table" style={{ fontSize: 12 }}>
+                                        <thead><tr><th>When</th><th>Action</th><th>Resource</th></tr></thead>
+                                        <tbody>
+                                          {activityAudit.map(a => (
+                                            <tr key={a.id}>
+                                              <td>{fmtDate(a.created_at)}</td>
+                                              <td><code className="aegis-code">{a.action}</code></td>
+                                              <td className="aegis-muted">
+                                                {a.resource_type}{a.resource_id ? ` ${a.resource_id.slice(0, 8)}…` : ''}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
+      </section>
+
+      {showForm && (
+        <section className="aegis-section">
+          <div className="aegis-section-bar">
+            <h2>{editingId ? 'Edit user' : 'New user'}</h2>
+          </div>
+          {formError && <div className="aegis-error">{formError}</div>}
+          <div className="aegis-form-row">
+            <label htmlFor="user-email">Email *</label>
+            <input id="user-email" type="email" value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+          </div>
+          <div className="aegis-form-row">
+            <label htmlFor="user-name">Display name</label>
+            <input id="user-name" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div className="aegis-form-row">
+            <label htmlFor="user-role">Role</label>
+            <select id="user-role" value={form.role}
+              onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'viewer' }))}>
+              <option value="admin">admin — full access</option>
+              <option value="viewer">viewer — read-only</option>
+            </select>
+          </div>
+          <div className="aegis-form-row">
+            <label htmlFor="user-notes">Notes</label>
+            <input id="user-notes" value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="(optional)" />
+          </div>
+          <div className="aegis-form-actions">
+            <button type="button" className="aegis-btn-primary" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create'}
+            </button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+          </div>
+        </section>
+      )}
+
+      {prefsUserId && (
+        <section className="aegis-section">
+          <div className="aegis-section-bar">
+            <h2>Notification Preferences — {prefsUserName}</h2>
+          </div>
+          <p className="aegis-muted" style={{ fontSize: 13, marginTop: 0 }}>
+            Controls digest email frequency and which events trigger notifications for this user.
+          </p>
+          {prefsError && <div className="aegis-error">{prefsError}</div>}
+          <div className="aegis-form-row">
+            <label htmlFor="prefs-freq">Digest frequency</label>
+            <select id="prefs-freq" value={prefsFreq} onChange={e => setPrefsFreq(e.target.value)}>
+              <option value="none">None — no digest emails</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div className="aegis-form-row">
+            <label>Notify on events</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {NOTIFY_EVENT_OPTIONS.map(opt => (
+                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 'normal', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={prefsEvents.includes(opt.value)}
+                    onChange={() => togglePrefsEvent(opt.value)} />
+                  <span>{opt.label}</span>
+                  <code className="aegis-code">{opt.value}</code>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="aegis-form-actions">
+            <button type="button" className="aegis-btn-primary" onClick={savePrefs} disabled={prefsSaving}>
+              {prefsSaving ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" className="aegis-btn-secondary" onClick={() => setPrefsUserId(null)}>Cancel</button>
+          </div>
+        </section>
+      )}
+    </>
+  )
+}
+
+// ── PACS Query Panel (C-FIND / C-MOVE) ────────────────────────────────────────
+
+type PACSQueryMatch = Record<string, string>
+
+function PACSQueryPanel() {
+  const [open, setOpen] = useState(false)
+  const [aeTitle, setAeTitle] = useState('')
+  const [host, setHost] = useState('')
+  const [port, setPort] = useState('')
+  const [queryLevel, setQueryLevel] = useState<'STUDY' | 'PATIENT' | 'SERIES'>('STUDY')
+  const [paramKey, setParamKey] = useState('')
+  const [paramValue, setParamValue] = useState('')
+  const [extraParams, setExtraParams] = useState<{ key: string; value: string }[]>([])
+  const [results, setResults] = useState<PACSQueryMatch[] | null>(null)
+  const [querying, setQuerying] = useState(false)
+  const [queryError, setQueryError] = useState<string | null>(null)
+  const [retrieveUID, setRetrieveUID] = useState('')
+  const [moveDest, setMoveDest] = useState('')
+  const [retrieving, setRetrieving] = useState(false)
+  const [retrieveMsg, setRetrieveMsg] = useState('')
+
+  const addParam = () => {
+    const k = paramKey.trim()
+    const v = paramValue.trim()
+    if (!k) return
+    setExtraParams(p => [...p, { key: k, value: v }])
+    setParamKey('')
+    setParamValue('')
+  }
+
+  const removeParam = (idx: number) => setExtraParams(p => p.filter((_, i) => i !== idx))
+
+  const runQuery = async () => {
+    const ae = aeTitle.trim()
+    const h = host.trim()
+    const p = parseInt(port.trim(), 10)
+    if (!ae || !h || !p) {
+      setQueryError('AE Title, Host, and Port are required')
+      return
+    }
+    setQuerying(true)
+    setQueryError(null)
+    setResults(null)
+    try {
+      const query_params: Record<string, string> = {}
+      for (const ep of extraParams) {
+        if (ep.key) query_params[ep.key] = ep.value
+      }
+      const res = await fetch('/api/dimse/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ae_title: ae, host: h, port: p, query_level: queryLevel, query_params })
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setQueryError(body?.error ?? body?.detail ?? `HTTP ${res.status}`)
+        return
+      }
+      setResults(body.matches ?? [])
+    } catch (err) {
+      setQueryError(err instanceof Error ? err.message : 'Query failed')
+    } finally {
+      setQuerying(false)
+    }
+  }
+
+  const runRetrieve = async (uid?: string) => {
+    const targetUID = uid ?? retrieveUID.trim()
+    const ae = aeTitle.trim()
+    const h = host.trim()
+    const p = parseInt(port.trim(), 10)
+    if (!ae || !h || !p || !targetUID) {
+      setRetrieveMsg('AE Title, Host, Port, and Study UID are required')
+      return
+    }
+    setRetrieving(true)
+    setRetrieveMsg('')
+    try {
+      const body: Record<string, unknown> = { ae_title: ae, host: h, port: p, study_instance_uid: targetUID }
+      if (moveDest.trim()) body.move_destination = moveDest.trim()
+      const res = await fetch('/api/dimse/retrieve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const respBody = await res.json()
+      if (!res.ok) {
+        setRetrieveMsg(`Retrieve failed: ${respBody?.error ?? respBody?.detail ?? `HTTP ${res.status}`}`)
+      } else {
+        setRetrieveMsg(`C-MOVE issued for ${targetUID} → destination: ${respBody.move_destination ?? 'AEGIS SCP'}`)
+      }
+    } catch (err) {
+      setRetrieveMsg(`Retrieve failed: ${err instanceof Error ? err.message : 'unknown error'}`)
+    } finally {
+      setRetrieving(false)
+    }
+  }
+
+  const columnKeys = results && results.length > 0
+    ? Array.from(new Set(results.flatMap(r => Object.keys(r)))).slice(0, 12)
+    : []
+
+  return (
+    <div className="routing-section">
+      <div className="routing-section-header" style={{ cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
+        <div className="routing-section-title">PACS Query (C-FIND / C-MOVE)</div>
+        <button
+          className="btn btn-sm"
+          type="button"
+          aria-expanded={open}
+          onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+        >{open ? '▲ Hide' : '▼ Show'}</button>
       </div>
+
+      {open && (
+        <div style={{ padding: '12px 0' }}>
+          {/* Connection params */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            <div>
+              <label className="field-label">AE Title</label>
+              <input className="text-input" value={aeTitle} onChange={e => setAeTitle(e.target.value)} placeholder="PACS-SERVER" style={{ width: 140 }} />
+            </div>
+            <div>
+              <label className="field-label">Host</label>
+              <input className="text-input" value={host} onChange={e => setHost(e.target.value)} placeholder="10.0.0.1" style={{ width: 160 }} />
+            </div>
+            <div>
+              <label className="field-label">Port</label>
+              <input className="text-input" value={port} onChange={e => setPort(e.target.value)} placeholder="104" type="number" style={{ width: 80 }} />
+            </div>
+            <div>
+              <label className="field-label">Query Level</label>
+              <select className="select-input" value={queryLevel} onChange={e => setQueryLevel(e.target.value as typeof queryLevel)}>
+                <option value="STUDY">STUDY</option>
+                <option value="PATIENT">PATIENT</option>
+                <option value="SERIES">SERIES</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Extra query params */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+              <input className="text-input" value={paramKey} onChange={e => setParamKey(e.target.value)} placeholder="DICOM keyword (e.g. PatientID)" style={{ width: 200 }} />
+              <input className="text-input" value={paramValue} onChange={e => setParamValue(e.target.value)} placeholder="value (empty = wildcard)" style={{ width: 180 }} />
+              <button className="btn btn-sm" type="button" onClick={addParam}>+ Add filter</button>
+            </div>
+            {extraParams.map((ep, idx) => (
+              <div key={idx} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', background: '#f0faf8', borderRadius: 4, padding: '2px 8px', marginRight: 6, marginBottom: 4, fontSize: 12 }}>
+                <code>{ep.key}</code>{ep.value ? <span>= <code>{ep.value}</code></span> : <span style={{ color: '#6b7280' }}> (wildcard)</span>}
+                <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ea580c', padding: '0 2px' }} onClick={() => removeParam(idx)} aria-label={`Remove filter ${ep.key}`}>✕</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+            <button className="btn btn-sm" type="button" onClick={runQuery} disabled={querying}>
+              {querying ? 'Querying…' : 'Run C-FIND Query'}
+            </button>
+          </div>
+
+          {queryError && <div className="state-error" style={{ marginBottom: 8 }}>{queryError}</div>}
+
+          {results !== null && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: '#374151', marginBottom: 6 }}>
+                Found <strong>{results.length}</strong> match{results.length !== 1 ? 'es' : ''}
+              </div>
+              {results.length === 0 ? (
+                <div className="state-empty">No matching studies found.</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="routing-table">
+                    <thead>
+                      <tr>
+                        {columnKeys.map(k => <th key={k}>{k}</th>)}
+                        <th>Retrieve</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.map((row, ri) => (
+                        <tr key={ri}>
+                          {columnKeys.map(k => <td key={k}><code style={{ fontSize: 11 }}>{row[k] ?? ''}</code></td>)}
+                          <td>
+                            {row['StudyInstanceUID'] ? (
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                disabled={retrieving}
+                                onClick={() => runRetrieve(row['StudyInstanceUID'])}
+                                title={`C-MOVE: ${row['StudyInstanceUID']}`}
+                              >
+                                Retrieve
+                              </button>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manual retrieve */}
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+            <div className="routing-section-title" style={{ marginBottom: 8 }}>Manual C-MOVE Retrieve</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 8 }}>
+              <div>
+                <label className="field-label">StudyInstanceUID</label>
+                <input className="text-input" value={retrieveUID} onChange={e => setRetrieveUID(e.target.value)} placeholder="1.2.840.xxxxx" style={{ width: 300 }} />
+              </div>
+              <div>
+                <label className="field-label">Move Destination AE (optional)</label>
+                <input className="text-input" value={moveDest} onChange={e => setMoveDest(e.target.value)} placeholder="AEGIS (default)" style={{ width: 160 }} />
+              </div>
+              <button className="btn btn-sm" type="button" onClick={() => runRetrieve()} disabled={retrieving}>
+                {retrieving ? 'Sending C-MOVE…' : 'Send C-MOVE'}
+              </button>
+            </div>
+            {retrieveMsg && (
+              <div className={retrieveMsg.startsWith('Retrieve failed') ? 'state-error' : 'state-ok'} style={{ fontSize: 13 }}>
+                {retrieveMsg}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6157,16 +9446,16 @@ function DimseOpsPanel() {
   const snapshot = summary?.snapshot
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">DIMSE Retry Operations</div>
-            <div className="routing-section-sub">
+            <div className="">DIMSE Retry Operations</div>
+            <div className="aegis-muted">
               Monitor and control DIMSE ingest pending/dead-letter queues.
             </div>
           </div>
-          <button type="button" className="btn-refresh" onClick={load} disabled={loading || disableBulk}>
+          <button type="button" className="aegis-icon-btn" onClick={load} disabled={loading || disableBulk}>
             Refresh
           </button>
         </div>
@@ -6175,8 +9464,8 @@ function DimseOpsPanel() {
           This panel proxies <code>/ingest/retry*</code> controls from the DIMSE sidecar through the API.
         </p>
 
-        {error && <div className="state-error">{error}</div>}
-        {loading && <div className="state-loading">Loading DIMSE operations…</div>}
+        {error && <div className="aegis-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading DIMSE operations…</div>}
 
         {!loading && summary && (
           <>
@@ -6207,18 +9496,18 @@ function DimseOpsPanel() {
               </div>
             </div>
 
-            <div className="routing-form">
+            <div className="aegis-section">
               <h3>Bulk Controls</h3>
-              <div className="form-grid">
+              <div className="">
                 <input
-                  className="form-input"
+                  className="aegis-filter"
                   type="text"
                   placeholder="Filter by StudyInstanceUID (optional)"
                   value={studyFilter}
                   onChange={(e) => setStudyFilter(e.target.value)}
                 />
                 <input
-                  className="form-input"
+                  className="aegis-filter"
                   type="number"
                   min={1}
                   max={50000}
@@ -6226,7 +9515,7 @@ function DimseOpsPanel() {
                   onChange={(e) => setBulkLimit(Number(e.target.value) || 1)}
                 />
               </div>
-              <div className="form-row form-row--actions">
+              <div className="aegis-form-actions">
                 <button
                   type="button"
                   className="btn btn--secondary"
@@ -6265,7 +9554,7 @@ function DimseOpsPanel() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn--revoke"
+                  className="aegis-btn-secondary"
                   disabled={disableBulk}
                   onClick={() => runAction(
                     'Clear dead-letter',
@@ -6286,17 +9575,17 @@ function DimseOpsPanel() {
       </div>
 
       {!loading && details && (
-        <div className="routing-section">
-          <div className="routing-section-header">
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
             <div>
-              <div className="routing-section-title">Pending Queue ({details.pending_total})</div>
+              <div className="">Pending Queue ({details.pending_total})</div>
             </div>
           </div>
 
           {details.pending_items.length === 0 ? (
-            <div className="state-empty">No pending retry items.</div>
+            <div className="aegis-muted">No pending retry items.</div>
           ) : (
-            <table className="routing-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Study UID</th>
@@ -6316,14 +9605,14 @@ function DimseOpsPanel() {
                     <td>
                       {item.next_attempt_at > 0 ? `${item.seconds_until_next_attempt}s` : 'n/a'}
                       {item.next_attempt_at > 0 && (
-                        <div className="routing-desc">{fmtDate(new Date(item.next_attempt_at * 1000).toISOString())}</div>
+                        <div className="aegis-muted">{fmtDate(new Date(item.next_attempt_at * 1000).toISOString())}</div>
                       )}
                     </td>
                     <td>{item.age_seconds}s</td>
                     <td>{item.file_count} files / {item.series_count} series</td>
                     <td><code>{item.last_error || '—'}</code></td>
                     <td>
-                      <div className="actions-cell">
+                      <div className="aegis-section-controls">
                         <button
                           type="button"
                           className="btn btn--secondary"
@@ -6337,7 +9626,7 @@ function DimseOpsPanel() {
                         </button>
                         <button
                           type="button"
-                          className="btn btn--revoke"
+                          className="aegis-btn-secondary"
                           disabled={disableBulk}
                           onClick={() => runAction(
                             'Clear pending study',
@@ -6358,17 +9647,17 @@ function DimseOpsPanel() {
       )}
 
       {!loading && details && (
-        <div className="routing-section">
-          <div className="routing-section-header">
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
             <div>
-              <div className="routing-section-title">Dead-letter Queue ({details.dead_letter_total})</div>
+              <div className="">Dead-letter Queue ({details.dead_letter_total})</div>
             </div>
           </div>
 
           {details.dead_letter_items.length === 0 ? (
-            <div className="state-empty">No dead-letter items.</div>
+            <div className="aegis-muted">No dead-letter items.</div>
           ) : (
-            <table className="routing-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Study UID</th>
@@ -6388,7 +9677,7 @@ function DimseOpsPanel() {
                     <td>{item.file_count} files / {item.series_count} series</td>
                     <td><code>{item.last_error || '—'}</code></td>
                     <td>
-                      <div className="actions-cell">
+                      <div className="aegis-section-controls">
                         <button
                           type="button"
                           className="btn btn--secondary"
@@ -6402,7 +9691,7 @@ function DimseOpsPanel() {
                         </button>
                         <button
                           type="button"
-                          className="btn btn--revoke"
+                          className="aegis-btn-secondary"
                           disabled={disableBulk}
                           onClick={() => runAction(
                             'Clear dead-letter study',
@@ -6423,14 +9712,14 @@ function DimseOpsPanel() {
       )}
 
       {!loading && (
-        <div className="routing-section">
-          <div className="routing-section-header">
-            <div className="routing-section-title">Recent Retry Alerts</div>
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
+            <div className="">Recent Retry Alerts</div>
           </div>
           {alerts.length === 0 ? (
-            <div className="state-empty">No recent retry threshold alerts.</div>
+            <div className="aegis-muted">No recent retry threshold alerts.</div>
           ) : (
-            <table className="routing-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -6442,7 +9731,7 @@ function DimseOpsPanel() {
               <tbody>
                 {alerts.map((alert, idx) => (
                   <tr key={`${alert.condition}-${alert.timestamp}-${idx}`}>
-                    <td className="td-date">{fmtDate(new Date(alert.timestamp * 1000).toISOString())}</td>
+                    <td className="">{fmtDate(new Date(alert.timestamp * 1000).toISOString())}</td>
                     <td><code>{alert.condition}</code></td>
                     <td>{alert.message}</td>
                     <td>
@@ -6457,14 +9746,14 @@ function DimseOpsPanel() {
       )}
 
       {!loading && (
-        <div className="routing-section">
-          <div className="routing-section-header">
-            <div className="routing-section-title">Recent Operator Actions</div>
+        <div className="aegis-section">
+          <div className="aegis-section-bar">
+            <div className="">Recent Operator Actions</div>
           </div>
           {actions.length === 0 ? (
-            <div className="state-empty">No recent retry-control actions.</div>
+            <div className="aegis-muted">No recent retry-control actions.</div>
           ) : (
-            <table className="routing-table">
+            <table className="aegis-table">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -6475,7 +9764,7 @@ function DimseOpsPanel() {
               <tbody>
                 {actions.map((action, idx) => (
                   <tr key={`${action.action}-${action.created_at}-${idx}`}>
-                    <td className="td-date">{fmtDate(action.created_at)}</td>
+                    <td className="">{fmtDate(action.created_at)}</td>
                     <td><code className={`routing-action routing-action--${action.action}`}>{action.action}</code></td>
                     <td>
                       <pre className="detail-json">{JSON.stringify(action.detail ?? {}, null, 2)}</pre>
@@ -6487,6 +9776,8 @@ function DimseOpsPanel() {
           )}
         </div>
       )}
+
+      <PACSQueryPanel />
     </div>
   )
 }
@@ -6581,61 +9872,61 @@ function APIKeysPanel() {
   }
 
   return (
-    <div className="routing-panel">
-      <div className="routing-section">
-        <div className="routing-section-header">
+    <div >
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
           <div>
-            <div className="routing-section-title">API Keys</div>
-            <div className="routing-section-sub">
+            <div className="">API Keys</div>
+            <div className="aegis-muted">
               Machine-to-machine credentials for programmatic API access. The raw key is shown only once at creation.
             </div>
           </div>
-          <button type="button" className="btn-primary" onClick={() => { setShowForm(true); setNewKeyValue(null) }}>
+          <button type="button" className="aegis-btn-primary" onClick={() => { setShowForm(true); setNewKeyValue(null) }}>
             + New API key
           </button>
         </div>
 
         {newKeyValue && (
-          <div className="routing-form" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-            <strong style={{ color: '#166534' }}>API key {newKeyLabel} — copy it now, it will not be shown again:</strong>
+          <div className="aegis-section" style={{ background: '#f0fdfa', border: '1px solid #99f6e4' }}>
+            <strong style={{ color: '#0f766e' }}>API key {newKeyLabel} — copy it now, it will not be shown again:</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-              <code style={{ background: '#dcfce7', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
+              <code style={{ background: '#ccfbf1', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', wordBreak: 'break-all', flex: 1 }}>
                 {newKeyValue}
               </code>
-              <button type="button" className="btn-secondary"
+              <button type="button" className="aegis-btn-secondary"
                 onClick={() => navigator.clipboard.writeText(newKeyValue!)}>Copy</button>
             </div>
-            <button type="button" className="btn-secondary" style={{ marginTop: '8px' }} onClick={() => setNewKeyValue(null)}>Dismiss</button>
+            <button type="button" className="aegis-btn-secondary" style={{ marginTop: '8px' }} onClick={() => setNewKeyValue(null)}>Dismiss</button>
           </div>
         )}
 
         {showForm && (
-          <div className="routing-form">
+          <div className="aegis-section">
             <h3>New API key</h3>
-            {formError && <div className="form-error">{formError}</div>}
-            <div className="form-grid">
-              <input className="form-input" type="text" placeholder="Key name *"
+            {formError && <div className="aegis-error">{formError}</div>}
+            <div className="">
+              <input className="aegis-filter" type="text" placeholder="Key name *"
                 value={formName} onChange={e => setFormName(e.target.value)} />
-              <input className="form-input" type="date" placeholder="Expiry date (optional)"
+              <input className="aegis-filter" type="date" placeholder="Expiry date (optional)"
                 value={formExpiry} onChange={e => setFormExpiry(e.target.value)}
                 title="Expiry date (optional)" />
             </div>
-            <div className="form-row form-row--actions">
-              <button type="button" className="btn-primary" onClick={create} disabled={saving}>
+            <div className="aegis-form-actions">
+              <button type="button" className="aegis-btn-primary" onClick={create} disabled={saving}>
                 {saving ? 'Creating…' : 'Create'}
               </button>
-              <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             </div>
           </div>
         )}
 
-        {loading && <div className="state-loading">Loading…</div>}
-        {error   && <div className="state-error">{error}</div>}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
         {!loading && !error && keys.length === 0 && (
-          <div className="state-empty">No API keys yet.</div>
+          <div className="aegis-muted">No API keys yet.</div>
         )}
         {!loading && !error && keys.length > 0 && (
-          <table className="routing-table">
+          <table className="aegis-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -6653,23 +9944,23 @@ function APIKeysPanel() {
                   <td>{k.name}</td>
                   <td><code style={{ fontSize: '0.8rem' }}>{k.key_prefix}…</code></td>
                   <td>{k.created_by}</td>
-                  <td>{k.last_used_at ? fmtDate(k.last_used_at) : <span className="routing-desc">never</span>}</td>
-                  <td>{k.expires_at ? fmtDate(k.expires_at) : <span className="routing-desc">never</span>}</td>
+                  <td>{k.last_used_at ? fmtDate(k.last_used_at) : <span className="aegis-muted">never</span>}</td>
+                  <td>{k.expires_at ? fmtDate(k.expires_at) : <span className="aegis-muted">never</span>}</td>
                   <td>
                     <span className={`status-badge status-badge--${k.enabled ? 'clean' : 'failed'}`}>
                       {k.enabled ? 'active' : 'disabled'}
                     </span>
                   </td>
                   <td>
-                    <div className="actions-cell">
-                      <button type="button" className="btn btn--action" onClick={() => toggle(k)}>
+                    <div className="aegis-section-controls">
+                      <button type="button" className="aegis-btn-secondary" onClick={() => toggle(k)}>
                         {k.enabled ? 'Disable' : 'Enable'}
                       </button>
-                      <button type="button" className="btn btn--action" onClick={() => rotate(k)}
+                      <button type="button" className="aegis-btn-secondary" onClick={() => rotate(k)}
                         disabled={rotatingId === k.id}>
                         {rotatingId === k.id ? 'Rotating…' : 'Rotate'}
                       </button>
-                      <button type="button" className="btn btn--revoke" onClick={() => del(k)}>Delete</button>
+                      <button type="button" className="aegis-btn-secondary" onClick={() => del(k)}>Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -6682,18 +9973,767 @@ function APIKeysPanel() {
   )
 }
 
+// ── DownloadsPanel ────────────────────────────────────────────────────────────
+
+const INSTALLER_PRODUCTS: Array<{ value: 'uploader' | 'dimse-bridge'; label: string }> = [
+  { value: 'uploader',     label: 'AEGIS Desktop Uploader' },
+  { value: 'dimse-bridge', label: 'AEGIS DIMSE Bridge' },
+]
+
+const INSTALLER_PLATFORMS: Array<{ value: string; label: string }> = [
+  { value: 'macos-arm64',    label: 'macOS (Apple Silicon)' },
+  { value: 'macos-x64',      label: 'macOS (Intel)' },
+  { value: 'windows-x64',    label: 'Windows (64-bit)' },
+  { value: 'linux-deb',      label: 'Linux (.deb)' },
+  { value: 'linux-appimage', label: 'Linux (AppImage)' },
+  { value: 'linux-rpm',      label: 'Linux (.rpm)' },
+]
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+function platformLabel(value: string): string {
+  return INSTALLER_PLATFORMS.find(p => p.value === value)?.label ?? value
+}
+
+function productLabel(value: string): string {
+  return INSTALLER_PRODUCTS.find(p => p.value === value)?.label ?? value
+}
+
+function DownloadsPanel() {
+  const [installers, setInstallers] = useState<DesktopInstaller[]>([])
+  const [invites, setInvites]       = useState<DesktopInstallerInvite[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
+
+  const [showUpload, setShowUpload]   = useState(false)
+  const [showSendFor, setShowSendFor] = useState<DesktopInstaller | null>(null)
+  const [toast, setToast]             = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const [iRes, vRes] = await Promise.all([
+        fetch('/api/desktop-installers'),
+        fetch('/api/desktop-installers/invites'),
+      ])
+      if (!iRes.ok) throw new Error('Failed to load installers')
+      if (!vRes.ok) throw new Error('Failed to load invite history')
+      const iData = await iRes.json()
+      const vData = await vRes.json()
+      setInstallers(iData.installers ?? [])
+      setInvites(vData.invites ?? [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // Auto-dismiss toast after 3s.
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  async function markCurrent(inst: DesktopInstaller) {
+    const res = await fetch(`/api/desktop-installers/${inst.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mark_current: true }),
+    })
+    if (!res.ok) { setToast('Failed to mark current'); return }
+    setToast(`Marked ${inst.version} current for ${platformLabel(inst.platform)}`)
+    load()
+  }
+
+  async function del(inst: DesktopInstaller) {
+    if (!confirm(`Delete ${productLabel(inst.product)} ${inst.version} (${platformLabel(inst.platform)})? This removes the installer binary.`)) return
+    const res = await fetch(`/api/desktop-installers/${inst.id}`, { method: 'DELETE' })
+    if (!res.ok && res.status !== 204) { setToast('Delete failed'); return }
+    setToast('Installer deleted')
+    load()
+  }
+
+  function downloadHref(inst: DesktopInstaller): string {
+    return `/api/desktop-installers/${inst.id}/download`
+  }
+
+  // Build a matrix: product → platform → newest installer + history (others).
+  const matrix = useMemo(() => {
+    const byKey = new Map<string, DesktopInstaller[]>()
+    for (const i of installers) {
+      const k = `${i.product}::${i.platform}`
+      const arr = byKey.get(k) ?? []
+      arr.push(i)
+      byKey.set(k, arr)
+    }
+    // Already sorted released_at DESC per (product, platform) by the server.
+    return byKey
+  }, [installers])
+
+  return (
+    <div >
+      <div className="aegis-section">
+        <div className="aegis-section-bar">
+          <div>
+            <div className="">Desktop client installers</div>
+            <div className="aegis-muted">
+              Manage and distribute installable AEGIS desktop apps. Upload new versions, mark which version is current per platform, and email install links to specific users.
+            </div>
+          </div>
+          <button type="button" className="aegis-btn-primary" onClick={() => setShowUpload(true)}>
+            + Upload version
+          </button>
+        </div>
+
+        {toast && (
+          <div className="aegis-section" style={{ background: '#ccfbf1', border: '1px solid #5eead4', color: '#0f766e' }}>
+            {toast}
+          </div>
+        )}
+        {loading && <div className="aegis-muted">Loading…</div>}
+        {error   && <div className="aegis-error">{error}</div>}
+
+        {!loading && !error && installers.length === 0 && (
+          <div className="aegis-muted">
+            No installers uploaded yet. Click <strong>Upload version</strong> to register the first one — or use the JSON API to register an external download URL (e.g. GitHub Releases).
+          </div>
+        )}
+
+        {!loading && !error && installers.length > 0 && INSTALLER_PRODUCTS.map(prod => {
+          // Only render product blocks that actually have installers.
+          const platformsWithRows = INSTALLER_PLATFORMS.filter(plat =>
+            (matrix.get(`${prod.value}::${plat.value}`) ?? []).length > 0
+          )
+          if (platformsWithRows.length === 0) return null
+          return (
+            <div key={prod.value} style={{ marginTop: '24px' }}>
+              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#334155' }}>{prod.label}</h3>
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {platformsWithRows.map(plat => {
+                  const versions = matrix.get(`${prod.value}::${plat.value}`) ?? []
+                  const current  = versions.find(v => v.is_current) ?? versions[0]
+                  const history  = versions.filter(v => v.id !== current.id)
+                  return (
+                    <div key={plat.value} style={{
+                      border: '1px solid var(--aegis-border)', borderRadius: '8px', padding: '16px',
+                      background: 'var(--aegis-surface)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>{plat.label}</div>
+                          <div style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
+                            v{current.version} {current.is_current && (
+                              <span style={{
+                                background: '#ccfbf1', color: '#0f766e',
+                                padding: '1px 8px', borderRadius: '10px',
+                                fontSize: '11px', marginLeft: '6px', fontWeight: 600,
+                              }}>CURRENT</span>
+                            )}
+                            {current.external_url && (
+                              <span style={{
+                                background: '#fef3c7', color: '#92400e',
+                                padding: '1px 8px', borderRadius: '10px',
+                                fontSize: '11px', marginLeft: '6px', fontWeight: 600,
+                              }}>EXTERNAL</span>
+                            )}
+                            <span style={{ marginLeft: '8px' }}>·</span> {fmtBytes(current.size_bytes)}
+                            <span style={{ marginLeft: '8px' }}>·</span> released {fmtDate(current.released_at)}
+                          </div>
+                          {current.sha256 && (
+                            <div style={{ color: '#94a3b8', fontSize: '11px', fontFamily: 'monospace', marginTop: '4px', wordBreak: 'break-all' }}>
+                              sha256: {current.sha256}
+                            </div>
+                          )}
+                          {current.changelog && (
+                            <div style={{
+                              marginTop: '8px', padding: '8px 12px',
+                              background: '#f8fafc', borderRadius: '6px',
+                              fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap',
+                            }}>{current.changelog}</div>
+                          )}
+                        </div>
+                        <div className="aegis-section-controls" style={{ flexShrink: 0 }}>
+                          <a className="aegis-btn-secondary" href={downloadHref(current)} target="_blank" rel="noreferrer">
+                            Download
+                          </a>
+                          <button type="button" className="aegis-btn-secondary" onClick={() => setShowSendFor(current)}>
+                            Send link
+                          </button>
+                          <button type="button" className="aegis-btn-secondary" onClick={() => del(current)}>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      {history.length > 0 && (
+                        <details style={{ marginTop: '12px' }}>
+                          <summary style={{ cursor: 'pointer', color: '#64748b', fontSize: '13px' }}>
+                            {history.length} older version{history.length === 1 ? '' : 's'}
+                          </summary>
+                          <table className="aegis-table" style={{ marginTop: '8px' }}>
+                            <thead>
+                              <tr>
+                                <th>Version</th><th>Size</th><th>Released</th><th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {history.map(h => (
+                                <tr key={h.id}>
+                                  <td>v{h.version}</td>
+                                  <td>{fmtBytes(h.size_bytes)}</td>
+                                  <td>{fmtDate(h.released_at)}</td>
+                                  <td>
+                                    <div className="aegis-section-controls">
+                                      <a className="aegis-btn-secondary" href={downloadHref(h)} target="_blank" rel="noreferrer">Download</a>
+                                      <button type="button" className="aegis-btn-secondary" onClick={() => markCurrent(h)}>Mark current</button>
+                                      <button type="button" className="aegis-btn-secondary" onClick={() => del(h)}>Delete</button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </details>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Invite send history */}
+        {!loading && !error && invites.length > 0 && (
+          <div style={{ marginTop: '32px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#334155' }}>Recent install link sends</h3>
+            <table className="aegis-table">
+              <thead>
+                <tr>
+                  <th>Recipient</th>
+                  <th>Product</th>
+                  <th>Platform</th>
+                  <th>Version</th>
+                  <th>Sent</th>
+                  <th>Clicks</th>
+                  <th>Paired</th>
+                  <th>Expires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invites.map(inv => (
+                  <tr key={inv.id}>
+                    <td>
+                      <div>{inv.recipient_email}</div>
+                      {inv.recipient_name && <div style={{ color: '#94a3b8', fontSize: '12px' }}>{inv.recipient_name}</div>}
+                    </td>
+                    <td>{productLabel(inv.product ?? '')}</td>
+                    <td>{platformLabel(inv.platform ?? '')}</td>
+                    <td>v{inv.version}</td>
+                    <td>{fmtDate(inv.sent_at)}</td>
+                    <td>
+                      {inv.click_count > 0
+                        ? <span title={`first: ${fmtDate(inv.first_clicked_at!)}, last: ${fmtDate(inv.last_clicked_at!)}`}>
+                            {inv.click_count}
+                          </span>
+                        : <span style={{ color: '#94a3b8' }}>—</span>}
+                    </td>
+                    <td>
+                      {inv.paired_at
+                        ? <span style={{ color: '#0f766e' }}>{fmtDate(inv.paired_at)}</span>
+                        : <span style={{ color: '#94a3b8' }}>—</span>}
+                    </td>
+                    <td>{fmtDate(inv.expires_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showUpload && (
+        <UploadInstallerModal onClose={() => setShowUpload(false)} onUploaded={() => { setShowUpload(false); load() }} />
+      )}
+      {showSendFor && (
+        <SendInstallLinkModal
+          installer={showSendFor}
+          onClose={() => setShowSendFor(null)}
+          onSent={() => { setShowSendFor(null); setToast('Install link sent'); load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function UploadInstallerModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
+  const [product, setProduct]     = useState<'uploader' | 'dimse-bridge'>('uploader')
+  const [platform, setPlatform]   = useState<string>('macos-arm64')
+  const [version, setVersion]     = useState('')
+  const [changelog, setChangelog] = useState('')
+  const [markCurrent, setMarkCurrent] = useState(true)
+  const [file, setFile]           = useState<File | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+
+  async function submit() {
+    setError(null)
+    if (!version.trim()) { setError('Version is required'); return }
+    if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/.test(version.trim())) {
+      setError('Version must be semver (e.g. 1.0.0)'); return
+    }
+    if (!file) { setError('Choose an installer file to upload'); return }
+
+    setSubmitting(true)
+    try {
+      const fd = new FormData()
+      fd.append('product', product)
+      fd.append('platform', platform)
+      fd.append('version', version.trim())
+      fd.append('changelog', changelog)
+      fd.append('mark_current', markCurrent ? 'true' : 'false')
+      fd.append('file', file)
+      const res = await fetch('/api/desktop-installers', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `Upload failed (${res.status})`)
+      }
+      onUploaded()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+        <h2>Upload installer</h2>
+        {error && <div className="form-error">{error}</div>}
+        <div className="form-grid">
+          <label>
+            Product
+            <select className="form-input" value={product} onChange={e => setProduct(e.target.value as 'uploader' | 'dimse-bridge')}>
+              {INSTALLER_PRODUCTS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Platform
+            <select className="form-input" value={platform} onChange={e => setPlatform(e.target.value)}>
+              {INSTALLER_PLATFORMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Version (semver)
+            <input className="form-input" type="text" placeholder="1.0.0" value={version} onChange={e => setVersion(e.target.value)} />
+          </label>
+          <label>
+            Installer file
+            <input className="form-input" type="file" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+          </label>
+        </div>
+        <label style={{ display: 'block', marginTop: '12px' }}>
+          Changelog (optional)
+          <textarea className="form-input" rows={4} value={changelog} onChange={e => setChangelog(e.target.value)}
+            placeholder="What's new in this version?" />
+        </label>
+        <label style={{ display: 'block', marginTop: '8px' }}>
+          <input type="checkbox" checked={markCurrent} onChange={e => setMarkCurrent(e.target.checked)} />
+          {' '}Mark as current for this platform
+        </label>
+        <div className="form-row form-row--actions">
+          <button type="button" className="btn-primary" onClick={submit} disabled={submitting}>
+            {submitting ? 'Uploading…' : 'Upload'}
+          </button>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SendInstallLinkModal({ installer, onClose, onSent }: {
+  installer: DesktopInstaller
+  onClose: () => void
+  onSent: () => void
+}) {
+  const [email, setEmail]   = useState('')
+  const [name, setName]     = useState('')
+  const [days, setDays]     = useState(7)
+  const [sending, setSending] = useState(false)
+  const [error, setError]   = useState<string | null>(null)
+
+  async function send() {
+    setError(null)
+    if (!email.includes('@')) { setError('Valid email required'); return }
+    setSending(true)
+    try {
+      const res = await fetch(`/api/desktop-installers/${installer.id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient_email: email.trim(),
+          recipient_name: name.trim() || undefined,
+          expiry_days: days,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `Send failed (${res.status})`)
+      }
+      onSent()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Send failed')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+        <h2>Send install link</h2>
+        <p style={{ color: '#64748b', fontSize: '14px', marginTop: '-8px' }}>
+          {productLabel(installer.product)} · {platformLabel(installer.platform)} · v{installer.version}
+        </p>
+        {error && <div className="form-error">{error}</div>}
+        <label style={{ display: 'block', marginTop: '12px' }}>
+          Recipient email
+          <input className="form-input" type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="user@hospital.org" />
+        </label>
+        <label style={{ display: 'block', marginTop: '12px' }}>
+          Recipient name (optional)
+          <input className="form-input" type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="Dr. Smith" />
+        </label>
+        <label style={{ display: 'block', marginTop: '12px' }}>
+          Link expires in
+          <select className="form-input" value={days} onChange={e => setDays(parseInt(e.target.value, 10))}>
+            <option value={1}>1 day</option>
+            <option value={7}>7 days</option>
+            <option value={14}>14 days</option>
+            <option value={30}>30 days</option>
+            <option value={90}>90 days</option>
+          </select>
+        </label>
+        <div className="form-row form-row--actions">
+          <button type="button" className="btn-primary" onClick={send} disabled={sending}>
+            {sending ? 'Sending…' : 'Send install link'}
+          </button>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={sending}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 type StudiesState = 'loading' | 'loaded' | 'error'
 
 const PAGE_SIZE = 50
 
-const GLOBAL_PROJECT_KEY = 'aegis_global_project_id'
+// ── UploadStudyModal ────────────────────────────────────────────────────────
+
+type UploadModalStage = 'idle' | 'parsing' | 'preview' | 'uploading' | 'done' | 'error'
+
+interface UploadStudyGroup {
+  studyUid: string
+  files: ParsedDicomFile[]
+  summary: StudySummary
+  tagChanges: { keyword: string; before: string; after: string }[]
+}
+
+function UploadStudyModal({ projects, onClose, onUploaded }: {
+  projects: Project[]
+  onClose: () => void
+  onUploaded: () => void
+}) {
+  const [stage, setStage]           = useState<UploadModalStage>('idle')
+  const [projectSlug, setProjectSlug] = useState<string>(projects[0]?.slug ?? '')
+  const [dragging, setDragging]     = useState(false)
+  const [parsedTotal, setParsedTotal] = useState(0)
+  const [parsedCount, setParsedCount] = useState(0)
+  const [groups, setGroups]         = useState<UploadStudyGroup[]>([])
+  const [currentGroupIdx, setCurrentGroupIdx] = useState(0)
+  const [uploadProgress, setUploadProgress]   = useState(0)
+  const [uploadTotal, setUploadTotal]         = useState(0)
+  const [uploadFilename, setUploadFilename]   = useState('')
+  const [doneUids, setDoneUids]     = useState<string[]>([])
+  const [errorMsg, setErrorMsg]     = useState('')
+  const abortRef = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFiles = useCallback(async (fileList: FileList | File[]) => {
+    const all = Array.from(fileList)
+    setStage('parsing')
+    setParsedCount(0)
+    setParsedTotal(all.length)
+    abortRef.current = false
+
+    const parsed: ParsedDicomFile[] = []
+    for (let i = 0; i < all.length; i++) {
+      if (abortRef.current) { setStage('idle'); return }
+      const file = all[i]
+      const isDcm = await isDicomFile(file)
+      if (!isDcm) { setParsedCount(i + 1); continue }
+      try {
+        const buf = await file.arrayBuffer()
+        const { parsed: p } = parseDicomFile(buf, file.name)
+        parsed.push(p)
+      } catch {
+        // skip unparseable files
+      }
+      setParsedCount(i + 1)
+    }
+
+    if (parsed.length === 0) {
+      setErrorMsg('No valid DICOM files found in the selection.')
+      setStage('error')
+      return
+    }
+
+    const byStudy = groupByStudy(parsed)
+    const gs: UploadStudyGroup[] = []
+    for (const [uid, files] of byStudy.entries()) {
+      const summary = buildStudySummary(files)
+      // Build tag diff preview from first file's tags (before/after)
+      const tagChanges: UploadStudyGroup['tagChanges'] = []
+      const firstFile = files[0]
+      for (const t of firstFile.tags) {
+        if (!t.originalValue || t.originalValue === '') continue
+        tagChanges.push({ keyword: t.keyword, before: String(t.originalValue), after: t.action === 'K' ? String(t.originalValue) : '[removed]' })
+        if (tagChanges.length >= 12) break
+      }
+      gs.push({ studyUid: uid, files, summary, tagChanges })
+    }
+
+    setGroups(gs)
+    setCurrentGroupIdx(0)
+    setStage('preview')
+  }, [])
+
+  const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragging(false)
+    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files)
+  }, [handleFiles])
+
+  const handleUpload = useCallback(async () => {
+    setStage('uploading')
+    const resultUids: string[] = []
+    for (const group of groups) {
+      setUploadProgress(0)
+      setUploadTotal(group.files.length)
+      setUploadFilename('')
+      try {
+        const result = await uploadStudy(group.files, projectSlug, group.summary, {
+          onProgress: (done, total) => { setUploadProgress(done); setUploadTotal(total) },
+          onFileStart: (fname) => setUploadFilename(fname),
+        })
+        resultUids.push(result.study?.studyInstanceUid ?? group.studyUid)
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : 'Upload failed')
+        setStage('error')
+        return
+      }
+    }
+    setDoneUids(resultUids)
+    setStage('done')
+    onUploaded()
+  }, [groups, projectSlug, onUploaded])
+
+  const reset = () => {
+    setStage('idle')
+    setGroups([])
+    setDoneUids([])
+    setErrorMsg('')
+    abortRef.current = false
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => { if ((e.target as HTMLElement).classList.contains('modal-overlay')) onClose() }}>
+      <div className="modal-box" style={{ maxWidth: 560, width: '100%' }}>
+        <div className="modal-header">
+          <h2 className="modal-title">Upload Study</h2>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close">×</button>
+        </div>
+
+        {/* Project selector */}
+        {projects.length > 1 && (
+          <div className="form-group" style={{ marginBottom: 12 }}>
+            <select className="form-select" value={projectSlug} onChange={e => setProjectSlug(e.target.value)} disabled={stage !== 'idle'}>
+              {projects.map(p => <option key={p.id} value={p.slug}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* idle: drop zone */}
+        {stage === 'idle' && (
+          <div
+            className={`drop-zone${dragging ? ' drop-zone--active' : ''}`}
+            onDragOver={e => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ cursor: 'pointer' }}
+          >
+            <div className="drop-zone__icon">⬆</div>
+            <div className="drop-zone__text">Drop DICOM files or folder here</div>
+            <div className="drop-zone__sub">or click to browse</div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              // @ts-expect-error webkitdirectory is non-standard
+              webkitdirectory=""
+              style={{ display: 'none' }}
+              onChange={e => e.target.files && handleFiles(e.target.files)}
+            />
+          </div>
+        )}
+
+        {/* parsing: progress */}
+        {stage === 'parsing' && (
+          <div style={{ padding: '20px 0' }}>
+            <div className="progress-label">Parsing files… {parsedCount} / {parsedTotal}</div>
+            <div className="progress-bar-wrap">
+              <div className="progress-bar-fill" style={{ width: parsedTotal ? `${(parsedCount / parsedTotal) * 100}%` : '0%' }} />
+            </div>
+            <button type="button" className="btn btn--secondary" style={{ marginTop: 12 }} onClick={() => { abortRef.current = true }}>Cancel</button>
+          </div>
+        )}
+
+        {/* preview: tag diff + confirm */}
+        {stage === 'preview' && groups.length > 0 && (
+          <div>
+            {groups.length > 1 && (
+              <div className="info-banner" style={{ marginBottom: 8 }}>
+                {groups.length} studies detected. Each will be uploaded as a separate session.
+              </div>
+            )}
+            {groups.map((g, i) => (
+              <div key={g.studyUid} style={{ marginBottom: 16 }}>
+                <div className="form-section-label">
+                  Study {groups.length > 1 ? `${i + 1} / ${groups.length} · ` : ''}{g.summary.modality || '?'} · {g.summary.bodyPart || '?'} · {g.files.length} files
+                </div>
+                <div className="preview-uid">{g.studyUid}</div>
+              </div>
+            ))}
+
+            <div className="form-section-label" style={{ marginTop: 8 }}>Anonymization preview (first study · first file)</div>
+            <div className="tag-diff-table-wrap" style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
+              <table className="tag-diff-table" style={{ width: '100%', fontSize: 12 }}>
+                <thead><tr><th>Tag</th><th>Before</th><th>After</th></tr></thead>
+                <tbody>
+                  {groups[0].tagChanges.map(tc => (
+                    <tr key={tc.keyword}>
+                      <td style={{ fontFamily: 'monospace' }}>{tc.keyword}</td>
+                      <td style={{ color: '#9a3412' }}>{tc.before}</td>
+                      <td style={{ color: tc.after === '[removed]' ? '#6b7280' : '#0f766e' }}>{tc.after}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn--secondary" onClick={reset}>Start over</button>
+              <button type="button" className="btn btn--approve" onClick={handleUpload}>Upload {groups.length > 1 ? `${groups.length} studies` : 'study'}</button>
+            </div>
+          </div>
+        )}
+
+        {/* uploading: progress */}
+        {stage === 'uploading' && (
+          <div style={{ padding: '20px 0' }}>
+            {groups.length > 1 && (
+              <div className="progress-label" style={{ marginBottom: 4 }}>
+                Study {currentGroupIdx + 1} of {groups.length}
+              </div>
+            )}
+            <div className="progress-label">
+              Uploading… {uploadProgress} / {uploadTotal}
+              {uploadFilename && <span style={{ color: '#6b7280', marginLeft: 6, fontSize: 11 }}>{uploadFilename}</span>}
+            </div>
+            <div className="progress-bar-wrap">
+              <div className="progress-bar-fill" style={{ width: uploadTotal ? `${(uploadProgress / uploadTotal) * 100}%` : '0%' }} />
+            </div>
+          </div>
+        )}
+
+        {/* done */}
+        {stage === 'done' && (
+          <div style={{ padding: '16px 0' }}>
+            <div className="success-banner" style={{ marginBottom: 12 }}>
+              ✓ {doneUids.length === 1 ? 'Study uploaded' : `${doneUids.length} studies uploaded`} successfully.
+            </div>
+            {doneUids.map(uid => (
+              <div key={uid} style={{ fontSize: 12, fontFamily: 'monospace', color: '#0f766e', marginBottom: 4 }}>
+                {uid}
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button type="button" className="btn btn--secondary" onClick={reset}>Upload another</button>
+              <button type="button" className="btn btn--approve" onClick={onClose}>Done</button>
+            </div>
+          </div>
+        )}
+
+        {/* error */}
+        {stage === 'error' && (
+          <div style={{ padding: '16px 0' }}>
+            <div className="error-banner" style={{ marginBottom: 12 }}>{errorMsg}</div>
+            <button type="button" className="btn btn--secondary" onClick={reset}>Try again</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
+const GLOBAL_PROJECT_KEY            = 'aegis_global_project_id'
+const SAVED_FILTERS_KEY             = 'aegis_saved_filters'
+const STUDIES_SORT_KEY              = 'aegis_studies_sort'
+const STUDIES_SHOW_DESC_KEY         = 'aegis_studies_show_desc'
+const STUDIES_GROUP_BY_PATIENT_KEY  = 'aegis_studies_group_by_patient'
 
 export function App() {
   const [displayTimezoneMode, setDisplayTimezoneMode] = useState<DisplayTimezoneMode>(() => readDisplayTimezone().mode)
   const [displayTimezoneCustom, setDisplayTimezoneCustom] = useState(() => readDisplayTimezone().customTimeZone)
-  const [tab, setTab] = useState<AppTab>('studies')
+
+  // The active tab is derived from the URL — /<tab> at root — so deep-linking,
+  // back/forward, and bookmarking all work. setTab(next) navigates to the
+  // matching URL. Legacy /admin/<tab> URLs are redirected at the router
+  // layer (see main.tsx AdminTabRedirect), so this code only sees root URLs.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab: AppTab = parseAdminTab(location.pathname)
+  const setTab = useCallback((next: AppTab) => {
+    navigate(`/${next}`)
+  }, [navigate])
+
+  // Sub-tab routing: /institutions/:id renders InstitutionsPanel in detail
+  // mode. /projects/:id is handled outside App by ProjectPage so the
+  // regex here only fires for institutions today.
+  const detailMatch = location.pathname.match(/^\/(institutions)\/([^/]+)/)
+  const institutionId = detailMatch?.[1] === 'institutions' ? (detailMatch[2] ?? null) : null
+  // Theme — shared with TopBar via the useDarkMode hook so toggling from
+  // anywhere (admin sidebar button OR the topbar button) updates everywhere.
+  const [darkMode, toggleDarkMode] = useDarkMode()
   const [state, setState] = useState<StudiesState>('loading')
   const [studies, setStudies] = useState<Study[]>([])
   const [studiesTotal, setStudiesTotal] = useState(0)
@@ -6707,12 +10747,203 @@ export function App() {
       fetch(`/api/studies/${id}/viewed`, { method: 'POST' }).catch(() => {/* best-effort */})
     }
   }
+
+  // Deep-link: /studies?study_id=<id> opens the StudyDetailPanel. Used by
+  // StudyPage when a researcher clicks through from a per-subject URL,
+  // and by audit / share / email links that carry the study id in the
+  // query string. We clear the param from the URL once consumed so
+  // back/forward history doesn't accumulate stale state.
+  useEffect(() => {
+    const sid = searchParams.get('study_id')
+    if (sid && !selectedStudyId) {
+      // Use selectStudy (not setSelectedStudyId) so deep-linked opens are
+      // recorded in the HIPAA access audit just like in-page clicks.
+      selectStudy(sid)
+      const next = new URLSearchParams(searchParams)
+      next.delete('study_id')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, selectedStudyId, setSearchParams])
   const [agentPrefill, setAgentPrefill] = useState<{ studyId: string; studyUid: string } | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
   const [bulkLabelInput, setBulkLabelInput] = useState('')
   const [bulkPipelineStep, setBulkPipelineStep] = useState('qc')
   const [stuckCount, setStuckCount] = useState(0)
+  const [stuckStudies, setStuckStudies] = useState<Array<{id:string;study_instance_uid:string;status:string;modality:string;body_part:string;updated_at:string}>>([])
+  const [showStuckPanel, setShowStuckPanel] = useState(false)
+  const [expiringStudies, setExpiringStudies] = useState<Array<{id:string;study_instance_uid:string;modality:string;body_part:string;expires_at:string;days_until_expiry:number;retention_days:number}>>([])
+  const [showExpiringPanel, setShowExpiringPanel] = useState(false)
+
+  // Protocol compliance trend panel (F2)
+  type ProtocolTrendDay = { day: string; checked: number; compliant: number; minor_deviations: number; non_compliant: number; compliance_pct: number }
+  type ProtocolTrend = { generated_at: string; period_days: number; totals: { checked: number; compliant: number; minor_deviations: number; non_compliant: number; compliance_pct: number }; days: ProtocolTrendDay[] }
+  const [showProtocolTrend, setShowProtocolTrend] = useState(false)
+  const [protocolTrend, setProtocolTrend] = useState<ProtocolTrend | null>(null)
+  const [protocolTrendLoading, setProtocolTrendLoading] = useState(false)
+  const loadProtocolTrend = async () => {
+    setProtocolTrendLoading(true)
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/protocol-trend?${params}`)
+    const d = r.ok ? await r.json() : null
+    setProtocolTrendLoading(false)
+    if (d) setProtocolTrend(d)
+  }
+  const toggleProtocolTrend = () => {
+    if (!showProtocolTrend && !protocolTrend) loadProtocolTrend()
+    setShowProtocolTrend(v => !v)
+  }
+
+  // PHI scan trend panel (F6)
+  type PhiTrendDay = { day: string; scanned: number; flagged: number; flag_rate_pct: number }
+  type PhiTrend = { generated_at: string; period_days: number; totals: { scanned: number; flagged: number; flag_rate_pct: number }; days: PhiTrendDay[] }
+  const [showPhiTrend, setShowPhiTrend] = useState(false)
+  const [phiTrend, setPhiTrend] = useState<PhiTrend | null>(null)
+  const [phiTrendLoading, setPhiTrendLoading] = useState(false)
+  const loadPhiTrend = async () => {
+    setPhiTrendLoading(true)
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/phi-trend?${params}`)
+    const d = r.ok ? await r.json() : null
+    setPhiTrendLoading(false)
+    if (d) setPhiTrend(d)
+  }
+  const togglePhiTrend = () => {
+    if (!showPhiTrend && !phiTrend) loadPhiTrend()
+    setShowPhiTrend(v => !v)
+  }
+
+  // Modality trend panel (F3)
+  type ModalityTrendDay = { day: string; counts: Record<string, number>; total: number }
+  type ModalityTrend = { generated_at: string; period_days: number; project_id?: string; totals: Record<string, number>; days: ModalityTrendDay[] }
+  const [showModalityTrend, setShowModalityTrend] = useState(false)
+  const [modalityTrend, setModalityTrend] = useState<ModalityTrend | null>(null)
+  const [modalityTrendLoading, setModalityTrendLoading] = useState(false)
+  const loadModalityTrend = async () => {
+    setModalityTrendLoading(true)
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/modality-trend?${params}`)
+    const d = r.ok ? await r.json() : null
+    setModalityTrendLoading(false)
+    if (d) setModalityTrend(d)
+  }
+  const toggleModalityTrend = () => {
+    if (!showModalityTrend && !modalityTrend) loadModalityTrend()
+    setShowModalityTrend(v => !v)
+  }
+
+  // Label usage panel (F4)
+  type LabelUsageRow = { label: string; count: number; study_count: number }
+  type LabelUsage = { project_id?: string; total_labels: number; labels: LabelUsageRow[] }
+  const [showLabelUsage, setShowLabelUsage] = useState(false)
+  const [labelUsage, setLabelUsage] = useState<LabelUsage | null>(null)
+  const [labelUsageLoading, setLabelUsageLoading] = useState(false)
+  const loadLabelUsage = async () => {
+    setLabelUsageLoading(true)
+    const params = new URLSearchParams()
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/label-usage?${params}`)
+    const d = r.ok ? await r.json() : null
+    setLabelUsageLoading(false)
+    if (d) setLabelUsage(d)
+  }
+  const toggleLabelUsage = () => {
+    if (!showLabelUsage && !labelUsage) loadLabelUsage()
+    setShowLabelUsage(v => !v)
+  }
+
+  // Source trend panel (F6)
+  type SourceTrendDay = { day: string; external: number; internal: number; total: number }
+  type SourceTrend = { generated_at: string; period_days: number; project_id?: string; totals: { external: number; internal: number; total: number }; days: SourceTrendDay[] }
+  const [showSourceTrend, setShowSourceTrend] = useState(false)
+  const [sourceTrend, setSourceTrend] = useState<SourceTrend | null>(null)
+  const [sourceTrendLoading, setSourceTrendLoading] = useState(false)
+  const loadSourceTrend = async () => {
+    setSourceTrendLoading(true)
+    const params = new URLSearchParams({ days: '30' })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const r = await fetch(`/api/stats/source-trend?${params}`)
+    const d = r.ok ? await r.json() : null
+    setSourceTrendLoading(false)
+    if (d) setSourceTrend(d)
+  }
+  const toggleSourceTrend = () => {
+    if (!showSourceTrend && !sourceTrend) loadSourceTrend()
+    setShowSourceTrend(v => !v)
+  }
+
+  // Institution breakdown panel (F8)
+  type InstitBreakdownRow = { institution_id: string | null; institution_name: string | null; study_count: number; approved: number; rejected: number; pending: number }
+  type InstitBreakdown = { project_id: string; generated_at: string; rows: InstitBreakdownRow[] }
+  const [showInstitBreakdown, setShowInstitBreakdown] = useState(false)
+  const [institBreakdown, setInstitBreakdown] = useState<InstitBreakdown | null>(null)
+  const [institBreakdownLoading, setInstitBreakdownLoading] = useState(false)
+  const loadInstitBreakdown = async () => {
+    if (!globalProjectId) return
+    setInstitBreakdownLoading(true)
+    const r = await fetch(`/api/projects/${globalProjectId}/institution-breakdown`)
+    const d = r.ok ? await r.json() : null
+    setInstitBreakdownLoading(false)
+    if (d) setInstitBreakdown(d)
+  }
+  const toggleInstitBreakdown = () => {
+    if (!showInstitBreakdown && !institBreakdown) loadInstitBreakdown()
+    setShowInstitBreakdown(v => !v)
+  }
+
+  // Bulk share state (F4)
+  const [bulkShareEmail, setBulkShareEmail] = useState('')
+  const [bulkShareExpiry, setBulkShareExpiry] = useState('168')
+  const doBulkShare = async () => {
+    if (!bulkShareEmail.trim()) { alert('Enter a recipient email.'); return }
+    const ids = Array.from(bulkSelected)
+    const res = await fetch('/api/studies/bulk-share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ study_ids: ids, recipient_email: bulkShareEmail.trim(), expiry_hours: Number(bulkShareExpiry) || 168 })
+    })
+    const d = res.ok ? await res.json() : null
+    if (d) { alert(`Created ${d.created} share${d.created !== 1 ? 's' : ''}${d.errors?.length ? ` (${d.errors.length} errors)` : ''}.`) }
+    setBulkSelected(new Set())
+    setBulkShareEmail('')
+  }
+
+  // Deleted Studies (Trash) panel
+  type DeletedStudy = { id: string; study_instance_uid: string; modality: string; body_part: string; status: string; deleted_at: string }
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showTrashPanel, setShowTrashPanel] = useState(false)
+  const [trashStudies, setTrashStudies] = useState<DeletedStudy[]>([])
+  const [trashTotal, setTrashTotal] = useState(0)
+  const [trashPage, setTrashPage] = useState(0)
+  const [trashLoading, setTrashLoading] = useState(false)
+  const TRASH_PAGE_SIZE = 50
+  const loadTrash = async (page = 0) => {
+    setTrashLoading(true)
+    const params = new URLSearchParams({ limit: String(TRASH_PAGE_SIZE), offset: String(page * TRASH_PAGE_SIZE) })
+    if (globalProjectId) params.set('project_id', globalProjectId)
+    const res = await fetch(`/api/studies/deleted?${params}`)
+    const d = res.ok ? await res.json() : null
+    setTrashLoading(false)
+    if (d) { setTrashStudies(d.studies ?? []); setTrashTotal(d.total ?? 0) }
+  }
+  const toggleTrashPanel = () => {
+    if (!showTrashPanel) { setTrashPage(0); loadTrash(0) }
+    setShowTrashPanel(v => !v)
+  }
+  const restoreDeletedStudy = async (id: string) => {
+    if (!confirm('Restore this study? It will be visible in the studies list again.')) return
+    await fetch(`/api/studies/${id}/restore`, { method: 'POST' })
+    loadTrash(trashPage)
+    setRefreshTick(t => t + 1)
+  }
+  const permDeleteStudy = async (id: string, uid: string) => {
+    if (!confirm(`Permanently delete study ${uid}?\nThis removes all DICOM files and cannot be undone.`)) return
+    await fetch(`/api/studies/bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', study_ids: [id] }) })
+    loadTrash(trashPage)
+  }
 
   // Global project selector — persisted to localStorage.
   const [globalProjectId, setGlobalProjectId] = useState<string>(() => localStorage.getItem(GLOBAL_PROJECT_KEY) ?? '')
@@ -6720,6 +10951,7 @@ export function App() {
   // Auth state
   const [currentUser, setCurrentUser] = useState<AuthIdentity | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [projectRoleById, setProjectRoleById] = useState<Record<string, ProjectRole | null>>({})
   const validCustomTimeZone = normalizeIanaTimeZone(displayTimezoneCustom) ?? ''
   const localTimeZone = browserTimeZone()
 
@@ -6740,18 +10972,66 @@ export function App() {
       .catch(() => { /* non-fatal — dev mode may not have auth */ })
   }, [])
 
-  // Poll stuck studies every 5 minutes for the warning badge.
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'researcher') {
+      setProjectRoleById({})
+      return
+    }
+    const uniqueProjectIDs = Array.from(new Set(studies.map(s => s.project_id).filter(Boolean)))
+    const missing = uniqueProjectIDs.filter(id => !(id in projectRoleById))
+    if (missing.length === 0) return
+    let cancelled = false
+    Promise.all(
+      missing.map(async projectID => {
+        try {
+          const res = await fetch(`/api/projects/${projectID}/members`)
+          if (!res.ok) return [projectID, null] as const
+          const data = await res.json()
+          const members = (data.members ?? []) as ProjectMember[]
+          const me = members.find(m => m.admin_user_id === currentUser.id || m.user_email === currentUser.email)
+          return [projectID, (me?.role as ProjectRole | undefined) ?? null] as const
+        } catch {
+          return [projectID, null] as const
+        }
+      }),
+    ).then(entries => {
+      if (cancelled) return
+      setProjectRoleById(prev => {
+        const next = { ...prev }
+        for (const [projectID, role] of entries) next[projectID] = role
+        return next
+      })
+    })
+    return () => { cancelled = true }
+  }, [currentUser, studies, projectRoleById])
+
+  // Poll stuck studies every 5 minutes for the warning badge + panel data.
   useEffect(() => {
     const fetchStuck = () => {
       const params = new URLSearchParams({ minutes: '60' })
       if (globalProjectId) params.set('project_id', globalProjectId)
       fetch(`/api/studies/stuck?${params}`)
         .then(r => r.ok ? r.json() : null)
-        .then(d => d && setStuckCount(d.total ?? 0))
+        .then(d => { if (d) { setStuckCount(d.total ?? 0); setStuckStudies(d.stuck ?? []) } })
         .catch(() => {})
     }
     fetchStuck()
     const id = setInterval(fetchStuck, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [globalProjectId])
+
+  // Poll for studies expiring within 7 days every 5 minutes (non-critical).
+  useEffect(() => {
+    const fetchExpiring = () => {
+      const params = new URLSearchParams({ days: '7', limit: '50' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      fetch(`/api/studies/expiring?${params}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => d && setExpiringStudies(d.studies ?? []))
+        .catch(() => {})
+    }
+    fetchExpiring()
+    const id = setInterval(fetchExpiring, 5 * 60 * 1000)
     return () => clearInterval(id)
   }, [globalProjectId])
 
@@ -6766,15 +11046,57 @@ export function App() {
   const [filterSearch,   setFilterSearch]   = useState('')
   const [filterSubject,  setFilterSubject]  = useState('')
   const [filterLabel,    setFilterLabel]    = useState('')
-  const [filterDateFrom, setFilterDateFrom] = useState('')
-  const [filterDateTo,   setFilterDateTo]   = useState('')
-  const [filterFlagged,  setFilterFlagged]  = useState(false)
+  const [filterDateFrom,    setFilterDateFrom]    = useState('')
+  const [filterDateTo,      setFilterDateTo]      = useState('')
+  const [filterFlagged,     setFilterFlagged]     = useState(false)
+  const [filterInstitution, setFilterInstitution] = useState('')
+
+  // Saved filter presets (localStorage)
+  type SavedFilter = {
+    name: string; status: string; modality: string; bodyPart: string; source: string
+    search: string; subject: string; label: string; dateFrom: string; dateTo: string
+    flagged: boolean
+  }
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => {
+    try { return JSON.parse(localStorage.getItem(SAVED_FILTERS_KEY) ?? 'null') ?? [] } catch { return [] }
+  })
+  const [showSaveFilterPrompt, setShowSaveFilterPrompt] = useState(false)
+  const [saveFilterName, setSaveFilterName] = useState('')
+  const [savedFiltersMenuOpen, setSavedFiltersMenuOpen] = useState(false)
+  const savedFiltersMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!savedFiltersMenuOpen) return
+    function onOutsideClick(e: MouseEvent) {
+      if (savedFiltersMenuRef.current && !savedFiltersMenuRef.current.contains(e.target as Node)) {
+        setSavedFiltersMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick)
+    return () => document.removeEventListener('mousedown', onOutsideClick)
+  }, [savedFiltersMenuOpen])
+
   const [page, setPage] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
 
+  // Studies table sort (persisted to localStorage)
+  type StudiesSortDir = 'asc' | 'desc'
+  const [sortBy,  setSortBy]  = useState<string>(() => {
+    try { return (JSON.parse(localStorage.getItem(STUDIES_SORT_KEY) || 'null') ?? {}).col || 'created_at' } catch { return 'created_at' }
+  })
+  const [sortDir, setSortDir] = useState<StudiesSortDir>(() => {
+    try { return (JSON.parse(localStorage.getItem(STUDIES_SORT_KEY) || 'null') ?? {}).dir || 'desc' } catch { return 'desc' }
+  })
+  const [showDescCol, setShowDescCol] = useState<boolean>(() => {
+    try { return localStorage.getItem(STUDIES_SHOW_DESC_KEY) === 'true' } catch { return false }
+  })
+  const [groupByPatient, setGroupByPatient] = useState<boolean>(() => {
+    try { return localStorage.getItem(STUDIES_GROUP_BY_PATIENT_KEY) === 'true' } catch { return false }
+  })
+
   // Real-time SSE updates — bump refreshTick on any study change so the list
   // re-fetches automatically without requiring a manual refresh.
-  useStudyEvents({
+  const { connected: sseConnected } = useStudyEvents({
     projectId: globalProjectId || undefined,
     onEvent: () => setRefreshTick(t => t + 1),
   })
@@ -6801,6 +11123,57 @@ export function App() {
     fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'researcher') return
+    const missing = projects.map(p => p.id).filter(id => !(id in projectRoleById))
+    if (missing.length === 0) return
+    let cancelled = false
+    Promise.all(
+      missing.map(async projectID => {
+        try {
+          const res = await fetch(`/api/projects/${projectID}/members`)
+          if (!res.ok) return [projectID, null] as const
+          const data = await res.json()
+          const members = (data.members ?? []) as ProjectMember[]
+          const me = members.find(m => m.admin_user_id === currentUser.id || m.user_email === currentUser.email)
+          return [projectID, (me?.role as ProjectRole | undefined) ?? null] as const
+        } catch {
+          return [projectID, null] as const
+        }
+      }),
+    ).then(entries => {
+      if (cancelled) return
+      setProjectRoleById(prev => {
+        const next = { ...prev }
+        for (const [projectID, role] of entries) next[projectID] = role
+        return next
+      })
+    })
+    return () => { cancelled = true }
+  }, [currentUser, projects, projectRoleById])
+
+  const isResearcher = currentUser?.role === 'researcher'
+  const knownProjectRoles = Object.values(projectRoleById).filter((role): role is ProjectRole => !!role)
+  const researcherSiteScopedOnly = isResearcher && knownProjectRoles.length > 0 && knownProjectRoles.every(isSiteScopedRole)
+  const canUseAllProjectsMode = !researcherSiteScopedOnly
+
+  useEffect(() => {
+    if (!researcherSiteScopedOnly || globalProjectId) return
+    const firstScopedProject = projects.find(p => isSiteScopedRole(projectRoleById[p.id]))
+    if (firstScopedProject) setGlobalProjectId(firstScopedProject.id)
+  }, [researcherSiteScopedOnly, globalProjectId, projects, projectRoleById])
+
+  const selectedProjectName = globalProjectId
+    ? (projects.find(p => p.id === globalProjectId)?.name ?? 'Selected project')
+    : (projects.length === 0 ? 'Loading projects…' : 'All projects')
+  const scopeLabel = researcherSiteScopedOnly && !globalProjectId ? 'Project required' : selectedProjectName
+
+  // Institutions for filter dropdown
+  const [allInstitutions, setAllInstitutions] = useState<Institution[]>([])
+  useEffect(() => {
+    fetch('/api/institutions').then(r => r.ok ? r.json() : null).then(d => { if (d) setAllInstitutions(d) }).catch(() => {})
+  }, [])
+
   // Dashboard pipeline stats
   type PipelineStats = {
     study_counts: { received: number; defacing: number; clean: number; defaced: number; approved: number; rejected: number; expired: number; total: number }
@@ -6820,13 +11193,26 @@ export function App() {
   type BreakdownRow = { modality: string; body_part: string; count: number }
   const [breakdown, setBreakdown] = useState<BreakdownRow[] | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const [breakdownError, setBreakdownError] = useState<string | null>(null)
+  // Toggles flip `show` immediately so the click always produces a visible
+  // response — the previous version only flipped on `res.ok`, so any silent
+  // fetch failure (auth, network, 500) made the menu appear "broken".
   const loadBreakdown = async () => {
-    const params = new URLSearchParams()
-    if (globalProjectId) params.set('project_id', globalProjectId)
-    const qs = params.toString()
-    const res = await fetch(`/api/stats/breakdown${qs ? '?' + qs : ''}`)
-    if (res.ok) { const d = await res.json(); setBreakdown(d.breakdown ?? []); setShowBreakdown(true) }
-    else setShowBreakdown(v => !v)
+    if (showBreakdown) { setShowBreakdown(false); return }
+    setShowBreakdown(true)
+    setBreakdownError(null)
+    try {
+      const params = new URLSearchParams()
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      const qs = params.toString()
+      const res = await fetch(`/api/stats/breakdown${qs ? '?' + qs : ''}`)
+      if (!res.ok) { setBreakdownError(`HTTP ${res.status}`); setBreakdown([]); return }
+      const d = await res.json()
+      setBreakdown(d.breakdown ?? [])
+    } catch (err) {
+      setBreakdownError(err instanceof Error ? err.message : 'Failed to load breakdown')
+      setBreakdown([])
+    }
   }
 
   type StorageStats = { raw_file_count: number; clean_file_count: number; total_file_count: number; total_studies: number; total_size_bytes: number }
@@ -6843,122 +11229,140 @@ export function App() {
   type TimelineDay = { date: string; received: number; approved: number }
   const [timeline, setTimeline] = useState<TimelineDay[] | null>(null)
   const [showTimeline, setShowTimeline] = useState(false)
+  const [timelineError, setTimelineError] = useState<string | null>(null)
   const loadTimeline = async () => {
-    const params = new URLSearchParams({ days: '30' })
-    if (globalProjectId) params.set('project_id', globalProjectId)
-    const res = await fetch(`/api/stats/timeline?${params}`)
-    if (res.ok) { const d = await res.json(); setTimeline(d.timeline ?? []); setShowTimeline(true) }
-    else setShowTimeline(v => !v)
-  }
-
-  // ── Quick-search palette (Cmd/Ctrl+K) ──────────────────────────────────────
-  type PaletteNavItem  = { kind: 'nav';   label: string; tab: AppTab; icon: string }
-  type PaletteStudyItem = { kind: 'study'; label: string; sub: string; id: string }
-  type PaletteItem = PaletteNavItem | PaletteStudyItem
-
-  const NAV_ITEMS: PaletteNavItem[] = [
-    { kind: 'nav', label: 'Studies',              tab: 'studies',            icon: '🗂' },
-    { kind: 'nav', label: 'Audit Log',             tab: 'audit',              icon: '📋' },
-    { kind: 'nav', label: 'Shares',                tab: 'shares',             icon: '🔗' },
-    { kind: 'nav', label: 'Routing Rules',         tab: 'routing',            icon: '🔀' },
-    { kind: 'nav', label: 'DIMSE Operations',      tab: 'dimse_ops',          icon: '📡' },
-    { kind: 'nav', label: 'Institutions',          tab: 'institutions',       icon: '🏥' },
-    { kind: 'nav', label: 'Anonymization Profiles',tab: 'profiles',           icon: '🔒' },
-    { kind: 'nav', label: 'Protocol Templates',    tab: 'protocol_templates', icon: '📐' },
-    { kind: 'nav', label: 'Notifications',         tab: 'notifications',      icon: '🔔' },
-    { kind: 'nav', label: 'Projects',              tab: 'projects',           icon: '📁' },
-    { kind: 'nav', label: 'Federation Peers',      tab: 'federation',         icon: '🌐' },
-    { kind: 'nav', label: 'TCIA Import',           tab: 'tcia_import',        icon: '🔬' },
-    { kind: 'nav', label: 'System Health',         tab: 'system',             icon: '⚙️' },
-    ...(isAdmin ? [
-      { kind: 'nav' as const, label: 'Users',        tab: 'users' as AppTab,         icon: '👤' },
-      { kind: 'nav' as const, label: 'API Keys',     tab: 'api_keys' as AppTab,      icon: '🔑' },
-      { kind: 'nav' as const, label: 'Invite Codes', tab: 'invite_codes' as AppTab,  icon: '🎟️' },
-    ] : []),
-  ]
-
-  const [paletteOpen, setPaletteOpen] = useState(false)
-  const [paletteQuery, setPaletteQuery] = useState('')
-  const [paletteStudies, setPaletteStudies] = useState<PaletteStudyItem[]>([])
-  const [paletteHighlight, setPaletteHighlight] = useState(0)
-  const paletteInputRef = useRef<HTMLInputElement>(null)
-
-  // Open with Cmd/Ctrl+K
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setPaletteOpen(v => { if (!v) { setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }; return !v })
-      }
-      if (e.key === 'Escape') setPaletteOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [])
-
-  // Focus input when palette opens
-  useEffect(() => {
-    if (paletteOpen) setTimeout(() => paletteInputRef.current?.focus(), 0)
-  }, [paletteOpen])
-
-  // Debounced study search
-  useEffect(() => {
-    if (!paletteOpen || paletteQuery.trim().length < 2) { setPaletteStudies([]); return }
-    const t = setTimeout(async () => {
-      const res = await fetch(`/api/studies?search=${encodeURIComponent(paletteQuery.trim())}&limit=6`)
-      if (!res.ok) return
-      const data = await res.json()
-      setPaletteStudies((data.studies ?? []).map((s: Study) => ({
-        kind: 'study' as const,
-        label: uidShort(s.study_instance_uid),
-        sub: [s.modality, s.body_part, s.status].filter(Boolean).join(' · '),
-        id: s.id,
-      })))
-    }, 250)
-    return () => clearTimeout(t)
-  }, [paletteQuery, paletteOpen])
-
-  const paletteNavFiltered = NAV_ITEMS.filter(n =>
-    !paletteQuery.trim() || n.label.toLowerCase().includes(paletteQuery.trim().toLowerCase())
-  )
-  const paletteItems: PaletteItem[] = [...paletteNavFiltered, ...paletteStudies]
-
-  const paletteSelect = (item: PaletteItem) => {
-    setPaletteOpen(false)
-    if (item.kind === 'nav') {
-      setTab(item.tab)
-    } else {
-      setTab('studies')
-      selectStudy(item.id)
+    if (showTimeline) { setShowTimeline(false); return }
+    setShowTimeline(true)
+    setTimelineError(null)
+    try {
+      const params = new URLSearchParams({ days: '30' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      const res = await fetch(`/api/stats/timeline?${params}`)
+      if (!res.ok) { setTimelineError(`HTTP ${res.status}`); setTimeline([]); return }
+      const d = await res.json()
+      setTimeline(d.timeline ?? [])
+    } catch (err) {
+      setTimelineError(err instanceof Error ? err.message : 'Failed to load timeline')
+      setTimeline([])
     }
   }
 
-  const paletteKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteHighlight(h => Math.min(h + 1, paletteItems.length - 1)) }
-    if (e.key === 'ArrowUp')   { e.preventDefault(); setPaletteHighlight(h => Math.max(h - 1, 0)) }
-    if (e.key === 'Enter' && paletteItems[paletteHighlight]) paletteSelect(paletteItems[paletteHighlight])
+  type StageTiming = { stage: string; count: number; avg_seconds: number; p95_seconds: number; min_seconds: number; max_seconds: number }
+  const [processingTimes, setProcessingTimes] = useState<StageTiming[] | null>(null)
+  const [showProcessingTimes, setShowProcessingTimes] = useState(false)
+  const [processingTimesError, setProcessingTimesError] = useState<string | null>(null)
+  const loadProcessingTimes = async () => {
+    if (showProcessingTimes) { setShowProcessingTimes(false); return }
+    setShowProcessingTimes(true)
+    setProcessingTimesError(null)
+    try {
+      const params = new URLSearchParams({ days: '30' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      const res = await fetch(`/api/stats/processing-times?${params}`)
+      if (!res.ok) { setProcessingTimesError(`HTTP ${res.status}`); setProcessingTimes([]); return }
+      const d = await res.json()
+      setProcessingTimes(d.stages ?? [])
+    } catch (err) {
+      setProcessingTimesError(err instanceof Error ? err.message : 'Failed to load processing times')
+      setProcessingTimes([])
+    }
   }
 
-  // Reset highlight when results change
-  useEffect(() => { setPaletteHighlight(0) }, [paletteItems.length])
-  // ── end palette ─────────────────────────────────────────────────────────────
+  type FunnelStage = { stage: string; count: number; pct_of_total: number; pct_of_prev: number }
+  const [funnel, setFunnel] = useState<FunnelStage[] | null>(null)
+  const [showFunnel, setShowFunnel] = useState(false)
+  const [funnelError, setFunnelError] = useState<string | null>(null)
+  const loadFunnel = async () => {
+    if (showFunnel) { setShowFunnel(false); return }
+    setShowFunnel(true)
+    setFunnelError(null)
+    try {
+      const params = new URLSearchParams({ days: '30' })
+      if (globalProjectId) params.set('project_id', globalProjectId)
+      const res = await fetch(`/api/stats/pipeline-funnel?${params}`)
+      if (!res.ok) { setFunnelError(`HTTP ${res.status}`); setFunnel([]); return }
+      const d = await res.json()
+      setFunnel(d.funnel ?? [])
+    } catch (err) {
+      setFunnelError(err instanceof Error ? err.message : 'Failed to load funnel')
+      setFunnel([])
+    }
+  }
+
+  type CohortSubject = {
+    subject_id: string; study_count: number; approved_count: number; rejected_count: number
+    pending_count: number; modalities: string[]; earliest_study_at: string; latest_study_at: string
+    all_approved: boolean; has_defaced: boolean; has_exported: boolean
+  }
+  type CohortReport = {
+    project_id: string; generated_at: string; total_subjects: number; subjects_multi_study: number
+    total_studies_with_subject: number; modality_coverage: Record<string, number>; subjects: CohortSubject[]
+  }
+  const [cohortReport, setCohortReport] = useState<CohortReport | null>(null)
+  const [showCohortReport, setShowCohortReport] = useState(false)
+  const [cohortLoading, setCohortLoading] = useState(false)
+  const [cohortError, setCohortError] = useState<string | null>(null)
+  const loadCohortReport = async () => {
+    if (!globalProjectId) { alert('Select a project to view the cohort report.'); return }
+    if (showCohortReport && cohortReport) { setShowCohortReport(false); return }
+    setShowCohortReport(true)
+    setCohortError(null)
+    setCohortLoading(true)
+    try {
+      const res = await fetch(`/api/projects/${globalProjectId}/cohort-report`)
+      if (!res.ok) { setCohortError(`HTTP ${res.status}`); return }
+      setCohortReport(await res.json())
+    } catch (err) {
+      setCohortError(err instanceof Error ? err.message : 'Failed to load cohort report')
+    } finally {
+      setCohortLoading(false)
+    }
+  }
+
+  const fmtDuration = (secs: number): string => {
+    if (secs < 60) return `${secs}s`
+    const m = Math.floor(secs / 60)
+    const s = Math.round(secs % 60)
+    return s > 0 ? `${m}m ${s}s` : `${m}m`
+  }
+
+  const stageLabel: Record<string, string> = {
+    deface: 'Defacing',
+    phi_scan: 'PHI Scan',
+    qc_check: 'QC Check',
+    bids_conversion: 'BIDS Conversion',
+    classification: 'Classification',
+    protocol_check: 'Protocol Check',
+    export: 'Export',
+  }
+
+  // The Cmd/Ctrl+K quick-search palette was removed — it duplicated the
+  // sidebar (Navigate list mirrored the tabs) and the limited study search
+  // there was outclassed by the global TopBarSearch in the topbar, which
+  // hits the real /api/search endpoint across projects + subjects + studies.
+
+  // (Dark mode side-effects — setting data-theme + saving to localStorage —
+  // are owned by the useDarkMode hook now; see src/hooks/useDarkMode.ts.)
 
   // Fetch studies whenever filters, page, or refresh tick change
   useEffect(() => {
     let cancelled = false
     setState('loading')
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) })
-    if (filterStatus)   params.set('status',     filterStatus)
-    if (filterModality) params.set('modality',   filterModality)
-    if (filterBodyPart) params.set('body_part',  filterBodyPart)
-    if (filterSource)   params.set('source',     filterSource)
-    if (filterProject)  params.set('project_id', filterProject)
-    if (filterSearch)   params.set('search',     filterSearch)
-    if (filterSubject)  params.set('subject_id', filterSubject)
-    if (filterLabel)    params.set('label',      filterLabel)
+    if (filterStatus)      params.set('status',         filterStatus)
+    if (filterModality)    params.set('modality',       filterModality)
+    if (filterBodyPart)    params.set('body_part',      filterBodyPart)
+    if (filterSource)      params.set('source',         filterSource)
+    if (filterProject)     params.set('project_id',     filterProject)
+    if (filterSearch)      params.set('search',         filterSearch)
+    if (filterSubject)     params.set('subject_id',     filterSubject)
+    if (filterLabel)       params.set('label',          filterLabel)
+    if (filterInstitution) params.set('institution_id', filterInstitution)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
     if (filterFlagged)  params.set('flagged',    'true')
+    params.set('sort_by',  sortBy)
+    params.set('sort_dir', sortDir)
 
     fetch(`/api/studies?${params}`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
@@ -6974,29 +11378,76 @@ export function App() {
         setState('error')
       })
     return () => { cancelled = true }
-  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterDateFrom, filterDateTo, filterFlagged, refreshTick])
+  }, [page, filterStatus, filterModality, filterBodyPart, filterSource, filterProject, filterSearch, filterSubject, filterLabel, filterInstitution, filterDateFrom, filterDateTo, filterFlagged, sortBy, sortDir, refreshTick])
 
   // Filter change helpers — also reset page to 0
   function setStatusF(v: string)   { setFilterStatus(v);   setPage(0); setBulkSelected(new Set()) }
   function setModalityF(v: string) { setFilterModality(v); setPage(0); setBulkSelected(new Set()) }
   function setBodyPartF(v: string) { setFilterBodyPart(v); setPage(0); setBulkSelected(new Set()) }
   function setSourceF(v: string)   { setFilterSource(v);   setPage(0); setBulkSelected(new Set()) }
-  function setProjectF(v: string)  { setFilterProject(v);  setPage(0); setBulkSelected(new Set()) }
+  function setProjectF(v: string)  {
+    if (!canUseAllProjectsMode && !v) return
+    setFilterProject(v)
+    setPage(0)
+    setBulkSelected(new Set())
+  }
   function setSearchF(v: string)    { setFilterSearch(v);    setPage(0); setBulkSelected(new Set()) }
   function setSubjectF(v: string)   { setFilterSubject(v);   setPage(0); setBulkSelected(new Set()) }
   function setLabelF(v: string)     { setFilterLabel(v);     setPage(0); setBulkSelected(new Set()) }
-  function setDateFromF(v: string)  { setFilterDateFrom(v);  setPage(0); setBulkSelected(new Set()) }
-  function setDateToF(v: string)    { setFilterDateTo(v);    setPage(0); setBulkSelected(new Set()) }
-  function setFlaggedF(v: boolean)  { setFilterFlagged(v);   setPage(0); setBulkSelected(new Set()) }
+  function setDateFromF(v: string)       { setFilterDateFrom(v);    setPage(0); setBulkSelected(new Set()) }
+  function setDateToF(v: string)         { setFilterDateTo(v);      setPage(0); setBulkSelected(new Set()) }
+  function setFlaggedF(v: boolean)       { setFilterFlagged(v);     setPage(0); setBulkSelected(new Set()) }
+  function setInstitutionF(v: string)    { setFilterInstitution(v); setPage(0); setBulkSelected(new Set()) }
 
-  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterDateFrom || filterDateTo || filterFlagged)
+  function setSortF(col: string) {
+    const newDir: StudiesSortDir = sortBy === col && sortDir === 'desc' ? 'asc' : 'desc'
+    setSortBy(col)
+    setSortDir(newDir)
+    setPage(0)
+    setBulkSelected(new Set())
+    localStorage.setItem(STUDIES_SORT_KEY, JSON.stringify({ col, dir: newDir }))
+  }
+
+  function sortIcon(col: string): string {
+    if (sortBy !== col) return ' ⇅'
+    return sortDir === 'asc' ? ' ▲' : ' ▼'
+  }
+
+  const hasFilters = !!(filterStatus || filterModality || filterBodyPart || filterSource || filterProject || filterSearch || filterSubject || filterLabel || filterInstitution || filterDateFrom || filterDateTo || filterFlagged)
 
   function clearFilters() {
     setFilterStatus(''); setFilterModality(''); setFilterBodyPart('')
-    setFilterSource(''); setFilterProject(''); setFilterSearch('')
-    setFilterSubject(''); setFilterLabel(''); setFilterDateFrom(''); setFilterDateTo('')
+    setFilterSource('')
+    setFilterProject(canUseAllProjectsMode ? '' : (globalProjectId || filterProject))
+    setFilterSearch('')
+    setFilterSubject(''); setFilterLabel(''); setFilterInstitution('')
+    setFilterDateFrom(''); setFilterDateTo('')
     setFilterFlagged(false); setPage(0)
     setBulkSelected(new Set())
+  }
+
+  function saveCurrentFilter() {
+    const name = saveFilterName.trim()
+    if (!name) return
+    const f: SavedFilter = { name, status: filterStatus, modality: filterModality, bodyPart: filterBodyPart, source: filterSource, search: filterSearch, subject: filterSubject, label: filterLabel, dateFrom: filterDateFrom, dateTo: filterDateTo, flagged: filterFlagged }
+    const updated = [f, ...savedFilters.filter(x => x.name !== name)]
+    setSavedFilters(updated)
+    localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(updated))
+    setShowSaveFilterPrompt(false)
+    setSaveFilterName('')
+  }
+
+  function loadSavedFilter(f: SavedFilter) {
+    setFilterStatus(f.status); setFilterModality(f.modality); setFilterBodyPart(f.bodyPart)
+    setFilterSource(f.source); setFilterSearch(f.search); setFilterSubject(f.subject)
+    setFilterLabel(f.label); setFilterDateFrom(f.dateFrom); setFilterDateTo(f.dateTo)
+    setFilterFlagged(f.flagged); setPage(0); setBulkSelected(new Set()); setSavedFiltersMenuOpen(false)
+  }
+
+  function deleteSavedFilter(name: string) {
+    const updated = savedFilters.filter(f => f.name !== name)
+    setSavedFilters(updated)
+    localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(updated))
   }
 
   const allPageIds = studies.map(s => s.id)
@@ -7087,13 +11538,14 @@ export function App() {
 
   const csvUrl = (() => {
     const params = new URLSearchParams()
-    if (filterStatus)   params.set('status',     filterStatus)
-    if (filterModality) params.set('modality',   filterModality)
-    if (filterBodyPart) params.set('body_part',  filterBodyPart)
-    if (filterSource)   params.set('source',     filterSource)
-    if (filterProject)  params.set('project_id', filterProject)
-    if (filterSearch)   params.set('search',     filterSearch)
-    if (filterLabel)    params.set('label',      filterLabel)
+    if (filterStatus)      params.set('status',         filterStatus)
+    if (filterModality)    params.set('modality',       filterModality)
+    if (filterBodyPart)    params.set('body_part',      filterBodyPart)
+    if (filterSource)      params.set('source',         filterSource)
+    if (filterProject)     params.set('project_id',     filterProject)
+    if (filterSearch)      params.set('search',         filterSearch)
+    if (filterLabel)       params.set('label',          filterLabel)
+    if (filterInstitution) params.set('institution_id', filterInstitution)
     if (filterDateFrom) params.set('date_from',  new Date(filterDateFrom).toISOString())
     if (filterDateTo)   params.set('date_to',    new Date(filterDateTo + 'T23:59:59Z').toISOString())
     if (filterFlagged)  params.set('flagged',    'true')
@@ -7103,281 +11555,19 @@ export function App() {
   const pageEnd    = Math.min((page + 1) * PAGE_SIZE, studiesTotal)
 
   return (
-    <div className="admin-root">
-      {/* Cmd/Ctrl+K quick-search palette */}
-      {paletteOpen && (
-        <div className="palette-overlay" onClick={() => setPaletteOpen(false)}>
-          <div className="palette-modal" onClick={e => e.stopPropagation()}>
-            <div className="palette-search-row">
-              <span className="palette-search-icon">⌕</span>
-              <input
-                ref={paletteInputRef}
-                className="palette-input"
-                placeholder="Search studies, navigate…"
-                value={paletteQuery}
-                onChange={e => setPaletteQuery(e.target.value)}
-                onKeyDown={paletteKeyDown}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <kbd className="palette-esc-hint">Esc</kbd>
-            </div>
-            {paletteItems.length > 0 ? (
-              <ul className="palette-results">
-                {paletteNavFiltered.length > 0 && (
-                  <li className="palette-group-label">Navigate</li>
-                )}
-                {paletteNavFiltered.map((item, i) => (
-                  <li
-                    key={item.tab}
-                    className={`palette-result${paletteHighlight === i ? ' palette-result--active' : ''}`}
-                    onMouseEnter={() => setPaletteHighlight(i)}
-                    onClick={() => paletteSelect(item)}
-                  >
-                    <span className="palette-result__icon">{item.icon}</span>
-                    <span className="palette-result__label">{item.label}</span>
-                  </li>
-                ))}
-                {paletteStudies.length > 0 && (
-                  <li className="palette-group-label">Studies</li>
-                )}
-                {paletteStudies.map((item, j) => {
-                  const idx = paletteNavFiltered.length + j
-                  return (
-                    <li
-                      key={item.id}
-                      className={`palette-result${paletteHighlight === idx ? ' palette-result--active' : ''}`}
-                      onMouseEnter={() => setPaletteHighlight(idx)}
-                      onClick={() => paletteSelect(item)}
-                    >
-                      <span className="palette-result__icon">🔬</span>
-                      <span className="palette-result__label">{item.label}</span>
-                      <span className="palette-result__sub">{item.sub}</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : paletteQuery.trim().length >= 2 ? (
-              <div className="palette-empty">No results</div>
-            ) : null}
-            <div className="palette-footer">
-              <span><kbd>↑↓</kbd> navigate</span>
-              <span><kbd>↵</kbd> select</span>
-              <span><kbd>Esc</kbd> close</span>
-            </div>
-          </div>
-        </div>
-      )}
-
+    <>
       {authError && (
         <div className="auth-error-banner">
           Access denied: {authError}
         </div>
       )}
 
-      <header className="header">
-        <div>
-          <h1>AEGIS Admin Dashboard</h1>
-          <p>Study review, QC, and export management</p>
-        </div>
-        <div className="header-actions">
-          {/* Global project selector */}
-          {projects.length > 1 && (
-            <div className="tz-control">
-              <label className="tz-label" htmlFor="global-project-select">Project</label>
-              <select
-                id="global-project-select"
-                className="tz-select"
-                value={globalProjectId}
-                onChange={e => setGlobalProjectId(e.target.value)}
-              >
-                <option value="">All projects</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              {globalProjectId && (
-                <button type="button" className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-                  onClick={() => setGlobalProjectId('')}>Clear</button>
-              )}
-            </div>
+          {!(tab === 'studies' && selectedStudyId) && (
+            <PageHeader
+              title={TAB_META[tab].title}
+              description={TAB_META[tab].description}
+            />
           )}
-          <div className="tz-control">
-            <label className="tz-label" htmlFor="display-timezone-mode">Time Zone</label>
-            <select
-              id="display-timezone-mode"
-              className="tz-select"
-              value={displayTimezoneMode}
-              onChange={(e) => setDisplayTimezoneMode(e.target.value as DisplayTimezoneMode)}
-            >
-              <option value="utc">UTC</option>
-              <option value="local">Local ({localTimeZone})</option>
-              <option value="custom">Custom</option>
-            </select>
-            {displayTimezoneMode === 'custom' && (
-              <>
-                <input
-                  className="tz-input"
-                  type="text"
-                  placeholder="America/Chicago"
-                  value={displayTimezoneCustom}
-                  onChange={(e) => setDisplayTimezoneCustom(e.target.value)}
-                />
-                {!validCustomTimeZone && displayTimezoneCustom.trim() && (
-                  <span className="tz-warning">Invalid IANA time zone</span>
-                )}
-              </>
-            )}
-          </div>
-          {currentUser && (
-            <span className="auth-user-badge">
-              {currentUser.name || currentUser.email} ({currentUser.role})
-            </span>
-          )}
-          <button
-            type="button"
-            className="btn-palette-trigger"
-            onClick={() => { setPaletteOpen(true); setPaletteQuery(''); setPaletteStudies([]); setPaletteHighlight(0) }}
-            title="Quick search (⌘K)"
-          >
-            <span>Search…</span>
-            <kbd>⌘K</kbd>
-          </button>
-          {tab === 'studies' && (
-            <button type="button" className="btn-refresh" onClick={() => setRefreshTick(t => t + 1)}>Refresh</button>
-          )}
-        </div>
-      </header>
-
-      {/* Tab nav */}
-      <nav className="tab-nav">
-        <button
-          type="button"
-          className={`tab-btn${tab === 'studies' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('studies')}
-        >
-          Studies
-          {stuckCount > 0 && <span className="tab-stuck-badge">{stuckCount} stuck</span>}
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'audit' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('audit')}
-        >
-          Audit Log
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'agent' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('agent')}
-        >
-          Agent
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'shares' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('shares')}
-        >
-          Shares
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'routing' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('routing')}
-        >
-          Routing
-        </button>
-        {isAdmin && (
-          <button
-            type="button"
-            className={`tab-btn${tab === 'dimse_ops' ? ' tab-btn--active' : ''}`}
-            onClick={() => setTab('dimse_ops')}
-          >
-            DIMSE Ops
-          </button>
-        )}
-        <button
-          type="button"
-          className={`tab-btn${tab === 'institutions' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('institutions')}
-        >
-          Institutions
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'profiles' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('profiles')}
-        >
-          Profiles
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'protocol_templates' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('protocol_templates')}
-        >
-          Protocol Templates
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'notifications' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('notifications')}
-        >
-          Notifications
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'projects' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('projects')}
-        >
-          Projects
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'federation' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('federation')}
-        >
-          Federation
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'tcia_import' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('tcia_import')}
-        >
-          TCIA Import
-        </button>
-        <button
-          type="button"
-          className={`tab-btn${tab === 'system' ? ' tab-btn--active' : ''}`}
-          onClick={() => setTab('system')}
-        >
-          System
-        </button>
-        {isAdmin && (
-          <button
-            type="button"
-            className={`tab-btn${tab === 'users' ? ' tab-btn--active' : ''}`}
-            onClick={() => setTab('users')}
-          >
-            Users
-          </button>
-        )}
-        {isAdmin && (
-          <button
-            type="button"
-            className={`tab-btn${tab === 'api_keys' ? ' tab-btn--active' : ''}`}
-            onClick={() => setTab('api_keys')}
-          >
-            API Keys
-          </button>
-        )}
-        {isAdmin && (
-          <button
-            type="button"
-            className={`tab-btn${tab === 'invite_codes' ? ' tab-btn--active' : ''}`}
-            onClick={() => setTab('invite_codes')}
-          >
-            Invite Codes
-          </button>
-        )}
-      </nav>
 
       {/* Studies tab */}
       {tab === 'studies' && selectedStudyId && (
@@ -7386,6 +11576,7 @@ export function App() {
           onBack={() => selectStudy(null)}
           onAction={() => setRefreshTick(t => t + 1)}
           isAdmin={isAdmin}
+          currentUser={currentUser}
         />
       )}
       {tab === 'agent' && (
@@ -7434,45 +11625,120 @@ export function App() {
                   </span>
                 </>
               )}
+              {protocolTrend && protocolTrend.totals.checked > 0 && (
+                <>
+                  <span className="stats-banner__sep" />
+                  <button
+                    type="button"
+                    className="stats-banner__shares"
+                    style={{background:'none',border:'none',cursor:'pointer',padding:0}}
+                    title="Protocol compliance rate — click to view trend"
+                    onClick={toggleProtocolTrend}
+                  >
+                    Protocol: {protocolTrend.totals.compliance_pct >= 0 ? `${protocolTrend.totals.compliance_pct.toFixed(1)}%` : '—'} compliant
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Expiring soon warning */}
+          {expiringStudies.length > 0 && (
+            <div className="aegis-warning-banner" style={{ marginBottom: 10 }}>
+              <span>
+                {expiringStudies.length} approved {expiringStudies.length === 1 ? 'study' : 'studies'} expiring within 7 days
+              </span>
+              <button type="button"
+                onClick={() => setShowExpiringPanel(v => !v)}
+                style={{
+                  fontSize: 12, padding: '2px 10px', background: '#ea580c',
+                  color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600,
+                  marginLeft: 'auto'
+                }}>
+                {showExpiringPanel ? 'Hide' : 'View'}
+              </button>
+            </div>
+          )}
+          {showExpiringPanel && expiringStudies.length > 0 && (
+            <div style={{
+              background: 'var(--aegis-surface)', border: '1px solid #fed7aa', borderRadius: 6,
+              padding: '10px 14px', marginBottom: 10, overflowX: 'auto'
+            }}>
+              <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                <thead>
+                  <tr>
+                    <th>Study UID</th>
+                    <th>Modality</th>
+                    <th>Body part</th>
+                    <th>Expires at</th>
+                    <th>Days left</th>
+                    <th>Retention</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expiringStudies.map(s => (
+                    <tr key={s.id}
+                      style={{cursor: 'pointer'}}
+                      onClick={() => setSelectedStudyId(s.id)}
+                      title="Click to view study details"
+                    >
+                      <td style={{fontFamily: 'monospace', fontSize: '0.75rem'}}>{s.study_instance_uid}</td>
+                      <td>{s.modality || <span className="aegis-muted">—</span>}</td>
+                      <td>{s.body_part || <span className="aegis-muted">—</span>}</td>
+                      <td>{new Date(s.expires_at).toLocaleDateString()}</td>
+                      <td style={{color: s.days_until_expiry <= 1 ? '#ea580c' : s.days_until_expiry <= 3 ? '#b45309' : '#374151', fontWeight: 600}}>
+                        {s.days_until_expiry === 0 ? 'Today' : `${s.days_until_expiry}d`}
+                      </td>
+                      <td>{s.retention_days}d policy</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
           {/* Breakdown stats toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadBreakdown} style={{fontSize:'0.8rem'}}>
               {showBreakdown ? '▲ Hide breakdown' : '▼ Modality / body part breakdown'}
             </button>
-            {showBreakdown && breakdown && (
+            {showBreakdown && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
-                <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
-                  <thead><tr><th>Modality</th><th>Body part</th><th>Count</th></tr></thead>
-                  <tbody>
-                    {breakdown.length === 0
-                      ? <tr><td colSpan={3} className="td-muted">No studies yet.</td></tr>
-                      : breakdown.map((r, i) => (
-                        <tr key={i}>
-                          <td>{r.modality || <span className="td-muted">—</span>}</td>
-                          <td>{r.body_part || <span className="td-muted">—</span>}</td>
-                          <td>{r.count}</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
+                {breakdownError && <div className="aegis-error" style={{fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load breakdown: {breakdownError}</div>}
+                {!breakdown && !breakdownError && <div className="aegis-muted" style={{fontSize:'0.8rem'}}>Loading…</div>}
+                {breakdown && (
+                  <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'600px'}}>
+                    <thead><tr><th>Modality</th><th>Body part</th><th>Count</th></tr></thead>
+                    <tbody>
+                      {breakdown.length === 0
+                        ? <tr><td colSpan={3} className="aegis-muted">No studies yet.</td></tr>
+                        : breakdown.map((r, i) => (
+                          <tr key={i}>
+                            <td>{r.modality || <span className="aegis-muted">—</span>}</td>
+                            <td>{r.body_part || <span className="aegis-muted">—</span>}</td>
+                            <td>{r.count}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
           </div>
 
           {/* Timeline (daily ingestion) toggle */}
           <div style={{marginBottom:'8px'}}>
-            <button type="button" className="btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadTimeline} style={{fontSize:'0.8rem'}}>
               {showTimeline ? '▲ Hide timeline' : '▼ Daily ingestion (last 30 days)'}
             </button>
-            {showTimeline && timeline && (
+            {showTimeline && (
               <div style={{marginTop:'6px',overflowX:'auto'}}>
-                {timeline.length === 0
-                  ? <span className="td-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                {timelineError && <div className="aegis-error" style={{fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load timeline: {timelineError}</div>}
+                {!timeline && !timelineError && <div className="aegis-muted" style={{fontSize:'0.8rem'}}>Loading…</div>}
+                {timeline && (timeline.length === 0
+                  ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
                   : (
-                    <table className="audit-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
+                    <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'420px'}}>
                       <thead><tr><th>Date</th><th>Received</th><th>Approved</th></tr></thead>
                       <tbody>
                         {timeline.map(d => (
@@ -7484,10 +11750,199 @@ export function App() {
                         ))}
                       </tbody>
                     </table>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* Stage processing times toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadProcessingTimes} style={{fontSize:'0.8rem'}}>
+              {showProcessingTimes ? '▲ Hide stage processing times' : '▼ Stage processing times (last 30 days)'}
+            </button>
+            {showProcessingTimes && (
+              <div style={{marginTop:'6px',overflowX:'auto'}}>
+                {processingTimesError && <div className="aegis-error" style={{fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load processing times: {processingTimesError}</div>}
+                {!processingTimes && !processingTimesError && <div className="aegis-muted" style={{fontSize:'0.8rem'}}>Loading…</div>}
+                {processingTimes && (processingTimes.length === 0
+                  ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No pipeline events in the last 30 days.</span>
+                  : (
+                    <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
+                      <thead>
+                        <tr>
+                          <th>Stage</th>
+                          <th>Count</th>
+                          <th>Avg</th>
+                          <th>P95</th>
+                          <th>Min</th>
+                          <th>Max</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {processingTimes.map(r => (
+                          <tr key={r.stage}>
+                            <td>{stageLabel[r.stage] ?? r.stage}</td>
+                            <td>{r.count}</td>
+                            <td>{fmtDuration(r.avg_seconds)}</td>
+                            <td>{fmtDuration(r.p95_seconds)}</td>
+                            <td>{fmtDuration(r.min_seconds)}</td>
+                            <td>{fmtDuration(r.max_seconds)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pipeline funnel toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadFunnel} style={{fontSize:'0.8rem'}}>
+              {showFunnel ? '▲ Hide pipeline funnel' : '▼ Pipeline funnel (last 30 days)'}
+            </button>
+            {showFunnel && (
+              <div style={{marginTop:'6px',overflowX:'auto'}}>
+                {funnelError && <div className="aegis-error" style={{fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load funnel: {funnelError}</div>}
+                {!funnel && !funnelError && <div className="aegis-muted" style={{fontSize:'0.8rem'}}>Loading…</div>}
+                {funnel && (funnel.length === 0
+                  ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No studies in the last 30 days.</span>
+                  : (
+                    <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'640px'}}>
+                      <thead>
+                        <tr>
+                          <th>Stage</th>
+                          <th style={{textAlign:'right'}}>Studies</th>
+                          <th style={{textAlign:'right'}}>% of received</th>
+                          <th style={{textAlign:'right'}}>Conversion rate</th>
+                          <th style={{minWidth:'120px'}}>Bar</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {funnel.map((s, i) => {
+                          const stageLabelMap: Record<string, string> = {
+                            received: 'Received',
+                            classified: 'Classified',
+                            phi_scanned: 'PHI Scanned',
+                            defaced: 'Defaced',
+                            qc_passed: 'QC Passed',
+                            bids_converted: 'BIDS Converted',
+                            approved: 'Approved',
+                            exported: 'Exported',
+                          }
+                          const pct = s.pct_of_total
+                          const barColor = pct >= 80 ? '#0d9488' : pct >= 50 ? '#b45309' : '#ea580c'
+                          return (
+                            <tr key={s.stage}>
+                              <td>{stageLabelMap[s.stage] ?? s.stage}</td>
+                              <td style={{textAlign:'right'}}>{s.count.toLocaleString()}</td>
+                              <td style={{textAlign:'right',color: pct >= 80 ? '#0f766e' : pct >= 50 ? '#b45309' : '#9a3412'}}>
+                                {s.pct_of_total.toFixed(1)}%
+                              </td>
+                              <td style={{textAlign:'right',color:'#64748b'}}>
+                                {i === 0 ? '—' : `${s.pct_of_prev.toFixed(1)}%`}
+                              </td>
+                              <td>
+                                <div style={{background:'#e2e8f0',borderRadius:'3px',height:'8px',width:'100%'}}>
+                                  <div style={{background:barColor,borderRadius:'3px',height:'8px',width:`${Math.min(pct,100)}%`}} />
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* Cohort report toggle */}
+          <div style={{marginBottom:'8px'}}>
+            <button type="button" className="aegis-btn-secondary" onClick={loadCohortReport} style={{fontSize:'0.8rem'}} disabled={cohortLoading}>
+              {cohortLoading ? 'Loading…' : showCohortReport ? '▲ Hide cohort report' : '▼ Cohort report (per-subject summary)'}
+            </button>
+            {!globalProjectId && (
+              <span style={{marginLeft:'8px',fontSize:'0.78rem',color:'#9ca3af'}}>Select a project to load.</span>
+            )}
+            {showCohortReport && cohortError && (
+              <div className="aegis-error" style={{marginTop:'6px',fontSize:'0.8rem',padding:'4px 0'}}>Couldn't load cohort report: {cohortError}</div>
+            )}
+            {showCohortReport && !cohortReport && !cohortError && (
+              <div className="aegis-muted" style={{marginTop:'6px',fontSize:'0.8rem'}}>Loading…</div>
+            )}
+            {showCohortReport && cohortReport && (
+              <div style={{marginTop:'8px'}}>
+                <div style={{display:'flex',gap:'24px',marginBottom:'8px',flexWrap:'wrap'}}>
+                  <span style={{fontSize:'0.8rem'}}><strong>{cohortReport.total_subjects}</strong> subjects</span>
+                  <span style={{fontSize:'0.8rem'}}><strong>{cohortReport.subjects_multi_study}</strong> multi-study</span>
+                  <span style={{fontSize:'0.8rem'}}><strong>{cohortReport.total_studies_with_subject}</strong> total linked studies</span>
+                  {Object.keys(cohortReport.modality_coverage).length > 0 && (
+                    <span style={{fontSize:'0.8rem'}}>
+                      Coverage: {Object.entries(cohortReport.modality_coverage).map(([m, n]) => `${m} (${n})`).join(', ')}
+                    </span>
+                  )}
+                  <span style={{fontSize:'0.75rem',color:'#9ca3af'}}>Generated {new Date(cohortReport.generated_at).toLocaleTimeString()}</span>
+                </div>
+                {cohortReport.subjects.length === 0
+                  ? <span className="aegis-muted" style={{fontSize:'0.8rem'}}>No subjects with linked studies in this project.</span>
+                  : (
+                    <div style={{overflowX:'auto'}}>
+                      <table className="aegis-table" style={{fontSize:'0.8rem',maxWidth:'900px'}}>
+                        <thead>
+                          <tr>
+                            <th>Subject ID</th>
+                            <th style={{textAlign:'right'}}>Studies</th>
+                            <th style={{textAlign:'right'}}>Approved</th>
+                            <th style={{textAlign:'right'}}>Pending</th>
+                            <th>Modalities</th>
+                            <th>All approved</th>
+                            <th>Defaced</th>
+                            <th>Exported</th>
+                            <th>Latest study</th>
+                            <th>ROI Export</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cohortReport.subjects.map(s => (
+                            <tr key={s.subject_id}>
+                              <td><code style={{fontSize:'0.8rem'}}>{s.subject_id}</code></td>
+                              <td style={{textAlign:'right'}}>{s.study_count}</td>
+                              <td style={{textAlign:'right',color:'#0f766e'}}>{s.approved_count}</td>
+                              <td style={{textAlign:'right',color: s.pending_count > 0 ? '#b45309' : '#6b7280'}}>{s.pending_count}</td>
+                              <td>{(s.modalities ?? []).join(', ') || <span className="aegis-muted">—</span>}</td>
+                              <td style={{textAlign:'center',color: s.all_approved ? '#0f766e' : '#9a3412'}}>{s.all_approved ? '✓' : '✗'}</td>
+                              <td style={{textAlign:'center',color: s.has_defaced ? '#0f766e' : '#9ca3af'}}>{s.has_defaced ? '✓' : '—'}</td>
+                              <td style={{textAlign:'center',color: s.has_exported ? '#0f766e' : '#9ca3af'}}>{s.has_exported ? '✓' : '—'}</td>
+                              <td style={{color:'#6b7280'}}>{new Date(s.latest_study_at).toLocaleDateString()}</td>
+                              <td>
+                                <a
+                                  href={`/api/subjects/${encodeURIComponent(s.subject_id)}/roi-export${globalProjectId ? `?project_id=${globalProjectId}` : ''}`}
+                                  download
+                                  style={{color:'#0d9488',fontSize:'0.75rem',textDecoration:'none'}}
+                                  title="Download all ROI measurements for this subject as CSV"
+                                >
+                                  ↓ ROI CSV
+                                </a>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
               </div>
             )}
           </div>
+
+          {/* Upload Study button */}
+          {isAdmin && (
+            <div style={{ marginBottom: 10 }}>
+              <button type="button" className="aegis-btn-secondary" onClick={() => setShowUploadModal(true)}>
+                ↑ Upload Study
+              </button>
+            </div>
+          )}
 
           {/* Synthetic MRI generator */}
           <SynthPanel isAdmin={isAdmin} onStudyGenerated={() => setRefreshTick(t => t + 1)} />
@@ -7539,9 +11994,19 @@ export function App() {
               <option value="internal">Internal</option>
             </select>
             <select className="filter-select" title="Filter by project" value={filterProject} onChange={e => setProjectF(e.target.value)}>
-              <option value="">All projects</option>
+              {canUseAllProjectsMode ? (
+                <option value="">All projects</option>
+              ) : !filterProject ? (
+                <option value="">Select project…</option>
+              ) : null}
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            {allInstitutions.length > 0 && (
+              <select className="filter-select" title="Filter by institution" value={filterInstitution} onChange={e => setInstitutionF(e.target.value)}>
+                <option value="">All institutions</option>
+                {allInstitutions.filter(i => i.enabled).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+              </select>
+            )}
             <input
               className="filter-input filter-input--subject"
               type="search"
@@ -7564,6 +12029,29 @@ export function App() {
               />
               {' '}Priority only
             </label>
+            {/* Date preset quick buttons */}
+            {[
+              { label: 'Today', days: 0 },
+              { label: '7d', days: 7 },
+              { label: '30d', days: 30 },
+            ].map(preset => (
+              <button
+                key={preset.label}
+                type="button"
+                className="aegis-btn-secondary"
+                style={{fontSize: '0.75rem', padding: '2px 7px'}}
+                title={preset.days === 0 ? 'Studies received today' : `Studies received in the last ${preset.days} days`}
+                onClick={() => {
+                  const to = new Date(); to.setHours(23, 59, 59, 999)
+                  const from = new Date(); from.setHours(0, 0, 0, 0)
+                  if (preset.days > 0) from.setDate(from.getDate() - (preset.days - 1))
+                  setDateFromF(from.toISOString().slice(0, 10))
+                  setDateToF(to.toISOString().slice(0, 10))
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
             <input
               type="date"
               className="filter-date"
@@ -7580,7 +12068,76 @@ export function App() {
               onChange={e => setDateToF(e.target.value)}
             />
             {hasFilters && (
-              <button type="button" className="btn btn--secondary" onClick={clearFilters}>Clear</button>
+              <button type="button" className="aegis-btn-secondary" onClick={clearFilters}>Clear</button>
+            )}
+            {/* Save current filter as a named preset */}
+            {hasFilters && !showSaveFilterPrompt && (
+              <button type="button" className="aegis-btn-secondary" onClick={() => { setSaveFilterName(''); setShowSaveFilterPrompt(true) }} title="Save current filters as a preset">
+                Save filter
+              </button>
+            )}
+            {showSaveFilterPrompt && (
+              <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="filter-input"
+                  placeholder="Preset name…"
+                  value={saveFilterName}
+                  onChange={e => setSaveFilterName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveCurrentFilter(); if (e.key === 'Escape') setShowSaveFilterPrompt(false) }}
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
+                  autoFocus
+                  style={{ width: 130 }}
+                />
+                <button type="button" className="aegis-btn-secondary" onClick={saveCurrentFilter} disabled={!saveFilterName.trim()}>Save</button>
+                <button type="button" className="aegis-btn-secondary" onClick={() => setShowSaveFilterPrompt(false)} aria-label="Cancel saving filter">✕</button>
+              </span>
+            )}
+            {/* Load saved filter presets dropdown */}
+            {savedFilters.length > 0 && (
+              <div ref={savedFiltersMenuRef} style={{ position: 'relative', display: 'inline-block' }}>
+                <button
+                  type="button"
+                  className="aegis-btn-secondary"
+                  onClick={() => setSavedFiltersMenuOpen(v => !v)}
+                  title="Load a saved filter preset"
+                >
+                  Saved ({savedFilters.length}) ▾
+                </button>
+                {savedFiltersMenuOpen && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 200,
+                    background: 'var(--bg-card, #fff)', border: '1px solid var(--border, #e2e8f0)',
+                    borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                    minWidth: 200, padding: '4px 0',
+                  }}>
+                    {savedFilters.map(f => (
+                      <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px' }}>
+                        <button
+                          type="button"
+                          style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: 4, fontSize: 13, color: 'var(--text-primary, #1e293b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover, #f1f5f9)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                          onClick={() => loadSavedFilter(f)}
+                        >
+                          {f.name}
+                        </button>
+                        <button
+                          type="button"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4, fontSize: 12, color: '#ea580c', flexShrink: 0 }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#ffedd5')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                          onClick={() => deleteSavedFilter(f.name)}
+                          title="Delete this preset"
+                          aria-label={`Delete preset ${f.name}`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             {state === 'loaded' && (
               <span className="filter-count">
@@ -7591,15 +12148,44 @@ export function App() {
                     : `${studiesTotal} total`}
               </span>
             )}
-            {state === 'loaded' && studiesTotal > 0 && (
-              <a href={csvUrl} download="studies.csv" className="btn btn--secondary btn--csv-export">Export CSV</a>
+            {!sseConnected && (
+              <span className="aegis-muted" style={{ fontSize: '0.75rem' }}>live updates paused — retrying</span>
             )}
+            {state === 'loaded' && studiesTotal > 0 && (
+              <a href={csvUrl} download="studies.csv" className="aegis-btn-secondary">Export CSV</a>
+            )}
+            <button
+              type="button"
+              className={`btn btn--secondary btn--toggle-desc${showDescCol ? ' btn--toggle-desc--on' : ''}`}
+              onClick={() => {
+                const next = !showDescCol
+                setShowDescCol(next)
+                localStorage.setItem(STUDIES_SHOW_DESC_KEY, String(next))
+              }}
+              title={showDescCol ? 'Hide description column' : 'Show study description column'}
+            >
+              {showDescCol ? 'Hide Desc' : 'Show Desc'}
+            </button>
+            <button
+              type="button"
+              className={`btn btn--secondary btn--toggle-group${groupByPatient ? ' btn--toggle-group--on' : ''}`}
+              onClick={() => {
+                const next = !groupByPatient
+                setGroupByPatient(next)
+                localStorage.setItem(STUDIES_GROUP_BY_PATIENT_KEY, String(next))
+              }}
+              title={groupByPatient
+                ? 'Show studies as a flat list'
+                : 'Group studies by subject ID (overrides column sort while on)'}
+            >
+              {groupByPatient ? 'Ungroup' : 'Group by Patient'}
+            </button>
           </div>
 
-          {state === 'loading' && <div className="state-loading">Loading studies…</div>}
-          {state === 'error'   && <div className="state-error">{error}</div>}
+          {state === 'loading' && <div className="aegis-muted">Loading studies…</div>}
+          {state === 'error'   && <div className="aegis-error">{error}</div>}
           {state === 'loaded' && studiesTotal === 0 && (
-            <div className="state-empty">
+            <div className="aegis-muted">
               {hasFilters
                 ? 'No studies match your filters.'
                 : 'No studies yet. Upload DICOM files via the Upload Portal.'}
@@ -7609,12 +12195,12 @@ export function App() {
           {state === 'loaded' && bulkSelected.size > 0 && isAdmin && (
             <div className="bulk-action-bar">
               <span className="bulk-action-bar__count">{bulkSelected.size} selected</span>
-              <button type="button" className="btn btn--approve" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
-              <button type="button" className="btn btn--reject" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
+              <button type="button" className="aegis-btn-primary" disabled={bulkWorking} onClick={() => doBulkAction('approve')}>Approve selected</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking} onClick={() => doBulkAction('reject')}>Reject selected</button>
               <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
               <input
                 type="text"
-                className="audit-actor-input"
+                className="aegis-filter"
                 placeholder="Label name…"
                 value={bulkLabelInput}
                 onChange={e => setBulkLabelInput(e.target.value)}
@@ -7622,11 +12208,11 @@ export function App() {
                 style={{width:'130px'}}
                 disabled={bulkWorking}
               />
-              <button type="button" className="btn btn--action" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
-              <button type="button" className="btn btn--secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('add')} title="Apply label to selected studies">+ Label</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking || !bulkLabelInput.trim()} onClick={() => doBulkLabel('remove')} title="Remove label from selected studies">− Label</button>
               <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
               <select
-                className="audit-actor-input"
+                className="aegis-filter"
                 value={bulkPipelineStep}
                 onChange={e => setBulkPipelineStep(e.target.value)}
                 disabled={bulkWorking}
@@ -7640,8 +12226,31 @@ export function App() {
                 <option value="bids">BIDS Convert</option>
                 <option value="export">Export</option>
               </select>
-              <button type="button" className="btn btn--action" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
-              <button type="button" className="btn btn--secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking} onClick={doBulkPipelineTrigger} title="Trigger pipeline step for selected studies">Trigger Step →</button>
+              <span className="bulk-action-bar__sep" style={{margin:'0 4px',color:'var(--text-muted)'}}>|</span>
+              <input
+                type="email"
+                className="aegis-filter"
+                placeholder="Share to email…"
+                value={bulkShareEmail}
+                onChange={e => setBulkShareEmail(e.target.value)}
+                style={{width: '160px'}}
+                disabled={bulkWorking}
+              />
+              <input
+                type="number"
+                className="aegis-filter"
+                placeholder="Hours"
+                value={bulkShareExpiry}
+                onChange={e => setBulkShareExpiry(e.target.value)}
+                style={{width: '64px'}}
+                min={1}
+                max={8760}
+                disabled={bulkWorking}
+                title="Expiry in hours (default 168 = 7 days)"
+              />
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking || !bulkShareEmail.trim()} onClick={doBulkShare} title="Create export shares for all selected approved studies">Share selected</button>
+              <button type="button" className="aegis-btn-secondary" disabled={bulkWorking} onClick={() => setBulkSelected(new Set())}>Clear selection</button>
             </div>
           )}
 
@@ -7660,43 +12269,164 @@ export function App() {
                       />
                     </th>
                     <th className="th-flag" title="Priority flag">★</th>
-                    <th>Study UID</th>
-                    <th>Modality</th>
-                    <th>Body Part</th>
-                    <th>Source</th>
-                    <th>Status</th>
+                    <th className="th-sortable" onClick={() => setSortF('subject_id')} title="Sort by subject ID (falls back to study UID when missing)">Subject{sortIcon('subject_id')}</th>
+                    {showDescCol && <th>Description</th>}
+                    <th className="th-sortable" onClick={() => setSortF('modality')} title="Sort by modality">Modality{sortIcon('modality')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('body_part')} title="Sort by body part">Body Part{sortIcon('body_part')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('study_date')} title="Sort by study date">Study Date{sortIcon('study_date')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('source')} title="Sort by source">Source{sortIcon('source')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('status')} title="Sort by status">Status{sortIcon('status')}</th>
                     <th>PHI Scan</th>
                     <th>QC</th>
                     <th>BIDS</th>
                     <th>Class.</th>
                     <th>Protocol</th>
                     <th>Export</th>
-                    <th className="align-right">Files</th>
-                    <th>Received</th>
+                    <th>Analytics</th>
+                    <th className="align-right th-sortable" onClick={() => setSortF('instance_count')} title="Sort by file count">Files{sortIcon('instance_count')}</th>
+                    <th className="th-sortable" onClick={() => setSortF('created_at')} title="Sort by received date">Received{sortIcon('created_at')}</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {studies.map(study => (
-                    <StudyRow
-                      key={study.id}
-                      study={study}
-                      onAction={() => setRefreshTick(t => t + 1)}
-                      onSelect={() => selectStudy(study.id)}
-                      onAskAgent={() => {
-                        setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
-                        setTab('agent')
-                      }}
-                      isAdmin={isAdmin}
-                      checked={bulkSelected.has(study.id)}
-                      onToggle={() => setBulkSelected(prev => {
-                        const next = new Set(prev)
-                        if (next.has(study.id)) next.delete(study.id)
-                        else next.add(study.id)
-                        return next
-                      })}
-                    />
-                  ))}
+                  {(() => {
+                    // Total column count for group-header colSpan. Mirrors the <thead> above:
+                    // check, flag, Study UID, [Description?], Modality, Body Part, Study Date,
+                    // Source, Status, PHI Scan, QC, BIDS, Class., Protocol, Export, Analytics,
+                    // Files, Received, Actions = 18 base columns (+1 when Description is visible).
+                    const colSpan = 18 + (showDescCol ? 1 : 0)
+
+                    // When group mode is OFF, render the server-sorted list as a flat table.
+                    if (!groupByPatient) {
+                      return studies.map(study => (
+                        <StudyRow
+                          key={study.id}
+                          study={study}
+                          onAction={() => setRefreshTick(t => t + 1)}
+                          onSelect={() => selectStudy(study.id)}
+                          onAskAgent={() => {
+                            setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
+                            setTab('agent')
+                          }}
+                          isAdmin={isAdmin}
+                          projectRole={projectRoleById[study.project_id] ?? null}
+                          checked={bulkSelected.has(study.id)}
+                          onToggle={() => setBulkSelected(prev => {
+                            const next = new Set(prev)
+                            if (next.has(study.id)) next.delete(study.id)
+                            else next.add(study.id)
+                            return next
+                          })}
+                          showDescCol={showDescCol}
+                        />
+                      ))
+                    }
+
+                    // Group mode: client-side reorder by (subject_id ASC nulls last,
+                    // study_date DESC) regardless of the current column sort. We keep the
+                    // sort indicator on whichever column the user clicked — only the visible
+                    // order changes.
+                    const norm = (v: string | null | undefined) =>
+                      v && v.trim() !== '' ? v : null
+                    const sortedForGroups = [...studies].sort((a, b) => {
+                      const pa = norm(a.subject_id)
+                      const pb = norm(b.subject_id)
+                      if (pa !== pb) {
+                        if (pa === null) return 1   // nulls last
+                        if (pb === null) return -1
+                        if (pa < pb) return -1
+                        if (pa > pb) return 1
+                      }
+                      // Same patient (or both null): latest study_date first.
+                      const da = a.study_date || ''
+                      const db = b.study_date || ''
+                      if (da === db) return 0
+                      return da < db ? 1 : -1
+                    })
+
+                    // Pre-compute per-group stats (study count + latest study_date) keyed by
+                    // subject ID. Use a sentinel string for the NULL group so we can also
+                    // store it in a normal Map.
+                    const NULL_KEY = ' __no_subject_id__'
+                    type GroupStat = { count: number; latestDate: string }
+                    const groupStats = new Map<string, GroupStat>()
+                    for (const s of sortedForGroups) {
+                      const key = norm(s.subject_id) ?? NULL_KEY
+                      const existing = groupStats.get(key)
+                      const sd = s.study_date || ''
+                      if (existing) {
+                        existing.count += 1
+                        if (sd > existing.latestDate) existing.latestDate = sd
+                      } else {
+                        groupStats.set(key, { count: 1, latestDate: sd })
+                      }
+                    }
+
+                    // Walk the sorted list, emitting a sticky group header row before each
+                    // new patient bucket.
+                    const rows: React.ReactNode[] = []
+                    let prevKey: string | null = null
+                    for (const study of sortedForGroups) {
+                      const key = norm(study.subject_id) ?? NULL_KEY
+                      if (key !== prevKey) {
+                        const stat = groupStats.get(key)!
+                        const isNullGroup = key === NULL_KEY
+                        const label = isNullGroup
+                          ? '(no subject ID)'
+                          : (norm(study.subject_id) as string)
+                        const studyWord = stat.count === 1 ? 'study' : 'studies'
+                        const latestSuffix = !isNullGroup && stat.latestDate
+                          ? `, latest ${stat.latestDate}`
+                          : ''
+                        rows.push(
+                          <tr key={`group-${key}`} className="study-group-header">
+                            <td
+                              colSpan={colSpan}
+                              style={{
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 1,
+                                background: '#1f2937',
+                                color: '#a5b4fc',
+                                fontWeight: 600,
+                                fontSize: '12px',
+                                padding: '6px 12px',
+                                borderTop: '1px solid #374151',
+                                borderBottom: '1px solid #374151',
+                                letterSpacing: '0.02em',
+                              }}
+                            >
+                              {label} — {stat.count} {studyWord}{latestSuffix}
+                            </td>
+                          </tr>
+                        )
+                        prevKey = key
+                      }
+                      rows.push(
+                        <StudyRow
+                          key={study.id}
+                          study={study}
+                          onAction={() => setRefreshTick(t => t + 1)}
+                          onSelect={() => selectStudy(study.id)}
+                          onAskAgent={() => {
+                            setAgentPrefill({ studyId: study.id, studyUid: study.study_instance_uid })
+                            setTab('agent')
+                          }}
+                          isAdmin={isAdmin}
+                          projectRole={projectRoleById[study.project_id] ?? null}
+                          checked={bulkSelected.has(study.id)}
+                          onToggle={() => setBulkSelected(prev => {
+                            const next = new Set(prev)
+                            if (next.has(study.id)) next.delete(study.id)
+                            else next.add(study.id)
+                            return next
+                          })}
+                          showDescCol={showDescCol}
+                        />
+                      )
+                    }
+                    return rows
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -7707,7 +12437,7 @@ export function App() {
             <div className="pagination">
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="aegis-btn-secondary"
                 disabled={page === 0}
                 onClick={() => setPage(p => p - 1)}
               >
@@ -7718,12 +12448,455 @@ export function App() {
               </span>
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="aegis-btn-secondary"
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage(p => p + 1)}
               >
                 Next →
               </button>
+              {totalPages > 2 && (
+                <span className="pagination-jump">
+                  <label htmlFor="page-jump-input" className="pagination-jump__label">Page</label>
+                  <input
+                    id="page-jump-input"
+                    type="number"
+                    className="pagination-jump__input"
+                    min={1}
+                    max={totalPages}
+                    defaultValue={page + 1}
+                    key={page}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const v = parseInt((e.target as HTMLInputElement).value, 10)
+                        if (!isNaN(v)) setPage(Math.max(0, Math.min(totalPages - 1, v - 1)))
+                      }
+                    }}
+                    onBlur={e => {
+                      const v = parseInt(e.target.value, 10)
+                      if (!isNaN(v)) setPage(Math.max(0, Math.min(totalPages - 1, v - 1)))
+                    }}
+                    title={`Jump to page (1–${totalPages})`}
+                  />
+                  <span className="pagination-jump__of">of {totalPages}</span>
+                </span>
+              )}
+            </div>
+          )}
+          {/* Protocol Compliance Trend panel (F2) */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleProtocolTrend}>
+                  {showProtocolTrend ? '▲ Hide protocol trend' : '▼ Protocol compliance trend (30d)'}
+                </button>
+                {showProtocolTrend && protocolTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showProtocolTrend && protocolTrend && !protocolTrendLoading && (
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
+                    <strong>Overall ({protocolTrend.period_days}d):</strong>{' '}
+                    {protocolTrend.totals.checked} checked ·{' '}
+                    <span style={{color: '#0d9488'}}>{protocolTrend.totals.compliant} compliant</span> ·{' '}
+                    <span style={{color: '#d97706'}}>{protocolTrend.totals.minor_deviations} minor</span> ·{' '}
+                    <span style={{color: '#ea580c'}}>{protocolTrend.totals.non_compliant} non-compliant</span>
+                    {protocolTrend.totals.compliance_pct >= 0 && (
+                      <strong style={{marginLeft: 8}}>{protocolTrend.totals.compliance_pct.toFixed(1)}% compliant</strong>
+                    )}
+                  </div>
+                  {protocolTrend.days.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No protocol checks recorded in this period.</p>
+                  ) : (
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Day</th>
+                          <th style={{textAlign:'right'}}>Checked</th>
+                          <th style={{textAlign:'right'}}>Compliant</th>
+                          <th style={{textAlign:'right'}}>Minor</th>
+                          <th style={{textAlign:'right'}}>Non-compliant</th>
+                          <th style={{textAlign:'right'}}>Compliance %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {protocolTrend.days.map(d => (
+                          <tr key={d.day}>
+                            <td style={{fontFamily:'monospace'}}>{d.day}</td>
+                            <td style={{textAlign:'right'}}>{d.checked}</td>
+                            <td style={{textAlign:'right', color:'#0d9488'}}>{d.compliant}</td>
+                            <td style={{textAlign:'right', color:'#d97706'}}>{d.minor_deviations}</td>
+                            <td style={{textAlign:'right', color:'#ea580c'}}>{d.non_compliant}</td>
+                            <td style={{textAlign:'right'}}>{d.compliance_pct >= 0 ? `${d.compliance_pct.toFixed(1)}%` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Stuck Studies panel (F10) */}
+          {isAdmin && stuckCount > 0 && (
+            <div style={{marginTop: 10, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={() => setShowStuckPanel(v => !v)}>
+                  {showStuckPanel ? '▲ Hide stuck studies' : `▼ Stuck studies (${stuckCount})`}
+                </button>
+                {showStuckPanel && (
+                  <span style={{fontSize: '0.75rem', color: '#9a3412'}}>
+                    Idle &gt; 60 min — click Re-run to re-evaluate routing
+                  </span>
+                )}
+              </div>
+              {showStuckPanel && stuckStudies.length > 0 && (
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid #fed7aa', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                    <thead>
+                      <tr>
+                        <th>Study UID</th>
+                        <th>Status</th>
+                        <th>Modality</th>
+                        <th>Last updated</th>
+                        <th style={{textAlign:'right'}}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stuckStudies.map(s => (
+                        <tr key={s.id}>
+                          <td style={{fontFamily:'monospace', fontSize:'0.72rem'}}>{s.study_instance_uid}</td>
+                          <td><span className={`badge badge--${s.status}`}>{s.status}</span></td>
+                          <td>{s.modality || <span className="aegis-muted">—</span>}</td>
+                          <td>{s.updated_at ? new Date(s.updated_at).toLocaleString() : <span className="aegis-muted">—</span>}</td>
+                          <td style={{textAlign:'right'}}>
+                            <button
+                              type="button"
+                              className="aegis-btn-secondary"
+                              style={{fontSize:'0.72rem', padding:'2px 8px'}}
+                              title="Re-evaluate routing rules for this study to restart the pipeline"
+                              onClick={async () => {
+                                await fetch(`/api/routing-rules/evaluate/${s.id}`, { method: 'POST' })
+                                setRefreshTick(t => t + 1)
+                                setTimeout(() => {
+                                  const params = new URLSearchParams({ minutes: '60' })
+                                  if (globalProjectId) params.set('project_id', globalProjectId)
+                                  fetch(`/api/studies/stuck?${params}`).then(r => r.ok ? r.json() : null).then(d => { if (d) { setStuckCount(d.total ?? 0); setStuckStudies(d.stuck ?? []) } })
+                                }, 1000)
+                              }}
+                            >
+                              Re-run
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PHI Scan Trend panel (F6) */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={togglePhiTrend}>
+                  {showPhiTrend ? '▲ Hide PHI scan trend' : '▼ PHI scan trend (30d)'}
+                </button>
+                {showPhiTrend && phiTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showPhiTrend && phiTrend && !phiTrendLoading && (
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
+                    <strong>Overall ({phiTrend.period_days}d):</strong>{' '}
+                    {phiTrend.totals.scanned} scanned ·{' '}
+                    <span style={{color: '#ea580c'}}>{phiTrend.totals.flagged} flagged</span>
+                    {phiTrend.totals.flag_rate_pct >= 0 && (
+                      <strong style={{marginLeft: 8}}>{phiTrend.totals.flag_rate_pct.toFixed(1)}% flag rate</strong>
+                    )}
+                  </div>
+                  {phiTrend.days.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No PHI scans recorded in this period.</p>
+                  ) : (
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Day</th>
+                          <th style={{textAlign:'right'}}>Scanned</th>
+                          <th style={{textAlign:'right'}}>Flagged</th>
+                          <th style={{textAlign:'right'}}>Flag rate %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {phiTrend.days.map(d => (
+                          <tr key={d.day}>
+                            <td style={{fontFamily:'monospace'}}>{d.day}</td>
+                            <td style={{textAlign:'right'}}>{d.scanned}</td>
+                            <td style={{textAlign:'right', color: d.flagged > 0 ? '#ea580c' : undefined}}>{d.flagged}</td>
+                            <td style={{textAlign:'right'}}>{d.flag_rate_pct >= 0 ? `${d.flag_rate_pct.toFixed(1)}%` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Modality trend panel (F3) */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleModalityTrend}>
+                  {showModalityTrend ? '▲ Hide modality trend' : '▼ Modality trend (30d)'}
+                </button>
+                {showModalityTrend && modalityTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showModalityTrend && modalityTrend && !modalityTrendLoading && (
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  {Object.keys(modalityTrend.totals).length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies in this period.</p>
+                  ) : (
+                    <>
+                      <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
+                        <strong>Totals ({modalityTrend.period_days}d):</strong>{' '}
+                        {Object.entries(modalityTrend.totals).map(([mod, cnt]) => (
+                          <span key={mod} style={{marginRight: 12}}>{mod}: <strong>{cnt}</strong></span>
+                        ))}
+                      </div>
+                      {modalityTrend.days.length > 0 && (
+                        <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                          <thead>
+                            <tr>
+                              <th>Day</th>
+                              {Object.keys(modalityTrend.totals).map(mod => (
+                                <th key={mod} style={{textAlign:'right'}}>{mod}</th>
+                              ))}
+                              <th style={{textAlign:'right'}}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {modalityTrend.days.map(d => (
+                              <tr key={d.day}>
+                                <td style={{fontFamily:'monospace'}}>{d.day}</td>
+                                {Object.keys(modalityTrend.totals).map(mod => (
+                                  <td key={mod} style={{textAlign:'right'}}>{d.counts[mod] ?? 0}</td>
+                                ))}
+                                <td style={{textAlign:'right'}}><strong>{d.total}</strong></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Label usage panel (F4) */}
+          {isAdmin && globalProjectId && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleLabelUsage}>
+                  {showLabelUsage ? '▲ Hide label usage' : '▼ Label usage'}
+                </button>
+                {showLabelUsage && labelUsageLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showLabelUsage && labelUsage && !labelUsageLoading && (
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  {labelUsage.labels.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No labels applied to studies in this project.</p>
+                  ) : (
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Label</th>
+                          <th style={{textAlign:'right'}}>Applications</th>
+                          <th style={{textAlign:'right'}}>Unique Studies</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {labelUsage.labels.map(row => (
+                          <tr key={row.label}>
+                            <td><code>{row.label}</code></td>
+                            <td style={{textAlign:'right'}}>{row.count}</td>
+                            <td style={{textAlign:'right'}}>{row.study_count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Source trend panel (F6) */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleSourceTrend}>
+                  {showSourceTrend ? '▲ Hide source trend' : '▼ Source trend (30d)'}
+                </button>
+                {showSourceTrend && sourceTrendLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showSourceTrend && sourceTrend && !sourceTrendLoading && (
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  <div style={{marginBottom: 8, fontSize: '0.82rem', color: '#374151'}}>
+                    <strong>Overall ({sourceTrend.period_days}d):</strong>{' '}
+                    External: <strong>{sourceTrend.totals.external}</strong> ·{' '}
+                    Internal: <strong>{sourceTrend.totals.internal}</strong> ·{' '}
+                    Total: <strong>{sourceTrend.totals.total}</strong>
+                  </div>
+                  {sourceTrend.days.filter(d => d.total > 0).length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies ingested in this period.</p>
+                  ) : (
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Day</th>
+                          <th style={{textAlign:'right'}}>External</th>
+                          <th style={{textAlign:'right'}}>Internal</th>
+                          <th style={{textAlign:'right'}}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sourceTrend.days.filter(d => d.total > 0).map(d => (
+                          <tr key={d.day}>
+                            <td style={{fontFamily:'monospace'}}>{d.day}</td>
+                            <td style={{textAlign:'right'}}>{d.external}</td>
+                            <td style={{textAlign:'right'}}>{d.internal}</td>
+                            <td style={{textAlign:'right'}}><strong>{d.total}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Institution breakdown panel (F8) — requires a project to be selected */}
+          {isAdmin && globalProjectId && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleInstitBreakdown}>
+                  {showInstitBreakdown ? '▲ Hide institution breakdown' : '▼ Institution breakdown'}
+                </button>
+                {showInstitBreakdown && institBreakdownLoading && <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Loading…</span>}
+              </div>
+              {showInstitBreakdown && institBreakdown && !institBreakdownLoading && (
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  {institBreakdown.rows.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No studies in this project yet.</p>
+                  ) : (
+                    <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                      <thead>
+                        <tr>
+                          <th>Institution</th>
+                          <th style={{textAlign:'right'}}>Studies</th>
+                          <th style={{textAlign:'right'}}>Approved</th>
+                          <th style={{textAlign:'right'}}>Rejected</th>
+                          <th style={{textAlign:'right'}}>Pending</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {institBreakdown.rows.map((row, i) => (
+                          <tr key={row.institution_id ?? `unknown-${i}`}>
+                            <td>{row.institution_name ?? <em style={{color:'#9ca3af'}}>Unknown</em>}</td>
+                            <td style={{textAlign:'right'}}>{row.study_count}</td>
+                            <td style={{textAlign:'right', color: row.approved > 0 ? '#0d9488' : undefined}}>{row.approved}</td>
+                            <td style={{textAlign:'right', color: row.rejected > 0 ? '#ea580c' : undefined}}>{row.rejected}</td>
+                            <td style={{textAlign:'right'}}>{row.pending}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Deleted Studies (Trash) panel */}
+          {isAdmin && (
+            <div style={{marginTop: 18, borderTop: '1px solid #e5e7eb', paddingTop: 10}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6}}>
+                <button type="button" className="aegis-btn-secondary" style={{fontSize: '0.8rem'}} onClick={toggleTrashPanel}>
+                  {showTrashPanel ? '▲ Hide deleted studies' : `▼ Deleted studies (trash)`}
+                </button>
+                {showTrashPanel && trashTotal > 0 && (
+                  <span style={{fontSize: '0.75rem', color: '#9a3412'}}>
+                    {trashTotal} soft-deleted {trashTotal === 1 ? 'study' : 'studies'}
+                  </span>
+                )}
+              </div>
+              {showTrashPanel && (
+                <div style={{background: 'var(--aegis-surface)', border: '1px solid var(--aegis-border)', borderRadius: 6, padding: '10px 14px', overflowX: 'auto'}}>
+                  {trashLoading ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>Loading…</p>
+                  ) : trashStudies.length === 0 ? (
+                    <p style={{fontSize: '0.8rem', color: '#6b7280'}}>No soft-deleted studies.</p>
+                  ) : (
+                    <>
+                      <table className="aegis-table" style={{fontSize: '0.8rem', width: '100%'}}>
+                        <thead>
+                          <tr>
+                            <th>Study UID</th>
+                            <th>Status at deletion</th>
+                            <th>Modality</th>
+                            <th>Body part</th>
+                            <th>Deleted at</th>
+                            <th style={{textAlign: 'right'}}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {trashStudies.map(s => (
+                            <tr key={s.id}>
+                              <td style={{fontFamily: 'monospace', fontSize: '0.72rem'}}>{s.study_instance_uid}</td>
+                              <td>{s.status || <span className="aegis-muted">—</span>}</td>
+                              <td>{s.modality || <span className="aegis-muted">—</span>}</td>
+                              <td>{s.body_part || <span className="aegis-muted">—</span>}</td>
+                              <td>{s.deleted_at ? new Date(s.deleted_at).toLocaleString() : <span className="aegis-muted">—</span>}</td>
+                              <td style={{textAlign: 'right', whiteSpace: 'nowrap'}}>
+                                <button
+                                  type="button"
+                                  className="aegis-btn-primary"
+                                  style={{fontSize: '0.72rem', padding: '2px 8px', marginRight: 4}}
+                                  onClick={() => restoreDeletedStudy(s.id)}
+                                  title="Restore study — makes it visible in the studies list again"
+                                >
+                                  Restore
+                                </button>
+                                <button
+                                  type="button"
+                                  className="aegis-btn-secondary"
+                                  style={{fontSize: '0.72rem', padding: '2px 8px'}}
+                                  onClick={() => permDeleteStudy(s.id, s.study_instance_uid)}
+                                  title="Permanently delete study and all DICOM files — cannot be undone"
+                                >
+                                  Delete permanently
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {trashTotal > TRASH_PAGE_SIZE && (
+                        <div style={{display: 'flex', gap: 8, marginTop: 8, alignItems: 'center'}}>
+                          <button type="button" className="aegis-btn-secondary" disabled={trashPage === 0} onClick={() => { setTrashPage(p => p - 1); loadTrash(trashPage - 1) }}>← Prev</button>
+                          <span style={{fontSize: '0.75rem', color: '#6b7280'}}>Page {trashPage + 1} of {Math.ceil(trashTotal / TRASH_PAGE_SIZE)}</span>
+                          <button type="button" className="aegis-btn-secondary" disabled={(trashPage + 1) * TRASH_PAGE_SIZE >= trashTotal} onClick={() => { setTrashPage(p => p + 1); loadTrash(trashPage + 1) }}>Next →</button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>
@@ -7742,7 +12915,12 @@ export function App() {
       {tab === 'dimse_ops' && isAdmin && <DimseOpsPanel />}
 
       {/* Institutions tab */}
-      {tab === 'institutions' && <InstitutionsPanel isAdmin={isAdmin} />}
+      {tab === 'institutions' && (
+        <InstitutionsPanel isAdmin={isAdmin} detailInstitutionId={institutionId} />
+      )}
+
+      {/* Satellites tab — enrolled on-prem AEGIS Satellites */}
+      {tab === 'satellites' && <SatellitesPanel isAdmin={isAdmin} />}
 
       {/* Profiles tab */}
       {tab === 'profiles' && <ProfilesPanel isAdmin={isAdmin} />}
@@ -7759,9 +12937,6 @@ export function App() {
       {/* Federation tab */}
       {tab === 'federation' && <FederationPanel isAdmin={isAdmin} />}
 
-      {/* TCIA Import tab */}
-      {tab === 'tcia_import' && <TCIAPanel isAdmin={isAdmin} />}
-
       {/* Users tab — admin only */}
       {tab === 'users' && isAdmin && <UsersPanel />}
 
@@ -7771,8 +12946,20 @@ export function App() {
       {/* Invite Codes tab — admin only */}
       {tab === 'invite_codes' && isAdmin && <InviteCodesPanel />}
 
+      {/* Downloads tab — admin only */}
+      {tab === 'downloads' && isAdmin && <DownloadsPanel />}
+
       {/* System Health tab */}
       {tab === 'system' && <SystemHealthPanel />}
-    </div>
+
+      {/* Upload Study Modal */}
+      {showUploadModal && (
+        <UploadStudyModal
+          projects={projects}
+          onClose={() => setShowUploadModal(false)}
+          onUploaded={() => { setRefreshTick(t => t + 1); setShowUploadModal(false) }}
+        />
+      )}
+    </>
   )
 }

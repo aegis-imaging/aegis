@@ -11,6 +11,7 @@ import (
 	"github.com/aegis-imaging/aegis/api/config"
 	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/events"
+	"github.com/aegis-imaging/aegis/api/satellite_ca"
 	"github.com/aegis-imaging/aegis/api/storage"
 )
 
@@ -47,7 +48,17 @@ type Server struct {
 	httpClient    *http.Client
 	sidecarHealth *sidecarHealthCache
 	bus           *events.Bus
+	satelliteCA       *satellite_ca.Signer // nil = enrollment disabled
 }
+
+// SetSatelliteCA wires the satellite-router cert issuer into the server. Called by
+// main.go at startup; nil means /api/satellites/enroll returns 503.
+func (s *Server) SetSatelliteCA(signer *satellite_ca.Signer) {
+	s.satelliteCA = signer
+}
+
+// SatelliteCA exposes the configured signer (or nil) for handlers and tests.
+func (s *Server) SatelliteCA() *satellite_ca.Signer { return s.satelliteCA }
 
 func NewServer(db *sql.DB, store storage.Storage, cfg *config.Config) *Server {
 	s := &Server{

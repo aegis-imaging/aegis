@@ -6,6 +6,7 @@ import (
 
 	"github.com/aegis-imaging/aegis/api/email"
 	"github.com/aegis-imaging/aegis/api/model"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 // AdvancePipeline inspects a study's processing state and dispatches the next
@@ -14,11 +15,12 @@ import (
 //
 // No-op when cfg.PipelineAuto is false (manual mode).
 //
-// Dependency graph (3 phases):
+// Dependency graph (4 phases):
 //
 //	Phase 0: Classification (blocks all other phases — fills modality/body_part)
 //	Phase 1: PHI scan, protocol check, defacing (parallel, raw files)
 //	Phase 2: QC check, BIDS conversion (after defacing completes, final files)
+//	Phase 3: Analytics + SCT (after BIDS conversion completes, consumes NIfTI outputs)
 func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 	if !s.cfg.PipelineAuto {
 		return
@@ -55,6 +57,7 @@ func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 
 	// Phase 1: Parallel services on raw files.
 	s.dispatchPhiScan(ctx, study)
+	s.dispatchPixelRedaction(ctx, study)
 	s.dispatchProtocolCheck(ctx, study)
 	s.dispatchDefacing(ctx, study)
 
@@ -65,6 +68,62 @@ func (s *Server) AdvancePipeline(ctx context.Context, studyID string) {
 	}
 	s.dispatchQcCheck(ctx, study)
 	s.dispatchBidsConversion(ctx, study)
+
+	// Phase 3: Post-BIDS analytics on NIfTI outputs.
+	// Block if BIDS conversion is required but not yet complete.
+	if study.BidsRequired && study.BidsStatus != "complete" {
+		return
+	}
+	s.dispatchAnalytics(ctx, study)
+	s.dispatchSct(ctx, study)
+
+	// Fire study.processing_complete if all required steps are now terminal.
+	s.maybeFireProcessingComplete(ctx, study.ID)
+}
+
+// maybeFireProcessingComplete fires the study.processing_complete webhook when all
+// required pipeline steps are terminal and the study is awaiting human review.
+// Called at the end of AdvancePipeline so it fires once per pipeline completion.
+func (s *Server) maybeFireProcessingComplete(ctx context.Context, studyID string) {
+	fresh, err := model.GetStudyByID(ctx, s.db, studyID)
+	if err != nil {
+		return
+	}
+	// Already terminal — approved/rejected/expired; nothing to signal.
+	if fresh.Status == "approved" || fresh.Status == "rejected" || fresh.Status == "expired" {
+		return
+	}
+	// Check each required step has reached a terminal status.
+	classOK := !fresh.ClassificationRequired ||
+		fresh.ClassificationStatus == "classified" || fresh.ClassificationStatus == "failed"
+	phiOK := !fresh.PhiScanRequired ||
+		fresh.PhiScanStatus == "clean" || fresh.PhiScanStatus == "flagged" || fresh.PhiScanStatus == "failed"
+	pixelRedactOK := !fresh.PixelRedactionRequired ||
+		fresh.PixelRedactionStatus == "complete" || fresh.PixelRedactionStatus == "failed"
+	protocolOK := !fresh.ProtocolRequired ||
+		fresh.ProtocolStatus == "compliant" || fresh.ProtocolStatus == "minor_deviations" ||
+		fresh.ProtocolStatus == "non_compliant" || fresh.ProtocolStatus == "failed"
+	defacingOK := !fresh.DefacingRequired ||
+		fresh.Status == "defaced" || fresh.Status == "clean"
+	qcOK := !fresh.QcRequired ||
+		fresh.QcStatus == "pass" || fresh.QcStatus == "warn" ||
+		fresh.QcStatus == "fail" || fresh.QcStatus == "failed"
+	bidsOK := !fresh.BidsRequired ||
+		fresh.BidsStatus == "complete" || fresh.BidsStatus == "failed"
+	analyticsOK := !fresh.AnalyticsRequired ||
+		fresh.AnalyticsStatus == "complete" || fresh.AnalyticsStatus == "partial" || fresh.AnalyticsStatus == "failed"
+	sctOK := !fresh.SctRequired ||
+		fresh.SctStatus == "complete" || fresh.SctStatus == "partial" || fresh.SctStatus == "failed"
+	exportOK := !fresh.ExportRequired ||
+		fresh.ExportStatus == "exported" || fresh.ExportStatus == "failed"
+
+	if classOK && phiOK && pixelRedactOK && protocolOK && defacingOK && qcOK && bidsOK && analyticsOK && sctOK && exportOK {
+		// Detach cancellation: these goroutines outlive the triggering request
+		// (values, e.g. tenant ctx, are kept).
+		bg := context.WithoutCancel(ctx)
+		go webhook.Deliver(bg, s.db, "study.processing_complete", fresh)
+		go s.createAutoShareURL(bg, fresh)
+	}
 }
 
 func (s *Server) dispatchClassification(ctx context.Context, study *model.Study) {
@@ -105,6 +164,29 @@ func (s *Server) dispatchPhiScan(ctx context.Context, study *model.Study) {
 		"study_uid": study.StudyInstanceUID,
 	})
 	go s.runPhiScan(study)
+}
+
+func (s *Server) dispatchPixelRedaction(ctx context.Context, study *model.Study) {
+	if !study.PixelRedactionRequired || study.PixelRedactionStatus != "pending" {
+		return
+	}
+	if s.cfg.PhiDetectionServiceURL == "" {
+		return
+	}
+	claimed, err := model.ClaimPixelRedaction(ctx, s.db, study.ID)
+	if err != nil {
+		log.Printf("pipeline: claim pixel_redaction for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	if !claimed {
+		return
+	}
+	log.Printf("pipeline: dispatching pixel_redaction for %s", study.StudyInstanceUID)
+	model.CreateAuditEntry(ctx, s.db, "pipeline.dispatch", "pipeline", "study", study.ID, "", map[string]any{
+		"service":   "pixel_redaction",
+		"study_uid": study.StudyInstanceUID,
+	})
+	go s.runPixelRedaction(study)
 }
 
 func (s *Server) dispatchProtocolCheck(ctx context.Context, study *model.Study) {
@@ -219,6 +301,52 @@ func (s *Server) dispatchBidsConversion(ctx context.Context, study *model.Study)
 		"study_uid": study.StudyInstanceUID,
 	})
 	go s.runBidsConversion(fresh)
+}
+
+func (s *Server) dispatchAnalytics(ctx context.Context, study *model.Study) {
+	if !study.AnalyticsRequired || study.AnalyticsStatus != "pending" {
+		return
+	}
+	if s.cfg.AnalyticsServiceURL == "" {
+		return
+	}
+	claimed, err := model.ClaimAnalytics(ctx, s.db, study.ID)
+	if err != nil {
+		log.Printf("pipeline: claim analytics for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	if !claimed {
+		return
+	}
+	log.Printf("pipeline: dispatching analytics for %s", study.StudyInstanceUID)
+	model.CreateAuditEntry(ctx, s.db, "pipeline.dispatch", "pipeline", "study", study.ID, "", map[string]any{
+		"service":   "analytics",
+		"study_uid": study.StudyInstanceUID,
+	})
+	go s.runAnalytics(study, "") // auto-select tool via pipeline
+}
+
+func (s *Server) dispatchSct(ctx context.Context, study *model.Study) {
+	if !study.SctRequired || study.SctStatus != "pending" {
+		return
+	}
+	if s.cfg.SctServiceURL == "" {
+		return
+	}
+	claimed, err := model.ClaimSct(ctx, s.db, study.ID)
+	if err != nil {
+		log.Printf("pipeline: claim sct for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	if !claimed {
+		return
+	}
+	log.Printf("pipeline: dispatching sct for %s", study.StudyInstanceUID)
+	model.CreateAuditEntry(ctx, s.db, "pipeline.dispatch", "pipeline", "study", study.ID, "", map[string]any{
+		"service":   "sct",
+		"study_uid": study.StudyInstanceUID,
+	})
+	go s.runSct(study)
 }
 
 // notifyPipelineFailure sends a plain-text alert email when a pipeline service step fails.

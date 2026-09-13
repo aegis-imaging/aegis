@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Rebuild sidecar images (+ API) and redeploy all Cloud Run services.
-# Usage: ./scripts/rebuild-deploy-sidecars.sh [TAG]
+# Usage: PROJECT_ID=<gcp-project> ./scripts/rebuild-deploy-sidecars.sh [TAG]
 # Default TAG: latest
 
 set -euo pipefail
 
 TAG="${1:-latest}"
-PROJECT="aegis-prod-488120"
+PROJECT="${PROJECT_ID:?Set PROJECT_ID to the GCP project}"
 REGION="us-central1"
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/aegis-services"
 PLATFORM="linux/amd64"

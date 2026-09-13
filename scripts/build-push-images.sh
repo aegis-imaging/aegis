@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Build and push all AEGIS service images to Google Artifact Registry.
-# Usage: ./scripts/build-push-images.sh [TAG]
+# Usage: PROJECT_ID=<gcp-project> ./scripts/build-push-images.sh [TAG]
 # Default TAG: latest
 
 set -euo pipefail
 
 TAG="${1:-latest}"
-REGISTRY="us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services"
+PROJECT="${PROJECT_ID:?Set PROJECT_ID to the GCP project}"
+REGISTRY="us-central1-docker.pkg.dev/${PROJECT}/aegis-services"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "==> Building and pushing AEGIS images (tag: $TAG)"

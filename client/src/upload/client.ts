@@ -5,6 +5,8 @@ import type { ParsedDicomFile, StudySummary } from '../types'
 export interface UploadOptions {
   /** Base URL for the AEGIS API. Defaults to '' (same origin). */
   apiBaseUrl?: string
+  /** Optional institution UUID for deterministic attribution at upload init. */
+  institutionId?: string
   /** Called after each file is successfully uploaded. */
   onProgress?: (uploaded: number, total: number) => void
   /** Called just before each file's upload begins (filename, 0-based index, total). */
@@ -68,6 +70,7 @@ export async function uploadStudy(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       project_slug: projectSlug,
+      institution_id: options.institutionId,
       file_count: files.length,
       uploader_email: options.uploaderEmail ?? '',
       study_metadata: {
@@ -75,6 +78,7 @@ export async function uploadStudy(
         modality: summary.modality,
         body_part: summary.bodyPart,
         study_description: summary.studyDescription,
+        study_date: summary.studyDate,
         series_count: summary.seriesCount,
         instance_count: summary.imageCount,
       },
@@ -82,7 +86,14 @@ export async function uploadStudy(
   })
 
   if (!initRes.ok) {
-    throw new Error(`Upload init failed (${initRes.status})`)
+    let detail = ''
+    try {
+      const body = await initRes.json() as { error?: string }
+      detail = body.error ?? ''
+    } catch {
+      // fall back to generic status message
+    }
+    throw new Error(detail || `Upload init failed (${initRes.status})`)
   }
 
   const initData = (await initRes.json()) as {

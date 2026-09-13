@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -112,4 +113,36 @@ func TestListStudySeries_NotFound(t *testing.T) {
 	srv.ListStudySeries(rr, req)
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func TestListStudySeries_SiteScopedOutOfSiteDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	instA := createInstitution(t, db, "sender", "PACS_SERIES_A", true)
+	instB := createInstitution(t, db, "sender", "PACS_SERIES_B", true)
+
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, instA.ID, study.ID)
+	require.NoError(t, err)
+
+	researcher := testutil.CreateTestAdminUser(t, db, "series-site@test.com", "researcher")
+	instBID := instB.ID
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_coordinator",
+		InstitutionID: &instBID,
+	}))
+
+	req := httptest.NewRequest("GET", "/api/studies/"+study.ID+"/series", nil)
+	req.SetPathValue("id", study.ID)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListStudySeries(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "study not found")
 }

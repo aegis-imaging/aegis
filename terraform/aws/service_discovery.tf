@@ -30,7 +30,10 @@ locals {
     "classification-service",
     "protocol-service",
     "synth-service",
+    "analytics-service",
+    "sct-service",
     "dimse-receiver",
+    "mcp-server",
     "api",
   ]
 }
@@ -48,10 +51,6 @@ resource "aws_service_discovery_service" "sidecars" {
       ttl  = 10
       type = "A"
     }
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
   }
 
   tags = {

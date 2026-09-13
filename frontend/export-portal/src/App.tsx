@@ -14,6 +14,7 @@ type ExportData = {
   body_part: string
   study_description: string
   instance_count: number
+  archive_size_bytes?: number
   series_count?: number
   expires_at: string
   expires_in_seconds?: number
@@ -44,6 +45,14 @@ const LEGACY_DISPLAY_TZ_CUSTOM_KEYS = [
 ]
 let displayTimezoneModeForFormat: DisplayTimezoneMode = 'utc'
 let displayTimezoneCustomForFormat = ''
+
+function fmtBytes(bytes: number): string {
+  if (bytes <= 0) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
 
 function pad2(n: number) {
   return String(n).padStart(2, '0')
@@ -342,10 +351,16 @@ export function App() {
                 <td className="label">Study UID</td>
                 <td className="study-uid-cell" title={data.study_uid}>{data.study_uid}</td>
               </tr>
+              {(data.series_count ?? 0) > 0 && (
+                <tr><td className="label">Series</td><td>{data.series_count} series</td></tr>
+              )}
               {data.instance_count > 0 && (
                 <tr><td className="label">Instances</td><td>{data.instance_count.toLocaleString()} DICOM image{data.instance_count !== 1 ? 's' : ''}</td></tr>
               )}
               <tr><td className="label">Files in ZIP</td><td>{data.files.length} file{data.files.length !== 1 ? 's' : ''}</td></tr>
+              {!!data.archive_size_bytes && data.archive_size_bytes > 0 && (
+                <tr><td className="label">Est. size</td><td>{fmtBytes(data.archive_size_bytes)}</td></tr>
+              )}
               <tr>
                 <td className="label">Expires</td>
                 <td className={isExpiringSoon ? 'expiring-soon' : ''}>
@@ -371,7 +386,7 @@ export function App() {
           {!isExpired ? (
             <a href={data.download_url} className="btn-download" download>
               Download All as ZIP
-              <span className="btn-download__sub">{data.files.length} file{data.files.length !== 1 ? 's' : ''}{data.instance_count > 0 ? ` · ${data.instance_count.toLocaleString()} image${data.instance_count !== 1 ? 's' : ''}` : ''}</span>
+              <span className="btn-download__sub">{data.files.length} file{data.files.length !== 1 ? 's' : ''}{(data.series_count ?? 0) > 0 ? ` · ${data.series_count} series` : ''}{data.instance_count > 0 ? ` · ${data.instance_count.toLocaleString()} image${data.instance_count !== 1 ? 's' : ''}` : ''}{data.archive_size_bytes && data.archive_size_bytes > 0 ? ` · ~${fmtBytes(data.archive_size_bytes)}` : ''}</span>
             </a>
           ) : (
             <p className="download-disabled">This share has expired. Please request a new link.</p>

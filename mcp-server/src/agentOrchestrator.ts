@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import { AegisApiClient } from "./aegisClient.js";
 
 const agentDataSchema = z.object({
@@ -17,7 +18,7 @@ const agentDataSchema = z.object({
     blockers: z.array(z.string()),
     recommended_actions: z.array(z.string())
   }),
-  timeline: z.array(z.object({ event: z.string(), timestamp: z.string() })),
+  timeline: z.array(z.object({ event: z.string(), timestamp: z.string().nullable().default("") })),
   next_steps: z.array(z.string())
 });
 
@@ -40,30 +41,38 @@ type LlmConfig = {
   maxTokens: number;
   useGcpAuth: boolean;
   gcpProject?: string;
+  useAwsBedrock?: boolean;
+  awsRegion?: string;
 };
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
-// Allowed Gemini model overrides — must be models available on Vertex AI OpenAI-compatible endpoint.
-const ALLOWED_MODEL_OVERRIDES = new Set([
-  // Gemini 3 series (latest)
-  "google/gemini-3.1-pro-preview",
-  "google/gemini-3-pro-preview",
-  "google/gemini-3-flash-preview",
-  // Gemini 2.5 series
+// Allowed model overrides per backend
+export const ALLOWED_BEDROCK_MODELS = new Set([
+  // Cross-region inference profiles (recommended for production — multi-AZ resilience)
+  "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+  "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+  "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+  "us.amazon.nova-lite-v1:0",
+  "us.amazon.nova-pro-v1:0",
+]);
+
+export const ALLOWED_VERTEX_MODELS = new Set([
+  // Gemini 2.5 series (stable — production recommended)
   "google/gemini-2.5-pro",
   "google/gemini-2.5-flash",
   "google/gemini-2.5-flash-lite",
-  // Gemini 2.0 series
-  "google/gemini-2.0-flash-001",
-  "google/gemini-2.0-flash-lite-001",
-  // Gemini 1.5 series (legacy)
-  "google/gemini-1.5-flash-001",
-  "google/gemini-1.5-pro-001",
+]);
+
+// Combined set — used for schema validation in agentServer
+export const ALLOWED_MODEL_OVERRIDES = new Set([
+  ...ALLOWED_VERTEX_MODELS,
+  ...ALLOWED_BEDROCK_MODELS,
 ]);
 
 function resolveModel(requested: string | undefined, config: LlmConfig): string {
-  if (requested && ALLOWED_MODEL_OVERRIDES.has(requested)) {
+  const allowed = config.useAwsBedrock ? ALLOWED_BEDROCK_MODELS : ALLOWED_VERTEX_MODELS;
+  if (requested && allowed.has(requested)) {
     return requested;
   }
   return config.model;
@@ -184,6 +193,39 @@ function buildToolHandlers(client: AegisApiClient): Record<string, ToolHandler> 
       const studyId = String(args.study_id ?? "");
       return client.get(`/api/studies/${encodeURIComponent(studyId)}/routing-log`);
     },
+    get_study_dicom_tags: async (args) => {
+      const studyUid = String(args.study_instance_uid ?? "");
+      return client.get(`/api/studies/${encodeURIComponent(studyUid)}/dicom-tags`);
+    },
+    get_study_series: async (args) => {
+      const studyId = String(args.study_id ?? "");
+      return client.get(`/api/studies/${encodeURIComponent(studyId)}/series`);
+    },
+    list_institutions: async () => client.get(`/api/institutions`),
+    list_routing_rules: async () => client.get(`/api/routing-rules`),
+    list_destinations: async () => client.get(`/api/destinations`),
+    list_projects: async () => client.get(`/api/projects`),
+    get_stuck_studies: async (args) => {
+      const params = new URLSearchParams();
+      if (args.minutes) params.set("minutes", String(args.minutes));
+      if (args.project_id) params.set("project_id", String(args.project_id));
+      const qs = params.toString();
+      return client.get(`/api/studies/stuck${qs ? `?${qs}` : ""}`);
+    },
+    get_pipeline_stats: async (args) => {
+      const params = new URLSearchParams();
+      if (args.project_id) params.set("project_id", String(args.project_id));
+      const qs = params.toString();
+      return client.get(`/api/stats${qs ? `?${qs}` : ""}`);
+    },
+    get_anonymization_diff: async (args) => {
+      const studyUid = String(args.study_uid ?? "");
+      return client.get(`/api/studies/${encodeURIComponent(studyUid)}/anonymization-diff`);
+    },
+    list_study_relationships: async (args) => {
+      const studyId = String(args.study_id ?? "");
+      return client.get(`/api/studies/${encodeURIComponent(studyId)}/relationships`);
+    },
     get_system_health: async () => client.get(`/healthz`)
   };
 }
@@ -279,6 +321,119 @@ function buildToolSchema() {
     {
       type: "function",
       function: {
+        name: "get_study_dicom_tags",
+        description: "Get all non-pixel DICOM tags from the first file of a study. Use to answer provenance questions — InstitutionName, StationName, SourceApplicationEntityTitle — directly from the DICOM file header.",
+        parameters: {
+          type: "object",
+          required: ["study_instance_uid"],
+          properties: { study_instance_uid: { type: "string" } },
+          additionalProperties: false
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_study_series",
+        description: "Get per-series DICOM metadata for a study (series count, modality per series, instance count). Use to understand what imaging series a study contains.",
+        parameters: {
+          type: "object",
+          required: ["study_id"],
+          properties: { study_id: { type: "string" } },
+          additionalProperties: false
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_institutions",
+        description: "List all institutions with their type, AE title, and IP ranges. Use to cross-reference which institution a study came from.",
+        parameters: { type: "object", properties: {}, additionalProperties: false }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_routing_rules",
+        description: "List all routing rules ordered by priority with their conditions (project, modality, body_part, source) and actions. Use to explain why a study was routed a particular way.",
+        parameters: { type: "object", properties: {}, additionalProperties: false }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_destinations",
+        description: "List all DICOM forwarding destinations (DICOMweb and DIMSE). Use to resolve destination names and URLs referenced in routing log entries.",
+        parameters: { type: "object", properties: {}, additionalProperties: false }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_projects",
+        description: "List all projects with id, name, slug, retention_days. Use to contextualize which project a study belongs to.",
+        parameters: { type: "object", properties: {}, additionalProperties: false }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_stuck_studies",
+        description: "List studies that have not advanced beyond a non-terminal state within the idle threshold. Use for SLA triage or 'what is currently stuck?' questions.",
+        parameters: {
+          type: "object",
+          properties: {
+            minutes: { type: "integer", description: "Idle threshold in minutes (default 60)" },
+            project_id: { type: "string", description: "Scope to a specific project UUID" }
+          },
+          additionalProperties: false
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_pipeline_stats",
+        description: "Get study status counts (received, defacing, clean, defaced, approved, rejected). Use for system-wide or per-project status overview.",
+        parameters: {
+          type: "object",
+          properties: {
+            project_id: { type: "string", description: "Scope to a specific project UUID" }
+          },
+          additionalProperties: false
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_anonymization_diff",
+        description: "Get the tag-level diff between raw and de-identified DICOM stores — which tags were removed, modified, or kept. Use to answer 'was this study properly de-identified?' questions. Requires DICOM StudyInstanceUID.",
+        parameters: {
+          type: "object",
+          required: ["study_uid"],
+          properties: { study_uid: { type: "string", description: "DICOM StudyInstanceUID (dot-separated)" } },
+          additionalProperties: false
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_study_relationships",
+        description: "List all relationships for a study (baseline, follow_up, comparison, replicate). Use to navigate longitudinal imaging series and multi-session studies.",
+        parameters: {
+          type: "object",
+          required: ["study_id"],
+          properties: { study_id: { type: "string" } },
+          additionalProperties: false
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
         name: "get_system_health",
         description: "Get system health snapshot.",
         parameters: { type: "object", properties: {}, additionalProperties: false }
@@ -351,6 +506,123 @@ async function callLlm(
   return { content: message?.content ?? undefined, tool_calls: message?.tool_calls };
 }
 
+// ── AWS Bedrock Converse API backend ─────────────────────────────────────────
+
+async function callBedrockLlm(
+  config: LlmConfig,
+  messages: LlmMessage[],
+  tools: unknown,
+  _forceJsonOutput = false
+): Promise<{ content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> }> {
+  const client = new BedrockRuntimeClient({ region: config.awsRegion || "us-east-1" });
+
+  // Extract system messages (Bedrock takes them separately)
+  const systemMessages = messages.filter((m) => m.role === "system");
+  const conversationMessages = messages.filter((m) => m.role !== "system");
+
+  // Convert OpenAI message format → Bedrock Converse format
+  // Use unknown[] and cast to avoid SDK discriminated-union strictness.
+  type BMsg = { role: "user" | "assistant"; content: unknown[] };
+  const bedrockMessages: BMsg[] = [];
+  for (let i = 0; i < conversationMessages.length; i++) {
+    const msg = conversationMessages[i];
+    if (msg.role === "assistant") {
+      const content: unknown[] = [];
+      if (msg.content) content.push({ text: msg.content });
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          let input: unknown = {};
+          try { input = tc.function.arguments ? JSON.parse(tc.function.arguments) : {}; } catch { /* empty */ }
+          content.push({ toolUse: { toolUseId: tc.id, name: tc.function.name, input } });
+        }
+      }
+      bedrockMessages.push({ role: "assistant", content });
+    } else if (msg.role === "tool") {
+      // Bedrock requires ALL tool results for one assistant turn in a SINGLE user
+      // message. Collect consecutive tool messages and merge them.
+      const toolResultContent: unknown[] = [];
+      while (i < conversationMessages.length && conversationMessages[i].role === "tool") {
+        const t = conversationMessages[i];
+        toolResultContent.push({
+          toolResult: {
+            toolUseId: t.tool_call_id ?? "",
+            content: [{ text: t.content }]
+          }
+        });
+        i++;
+      }
+      i--; // outer loop will increment
+      bedrockMessages.push({ role: "user", content: toolResultContent });
+    } else {
+      // user role
+      bedrockMessages.push({ role: "user", content: [{ text: msg.content }] });
+    }
+  }
+
+  // Translate OpenAI tool schema → Bedrock toolSpec format
+  type OpenAiTool = { type: string; function: { name: string; description?: string; parameters?: unknown } };
+  const bedrockTools = Array.isArray(tools) && tools.length > 0
+    ? (tools as OpenAiTool[]).map((t) => ({
+        toolSpec: {
+          name: t.function.name,
+          description: t.function.description ?? "",
+          inputSchema: { json: (t.function.parameters ?? {}) as unknown }
+        }
+      }))
+    : undefined;
+
+  const response = await client.send(new ConverseCommand({
+    modelId: config.model,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    messages: bedrockMessages as any,
+    system: systemMessages.length > 0
+      ? systemMessages.map((m) => ({ text: m.content }))
+      : undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    toolConfig: bedrockTools ? { tools: bedrockTools as any } : undefined,
+    inferenceConfig: {
+      temperature: config.temperature,
+      maxTokens: config.maxTokens
+    }
+  }));
+
+  const outputContent = response.output?.message?.content ?? [];
+  let textContent: string | undefined;
+  const toolCalls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
+
+  for (const block of outputContent) {
+    if ("text" in block && block.text) {
+      textContent = block.text;
+    } else if ("toolUse" in block && block.toolUse) {
+      toolCalls.push({
+        id: block.toolUse.toolUseId ?? "",
+        function: {
+          name: block.toolUse.name ?? "",
+          arguments: JSON.stringify(block.toolUse.input ?? {})
+        }
+      });
+    }
+  }
+
+  return {
+    content: textContent,
+    tool_calls: toolCalls.length > 0 ? toolCalls : undefined
+  };
+}
+
+// Dispatch to the correct LLM backend based on config
+async function dispatchLlm(
+  config: LlmConfig,
+  messages: LlmMessage[],
+  tools: unknown,
+  forceJsonOutput = false
+): Promise<{ content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> }> {
+  if (config.useAwsBedrock) {
+    return callBedrockLlm(config, messages, tools, forceJsonOutput);
+  }
+  return callLlm(config, messages, tools, forceJsonOutput);
+}
+
 export async function runAgentWithLlm(
   client: AegisApiClient,
   request: AgentRequest,
@@ -379,7 +651,7 @@ export async function runAgentWithLlm(
 
   // Phase 1: tool-call loop — gather data via tools (up to 6 rounds).
   for (let i = 0; i < 6; i += 1) {
-    const result = await callLlm(effectiveConfig, messages, tools);
+    const result = await dispatchLlm(effectiveConfig, messages, tools);
 
     if (result.tool_calls && result.tool_calls.length > 0) {
       madeToolCalls = true;
@@ -428,7 +700,7 @@ export async function runAgentWithLlm(
   // This handles models (like Gemini) that exhaust tool rounds without producing structured output.
   if (!finalContent) {
     messages.push({ role: "user", content: FINAL_JSON_REQUEST });
-    const finalResult = await callLlm(effectiveConfig, messages, null, true);
+    const finalResult = await dispatchLlm(effectiveConfig, messages, null, true);
     finalContent = finalResult.content ?? null;
   } else if (madeToolCalls) {
     // We got content after tool calls — try to parse it.
@@ -437,7 +709,7 @@ export async function runAgentWithLlm(
       return parseAgentData(finalContent);
     } catch {
       messages.push({ role: "user", content: FINAL_JSON_REQUEST });
-      const retryResult = await callLlm(effectiveConfig, messages, null, true);
+      const retryResult = await dispatchLlm(effectiveConfig, messages, null, true);
       finalContent = retryResult.content ?? null;
     }
   }
@@ -457,7 +729,22 @@ export function buildLlmConfig(env: {
   maxTokens: number;
   useGcpAuth: boolean;
   gcpProject?: string;
+  useAwsBedrock?: boolean;
+  awsRegion?: string;
 }): LlmConfig | null {
+  if (env.useAwsBedrock) {
+    return {
+      baseUrl: "",
+      apiKey: "",
+      useGcpAuth: false,
+      useAwsBedrock: true,
+      awsRegion: env.awsRegion || "us-east-1",
+      model: env.model || "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+      temperature: env.temperature,
+      maxTokens: env.maxTokens
+    };
+  }
+
   if (env.useGcpAuth) {
     if (!env.gcpProject) {
       return null;
@@ -466,7 +753,7 @@ export function buildLlmConfig(env: {
     return {
       baseUrl: env.baseUrl || vertexBaseUrl,
       apiKey: "",
-      model: env.model || "google/gemini-2.0-flash-001",
+      model: env.model || "google/gemini-2.5-flash",
       temperature: env.temperature,
       maxTokens: env.maxTokens,
       useGcpAuth: true,
@@ -488,4 +775,4 @@ export function buildLlmConfig(env: {
   };
 }
 
-export { ALLOWED_MODEL_OVERRIDES };
+// Re-export for external consumers (ALLOWED_MODEL_OVERRIDES already exported above)

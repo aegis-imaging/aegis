@@ -124,7 +124,7 @@ func TestRequireAuth_AWSProviderMissingHeader(t *testing.T) {
 	wrapped(rr, req)
 
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Body.String(), "missing AWS ALB authentication header")
+	assert.Contains(t, rr.Body.String(), "missing authentication header")
 }
 
 func TestRequireAuth_AutoProviderWithAWSHeader(t *testing.T) {

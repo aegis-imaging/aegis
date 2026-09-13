@@ -128,9 +128,12 @@ func cleanAndSeed(t *testing.T, db *sql.DB) {
 			admin_users,
 			institutions,
 			audit_trail,
+			desktop_installer_invites,
+			desktop_installers,
 			api_keys,
 			invite_codes,
-			projects
+			projects,
+			tenants
 		CASCADE
 	`)
 	if err != nil {

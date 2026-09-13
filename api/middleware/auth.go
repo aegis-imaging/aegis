@@ -52,6 +52,16 @@ func UserFromContext(ctx context.Context) *AuthUser {
 	return u
 }
 
+// AuthUserContextKey returns the context key used to store the AuthUser.
+// Exposed for test injection via context.WithValue.
+func AuthUserContextKey() any {
+	return authUserKey
+}
+
+// sessionDedupWindow is the minimum gap between recorded login sessions for the
+// same user. Requests within this window do not create a new row.
+const sessionDedupWindow = 30 * time.Minute
+
 // RequireAuth returns a middleware that enforces authentication on a handler.
 // When cfg.AuthEnabled is false (local dev), it auto-authenticates using
 // cfg.DevUserEmail. When true (production), it extracts user identity from
@@ -71,6 +81,70 @@ func RequireAuth(db *sql.DB, cfg *config.Config) func(http.HandlerFunc) http.Han
 			if err != nil {
 				writeAuthError(w, err)
 				return
+			}
+
+			// Record login session asynchronously, deduped per 30 minutes.
+			// Only record for real users (non-synthetic dev user ID).
+			if user.ID != "00000000-0000-0000-0000-000000000000" {
+				ip := clientIPFromRequest(r)
+				ua := r.UserAgent()
+				uid := user.ID
+				go func() {
+					_ = model.RecordAdminSessionWithDedup(context.Background(), db, uid, ip, ua, sessionDedupWindow)
+				}()
+			}
+
+			ctx := context.WithValue(r.Context(), authUserKey, user)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}
+	}
+}
+
+// clientIPFromRequest extracts the real client IP from the request, respecting
+// X-Forwarded-For and X-Real-IP headers set by reverse proxies.
+func clientIPFromRequest(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	host := r.RemoteAddr
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		return host[:idx]
+	}
+	return host
+}
+
+// OptionalAuth is like RequireAuth but never rejects unauthenticated requests.
+// If authentication succeeds, the user is injected into the request context.
+// If authentication fails (no headers, invalid key, etc.), the request continues
+// without a user in context — handlers check UserFromContext for nil.
+// Used on routes that need to tailor responses by user identity but also
+// serve unauthenticated callers (e.g. GET /api/projects).
+func OptionalAuth(db *sql.DB, cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			var user *AuthUser
+			var err error
+
+			if !cfg.AuthEnabled {
+				// Dev mode: auto-auth, but tolerate missing users gracefully.
+				user, err = devUser(r.Context(), db, cfg.DevUserEmail)
+				if err != nil {
+					next.ServeHTTP(w, r)
+					return
+				}
+			} else {
+				user, err = extractUser(r.Context(), db, r, cfg)
+				if err != nil {
+					// Auth failed silently — continue without user context.
+					next.ServeHTTP(w, r)
+					return
+				}
 			}
 
 			ctx := context.WithValue(r.Context(), authUserKey, user)
@@ -106,15 +180,25 @@ func (e *authError) Error() string { return e.Message }
 
 // extractUser determines the authenticated user based on the configured provider.
 // Supported providers: "iap" (GCP), "azure" (Azure AD), "aws" (ALB + Cognito), "auto" (try all).
+// All modes fall back to API key authentication via Authorization: Bearer <key>.
 func extractUser(ctx context.Context, db *sql.DB, r *http.Request, cfg *config.Config) (*AuthUser, error) {
 	switch cfg.AuthProvider {
 	case "iap":
-		return iapUser(ctx, db, r)
+		if r.Header.Get("X-Goog-Authenticated-User-Email") != "" {
+			return iapUser(ctx, db, r)
+		}
+		return apiKeyUser(ctx, db, r)
 	case "azure":
-		return azureUser(ctx, db, r)
+		if r.Header.Get("X-MS-CLIENT-PRINCIPAL-NAME") != "" {
+			return azureUser(ctx, db, r)
+		}
+		return apiKeyUser(ctx, db, r)
 	case "aws":
-		return awsUser(ctx, db, r, cfg.AWSALBRegion)
-	default: // "auto" — try IAP, then Azure, then AWS
+		if r.Header.Get("X-Amzn-Oidc-Data") != "" {
+			return awsUser(ctx, db, r, cfg.AWSALBRegion)
+		}
+		return apiKeyUser(ctx, db, r)
+	default: // "auto" — try IAP, then Azure, then AWS, then API key
 		if r.Header.Get("X-Goog-Authenticated-User-Email") != "" {
 			return iapUser(ctx, db, r)
 		}
@@ -124,8 +208,41 @@ func extractUser(ctx context.Context, db *sql.DB, r *http.Request, cfg *config.C
 		if r.Header.Get("X-Amzn-Oidc-Data") != "" {
 			return awsUser(ctx, db, r, cfg.AWSALBRegion)
 		}
+		return apiKeyUser(ctx, db, r)
+	}
+}
+
+// apiKeyUser authenticates via Authorization: Bearer <api_key>.
+// Looks up the key by SHA-256 hash in the api_keys table, checks enabled + expiry,
+// then resolves the key's created_by email to an admin user.
+func apiKeyUser(ctx context.Context, db *sql.DB, r *http.Request) (*AuthUser, error) {
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
 		return nil, &authError{http.StatusUnauthorized, "missing authentication header"}
 	}
+	rawKey := strings.TrimPrefix(auth, "Bearer ")
+	if rawKey == "" {
+		return nil, &authError{http.StatusUnauthorized, "missing authentication header"}
+	}
+
+	hash := sha256.Sum256([]byte(rawKey))
+	keyHash := fmt.Sprintf("%x", hash)
+
+	apiKey, err := model.GetAPIKeyByHash(ctx, db, keyHash)
+	if err != nil {
+		return nil, &authError{http.StatusUnauthorized, "invalid API key"}
+	}
+	if !apiKey.Enabled {
+		return nil, &authError{http.StatusForbidden, "API key is disabled"}
+	}
+	if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
+		return nil, &authError{http.StatusForbidden, "API key has expired"}
+	}
+
+	// Update last_used_at asynchronously
+	go model.TouchAPIKey(context.Background(), db, apiKey.ID)
+
+	return lookupUser(ctx, db, apiKey.CreatedBy)
 }
 
 func devUser(ctx context.Context, db *sql.DB, email string) (*AuthUser, error) {
@@ -270,7 +387,9 @@ func extractEmailFromALBJWT(region, token string) (string, error) {
 	}
 
 	// ── 5. Verify signature ───────────────────────────────────────────────────
-	sigBytes, err := base64.RawURLEncoding.DecodeString(sigB64)
+	// Strip any trailing padding characters before RawURLEncoding decode.
+	// Some ALB JWT implementations include "==" padding in the signature section.
+	sigBytes, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(sigB64, "="))
 	if err != nil {
 		return "", fmt.Errorf("decode JWT signature: %w", err)
 	}

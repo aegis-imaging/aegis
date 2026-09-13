@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -21,9 +22,8 @@ import (
 // ApproveStudy transitions a study to 'approved', making it eligible for export sharing.
 func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentApproveReject)
+	if !ok {
 		return
 	}
 	if study.Status == "approved" || study.Status == "rejected" {
@@ -60,9 +60,8 @@ func (s *Server) ApproveStudy(w http.ResponseWriter, r *http.Request) {
 // Accepts an optional JSON body: {"reason": "..."} (max 500 chars).
 func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentApproveReject)
+	if !ok {
 		return
 	}
 	if study.Status == "rejected" {
@@ -112,9 +111,8 @@ func (s *Server) RejectStudy(w http.ResponseWriter, r *http.Request) {
 // POST /api/studies/{id}/reactivate
 func (s *Server) ReactivateStudy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	study, err := model.GetStudyByID(r.Context(), s.db, id)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentApproveReject)
+	if !ok {
 		return
 	}
 	if study.Status != "expired" {
@@ -133,8 +131,8 @@ func (s *Server) ReactivateStudy(w http.ResponseWriter, r *http.Request) {
 type createShareRequest struct {
 	RecipientEmail string `json:"recipient_email"`
 	Note           string `json:"note"`
-	ExpiryHours    int    `json:"expiry_hours"`         // default 168 (7 days)
-	ExpiresAt      string `json:"expires_at,omitempty"` // optional RFC3339 timestamp
+	ExpiryHours    int    `json:"expiry_hours"`            // default 168 (7 days)
+	ExpiresAt      string `json:"expires_at,omitempty"`    // optional RFC3339 timestamp
 	MaxDownloads   *int   `json:"max_downloads,omitempty"` // nil = unlimited
 }
 
@@ -210,7 +208,7 @@ func (s *Server) CreateShare(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.ExportPortalBaseURL != "" {
 		exportURL = fmt.Sprintf("%s?token=%s", s.cfg.ExportPortalBaseURL, rawToken)
 	} else {
-		exportURL = fmt.Sprintf("%s/api/export/%s", s.cfg.APIBaseURL, rawToken)
+		exportURL = fmt.Sprintf("%s/api/export/%s/download", s.cfg.APIBaseURL, rawToken)
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "share.created", actorEmail(r), "export_share", share.ID, clientIP(r), map[string]any{
 		"recipient":  req.RecipientEmail,
@@ -271,14 +269,36 @@ func (s *Server) ListAllShares(w http.ResponseWriter, r *http.Request) {
 
 	status := model.ShareStatusFilter(q.Get("status"))
 	projectID := q.Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+	institutionID := ""
+	if access != nil {
+		projectID = access.ProjectID
+		if access.IsSiteScoped() {
+			institutionID = *access.InstitutionID
+		}
+	}
 
-	total, err := model.CountAllExportShares(r.Context(), s.db, status, projectID)
+	var total int
+	var err error
+	if access != nil {
+		total, err = model.CountAllExportSharesForScope(r.Context(), s.db, status, projectID, institutionID)
+	} else {
+		total, err = model.CountAllExportShares(r.Context(), s.db, status, projectID)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to count shares")
 		return
 	}
 
-	shares, err := model.ListAllExportShares(r.Context(), s.db, status, limit, offset, projectID)
+	var shares []model.ExportShare
+	if access != nil {
+		shares, err = model.ListAllExportSharesForScope(r.Context(), s.db, status, limit, offset, projectID, institutionID)
+	} else {
+		shares, err = model.ListAllExportShares(r.Context(), s.db, status, limit, offset, projectID)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list shares")
 		return
@@ -305,6 +325,9 @@ func (s *Server) ListAllShares(w http.ResponseWriter, r *http.Request) {
 // ListShares returns all export shares for a study.
 func (s *Server) ListShares(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if _, _, ok := s.requireStudyReadAccessByID(w, r, id); !ok {
+		return
+	}
 	shares, err := model.ListExportSharesByStudy(r.Context(), s.db, id)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list shares")
@@ -332,7 +355,23 @@ func buildListShareResponses(shares []model.ExportShare, now time.Time) []listSh
 
 // GetExportAnalytics returns aggregate download analytics across all export shares.
 func (s *Server) GetExportAnalytics(w http.ResponseWriter, r *http.Request) {
-	analytics, err := model.GetExportDownloadAnalytics(r.Context(), s.db)
+	projectID := r.URL.Query().Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+
+	var analytics *model.DownloadAnalytics
+	var err error
+	if access != nil {
+		institutionID := ""
+		if access.IsSiteScoped() {
+			institutionID = *access.InstitutionID
+		}
+		analytics, err = model.GetExportDownloadAnalyticsForScope(r.Context(), s.db, access.ProjectID, institutionID)
+	} else {
+		analytics, err = model.GetExportDownloadAnalytics(r.Context(), s.db)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to load export analytics")
 		return
@@ -343,6 +382,14 @@ func (s *Server) GetExportAnalytics(w http.ResponseWriter, r *http.Request) {
 // GetShareDownloads returns the immutable download history for one export share.
 func (s *Server) GetShareDownloads(w http.ResponseWriter, r *http.Request) {
 	shareID := r.PathValue("shareID")
+	share, err := model.GetExportShareByID(r.Context(), s.db, shareID)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "share not found")
+		return
+	}
+	if _, _, ok := s.requireStudyReadAccessByID(w, r, share.StudyID); !ok {
+		return
+	}
 	downloads, err := model.ListExportDownloadsByShare(r.Context(), s.db, shareID)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list downloads")
@@ -440,7 +487,9 @@ type redeemResponse struct {
 	Modality         string       `json:"modality"`
 	BodyPart         string       `json:"body_part"`
 	StudyDescription string       `json:"study_description"`
+	SeriesCount      int          `json:"series_count"`
 	InstanceCount    int          `json:"instance_count"`
+	ArchiveSizeBytes int64        `json:"archive_size_bytes"` // estimated ZIP size from study_size_bytes; 0 = unknown
 	ExpiresAt        time.Time    `json:"expires_at"`
 	ExpiresInSeconds int64        `json:"expires_in_seconds"`
 	Note             string       `json:"note"`
@@ -515,13 +564,48 @@ func (s *Server) RedeemExport(w http.ResponseWriter, r *http.Request) {
 		Modality:         study.Modality,
 		BodyPart:         study.BodyPart,
 		StudyDescription: study.StudyDescription,
+		SeriesCount:      study.SeriesCount,
 		InstanceCount:    study.InstanceCount,
+		ArchiveSizeBytes: study.StudySizeBytes,
 		ExpiresAt:        share.ExpiresAt,
 		ExpiresInSeconds: shareExpiresInSeconds(share, now),
 		Note:             share.Note,
 		CreatedBy:        share.CreatedBy,
 		DownloadURL:      downloadURL,
 		Files:            files,
+	})
+}
+
+// createAutoShareURL automatically creates an export share when all required pipeline
+// steps complete. Idempotent — skips if auto_share_url is already set on the study.
+func (s *Server) createAutoShareURL(ctx context.Context, study *model.Study) {
+	if study.AutoShareURL != nil && *study.AutoShareURL != "" {
+		return // already created
+	}
+
+	rawToken, tokenHash, err := generateShareToken()
+	if err != nil {
+		log.Printf("auto-share: generate token for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	expiresAt := time.Now().UTC().AddDate(0, 0, s.cfg.AutoShareExpiryDays)
+	share, err := model.CreateExportShare(ctx, s.db, study.ID, tokenHash, "", "Auto-generated", "pipeline", expiresAt, nil)
+	if err != nil {
+		log.Printf("auto-share: create share for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+	_ = share
+
+	downloadURL := fmt.Sprintf("%s/api/export/%s/download", s.cfg.APIBaseURL, rawToken)
+	if err := model.SetStudyAutoShareURL(ctx, s.db, study.ID, downloadURL); err != nil {
+		log.Printf("auto-share: set url for %s: %v", study.StudyInstanceUID, err)
+		return
+	}
+
+	model.CreateAuditEntry(ctx, s.db, "share.auto_created", "pipeline", "study", study.ID, "", map[string]any{
+		"study_uid":  study.StudyInstanceUID,
+		"expires_at": expiresAt,
 	})
 }
 

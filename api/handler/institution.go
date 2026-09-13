@@ -14,7 +14,35 @@ import (
 // ─── Institutions ─────────────────────────────────────────────────────────────
 
 func (s *Server) ListInstitutions(w http.ResponseWriter, r *http.Request) {
-	insts, err := model.ListInstitutions(r.Context(), s.db)
+	projectID := r.URL.Query().Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+
+	var insts []model.Institution
+	var err error
+	if access != nil {
+		links, lerr := model.ListInstitutionsForProject(r.Context(), s.db, access.ProjectID)
+		if lerr != nil {
+			log.Printf("list institutions for project %s: %v", access.ProjectID, lerr)
+			s.writeError(w, http.StatusInternalServerError, "failed to list institutions")
+			return
+		}
+		insts = make([]model.Institution, 0, len(links))
+		for _, link := range links {
+			if access.IsSiteScoped() && link.InstitutionID != *access.InstitutionID {
+				continue
+			}
+			inst, ierr := model.GetInstitutionByID(r.Context(), s.db, link.InstitutionID)
+			if ierr != nil {
+				continue
+			}
+			insts = append(insts, *inst)
+		}
+	} else {
+		insts, err = model.ListInstitutions(r.Context(), s.db)
+	}
 	if err != nil {
 		log.Printf("list institutions: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to list institutions")
@@ -70,7 +98,24 @@ func (s *Server) GetInstitutionStats(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusNotFound, "institution not found")
 		return
 	}
-	stats, err := model.GetInstitutionStats(r.Context(), s.db, id)
+
+	projectID := r.URL.Query().Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+
+	var stats *model.InstitutionStats
+	var err error
+	if access != nil {
+		if access.IsSiteScoped() && id != *access.InstitutionID {
+			s.writeError(w, http.StatusNotFound, "institution not found")
+			return
+		}
+		stats, err = model.GetInstitutionStatsForProject(r.Context(), s.db, id, access.ProjectID)
+	} else {
+		stats, err = model.GetInstitutionStats(r.Context(), s.db, id)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to load institution stats")
 		return

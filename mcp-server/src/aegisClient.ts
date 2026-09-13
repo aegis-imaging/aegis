@@ -36,6 +36,8 @@ const allowedGetPathPatterns = [
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/series$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels$/,
   /^\/api\/studies\/[0-9.]+\/dicom-tags$/,
+  /^\/api\/studies\/[0-9.]+\/anonymization-diff$/,
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/relationships$/,
   /^\/api\/dimse\/retry\/details(?:\?.*)?$/,
   /^\/api\/dimse\/retry\/summary(?:\?.*)?$/,
   /^\/api\/study-uid\/[0-9.]+$/,
@@ -62,6 +64,8 @@ const allowedGetPathPatterns = [
 const allowedPostPathPatterns = [
   /^\/api\/api-keys$/,
   /^\/api\/api-keys\/[0-9a-fA-F-]{36}\/rotate$/,
+  /^\/api\/destinations$/,
+  /^\/api\/routing-rules$/,
   /^\/api\/studies\/bulk$/,
   /^\/api\/studies\/bulk-label$/,
   /^\/api\/studies\/generate-synthetic$/,
@@ -74,6 +78,8 @@ const allowedPostPathPatterns = [
   /^\/api\/studies\/[0-9.]+\/trigger-deface$/,
   /^\/api\/dimse\/retry\/process\/[0-9.]+$/,
   /^\/api\/dimse\/retry\/replay\/[0-9.]+$/,
+  /^\/api\/dimse\/query$/,
+  /^\/api\/dimse\/retrieve$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/approve$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/reject$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/share$/,
@@ -91,12 +97,16 @@ const allowedPostPathPatterns = [
 const allowedDeletePathPatterns = [
   /^\/api\/shares\/[0-9a-fA-F-]{36}$/,
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/labels\/[0-9a-fA-F-]{36}$/,
-  /^\/api\/api-keys\/[0-9a-fA-F-]{36}$/
+  /^\/api\/api-keys\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/destinations\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/routing-rules\/[0-9a-fA-F-]{36}$/
 ] as const;
 
 const allowedPutPathPatterns = [
   /^\/api\/studies\/[0-9a-fA-F-]{36}\/project$/,
-  /^\/api\/studies\/[0-9a-fA-F-]{36}\/subject$/
+  /^\/api\/studies\/[0-9a-fA-F-]{36}\/subject$/,
+  /^\/api\/destinations\/[0-9a-fA-F-]{36}$/,
+  /^\/api\/routing-rules\/[0-9a-fA-F-]{36}$/
 ] as const;
 
 const allowedPatchPathPatterns = [

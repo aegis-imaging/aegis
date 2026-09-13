@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,6 +21,10 @@ import (
 	"github.com/aegis-imaging/aegis/api/routing"
 )
 
+// maxStowBytes caps a single STOW-RS request body. DICOM studies are large;
+// the cap is anti-OOM protection, not a quota.
+const maxStowBytes = 4 << 30 // 4 GiB
+
 // StowReceiver implements DICOMweb STOW-RS (PS3.18 §10.5).
 // POST /api/stow
 //
@@ -29,6 +34,8 @@ import (
 //
 // Optional query param: ?project=<slug> (defaults to "default")
 func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxStowBytes)
+
 	// ── API key auth ────────────────────────────────────────────────
 	rawKey := ""
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
@@ -76,18 +83,35 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 
 	// ── Read and group DICOM parts by StudyInstanceUID ───────────────
 	type dicomPart struct {
-		data     []byte
-		studyUID string
-		modality string
-		bodyPart string
-		studyDesc string
+		data          []byte
+		studyUID      string
+		seriesUID     string
+		modality      string
+		bodyPart      string
+		studyDesc     string
+		subjectID string
+		studyDate     string
+	}
+
+	// seriesAcc accumulates parts for one series within a study so we can
+	// emit one study_series_metadata row per (study, series) below.
+	type seriesAcc struct {
+		firstDataset  dicomlib.Dataset
+		hasFirst      bool
+		instanceCount int
 	}
 
 	type studyGroup struct {
-		parts    []dicomPart
-		modality string
-		bodyPart string
-		studyDesc string
+		parts         []dicomPart
+		modality      string
+		bodyPart      string
+		studyDesc     string
+		subjectID string
+		studyDate     string
+		// seriesOrder preserves the order series were first seen so we
+		// produce deterministic upserts.
+		seriesOrder []string
+		series      map[string]*seriesAcc
 	}
 
 	groups := make(map[string]*studyGroup)
@@ -101,6 +125,12 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				s.writeError(w, http.StatusRequestEntityTooLarge,
+					fmt.Sprintf("request body too large (max %d bytes)", maxErr.Limit))
+				return
+			}
 			log.Printf("stow_receiver: read part %d: %v", partIndex, err)
 			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to read part %d: %v", partIndex, err))
 			return
@@ -117,6 +147,12 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		data, err := io.ReadAll(part)
 		part.Close()
 		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				s.writeError(w, http.StatusRequestEntityTooLarge,
+					fmt.Sprintf("request body too large (max %d bytes)", maxErr.Limit))
+				return
+			}
 			log.Printf("stow_receiver: read part %d body: %v", partIndex, err)
 			s.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to read part %d body: %v", partIndex, err))
 			return
@@ -139,11 +175,14 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		}
 
 		p := dicomPart{
-			data:     data,
-			studyUID: stowGetStringTag(dataset, tag.StudyInstanceUID),
-			modality: stowGetStringTag(dataset, tag.Modality),
-			bodyPart: stowGetStringTag(dataset, tag.BodyPartExamined),
-			studyDesc: stowGetStringTag(dataset, tag.StudyDescription),
+			data:          data,
+			studyUID:      stowGetStringTag(dataset, tag.StudyInstanceUID),
+			seriesUID:     stowGetStringTag(dataset, tag.SeriesInstanceUID),
+			modality:      stowGetStringTag(dataset, tag.Modality),
+			bodyPart:      stowGetStringTag(dataset, tag.BodyPartExamined),
+			studyDesc:     stowGetStringTag(dataset, tag.StudyDescription),
+			subjectID: stowGetStringTag(dataset, tag.PatientID),
+			studyDate:     stowGetStringTag(dataset, tag.StudyDate),
 		}
 		if p.studyUID == "" {
 			// Assign a generated UID based on the part index if missing.
@@ -153,14 +192,38 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		g, exists := groups[p.studyUID]
 		if !exists {
 			g = &studyGroup{
-				modality:  p.modality,
-				bodyPart:  p.bodyPart,
-				studyDesc: p.studyDesc,
+				modality:      p.modality,
+				bodyPart:      p.bodyPart,
+				studyDesc:     p.studyDesc,
+				subjectID: p.subjectID,
+				studyDate:     p.studyDate,
+				series:        make(map[string]*seriesAcc),
 			}
 			groups[p.studyUID] = g
 			orderedUIDs = append(orderedUIDs, p.studyUID)
+		} else {
+			// First non-empty wins per study (in case later parts have the tag but the first didn't).
+			if g.subjectID == "" && p.subjectID != "" {
+				g.subjectID = p.subjectID
+			}
+			if g.studyDate == "" && p.studyDate != "" {
+				g.studyDate = p.studyDate
+			}
 		}
 		g.parts = append(g.parts, p)
+
+		// Track per-series metadata if we have a SeriesInstanceUID. Files
+		// without one still get stored (legacy / non-MR) but won't show up
+		// in the series metadata table.
+		if p.seriesUID != "" {
+			sAcc, ok := g.series[p.seriesUID]
+			if !ok {
+				sAcc = &seriesAcc{firstDataset: dataset, hasFirst: true}
+				g.series[p.seriesUID] = sAcc
+				g.seriesOrder = append(g.seriesOrder, p.seriesUID)
+			}
+			sAcc.instanceCount++
+		}
 		partIndex++
 	}
 
@@ -209,12 +272,26 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 		// Create study record.
 		bodyPartUpper := strings.ToUpper(g.bodyPart)
 		defacingRequired := bodyPartUpper == "HEAD" || bodyPartUpper == "BRAIN"
+		var subjectIDPtr, studyDatePtr *string
+		if g.subjectID != "" {
+			v := g.subjectID
+			subjectIDPtr = &v
+		}
+		if g.studyDate != "" {
+			v := g.studyDate
+			studyDatePtr = &v
+		}
+		// SubjectID is the canonical subject identifier; initialize it to
+		// the DICOM-derived pseudonymized PatientID so the study appears
+		// in the XNAT-style subject listing immediately.
 		study := &model.Study{
 			ProjectID:        project.ID,
 			StudyInstanceUID: studyUID,
 			Modality:         g.modality,
 			BodyPart:         g.bodyPart,
 			StudyDescription: g.studyDesc,
+			StudyDate:        studyDatePtr,
+			SubjectID:        subjectIDPtr,
 			InstanceCount:    len(g.parts),
 			Status:           "received",
 			DefacingRequired: defacingRequired,
@@ -225,6 +302,28 @@ func (s *Server) StowReceiver(w http.ResponseWriter, r *http.Request) {
 			log.Printf("stow_receiver: create study %s: %v", studyUID, err)
 			s.writeError(w, http.StatusInternalServerError, "failed to create study record")
 			return
+		}
+
+		// Upsert per-series DICOM metadata so the dashboard, protocol checker,
+		// and analytics can read TR/TE/protocol/etc. without re-parsing files.
+		// Best-effort: a write failure here does not abort the receive.
+		for _, seriesUID := range g.seriesOrder {
+			sAcc := g.series[seriesUID]
+			if sAcc == nil || !sAcc.hasFirst {
+				continue
+			}
+			sm := extractSeriesMetadata(sAcc.firstDataset)
+			if sm == nil {
+				continue
+			}
+			sm.StudyID = study.ID
+			if sm.SeriesInstanceUID == "" {
+				sm.SeriesInstanceUID = seriesUID
+			}
+			sm.InstanceCount = sAcc.instanceCount
+			if err := model.UpsertSeriesMetadata(r.Context(), s.db, sm); err != nil {
+				log.Printf("stow_receiver: upsert series metadata %s/%s: %v", studyUID, seriesUID, err)
+			}
 		}
 
 		// Evaluate routing rules (may mutate study — auto_approve, require_defacing, etc.)

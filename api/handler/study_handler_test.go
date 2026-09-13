@@ -8,11 +8,26 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func withResearcherUser(r *http.Request, id, email string) *http.Request {
+	ctx := context.WithValue(r.Context(), middleware.AuthUserContextKey(), &middleware.AuthUser{
+		ID: id, Email: email, Role: "researcher",
+	})
+	return r.WithContext(ctx)
+}
+
+func withAdminUser(r *http.Request, id, email string) *http.Request {
+	ctx := context.WithValue(r.Context(), middleware.AuthUserContextKey(), &middleware.AuthUser{
+		ID: id, Email: email, Role: "admin",
+	})
+	return r.WithContext(ctx)
+}
 
 func TestListStudies_Handler(t *testing.T) {
 	db := testutil.TestDB(t)
@@ -53,6 +68,67 @@ func TestListStudies_WithStatusFilter(t *testing.T) {
 	}
 	json.NewDecoder(rr.Body).Decode(&result)
 	assert.Equal(t, 0, result.Total, "no approved studies yet")
+}
+
+func TestListStudies_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "list-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/studies", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+	srv.ListStudies(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestListStudies_ResearcherWithProjectScopeAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "list-researcher-allowed@test.com", "researcher")
+
+	err := model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "coordinator",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/api/studies?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+	srv.ListStudies(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var result struct {
+		Studies []model.Study `json:"studies"`
+		Total   int           `json:"total"`
+	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, 1, result.Total)
+	assert.Len(t, result.Studies, 1)
+}
+
+func TestListStudies_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "list-researcher-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/studies?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+	srv.ListStudies(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
 }
 
 func TestListStudies_WithLabelFilter(t *testing.T) {
@@ -97,7 +173,9 @@ func TestListStudies_WithLabelFilter(t *testing.T) {
 	req3 := httptest.NewRequest("GET", "/api/studies", nil)
 	rr3 := httptest.NewRecorder()
 	srv.ListStudies(rr3, req3)
-	var result3 struct{ Total int `json:"total"` }
+	var result3 struct {
+		Total int `json:"total"`
+	}
 	json.NewDecoder(rr3.Body).Decode(&result3)
 	assert.Equal(t, 2, result3.Total)
 
@@ -141,6 +219,7 @@ func TestApproveStudy_Handler(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
+	req = withAdminUser(req, "admin-approve", "admin-approve@test.com")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
 	srv.ApproveStudy(rr, req)
@@ -155,8 +234,9 @@ func TestApproveStudy_NotFound(t *testing.T) {
 	db := testutil.TestDB(t)
 	srv := testutil.TestServer(t, db)
 
-	req := httptest.NewRequest("POST", "/api/studies/nonexistent/approve", nil)
-	req.SetPathValue("id", "nonexistent")
+	req := httptest.NewRequest("POST", "/api/studies/00000000-0000-0000-0000-000000000000/approve", nil)
+	req = withAdminUser(req, "admin-approve-not-found", "admin-approve-not-found@test.com")
+	req.SetPathValue("id", "00000000-0000-0000-0000-000000000000")
 	rr := httptest.NewRecorder()
 	srv.ApproveStudy(rr, req)
 
@@ -171,11 +251,62 @@ func TestApproveStudy_AlreadyApproved(t *testing.T) {
 	model.UpdateStudyStatus(context.Background(), db, study.ID, "approved")
 
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
+	req = withAdminUser(req, "admin-approve-already", "admin-approve-already@test.com")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
 	srv.ApproveStudy(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestApproveStudy_ResearcherReviewerAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "approve-reviewer@test.com", "researcher")
+
+	err := model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "reviewer",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.ApproveStudy(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestApproveStudy_ResearcherSiteCoordinatorForbidden(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	inst := testutil.CreateTestInstitution(t, db, "approve-site-coordinator")
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, inst.ID, study.ID)
+	require.NoError(t, err)
+	researcher := testutil.CreateTestAdminUser(t, db, "approve-site-coordinator@test.com", "researcher")
+
+	err = model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_coordinator",
+		InstitutionID: &inst.ID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/approve", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	req.SetPathValue("id", study.ID)
+	rr := httptest.NewRecorder()
+	srv.ApproveStudy(rr, req)
+
+	assert.Equal(t, http.StatusForbidden, rr.Code)
 }
 
 func TestRejectStudy_Handler(t *testing.T) {
@@ -185,6 +316,7 @@ func TestRejectStudy_Handler(t *testing.T) {
 	study := testutil.CreateTestStudy(t, db, proj.ID)
 
 	req := httptest.NewRequest("POST", "/api/studies/"+study.ID+"/reject", nil)
+	req = withAdminUser(req, "admin-reject", "admin-reject@test.com")
 	req.SetPathValue("id", study.ID)
 	rr := httptest.NewRecorder()
 	srv.RejectStudy(rr, req)
@@ -238,8 +370,8 @@ func TestEvaluateRoutingRules_Handler(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	var result struct {
-		Study      model.Study              `json:"study"`
-		RoutingLog []model.RoutingLogEntry  `json:"routing_log"`
+		Study      model.Study             `json:"study"`
+		RoutingLog []model.RoutingLogEntry `json:"routing_log"`
 	}
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
 	assert.Equal(t, study.ID, result.Study.ID)

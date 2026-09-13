@@ -1,0 +1,683 @@
+/* ── Theme toggle ────────────────────────────────────────────────────────── */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE
+   Applied via [data-theme="dark"] on <html>.
+   Overrides light-mode hardcoded colors with a slate-toned dark palette.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] body {
+  background: #0f1117;
+  color: #c9d1d9;
+}
+
+/* ── Top bar ──────────────────────────────────────────────────────────────── */
+[data-theme="dark"] .topbar {
+  background: #161b22;
+  border-bottom-color: #30363d;
+}
+
+[data-theme="dark"] .topbar-title {
+  color: #e6edf3;
+}
+
+[data-theme="dark"] .hamburger-btn {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .hamburger-btn:hover {
+  background: #21262d;
+}
+
+/* ── Theme toggle (dark) ──────────────────────────────────────────────────── */
+[data-theme="dark"] .theme-toggle {
+  background: #21262d;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .theme-toggle:hover {
+  background: #30363d;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+[data-theme="dark"] .sidenav {
+  background: #161b22;
+  border-right-color: #30363d;
+}
+
+[data-theme="dark"] .sidenav-toolbar {
+  border-bottom-color: #30363d;
+}
+
+[data-theme="dark"] .sidenav-footer__user {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .sidenav-group + .sidenav-group {
+  border-top-color: #30363d;
+}
+
+[data-theme="dark"] .sidenav-group-label {
+  color: #656d76;
+}
+
+[data-theme="dark"] .sidenav-item {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .sidenav-item:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+[data-theme="dark"] .sidenav-item--active {
+  background: #1c2a3e;
+  color: #58a6ff;
+  border-right-color: #58a6ff;
+}
+
+[data-theme="dark"] .sidenav-item--active:hover {
+  background: #1f3050;
+}
+
+[data-theme="dark"] .sidenav-footer {
+  border-top-color: #30363d;
+}
+
+[data-theme="dark"] .sidenav-overlay {
+  background: rgba(0,0,0,0.5);
+}
+
+/* ── Layout containers ────────────────────────────────────────────────────── */
+[data-theme="dark"] .admin-root {
+  background: #0d1117;
+}
+
+[data-theme="dark"] .layout-body {
+  background: #0d1117;
+}
+
+[data-theme="dark"] .main-content {
+  background: #0d1117;
+}
+
+/* ── Controls (selects, inputs, badges in topbar) ─────────────────────────── */
+[data-theme="dark"] .tz-label {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .tz-select,
+[data-theme="dark"] .tz-input {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .tz-warning {
+  color: #d29922;
+}
+
+[data-theme="dark"] .auth-user-badge {
+  background: #21262d;
+  color: #8b949e;
+}
+
+[data-theme="dark"] .auth-error-banner {
+  background: #2d1b0e;
+  border-color: #5a3600;
+  color: #d29922;
+}
+
+/* ── Search palette ───────────────────────────────────────────────────────── */
+[data-theme="dark"] .btn-palette-trigger {
+  background: #21262d;
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+[data-theme="dark"] .btn-palette-trigger:hover {
+  border-color: #58a6ff;
+}
+
+[data-theme="dark"] .btn-palette-trigger kbd {
+  background: #30363d;
+  color: #8b949e;
+}
+
+/* ── Stats bar / stat cards ───────────────────────────────────────────────── */
+[data-theme="dark"] .stat-card {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .stat-label {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .stat-number--neutral { color: #8b949e; }
+[data-theme="dark"] .stat-number--success { color: #2dd4bf; }
+[data-theme="dark"] .stat-number--warning { color: #d29922; }
+[data-theme="dark"] .stat-number--error   { color: #fb923c; }
+
+/* ── State displays ───────────────────────────────────────────────────────── */
+[data-theme="dark"] .state-loading,
+[data-theme="dark"] .state-empty {
+  color: #656d76;
+}
+
+[data-theme="dark"] .state-error {
+  background: #2d1b0e;
+  border-color: #5a3600;
+  color: #fb923c;
+}
+
+/* ── Pipeline stats banner ────────────────────────────────────────────────── */
+[data-theme="dark"] .stats-pill {
+  background: #21262d;
+  color: #8b949e;
+}
+
+[data-theme="dark"] .stats-pill--received  { background: #1c2a3e; color: #58a6ff; border-color: #1f3050; }
+[data-theme="dark"] .stats-pill--defacing  { background: #2d2305; color: #d29922; border-color: #3d3008; }
+[data-theme="dark"] .stats-pill--clean     { background: #0d2d2a; color: #2dd4bf; border-color: #143d38; }
+[data-theme="dark"] .stats-pill--defaced   { background: #0d2d2a; color: #2dd4bf; border-color: #143d38; }
+[data-theme="dark"] .stats-pill--approved  { background: #0d2d2a; color: #2dd4bf; border-color: #1a4740; }
+[data-theme="dark"] .stats-pill--rejected  { background: #2d1a0e; color: #fb923c; border-color: #3d2412; }
+
+[data-theme="dark"] .stats-banner__sep {
+  background: #30363d;
+}
+
+[data-theme="dark"] .stats-banner__shares {
+  color: #8b949e;
+}
+
+/* ── Badges ────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] .badge--received { background: #1c2a3e; color: #58a6ff; }
+[data-theme="dark"] .badge--defacing { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .badge--clean    { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .badge--defaced  { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .badge--approved { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .badge--rejected { background: #2d1a0e; color: #fb923c; }
+[data-theme="dark"] .badge--expired  { background: #2d1a0e; color: #fb923c; }
+
+[data-theme="dark"] .badge--external { background: #1c2a3e; color: #58a6ff; }
+[data-theme="dark"] .badge--internal { background: #271d3d; color: #bc8cff; }
+
+[data-theme="dark"] .badge--pending  { background: #21262d; color: #8b949e; }
+[data-theme="dark"] .badge--scanning { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .badge--phi-clean    { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .badge--flagged  { background: #2d1a0e; color: #fb923c; }
+[data-theme="dark"] .badge--failed   { background: #2d1a0e; color: #fb923c; }
+
+[data-theme="dark"] .badge--checking { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .badge--qc-pass  { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .badge--warn     { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .badge--fail     { background: #2d1a0e; color: #fb923c; }
+
+[data-theme="dark"] .badge--converting    { background: #1c2a3e; color: #58a6ff; }
+[data-theme="dark"] .badge--bids-complete { background: #0d2d2a; color: #2dd4bf; }
+
+[data-theme="dark"] .badge--classifying         { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .badge--classify-classified { background: #0d2d2a; color: #2dd4bf; }
+
+[data-theme="dark"] .badge--checking                  { background: #1c2a3e; color: #58a6ff; }
+[data-theme="dark"] .badge--protocol-compliant        { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .badge--protocol-minor_deviations { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .badge--protocol-non_compliant    { background: #2d1a0e; color: #fb923c; }
+
+[data-theme="dark"] .badge--export-pending   { background: #1c2a3e; color: #58a6ff; }
+[data-theme="dark"] .badge--export-exporting { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .badge--export-exported  { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .badge--export-failed    { background: #2d1a0e; color: #fb923c; }
+
+[data-theme="dark"] .status-badge--clean  { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .status-badge--failed { background: #2d1a0e; color: #fb923c; }
+
+[data-theme="dark"] .badge--enabled  { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .badge--disabled { background: #21262d; color: #656d76; }
+
+/* ── Filter bar ───────────────────────────────────────────────────────────── */
+[data-theme="dark"] .filter-input,
+[data-theme="dark"] .filter-select {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .filter-count {
+  color: #8b949e;
+}
+
+/* ── Tables (studies, audit, routing, shares, detail) ─────────────────────── */
+[data-theme="dark"] .studies-table-wrap,
+[data-theme="dark"] .audit-table-wrap {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .studies-table thead,
+[data-theme="dark"] .audit-table thead {
+  background: #1c2128;
+}
+
+[data-theme="dark"] .studies-table th,
+[data-theme="dark"] .audit-table th,
+[data-theme="dark"] .routing-table th,
+[data-theme="dark"] .shares-table th,
+[data-theme="dark"] .detail-table th {
+  color: #8b949e;
+  border-bottom-color: #30363d;
+}
+
+[data-theme="dark"] .studies-table th.th-sortable:hover {
+  color: #c9d1d9;
+  background: #21262d;
+}
+
+[data-theme="dark"] .studies-table td,
+[data-theme="dark"] .audit-row td,
+[data-theme="dark"] .routing-table td,
+[data-theme="dark"] .shares-table td,
+[data-theme="dark"] .detail-table td {
+  border-bottom-color: #21262d;
+}
+
+[data-theme="dark"] .td-uid {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .td-num { color: #8b949e; }
+[data-theme="dark"] .td-date { color: #656d76; }
+[data-theme="dark"] .td-subtle { color: #656d76; }
+
+[data-theme="dark"] .shares-table .td-muted { color: #656d76; }
+
+[data-theme="dark"] .share-status--active   { color: #2dd4bf; }
+[data-theme="dark"] .share-status--expired  { color: #d29922; }
+[data-theme="dark"] .share-status--revoked  { color: #fb923c; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+[data-theme="dark"] .btn--approve    { background: #0d2d2a; border-color: #1a4740; color: #2dd4bf; }
+[data-theme="dark"] .btn--reject     { background: #2d1a0e; border-color: #3d2412; color: #fb923c; }
+[data-theme="dark"] .btn--share      { background: #1c2a3e; border-color: #1f3050; color: #58a6ff; }
+[data-theme="dark"] .btn--revoke     { background: #161b22; border-color: #3d2412; color: #fb923c; }
+[data-theme="dark"] .btn--view       { background: #271d3d; border-color: #362a50; color: #bc8cff; }
+[data-theme="dark"] .btn--deface     { background: #2d2305; border-color: #3d3008; color: #d29922; }
+[data-theme="dark"] .btn--phi-scan   { background: #271d3d; border-color: #362a50; color: #bc8cff; }
+[data-theme="dark"] .btn--edit       { background: #21262d; border-color: #30363d; color: #c9d1d9; }
+[data-theme="dark"] .btn--secondary  { background: #21262d; border-color: #30363d; color: #8b949e; }
+[data-theme="dark"] .btn--agent      { background: #0c3a5b; border-color: #0d4a72; color: #58a6ff; }
+
+[data-theme="dark"] .btn-icon { color: #8b949e; }
+
+[data-theme="dark"] .btn-refresh,
+[data-theme="dark"] .btn-copy {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .btn-primary {
+  background: #1f6feb;
+  color: #fff;
+}
+
+/* ── Audit log ────────────────────────────────────────────────────────────── */
+[data-theme="dark"] .audit-filter-label { color: #8b949e; }
+
+[data-theme="dark"] .audit-filter-btn {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .audit-filter-btn:hover {
+  border-color: #8b949e;
+}
+
+[data-theme="dark"] .audit-filter-btn--active {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+
+[data-theme="dark"] .audit-time { color: #656d76; }
+[data-theme="dark"] .audit-actor { color: #c9d1d9; }
+[data-theme="dark"] .audit-resource-type { color: #656d76; background: #21262d; }
+[data-theme="dark"] .audit-resource-id { color: #c9d1d9; }
+[data-theme="dark"] .audit-ip { color: #656d76; }
+[data-theme="dark"] .audit-no-detail { color: #30363d; }
+
+[data-theme="dark"] .audit-detail-toggle {
+  background: #21262d;
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+[data-theme="dark"] .audit-detail-pre {
+  background: #1c2128;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .audit-detail-row td {
+  border-bottom-color: #21262d;
+}
+
+[data-theme="dark"] .audit-action--upload       { background: #1c2a3e; color: #58a6ff; }
+[data-theme="dark"] .audit-action--study-ok     { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .audit-action--study-err    { background: #2d1a0e; color: #fb923c; }
+[data-theme="dark"] .audit-action--share        { background: #271d3d; color: #bc8cff; }
+[data-theme="dark"] .audit-action--share-revoked{ background: #21262d; color: #8b949e; }
+[data-theme="dark"] .audit-action--deface       { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .audit-action--deface-err   { background: #2d1a0e; color: #fb923c; }
+[data-theme="dark"] .audit-action--neutral      { background: #21262d; color: #8b949e; }
+
+/* ── Routing ──────────────────────────────────────────────────────────────── */
+[data-theme="dark"] .routing-form {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .routing-hint { color: #8b949e; }
+
+[data-theme="dark"] .routing-hint code {
+  background: #21262d;
+}
+
+[data-theme="dark"] .routing-form-section-label { color: #656d76; }
+[data-theme="dark"] .routing-priority { color: #c9d1d9; }
+[data-theme="dark"] .routing-name { color: #e6edf3; }
+[data-theme="dark"] .routing-desc { color: #656d76; }
+[data-theme="dark"] .routing-target { color: #8b949e; }
+
+[data-theme="dark"] .routing-condition-tag {
+  background: #1c2a3e;
+  color: #58a6ff;
+  border-color: #1f3050;
+}
+
+[data-theme="dark"] .routing-action--route_to          { background: #1c2a3e; color: #58a6ff; }
+[data-theme="dark"] .routing-action--require_defacing  { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .routing-action--auto_approve      { background: #0d2d2a; color: #2dd4bf; }
+[data-theme="dark"] .routing-action--require_qa        { background: #21262d; color: #8b949e; }
+[data-theme="dark"] .routing-action--require_qc_check  { background: #1c2044; color: #8b8cf8; }
+[data-theme="dark"] .routing-action--require_bids_conversion   { background: #271d3d; color: #bc8cff; }
+[data-theme="dark"] .routing-action--require_classification   { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .routing-action--reject            { background: #2d1a0e; color: #fb923c; }
+
+[data-theme="dark"] .routing-action--sender   { background: #1c2a3e; color: #58a6ff; }
+[data-theme="dark"] .routing-action--receiver { background: #271d3d; color: #bc8cff; }
+[data-theme="dark"] .routing-action--both     { background: #2d2305; color: #d29922; }
+[data-theme="dark"] .routing-action--admin    { background: #2d1a0e; color: #fb923c; }
+
+/* ── Institutions ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .inst-row--selected { background: #1c2a3e; }
+[data-theme="dark"] .inst-slug { color: #656d76; }
+
+[data-theme="dark"] .inst-projects-panel {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+/* ── Share panel ──────────────────────────────────────────────────────────── */
+[data-theme="dark"] .share-panel {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .share-url-box {
+  background: #0d2d2a;
+  border-color: #1a4740;
+}
+
+[data-theme="dark"] .share-url-label { color: #2dd4bf; }
+
+[data-theme="dark"] .share-url-code {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .share-url-meta { color: #656d76; }
+[data-theme="dark"] .shares-empty { color: #656d76; }
+
+/* ── Forms ─────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] .form-section-label { color: #c9d1d9; }
+[data-theme="dark"] .form-error { color: #fb923c; }
+
+[data-theme="dark"] .form-input,
+[data-theme="dark"] .form-select {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+/* ── Study detail ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .study-detail__description { color: #8b949e; }
+
+[data-theme="dark"] .study-detail__meta {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .study-detail__meta-item { color: #c9d1d9; }
+[data-theme="dark"] .study-detail__meta-item strong { color: #656d76; }
+[data-theme="dark"] .study-detail__section-title { color: #c9d1d9; }
+
+[data-theme="dark"] .study-detail__tab-nav {
+  border-bottom-color: #30363d;
+}
+
+/* ── Pipeline viz ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] .pipeline-label { color: #c9d1d9; }
+[data-theme="dark"] .pipeline-status { color: #8b949e; }
+[data-theme="dark"] .pipeline-arrow { color: #30363d; }
+[data-theme="dark"] .pipeline-dot--pending { background: #30363d; }
+[data-theme="dark"] .pipeline-dot--skip    { background: #21262d; }
+
+/* ── Tab nav (sub-panels) ─────────────────────────────────────────────────── */
+[data-theme="dark"] .tab-nav {
+  border-bottom-color: #30363d;
+}
+
+[data-theme="dark"] .tab-btn {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .tab-btn:hover {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .tab-btn--active {
+  color: #58a6ff;
+  border-bottom-color: #58a6ff;
+}
+
+/* ── Pagination ───────────────────────────────────────────────────────────── */
+[data-theme="dark"] .pagination-info,
+[data-theme="dark"] .pagination-jump__label,
+[data-theme="dark"] .pagination-jump__of {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .pagination-jump__input {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+/* ── Stuck badge ──────────────────────────────────────────────────────────── */
+[data-theme="dark"] .tab-stuck-badge {
+  background: #ea580c;
+  color: #fff;
+}
+
+/* ── Bulk action bar ──────────────────────────────────────────────────────── */
+[data-theme="dark"] .bulk-bar {
+  background: #1c2128;
+  border-color: #30363d;
+}
+
+/* ── Section headers (h2, h3) ─────────────────────────────────────────────── */
+[data-theme="dark"] .routing-section-header h2,
+[data-theme="dark"] .inst-projects-panel h3,
+[data-theme="dark"] .share-panel-header h3 {
+  color: #e6edf3;
+}
+
+/* ── TCIA panel ───────────────────────────────────────────────────────────── */
+[data-theme="dark"] .tcia-header { color: #e6edf3; }
+[data-theme="dark"] .tcia-results-header { color: #e6edf3; }
+[data-theme="dark"] .tcia-error-text { color: #fb923c; }
+[data-theme="dark"] .tcia-attribution,
+[data-theme="dark"] .tcia-attribution a { color: #656d76; }
+
+/* ── Catch-all: generic text, borders, backgrounds ────────────────────────── */
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4 {
+  color: #e6edf3;
+}
+
+[data-theme="dark"] a {
+  color: #58a6ff;
+}
+
+[data-theme="dark"] code {
+  background: #21262d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] pre {
+  background: #161b22;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] hr {
+  border-color: #30363d;
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #484f58;
+}
+
+[data-theme="dark"] table {
+  color: #c9d1d9;
+}
+
+/* ── AI Agent panel ──────────────────────────────────────────────────────────
+   The .agent-* classes in panels.css hardcode light-mode colors (#fff,
+   #f9fafb, #374151, etc.). In dark mode the page background goes dark but
+   those colors don't, so headings/labels/chips/cards turn into low-contrast
+   washes against the dark backdrop (see screenshot in PR description).
+   These overrides translate every agent-* light value to the slate-toned
+   dark palette used by the rest of dark-theme.css. */
+
+[data-theme="dark"] .agent-panel {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .agent-panel__header h2 {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-panel__header p {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .agent-form {
+  background: #0f1117; /* slight inset against the surface */
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .agent-section {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .agent-section h3 {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-muted {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .agent-kv__field {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-kv__value {
+  color: #e6edf3;
+}
+
+[data-theme="dark"] .agent-kv__meta {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .agent-pill {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-pill--blocker {
+  background: #2d2305;
+  border-color: #3d3008;
+  color: #d29922;
+}
+
+[data-theme="dark"] .agent-pill--step {
+  background: #0c3a5b;
+  border-color: #0d4a72;
+  color: #58a6ff;
+}
+
+[data-theme="dark"] .agent-raw {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-raw pre {
+  background: #0f1117;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-prompts__label {
+  color: #8b949e;
+}
+
+[data-theme="dark"] .agent-prompt-chip {
+  background: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .agent-prompt-chip:hover {
+  background: #0c3a5b;
+  border-color: #0d4a72;
+  color: #58a6ff;
+}
+
+/* The component sets agent-prompt-chip--active when a quick-prompt is
+   selected, but panels.css never defined a rule for that modifier. Light
+   mode picks up the (non-existent) styling via the base chip; dark mode
+   should make the active state actually distinguishable so the user can
+   see which prompt their input mirrors. */
+[data-theme="dark"] .agent-prompt-chip.agent-prompt-chip--active {
+  background: #0d4a72;
+  border-color: #58a6ff;
+  color: #c9d1d9;
+}

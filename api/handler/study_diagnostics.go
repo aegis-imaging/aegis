@@ -2,9 +2,7 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -69,13 +67,8 @@ func (s *Server) GetStudyDiagnostics(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusNotFound, "study not found")
 		return
 	}
-	study, err := model.GetStudyByID(r.Context(), s.db, studyID)
-	if errors.Is(err, sql.ErrNoRows) {
-		s.writeError(w, http.StatusNotFound, "study not found")
-		return
-	}
-	if err != nil {
-		s.writeError(w, http.StatusInternalServerError, "failed to get study")
+	study, _, ok := s.requireStudyReadAccessByID(w, r, studyID)
+	if !ok {
 		return
 	}
 
@@ -166,12 +159,16 @@ func buildStudyDiagnosticsSummary(
 		"Classification", fmt.Sprintf("POST /api/studies/%s/classify", study.StudyInstanceUID), addBlocker, addAction)
 	evaluateRequiredStage(study.PhiScanRequired, study.PhiScanStatus,
 		"PHI scan", fmt.Sprintf("POST /api/studies/%s/phi-scan", study.StudyInstanceUID), addBlocker, addAction)
+	evaluateRequiredStage(study.PixelRedactionRequired, study.PixelRedactionStatus,
+		"Pixel redaction", fmt.Sprintf("POST /api/studies/%s/pixel-redaction", study.StudyInstanceUID), addBlocker, addAction)
 	evaluateRequiredStage(study.ProtocolRequired, study.ProtocolStatus,
 		"Protocol check", fmt.Sprintf("POST /api/studies/%s/protocol-check", study.StudyInstanceUID), addBlocker, addAction)
 	evaluateRequiredStage(study.QcRequired, study.QcStatus,
 		"QC check", fmt.Sprintf("POST /api/studies/%s/qc-check", study.StudyInstanceUID), addBlocker, addAction)
 	evaluateRequiredStage(study.BidsRequired, study.BidsStatus,
 		"BIDS conversion", fmt.Sprintf("POST /api/studies/%s/bids-convert", study.StudyInstanceUID), addBlocker, addAction)
+	evaluateRequiredStage(study.AnalyticsRequired, study.AnalyticsStatus,
+		"Analytics", fmt.Sprintf("POST /api/studies/%s/analytics", study.StudyInstanceUID), addBlocker, addAction)
 
 	if study.ExportRequired {
 		if study.Status != "approved" {
@@ -232,6 +229,8 @@ func evaluateRequiredStage(
 		"converting":  true,
 		"defacing":    true,
 		"exporting":   true,
+		"redacting":   true,
+		"analyzing":   true,
 	}
 	if inProgress[normalized] {
 		addBlocker(fmt.Sprintf("%s is in progress (%s)", name, normalized))

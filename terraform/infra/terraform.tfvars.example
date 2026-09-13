@@ -1,8 +1,18 @@
 project_id   = "aegis-prod"
 region       = "us-central1"
 environment  = "dev"
-api_domain   = "api-dev.aegisimaging.ai"
-admin_domain = "admin-dev.aegisimaging.ai"
+api_domain     = "api-dev.aegisimaging.ai"
+# Hostname of the unified React app — XNAT routes at /, admin tabs at
+# /admin/*, public about pages at /about. Must resolve to the LB IP before
+# apply, or managed-certificate provisioning fails.
+app_domain = "app-dev.aegisimaging.ai"
+# Public landing site, hosted on Cloudflare Pages (not this LB). Only used
+# for the API CORS allowlist.
+landing_domain = "aegisimaging.ai"
+# Extra hostnames the LB certificate must cover temporarily, e.g. the apex
+# while DNS moves to Cloudflare. Remove once the move is done so renewals
+# don't fail on a hostname that no longer points here.
+# extra_lb_domains = ["aegisimaging.ai", "www.aegisimaging.ai"]
 
 # IAP OAuth credentials for the admin dashboard backend.
 iap_oauth_client_id     = "YOUR_IAP_OAUTH_CLIENT_ID"
@@ -25,12 +35,14 @@ first_admin_email = "you@example.com"
 api_image                    = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/api:latest"
 admin_dashboard_image        = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/admin-dashboard:latest"
 defacing_image               = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/defacing:latest"
+# dicom-tools serves phi-detection, qc, bids, classification, protocol and synth from one image (PR #530).
+dicom_tools_image            = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/dicom-tools:latest"
 phi_detection_image          = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/phi-detection:latest"
 qc_service_image             = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/qc-service:latest"
 bids_service_image           = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/bids-service:latest"
 classification_service_image = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/classification-service:latest"
 protocol_service_image       = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/protocol-service:latest"
-weasis_image                 = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/weasis:latest"
+dwv_image                    = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/dwv:latest"
 mcp_server_image             = "us-central1-docker.pkg.dev/aegis-prod/aegis-services/mcp-server:latest"
 # mcp_server_aegis_api_token = ""  # populate via: gcloud secrets versions add <prefix>-mcp-aegis-api-token --data-file=-
 
@@ -66,11 +78,10 @@ enable_monitoring_alerts       = true
 
 # DIMSE receiver — Compute Engine VM for DICOM C-STORE SCP (TCP 11112).
 # Leave dimse_receiver_image empty to skip all DIMSE resources (default).
-# Set to the full Artifact Registry URI once you've built and pushed the image:
-#   dimse_receiver_image = "us-central1-docker.pkg.dev/<project>/aegis-services/dimse-receiver:latest"
-# dimse_receiver_image       = ""
+# Set to the full Artifact Registry URI once you've built and pushed the image.
+dimse_receiver_image        = "us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/aegis-services/dimse-receiver:latest"
+dimse_api_url               = "https://api.aegisimaging.ai"
+dimse_project_slug          = "default"
+dimse_source_ranges         = ["203.0.113.0/24"]  # PLACEHOLDER — replace with real PACS IP ranges
 # dimse_receiver_machine_type = "e2-small"
 # dimse_receiver_zone         = ""   # defaults to <region>-a
-# dimse_api_url               = "https://api.aegisimaging.ai"
-# dimse_project_slug          = "default"
-# dimse_source_ranges         = ["0.0.0.0/0"]   # restrict to PACS IPs in production

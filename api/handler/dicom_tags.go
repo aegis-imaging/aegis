@@ -10,16 +10,14 @@ import (
 
 	dicomlib "github.com/suyashkumar/dicom"
 	"github.com/suyashkumar/dicom/pkg/tag"
-
-	"github.com/aegis-imaging/aegis/api/model"
 )
 
 // DicomTagEntry represents one DICOM tag in the inspection response.
 type DicomTagEntry struct {
-	Tag     string `json:"tag"`      // e.g. "(0008,0060)"
-	Keyword string `json:"keyword"`  // e.g. "Modality"
-	VR      string `json:"vr"`       // e.g. "CS"
-	Value   string `json:"value"`    // string representation of the element value
+	Tag     string `json:"tag"`     // e.g. "(0008,0060)"
+	Keyword string `json:"keyword"` // e.g. "Modality"
+	VR      string `json:"vr"`      // e.g. "CS"
+	Value   string `json:"value"`   // string representation of the element value
 }
 
 // InspectDicomTags reads tags from the first DICOM file of a study (skipping pixel data)
@@ -28,9 +26,8 @@ type DicomTagEntry struct {
 func (s *Server) InspectDicomTags(w http.ResponseWriter, r *http.Request) {
 	studyUID := r.PathValue("studyUID")
 
-	study, err := model.GetStudyByUID(r.Context(), s.db, studyUID)
-	if err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	study, _, ok := s.requireStudyReadAccessByUID(w, r, studyUID)
+	if !ok {
 		return
 	}
 

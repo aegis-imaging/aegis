@@ -1,0 +1,62 @@
+name: Quarterly Access Model Review
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 14 1 1,4,7,10 *" # 1st day of quarter months at 14:00 UTC
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  open-review-issue:
+    name: Open quarterly review issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create quarterly access review issue (if missing)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const now = new Date();
+            const quarter = Math.floor(now.getUTCMonth() / 3) + 1;
+            const year = now.getUTCFullYear();
+            const title = `[P2-51] Quarterly Access Model Review - ${year} Q${quarter}`;
+            const label = 'access-model-review';
+
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: label,
+              per_page: 100,
+            });
+
+            const alreadyOpen = existing.find(issue => issue.title === title);
+            if (alreadyOpen) {
+              core.info(`Issue already open: #${alreadyOpen.number}`);
+              return;
+            }
+
+            const body = [
+              'Quarterly review created by automation for P2-51.',
+              '',
+              'References:',
+              '- docs/planning/quarterly-access-model-review.md',
+              '- docs/evidence/hardening-phase-5/global/quarterly-access-model-review-template.md',
+              '',
+              '## Checklist',
+              '- [ ] Role matrix validation completed (including `scripts/check-access-matrix-coverage.sh`)',
+              '- [ ] Cloud-auth parity validated for GCP IAP, Azure Easy Auth, AWS ALB/Cognito',
+              '- [ ] Access-log sample reviewed (>=10 scoped requests) with evidence links attached',
+              '- [ ] Findings, owners, and due dates documented',
+              '- [ ] Platform + Security + Compliance sign-off recorded',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: [label, 'compliance'],
+            });

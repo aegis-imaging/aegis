@@ -4,9 +4,56 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aegis-imaging/aegis/api/model"
 )
+
+type studyNote struct {
+	ID        string    `json:"id"`
+	Actor     string    `json:"actor"`
+	Note      string    `json:"note"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ListStudyNotes returns all admin notes recorded for a study (stored as
+// study.note audit entries). Notes are ordered newest-first.
+func (s *Server) ListStudyNotes(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := model.GetStudyByID(r.Context(), s.db, id); err != nil {
+		s.writeError(w, http.StatusNotFound, "study not found")
+		return
+	}
+
+	entries, err := model.ListStudyNoteAuditEntries(r.Context(), s.db, id)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to list notes")
+		return
+	}
+
+	notes := make([]studyNote, 0, len(entries))
+	for _, e := range entries {
+		// Extract the "note" field from the JSONB detail.
+		var detail struct {
+			Note string `json:"note"`
+		}
+		if len(e.Detail) > 0 {
+			_ = json.Unmarshal(e.Detail, &detail)
+		}
+		notes = append(notes, studyNote{
+			ID:        e.ID,
+			Actor:     e.Actor,
+			Note:      detail.Note,
+			CreatedAt: e.CreatedAt,
+		})
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"study_id": id,
+		"notes":    notes,
+		"total":    len(notes),
+	})
+}
 
 type addNoteRequest struct {
 	Note string `json:"note"`
@@ -31,8 +78,7 @@ func (s *Server) AddStudyNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := model.GetStudyByID(r.Context(), s.db, id); err != nil {
-		s.writeError(w, http.StatusNotFound, "study not found")
+	if _, _, ok := s.requireStudyWriteAccessByID(w, r, id, projectWriteIntentStudyMutation); !ok {
 		return
 	}
 

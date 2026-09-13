@@ -121,7 +121,7 @@ export function SynthPanel({
         <div className="tcia-field tcia-field--narrow">
           <label className="tcia-label">Size</label>
           <select
-            className="form-select"
+            className=""
             value={size}
             onChange={e => setSize(Number(e.target.value))}
             disabled={generating}
@@ -138,7 +138,7 @@ export function SynthPanel({
           <div style={{ display: 'flex', gap: 4 }}>
             <input
               type="number"
-              className="form-input"
+              className="aegis-filter"
               value={seed}
               min={0}
               max={999999}
@@ -163,7 +163,7 @@ export function SynthPanel({
           <div className="tcia-field">
             <label className="tcia-label">Project</label>
             <select
-              className="form-select"
+              className=""
               value={projectSlug}
               onChange={e => setProjectSlug(e.target.value)}
               disabled={generating}
@@ -196,7 +196,7 @@ export function SynthPanel({
           <div className="tcia-field tcia-field--action">
             <button
               type="button"
-              className="btn-primary"
+              className="aegis-btn-primary"
               onClick={generate}
               disabled={generating}
             >
@@ -219,7 +219,17 @@ export function SynthPanel({
             <tbody>
               <tr>
                 <th style={{ width: 160 }}>Study UID</th>
-                <td className="tcia-uid" title={result.study_uid}>…{result.study_uid.slice(-30)}</td>
+                <td className="tcia-uid tcia-uid-cell">
+                  {result.study_uid}
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(result.study_uid)}
+                    title="Copy UID"
+                    className="tcia-uid-copy"
+                  >
+                    Copy
+                  </button>
+                </td>
               </tr>
               <tr>
                 <th>Files</th>

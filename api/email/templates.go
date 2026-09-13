@@ -157,6 +157,34 @@ func PipelineFailure(studyUID, service, errMsg string) (subject, body string) {
 	return subject, buf.String()
 }
 
+var destinationFailingTmpl = template.Must(template.New("destination_failing").Parse(
+`A DICOM destination has stopped responding.
+
+Destination: {{ .Name }} ({{ .Type }})
+Error:        {{ .ErrMsg }}
+Detected at:  {{ .DetectedAt }} UTC
+
+The destination health probe recorded a failure. Check that the remote
+endpoint is online and that any firewall rules permit outbound connections.
+
+--
+This is an automated alert from AEGIS. Do not reply to this email.
+`))
+
+// DestinationFailing renders an alert email when a DICOM destination transitions to failing.
+// No PHI is included — only the destination name, type, and error message.
+func DestinationFailing(name, destType, errMsg string) (subject, body string) {
+	subject = "[AEGIS Alert] Destination unreachable: " + name
+	var buf bytes.Buffer
+	destinationFailingTmpl.Execute(&buf, struct {
+		Name        string
+		Type        string
+		ErrMsg      string
+		DetectedAt  string
+	}{name, destType, errMsg, time.Now().UTC().Format("2006-01-02 15:04:05 UTC")})
+	return subject, buf.String()
+}
+
 var inviteRequestTmpl = template.Must(template.New("invite_request").Parse(
 	`Someone has requested early access to AEGIS.
 
@@ -225,6 +253,36 @@ func InviteCodeIssued(name, code, inviteURL, landingURL string) (subject, body s
 	return subject, buf.String()
 }
 
+var adminDashboardInviteTmpl = template.Must(template.New("admin_dashboard_invite").Parse(
+	`Hi,
+
+You have been granted {{ .Role }} access to the AEGIS Admin Dashboard.
+
+Dashboard URL:
+
+  {{ .DashboardURL }}
+
+Sign in using your existing Google, Microsoft, or AWS account at the link above.
+No separate password is required — use your organisation's single sign-on.
+
+Your role: {{ .Role }}
+
+--
+This is an automated message from AEGIS. Do not reply to this email.
+`))
+
+// AdminDashboardInvite renders the welcome email sent when an admin invites a user
+// to the dashboard directly. No PHI is included.
+func AdminDashboardInvite(toEmail, dashboardURL, role string) (subject, body string) {
+	subject = "You've been invited to the AEGIS Admin Dashboard"
+	var buf bytes.Buffer
+	adminDashboardInviteTmpl.Execute(&buf, struct {
+		DashboardURL string
+		Role         string
+	}{dashboardURL, role})
+	return subject, buf.String()
+}
+
 var contactFormTmpl = template.Must(template.New("contact_form").Parse(
 	`New contact form submission from the AEGIS website.
 
@@ -261,6 +319,45 @@ func truncate(s string, n int) string {
 	return s[:n] + "..."
 }
 
+var desktopInstallerInviteTmpl = template.Must(template.New("desktop_installer_invite").Parse(
+	`Hi {{ .Name }},
+
+You have been sent a download link for {{ .ProductLabel }} ({{ .PlatformLabel }}).
+
+Download:
+
+  {{ .InstallURL }}
+
+This link expires on {{ .ExpiresAt }}. If it expires before you install, contact
+your AEGIS administrator and they can resend the link.
+
+After installing, the app will pair with your AEGIS account automatically the
+first time you launch it.
+
+--
+This is an automated message from AEGIS. Do not reply to this email.
+`))
+
+// DesktopInstallerInvite renders the email sent to a recipient when an admin
+// dispatches a desktop client install link from the admin dashboard. The body
+// includes the time-limited install URL — never the raw pairing token.
+func DesktopInstallerInvite(name, productLabel, platformLabel, installURL string, expiresAt time.Time) (subject, body string) {
+	if name == "" {
+		name = "there"
+	}
+	subject = "[AEGIS] Your " + productLabel + " download link"
+	var buf bytes.Buffer
+	desktopInstallerInviteTmpl.Execute(&buf, struct {
+		Name          string
+		ProductLabel  string
+		PlatformLabel string
+		InstallURL    string
+		ExpiresAt     string
+	}{name, productLabel, platformLabel, installURL,
+		expiresAt.UTC().Format("2006-01-02 15:04 UTC")})
+	return subject, buf.String()
+}
+
 // DigestSummary renders a periodic digest email for a project.
 func DigestSummary(projectName, frequency, periodLabel string, received, approved, rejected, pending, sharesCreated int) (subject, body string) {
 	freqTitle := strings.ToUpper(frequency[:1]) + frequency[1:]
@@ -276,5 +373,44 @@ func DigestSummary(projectName, frequency, periodLabel string, received, approve
 		Pending        int
 		SharesCreated  int
 	}{freqTitle, projectName, periodLabel, received, approved, rejected, pending, sharesCreated})
+	return subject, buf.String()
+}
+
+var uploaderInviteTmpl = template.Must(template.New("uploader_invite").Parse(
+	`Hi {{ .Name }},
+
+You've been invited to contribute imaging studies to the project
+"{{ .ProjectName }}" in AEGIS.
+
+Click the link below to set a password and start uploading:
+
+  {{ .RedeemURL }}
+
+This invitation expires on {{ .ExpiresAt }}.
+
+After you set your password you'll be able to sign in at the upload
+portal whenever you have new data to contribute. You'll only have
+access to upload to "{{ .ProjectName }}" — nothing else.
+
+--
+This is an automated message from AEGIS. Do not reply to this email.
+`))
+
+// UploaderInvite renders the email sent to an outside contributor when an
+// admin or researcher invites them to upload to a specific project. The body
+// includes the time-limited redeem URL — never the raw token alone.
+func UploaderInvite(name, projectName, redeemURL string, expiresAt time.Time) (subject, body string) {
+	if name == "" {
+		name = "there"
+	}
+	subject = "[AEGIS] Invitation to upload to " + projectName
+	var buf bytes.Buffer
+	uploaderInviteTmpl.Execute(&buf, struct {
+		Name        string
+		ProjectName string
+		RedeemURL   string
+		ExpiresAt   string
+	}{name, projectName, redeemURL,
+		expiresAt.UTC().Format("2006-01-02 15:04 UTC")})
 	return subject, buf.String()
 }

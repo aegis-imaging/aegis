@@ -23,12 +23,17 @@ on:
         default: "45"
         type: string
       iap_email:
-        description: "Optional: identity email for X-Goog-Authenticated-User-Email convenience flag"
+        description: "Optional: identity email for X-Goog-Authenticated-User-Email convenience flag (GCP)"
+        required: false
+        default: ""
+        type: string
+      azure_email:
+        description: "Optional: identity email for X-MS-CLIENT-PRINCIPAL-NAME convenience flag (Azure)"
         required: false
         default: ""
         type: string
       require_auth_context:
-        description: "Fail fast when neither admin header secret nor iap_email is provided"
+        description: "Fail fast when neither admin header secret nor identity email is provided"
         required: false
         default: true
         type: boolean
@@ -45,28 +50,78 @@ jobs:
       - name: Run cloud smoke suite
         env:
           ADMIN_HEADER: ${{ secrets.CLOUD_SMOKE_ADMIN_HEADER }}
+          INPUT_BASE_URL: ${{ inputs.base_url }}
+          INPUT_PROJECT_SLUG: ${{ inputs.project_slug }}
+          INPUT_TIMEOUT: ${{ inputs.timeout_seconds }}
+          INPUT_PIPELINE_TIMEOUT: ${{ inputs.pipeline_timeout_seconds }}
+          INPUT_IAP_EMAIL: ${{ inputs.iap_email }}
+          INPUT_AZURE_EMAIL: ${{ inputs.azure_email }}
+          INPUT_REQUIRE_AUTH: ${{ inputs.require_auth_context }}
         run: |
           set -euo pipefail
 
           CMD=(
             python3 scripts/cloud_smoke_test.py
-            --base-url "${{ inputs.base_url }}"
-            --project-slug "${{ inputs.project_slug }}"
-            --timeout "${{ inputs.timeout_seconds }}"
-            --pipeline-timeout "${{ inputs.pipeline_timeout_seconds }}"
+            --base-url "${INPUT_BASE_URL}"
+            --project-slug "${INPUT_PROJECT_SLUG}"
+            --timeout "${INPUT_TIMEOUT}"
+            --pipeline-timeout "${INPUT_PIPELINE_TIMEOUT}"
           )
 
           if [ -n "${ADMIN_HEADER:-}" ]; then
             CMD+=(--admin-header "${ADMIN_HEADER}")
           fi
 
-          if [ -n "${{ inputs.iap_email }}" ]; then
-            CMD+=(--iap-email "${{ inputs.iap_email }}")
+          if [ -n "${INPUT_IAP_EMAIL:-}" ]; then
+            CMD+=(--iap-email "${INPUT_IAP_EMAIL}")
           fi
 
-          if [ "${{ inputs.require_auth_context }}" = "true" ] && [ -z "${ADMIN_HEADER:-}" ] && [ -z "${{ inputs.iap_email }}" ]; then
-            echo "error: provide CLOUD_SMOKE_ADMIN_HEADER secret or iap_email input for authenticated endpoints." >&2
+          if [ -n "${INPUT_AZURE_EMAIL:-}" ]; then
+            CMD+=(--azure-email "${INPUT_AZURE_EMAIL}")
+          fi
+
+          if [ "${INPUT_REQUIRE_AUTH}" = "true" ] && \
+             [ -z "${ADMIN_HEADER:-}" ] && \
+             [ -z "${INPUT_IAP_EMAIL:-}" ] && \
+             [ -z "${INPUT_AZURE_EMAIL:-}" ]; then
+            echo "error: provide CLOUD_SMOKE_ADMIN_HEADER secret, iap_email, or azure_email input for authenticated endpoints." >&2
             exit 1
+          fi
+
+          "${CMD[@]}"
+
+  smoke-azure:
+    name: Azure cloud smoke suite
+    runs-on: ubuntu-latest
+    # Only runs automatically when AZURE_API_URL variable is set (Azure deployment exists).
+    if: ${{ vars.AZURE_API_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run cloud smoke suite (Azure)
+        env:
+          AZURE_ADMIN_HEADER: ${{ secrets.AZURE_CLOUD_SMOKE_ADMIN_HEADER }}
+          AZURE_URL: ${{ vars.AZURE_API_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${AZURE_URL:-}" ]; then
+            echo "AZURE_API_URL variable not set — skipping Azure smoke test."
+            exit 0
+          fi
+
+          CMD=(
+            python3 scripts/cloud_smoke_test.py
+            --base-url "${AZURE_URL}"
+            --project-slug "default"
+            --timeout "30"
+            --pipeline-timeout "60"
+          )
+
+          if [ -n "${AZURE_ADMIN_HEADER:-}" ]; then
+            CMD+=(--admin-header "${AZURE_ADMIN_HEADER}")
           fi
 
           "${CMD[@]}"

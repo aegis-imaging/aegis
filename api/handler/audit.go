@@ -3,8 +3,10 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -47,14 +49,56 @@ func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request) {
 		DateFrom:     dateFrom,
 		DateTo:       dateTo,
 	}
+	// Tenant scope: a tenant in the request context restricts the listing to
+	// that tenant's audit rows. Legacy single-tenant requests (no tenant)
+	// see everything they would have seen pre-multitenant.
+	if t := middleware.TenantFromContext(r.Context()); t != nil {
+		f.TenantID = t.ID
+	}
+	projectID := q.Get("project_id")
 
-	total, err := model.CountAuditEntries(r.Context(), s.db, f)
+	// Self-query relaxation. The /profile/activity page (and any future
+	// non-admin caller) needs to read its own audit entries via
+	// `?actor=<their-email>` without supplying a project_id. The actor
+	// filter naturally restricts the result set to the caller's own
+	// rows, so there's no cross-user data leak. Admins fall through to
+	// the normal scope check (which is a no-op for admins anyway).
+	user := middleware.UserFromContext(r.Context())
+	isSelfQuery := user != nil &&
+		f.Actor != "" &&
+		strings.EqualFold(strings.TrimSpace(f.Actor), user.Email)
+
+	var access *model.UserProjectAccess
+	if !isSelfQuery {
+		var ok bool
+		access, ok = s.requireResearcherProjectScope(w, r, projectID)
+		if !ok {
+			return
+		}
+	}
+	institutionID := ""
+	if access != nil && access.IsSiteScoped() {
+		institutionID = *access.InstitutionID
+	}
+
+	var total int
+	var err error
+	if access != nil {
+		total, err = model.CountAuditEntriesForStudyScope(r.Context(), s.db, f, access.ProjectID, institutionID)
+	} else {
+		total, err = model.CountAuditEntries(r.Context(), s.db, f)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to count audit entries")
 		return
 	}
 
-	entries, err := model.ListAuditEntries(r.Context(), s.db, f, limit, offset)
+	var entries []model.AuditEntry
+	if access != nil {
+		entries, err = model.ListAuditEntriesForStudyScope(r.Context(), s.db, f, access.ProjectID, institutionID, limit, offset)
+	} else {
+		entries, err = model.ListAuditEntries(r.Context(), s.db, f, limit, offset)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list audit entries")
 		return
@@ -74,7 +118,23 @@ func (s *Server) ListAudit(w http.ResponseWriter, r *http.Request) {
 // GET /api/audit/actors
 func (s *Server) GetAuditActors(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	actors, err := model.GetActorSummary(r.Context(), s.db, limit)
+	projectID := r.URL.Query().Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+	institutionID := ""
+	if access != nil && access.IsSiteScoped() {
+		institutionID = *access.InstitutionID
+	}
+
+	var actors []model.ActorSummary
+	var err error
+	if access != nil {
+		actors, err = model.GetActorSummaryForStudyScope(r.Context(), s.db, access.ProjectID, institutionID, limit)
+	} else {
+		actors, err = model.GetActorSummary(r.Context(), s.db, limit)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to query actor summary")
 		return

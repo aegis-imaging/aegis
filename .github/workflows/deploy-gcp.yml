@@ -1,0 +1,376 @@
+name: Deploy to GCP
+
+# Replaces GCP Cloud Build trigger `deploy-on-develop` (cloudbuild.yaml).
+# Fires on every push to `main` (the release branch; `develop` is promoted to
+# `main` by pull request) and can also be triggered manually.
+#
+# Prerequisites — set in GitHub repo secrets / variables:
+#   Secrets:
+#     GCP_WORKLOAD_IDENTITY_PROVIDER  — WIF provider resource name
+#                                       (output of terraform/project/github_actions.tf)
+#     GCP_SERVICE_ACCOUNT             — SA email to impersonate
+#                                       (aegis-cloud-build@<GCP_PROJECT_ID>.iam.gserviceaccount.com)
+#   Variables:
+#     GCP_PROJECT_ID    = <GCP_PROJECT_ID>
+#     GCP_REGION        = us-central1
+#     GCP_DWV_URL       = https://dwv-<CLOUD_RUN_HASH>-uc.a.run.app
+#     GCP_OHIF_URL      = https://ohif-<CLOUD_RUN_HASH>-uc.a.run.app
+#     GCP_API_URL       = https://api.aegisimaging.ai
+#     GCP_ADMIN_URL     = https://app.aegisimaging.ai
+#     GCP_DIMSE_INSTANCE = aegis-prod-dimse-receiver   (leave empty to skip DIMSE VM deploy)
+#     GCP_DIMSE_ZONE     = us-central1-a               (leave empty to skip DIMSE VM deploy)
+#
+# Auth uses Workload Identity Federation (OIDC) — no long-lived service account keys.
+# Setup: apply terraform/project/github_actions.tf, then copy the outputs into GitHub secrets.
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.pdf"
+      - "frontend/landing/**"   # deployed by Cloudflare Pages
+      - "terraform/**"          # handled by the terraform-* workflows
+  workflow_dispatch:
+
+permissions:
+  id-token: write  # Required for OIDC token exchange with GCP
+  contents: read
+
+# One deploy at a time — never cancel in-progress; let it finish.
+concurrency:
+  group: deploy-gcp
+  cancel-in-progress: false
+
+jobs:
+  # ── Phase 0: Pre-flight validation ─────────────────────────────────────────
+  validate:
+    name: Validate required configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate authentication guardrails
+        run: ./scripts/check-auth-guardrails.sh
+
+      - name: Check required secrets and variables
+        env:
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          SA_EMAIL:     ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          PROJECT_ID:   ${{ vars.GCP_PROJECT_ID }}
+          REGION:       ${{ vars.GCP_REGION }}
+          DWV_URL:      ${{ vars.GCP_DWV_URL }}
+          API_URL:      ${{ vars.GCP_API_URL }}
+        run: |
+          missing=()
+          [[ -n "$WIF_PROVIDER" ]] || missing+=("GCP_WORKLOAD_IDENTITY_PROVIDER (secret)")
+          [[ -n "$SA_EMAIL" ]]     || missing+=("GCP_SERVICE_ACCOUNT (secret)")
+          [[ -n "$PROJECT_ID" ]]   || missing+=("GCP_PROJECT_ID (var)")
+          [[ -n "$REGION" ]]       || missing+=("GCP_REGION (var)")
+          [[ -n "$DWV_URL" ]]      || missing+=("GCP_DWV_URL (var)")
+          [[ -n "$API_URL" ]]      || missing+=("GCP_API_URL (var)")
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "Missing required GitHub variables/secrets:"
+            printf '  - %s\n' "${missing[@]}"
+            echo "Set these in: GitHub repo -> Settings -> Secrets and variables -> Actions"
+            exit 1
+          fi
+          echo "All required variables and secrets are present."
+
+  # ── Phase 1: Build all images in parallel (matrix strategy) ───────────────
+  build:
+    name: Build ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: validate
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: api
+            dockerfile: api/Dockerfile
+          - service: admin-dashboard
+            context: .
+            dockerfile: frontend/admin-dashboard/Dockerfile
+            build_args: "--build-arg VITE_DWV_BASE_URL=$DWV_URL --build-arg VITE_OHIF_BASE_URL=$OHIF_URL --build-arg VITE_API_BASE_URL=$API_URL"
+          - service: upload-portal
+            context: .
+            dockerfile: frontend/upload-portal/Dockerfile
+          - service: dwv
+            context: dwv
+            dockerfile: dwv/Dockerfile
+          - service: ohif
+            context: ohif
+            dockerfile: ohif/Dockerfile
+          - service: defacing
+            context: defacing
+            dockerfile: defacing/Dockerfile
+          # dicom-tools consolidates the six former lightweight sidecars
+          # into one image. See PR #530.
+          - service: dicom-tools
+            context: dicom-tools
+            dockerfile: dicom-tools/Dockerfile
+          - service: analytics-service
+            context: analytics-service
+            dockerfile: analytics-service/Dockerfile
+          - service: sct-service
+            context: sct-service
+            dockerfile: sct-service/Dockerfile
+          - service: mcp-server
+            context: mcp-server
+            dockerfile: mcp-server/Dockerfile
+          - service: dimse-receiver
+            context: dimse-receiver
+            dockerfile: dimse-receiver/Dockerfile
+
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      REPO:      ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/aegis-services
+      REGION:    ${{ vars.GCP_REGION }}
+      DWV_URL:   ${{ vars.GCP_DWV_URL }}
+      OHIF_URL:  ${{ vars.GCP_OHIF_URL }}
+      API_URL:   ${{ vars.GCP_API_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account:            ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+      - name: Build and push
+        env:
+          SERVICE:    ${{ matrix.service }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          CTX:        ${{ matrix.context }}
+          BUILD_ARGS: ${{ matrix.build_args }}
+        run: |
+          SHA_TAG="$REPO/$SERVICE:$IMAGE_TAG"
+          LATEST_TAG="$REPO/$SERVICE:latest"
+
+          # Expand build args that reference env vars (e.g. $DWV_URL, $API_URL)
+          EXPANDED_ARGS=""
+          if [[ -n "${BUILD_ARGS:-}" ]]; then
+            EXPANDED_ARGS=$(eval echo "$BUILD_ARGS")
+          fi
+
+          docker build \
+            --platform linux/amd64 \
+            --file "$DOCKERFILE" \
+            --tag  "$SHA_TAG" \
+            --tag  "$LATEST_TAG" \
+            ${EXPANDED_ARGS:+$EXPANDED_ARGS} \
+            "$CTX"
+
+          docker push "$SHA_TAG"
+          docker push "$LATEST_TAG"
+
+  # ── Phase 2: Deploy all Cloud Run services ──────────────────────────────────
+  # Sequential steps in a single job — avoids spinning up 14 extra runners.
+  # Each gcloud run deploy call only updates the container image; env vars,
+  # secrets, CPU/memory, and service accounts are preserved from the running
+  # config (same as cloudbuild.yaml: --image flag only, no --set-env-vars).
+  deploy:
+    name: Deploy Cloud Run services
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      IMAGE_TAG:  ${{ github.sha }}
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION:     ${{ vars.GCP_REGION }}
+      REPO:       ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/aegis-services
+      API_URL:    ${{ vars.GCP_API_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account:            ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      # scripts/gcp_cloud_run_deploy.sh prints the failed revision's logs when
+      # a container does not start, so the cause shows up in this run.
+      - name: Deploy — api
+        run: ./scripts/gcp_cloud_run_deploy.sh aegis-api "$REPO/api:$IMAGE_TAG"
+
+      - name: Deploy — admin-dashboard
+        run: ./scripts/gcp_cloud_run_deploy.sh aegis-admin-dashboard "$REPO/admin-dashboard:$IMAGE_TAG"
+
+      - name: Deploy — upload-portal
+        run: |
+          if gcloud run services describe aegis-prod-upload-portal \
+              --region="$REGION" --project="$PROJECT_ID" \
+              --format="value(name)" 2>/dev/null | grep -q aegis-prod-upload-portal; then
+            ./scripts/gcp_cloud_run_deploy.sh aegis-prod-upload-portal "$REPO/upload-portal:$IMAGE_TAG"
+          else
+            echo "Skipping aegis-prod-upload-portal (service not provisioned)"
+          fi
+
+      - name: Deploy — dwv
+        run: ./scripts/gcp_cloud_run_deploy.sh dwv "$REPO/dwv:$IMAGE_TAG" --set-env-vars="API_URL=$API_URL" --allow-unauthenticated
+
+      - name: Deploy — ohif
+        run: ./scripts/gcp_cloud_run_deploy.sh ohif "$REPO/ohif:$IMAGE_TAG" --set-env-vars="API_URL=$API_URL" --allow-unauthenticated
+
+      - name: Deploy — defacing
+        run: ./scripts/gcp_cloud_run_deploy.sh defacing "$REPO/defacing:$IMAGE_TAG"
+
+      - name: Deploy — dicom-tools
+        run: ./scripts/gcp_cloud_run_deploy.sh dicom-tools "$REPO/dicom-tools:$IMAGE_TAG"
+
+      - name: Deploy — analytics-service
+        run: ./scripts/gcp_cloud_run_deploy.sh analytics-service "$REPO/analytics-service:$IMAGE_TAG"
+
+      - name: Deploy — sct-service
+        run: ./scripts/gcp_cloud_run_deploy.sh sct-service "$REPO/sct-service:$IMAGE_TAG"
+
+      - name: Deploy — mcp-server
+        run: ./scripts/gcp_cloud_run_deploy.sh aegis-mcp-server "$REPO/mcp-server:$IMAGE_TAG"
+
+  # ── Phase 2b: Deploy DIMSE Receiver VM (if configured) ─────────────────────
+  # Mirrors cloudbuild.yaml: update dimse-image metadata, then reset the VM.
+  # The startup script on the VM reads the metadata and re-pulls the image.
+  # Only runs when GCP_DIMSE_INSTANCE and GCP_DIMSE_ZONE variables are set.
+  deploy-dimse:
+    name: Deploy DIMSE Receiver VM
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ vars.GCP_DIMSE_INSTANCE != '' && vars.GCP_DIMSE_ZONE != '' }}
+    env:
+      IMAGE_TAG:      ${{ github.sha }}
+      PROJECT_ID:     ${{ vars.GCP_PROJECT_ID }}
+      REGION:         ${{ vars.GCP_REGION }}
+      REPO:           ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/aegis-services
+      DIMSE_INSTANCE: ${{ vars.GCP_DIMSE_INSTANCE }}
+      DIMSE_ZONE:     ${{ vars.GCP_DIMSE_ZONE }}
+
+    steps:
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account:            ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Check DIMSE instance exists
+        id: check-instance
+        run: |
+          if gcloud compute instances describe "$DIMSE_INSTANCE" \
+              --zone="$DIMSE_ZONE" --project="$PROJECT_ID" \
+              --format="value(name)" 2>/dev/null | grep -q "$DIMSE_INSTANCE"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DIMSE VM $DIMSE_INSTANCE not found — skipping VM deploy (provision with terraform apply first)"
+          fi
+
+      - name: Update dimse-image metadata
+        if: steps.check-instance.outputs.exists == 'true'
+        run: |
+          gcloud compute instances add-metadata "$DIMSE_INSTANCE" \
+            --metadata="dimse-image=$REPO/dimse-receiver:$IMAGE_TAG" \
+            --zone="$DIMSE_ZONE" \
+            --project="$PROJECT_ID"
+
+      - name: Reset DIMSE VM (triggers startup script re-pull)
+        if: steps.check-instance.outputs.exists == 'true'
+        run: |
+          status=$(gcloud compute instances describe "$DIMSE_INSTANCE" --zone="$DIMSE_ZONE" --project="$PROJECT_ID" --format='value(status)')
+          if [ "$status" != "RUNNING" ]; then
+            echo "::notice::$DIMSE_INSTANCE is $status — not resetting; it pulls the image named in its metadata on next boot"
+            exit 0
+          fi
+          # The metadata update above leaves the instance briefly "not ready";
+          # the reset is rejected until that operation settles, so retry.
+          for attempt in 1 2 3 4 5 6; do
+            if gcloud compute instances reset "$DIMSE_INSTANCE" --zone="$DIMSE_ZONE" --project="$PROJECT_ID"; then
+              exit 0
+            fi
+            echo "reset rejected (attempt $attempt/6); retrying in 10s"
+            sleep 10
+          done
+          echo "::error::could not reset $DIMSE_INSTANCE after 6 attempts"
+          exit 1
+
+  # ── Phase 3: Post-deploy smoke check ────────────────────────────────────────
+  smoke-check:
+    name: Post-deploy smoke check
+    runs-on: ubuntu-latest
+    needs: deploy
+    env:
+      API_URL:   ${{ vars.GCP_API_URL }}
+      ADMIN_URL: ${{ vars.GCP_ADMIN_URL }}
+
+    steps:
+      - name: Wait for Cloud Run rollout
+        run: sleep 20
+
+      - name: Verify API health
+        run: |
+          max_attempts=5
+          delay=15
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "Health check attempt $attempt/$max_attempts..."
+            status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "$API_URL/healthz" 2>/dev/null || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "API is healthy:"
+              cat /tmp/healthz.json | python3 -m json.tool 2>/dev/null || cat /tmp/healthz.json
+              exit 0
+            fi
+            echo "Got HTTP $status, retrying in ${delay}s..."
+            sleep "$delay"
+          done
+          echo "::error::API health check failed after $max_attempts attempts (last HTTP $status)"
+          cat /tmp/healthz.json 2>/dev/null || true
+          exit 1
+
+      - name: Verify admin endpoint reachability
+        run: |
+          ADMIN="${ADMIN_URL:-https://app.aegisimaging.ai}"
+          status=$(curl -s -o /tmp/admin_headers.txt -w '%{http_code}' -I "$ADMIN" 2>/dev/null || echo "000")
+          case "$status" in
+            200|301|302|401|403)
+              echo "Admin endpoint reachable with HTTP $status"
+              ;;
+            *)
+              echo "::error::Admin endpoint not reachable (HTTP $status)"
+              cat /tmp/admin_headers.txt 2>/dev/null || true
+              exit 1
+              ;;
+          esac
+
+      - name: Write smoke summary
+        run: |
+          API_STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/healthz" 2>/dev/null || echo "000")
+          ADMIN_STATUS=$(curl -s -o /dev/null -w '%{http_code}' -I "${ADMIN_URL:-https://app.aegisimaging.ai}" 2>/dev/null || echo "000")
+          {
+            echo "## GCP Smoke Check Summary"
+            echo ""
+            echo "- Platform: GCP Cloud Run"
+            echo "- API URL: ${API_URL}"
+            echo "- API /healthz HTTP: ${API_STATUS}"
+            echo "- Admin URL: ${ADMIN_URL:-https://app.aegisimaging.ai}"
+            echo "- Admin HEAD HTTP: ${ADMIN_STATUS}"
+            echo "- Result: passed"
+          } >> "$GITHUB_STEP_SUMMARY"

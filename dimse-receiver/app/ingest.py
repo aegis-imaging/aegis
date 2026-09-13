@@ -24,6 +24,7 @@ class StudyAccumulator:
     modality: str = ""
     body_part: str = ""
     study_description: str = ""
+    study_date: str = ""
     series_uids: set = field(default_factory=set)
     file_count: int = 0
     calling_ae_title: str = ""
@@ -73,6 +74,7 @@ def _serialize_accumulator(acc: StudyAccumulator) -> dict[str, object]:
         "modality": acc.modality,
         "body_part": acc.body_part,
         "study_description": acc.study_description,
+        "study_date": acc.study_date,
         "series_uids": sorted(str(uid) for uid in acc.series_uids),
         "file_count": int(acc.file_count),
         "calling_ae_title": acc.calling_ae_title,
@@ -155,6 +157,7 @@ def _deserialize_accumulator(payload: object) -> StudyAccumulator | None:
         modality=str(payload.get("modality", "")).strip(),
         body_part=str(payload.get("body_part", "")).strip(),
         study_description=str(payload.get("study_description", "")).strip(),
+        study_date=str(payload.get("study_date", "")).strip(),
         series_uids=series_uids,
         file_count=_coerce_int(payload.get("file_count", 0), default=0, minimum=0),
         calling_ae_title=str(payload.get("calling_ae_title", "")).strip(),
@@ -336,6 +339,7 @@ def trigger_ingest(acc: StudyAccumulator) -> bool:
             "modality": acc.modality,
             "body_part": acc.body_part,
             "study_description": acc.study_description,
+            "study_date": acc.study_date,
             "series_count": len(acc.series_uids),
             "instance_count": acc.file_count,
         },

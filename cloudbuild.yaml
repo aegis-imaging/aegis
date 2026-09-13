@@ -11,16 +11,19 @@
 #   _REGION         GCP region                      (default: us-central1)
 #   _PROJECT_ID     GCP project ID                  (default: aegis-prod-488120)
 #   _REPO           Artifact Registry repo base URL
-#   _WEASIS_URL     DWV viewer Cloud Run URL (baked into admin-dashboard at build time)
-#   _API_URL        Public API base URL  (baked into landing page at build time)
+#   _DWV_URL        DWV viewer Cloud Run URL (baked into admin-dashboard at build time)
+#   _API_URL        Public API base URL  (baked into upload portal at build time)
 ################################################################################
 
 substitutions:
   _REGION: us-central1
   _PROJECT_ID: aegis-prod-488120
   _REPO: us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services
-  _WEASIS_URL: https://weasis-uk5cvzf5nq-uc.a.run.app
+  _DWV_URL: https://dwv-uk5cvzf5nq-uc.a.run.app
+  _OHIF_URL: https://ohif-uk5cvzf5nq-uc.a.run.app
   _API_URL: https://api.aegisimaging.ai
+  _ADMIN_URL: https://admin.aegisimaging.ai
+  _UPLOAD_PORTAL_URL: https://upload.aegisimaging.ai
   # DIMSE receiver — Compute Engine instance. Override in trigger if zone/name differ.
   _DIMSE_ZONE: us-central1-a
   _DIMSE_INSTANCE: aegis-prod-dimse-receiver
@@ -52,7 +55,7 @@ steps:
         docker push ${_REPO}/api:${SHORT_SHA}
         docker push ${_REPO}/api:latest
 
-  # --- admin-dashboard (VITE_WEASIS_BASE_URL baked in at build time) ---
+  # --- admin-dashboard (VITE_DWV_BASE_URL baked in at build time) ---
   - name: gcr.io/cloud-builders/docker
     id: build-push-admin-dashboard
     waitFor: ["-"]
@@ -62,34 +65,21 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          --build-arg VITE_WEASIS_BASE_URL=${_WEASIS_URL} \
+          -f frontend/admin-dashboard/Dockerfile \
+          --build-arg VITE_DWV_BASE_URL=${_DWV_URL} \
+          --build-arg VITE_OHIF_BASE_URL=${_OHIF_URL} \
           -t ${_REPO}/admin-dashboard:${SHORT_SHA} \
           -t ${_REPO}/admin-dashboard:latest \
-          frontend/admin-dashboard
+          .
         docker push ${_REPO}/admin-dashboard:${SHORT_SHA}
         docker push ${_REPO}/admin-dashboard:latest
 
-  # --- landing (repo-root build context; gate is server-side via GATE_ENABLED env var) ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-landing
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -f frontend/landing/Dockerfile \
-          --build-arg VITE_API_BASE_URL=${_API_URL} \
-          -t ${_REPO}/landing:${SHORT_SHA} \
-          -t ${_REPO}/landing:latest \
-          .
-        docker push ${_REPO}/landing:${SHORT_SHA}
-        docker push ${_REPO}/landing:latest
+  # Landing page (frontend/landing) is a static site deployed by Cloudflare
+  # Pages from the develop branch — no image is built here.
 
-  # --- weasis (DWV-based DICOM viewer) ---
+  # --- upload-portal (invite-gated public upload SPA for remote sending sites) ---
   - name: gcr.io/cloud-builders/docker
-    id: build-push-weasis
+    id: build-push-upload-portal
     waitFor: ["-"]
     entrypoint: /bin/bash
     args:
@@ -97,11 +87,43 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          -t ${_REPO}/weasis:${SHORT_SHA} \
-          -t ${_REPO}/weasis:latest \
-          weasis
-        docker push ${_REPO}/weasis:${SHORT_SHA}
-        docker push ${_REPO}/weasis:latest
+          -t ${_REPO}/upload-portal:${SHORT_SHA} \
+          -t ${_REPO}/upload-portal:latest \
+          frontend/upload-portal
+        docker push ${_REPO}/upload-portal:${SHORT_SHA}
+        docker push ${_REPO}/upload-portal:latest
+
+  # --- dwv (DWV-based DICOM viewer) ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-dwv
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/dwv:${SHORT_SHA} \
+          -t ${_REPO}/dwv:latest \
+          dwv
+        docker push ${_REPO}/dwv:${SHORT_SHA}
+        docker push ${_REPO}/dwv:latest
+
+  # --- ohif (OHIF-based DICOM viewer, optional second viewer alongside DWV) ---
+  - name: gcr.io/cloud-builders/docker
+    id: build-push-ohif
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker build \
+          -t ${_REPO}/ohif:${SHORT_SHA} \
+          -t ${_REPO}/ohif:latest \
+          ohif
+        docker push ${_REPO}/ohif:${SHORT_SHA}
+        docker push ${_REPO}/ohif:latest
 
   # --- defacing ---
   - name: gcr.io/cloud-builders/docker
@@ -119,9 +141,9 @@ steps:
         docker push ${_REPO}/defacing:${SHORT_SHA}
         docker push ${_REPO}/defacing:latest
 
-  # --- phi-detection ---
+  # --- dicom-tools (consolidates phi-detection, qc, bids, classification, protocol, synth) ---
   - name: gcr.io/cloud-builders/docker
-    id: build-push-phi-detection
+    id: build-push-dicom-tools
     waitFor: ["-"]
     entrypoint: /bin/bash
     args:
@@ -129,15 +151,15 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          -t ${_REPO}/phi-detection:${SHORT_SHA} \
-          -t ${_REPO}/phi-detection:latest \
-          phi-detection
-        docker push ${_REPO}/phi-detection:${SHORT_SHA}
-        docker push ${_REPO}/phi-detection:latest
+          -t ${_REPO}/dicom-tools:${SHORT_SHA} \
+          -t ${_REPO}/dicom-tools:latest \
+          dicom-tools
+        docker push ${_REPO}/dicom-tools:${SHORT_SHA}
+        docker push ${_REPO}/dicom-tools:latest
 
-  # --- qc-service ---
+  # --- sct-service ---
   - name: gcr.io/cloud-builders/docker
-    id: build-push-qc-service
+    id: build-push-sct-service
     waitFor: ["-"]
     entrypoint: /bin/bash
     args:
@@ -145,15 +167,15 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          -t ${_REPO}/qc-service:${SHORT_SHA} \
-          -t ${_REPO}/qc-service:latest \
-          qc-service
-        docker push ${_REPO}/qc-service:${SHORT_SHA}
-        docker push ${_REPO}/qc-service:latest
+          -t ${_REPO}/sct-service:${SHORT_SHA} \
+          -t ${_REPO}/sct-service:latest \
+          sct-service
+        docker push ${_REPO}/sct-service:${SHORT_SHA}
+        docker push ${_REPO}/sct-service:latest
 
-  # --- bids-service ---
+  # --- analytics-service ---
   - name: gcr.io/cloud-builders/docker
-    id: build-push-bids-service
+    id: build-push-analytics-service
     waitFor: ["-"]
     entrypoint: /bin/bash
     args:
@@ -161,59 +183,11 @@ steps:
       - |
         set -euo pipefail
         docker build \
-          -t ${_REPO}/bids-service:${SHORT_SHA} \
-          -t ${_REPO}/bids-service:latest \
-          bids-service
-        docker push ${_REPO}/bids-service:${SHORT_SHA}
-        docker push ${_REPO}/bids-service:latest
-
-  # --- classification-service ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-classification-service
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -t ${_REPO}/classification-service:${SHORT_SHA} \
-          -t ${_REPO}/classification-service:latest \
-          classification-service
-        docker push ${_REPO}/classification-service:${SHORT_SHA}
-        docker push ${_REPO}/classification-service:latest
-
-  # --- protocol-service ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-protocol-service
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -t ${_REPO}/protocol-service:${SHORT_SHA} \
-          -t ${_REPO}/protocol-service:latest \
-          protocol-service
-        docker push ${_REPO}/protocol-service:${SHORT_SHA}
-        docker push ${_REPO}/protocol-service:latest
-
-  # --- synth-service ---
-  - name: gcr.io/cloud-builders/docker
-    id: build-push-synth-service
-    waitFor: ["-"]
-    entrypoint: /bin/bash
-    args:
-      - -c
-      - |
-        set -euo pipefail
-        docker build \
-          -t ${_REPO}/synth-service:${SHORT_SHA} \
-          -t ${_REPO}/synth-service:latest \
-          synth-service
-        docker push ${_REPO}/synth-service:${SHORT_SHA}
-        docker push ${_REPO}/synth-service:latest
+          -t ${_REPO}/analytics-service:${SHORT_SHA} \
+          -t ${_REPO}/analytics-service:latest \
+          analytics-service
+        docker push ${_REPO}/analytics-service:${SHORT_SHA}
+        docker push ${_REPO}/analytics-service:latest
 
   # --- mcp-server ---
   - name: gcr.io/cloud-builders/docker
@@ -287,30 +261,51 @@ steps:
       - --project=${_PROJECT_ID}
       - --quiet
 
-  # --- deploy landing ---
+  # Landing page is deployed by Cloudflare Pages (see frontend/landing);
+  # admin-dashboard still serves /about/* via the no-IAP backend.
+
+  # --- deploy upload-portal ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-landing
-    waitFor: [build-push-landing]
+    id: deploy-upload-portal
+    waitFor: [build-push-upload-portal]
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - aegis-prod-landing
-      - --image=${_REPO}/landing:${SHORT_SHA}
+      - aegis-upload-portal
+      - --image=${_REPO}/upload-portal:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
+      - --allow-unauthenticated
+      - --set-env-vars=API_URL=https://api.aegisimaging.ai
       - --quiet
 
-  # --- deploy weasis ---
+  # --- deploy dwv ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-weasis
-    waitFor: [build-push-weasis]
+    id: deploy-dwv
+    waitFor: [build-push-dwv]
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - weasis
-      - --image=${_REPO}/weasis:${SHORT_SHA}
+      - dwv
+      - --image=${_REPO}/dwv:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+      - --allow-unauthenticated
+      - --set-env-vars=API_URL=https://api.aegisimaging.ai
+      - --quiet
+
+  # --- deploy ohif ---
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy-ohif
+    waitFor: [build-push-ohif]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ohif
+      - --image=${_REPO}/ohif:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --allow-unauthenticated
@@ -331,86 +326,44 @@ steps:
       - --project=${_PROJECT_ID}
       - --quiet
 
-  # --- deploy phi-detection ---
+  # --- deploy dicom-tools (replaces deploy phi-detection / qc / bids / classification / protocol / synth) ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-phi-detection
-    waitFor: [build-push-phi-detection]
+    id: deploy-dicom-tools
+    waitFor: [build-push-dicom-tools]
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - phi-detection
-      - --image=${_REPO}/phi-detection:${SHORT_SHA}
+      - dicom-tools
+      - --image=${_REPO}/dicom-tools:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --quiet
 
-  # --- deploy qc-service ---
+  # --- deploy sct-service ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-qc-service
-    waitFor: [build-push-qc-service]
+    id: deploy-sct-service
+    waitFor: [build-push-sct-service]
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - qc-service
-      - --image=${_REPO}/qc-service:${SHORT_SHA}
+      - sct-service
+      - --image=${_REPO}/sct-service:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --quiet
 
-  # --- deploy bids-service ---
+  # --- deploy analytics-service ---
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-bids-service
-    waitFor: [build-push-bids-service]
+    id: deploy-analytics-service
+    waitFor: [build-push-analytics-service]
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - bids-service
-      - --image=${_REPO}/bids-service:${SHORT_SHA}
-      - --region=${_REGION}
-      - --project=${_PROJECT_ID}
-      - --quiet
-
-  # --- deploy classification-service ---
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-classification-service
-    waitFor: [build-push-classification-service]
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - classification-service
-      - --image=${_REPO}/classification-service:${SHORT_SHA}
-      - --region=${_REGION}
-      - --project=${_PROJECT_ID}
-      - --quiet
-
-  # --- deploy protocol-service ---
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-protocol-service
-    waitFor: [build-push-protocol-service]
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - protocol-service
-      - --image=${_REPO}/protocol-service:${SHORT_SHA}
-      - --region=${_REGION}
-      - --project=${_PROJECT_ID}
-      - --quiet
-
-  # --- deploy synth-service ---
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-    id: deploy-synth-service
-    waitFor: [build-push-synth-service]
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - synth-service
-      - --image=${_REPO}/synth-service:${SHORT_SHA}
+      - analytics-service
+      - --image=${_REPO}/analytics-service:${SHORT_SHA}
       - --region=${_REGION}
       - --project=${_PROJECT_ID}
       - --quiet
@@ -468,3 +421,46 @@ steps:
           --quiet
 
         echo "==> dimse-receiver deploy complete."
+
+  # --- post-deploy smoke check (API + admin endpoint reachability) ---
+  - name: curlimages/curl:8.12.1
+    id: smoke-check
+    waitFor:
+      - deploy-api
+      - deploy-admin-dashboard
+    entrypoint: /bin/sh
+    args:
+      - -c
+      - |
+        set -euo pipefail
+
+        echo "==> Checking API health: ${_API_URL}/healthz"
+        api_status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "${_API_URL}/healthz" || echo "000")
+        if [ "${api_status}" != "200" ]; then
+          echo "API health check failed with HTTP $${api_status}"
+          cat /tmp/healthz.json || true
+          exit 1
+        fi
+        echo "API health check passed"
+
+        echo "==> Checking admin endpoint reachability: ${_ADMIN_URL}"
+        admin_status=$(curl -s -o /tmp/admin_headers.txt -w '%{http_code}' -I "${_ADMIN_URL}" || echo "000")
+        case "$${admin_status}" in
+          200|301|302|401|403)
+            echo "Admin endpoint reachable with HTTP $${admin_status}"
+            ;;
+          *)
+            echo "Admin endpoint check failed with HTTP $${admin_status}"
+            cat /tmp/admin_headers.txt || true
+            exit 1
+            ;;
+        esac
+
+          echo "## Smoke Check Summary"
+          echo ""
+          echo "- Platform: GCP"
+          echo "- API URL: ${_API_URL}"
+          echo "- API /healthz HTTP: $${api_status}"
+          echo "- Admin URL: ${_ADMIN_URL}"
+          echo "- Admin HEAD HTTP: $${admin_status}"
+          echo "- Result: passed"

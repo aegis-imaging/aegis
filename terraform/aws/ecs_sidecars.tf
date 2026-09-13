@@ -1,6 +1,6 @@
 # ── ECS Fargate — Python processing sidecars ──────────────────────────────────
 #
-# 7 sidecar services that run alongside the Go API. Each registers with
+# 9 sidecar services that run alongside the Go API. Each registers with
 # AWS Cloud Map so the API can reach it at http://<name>.aegis.local:8080.
 #
 # All sidecars share the same IAM roles and ECS security group as the API.
@@ -61,6 +61,21 @@ locals {
       memory = 1024
       env    = []
     }
+    "analytics-service" = {
+      cpu    = 1024
+      memory = 2048
+      env = [
+        { name = "ANALYTICS_TOOL", value = "auto" },
+      ]
+    }
+    "sct-service" = {
+      cpu    = 512
+      memory = 1024
+      env = [
+        { name = "SCT_TOOL", value = "auto" },
+        { name = "SCT_CONTRAST", value = "t2" },
+      ]
+    }
   }
 
   # Common environment variables injected into every sidecar
@@ -76,7 +91,7 @@ locals {
 # ── Task definitions ───────────────────────────────────────────────────────────
 
 resource "aws_ecs_task_definition" "sidecar" {
-  for_each = local.sidecar_configs
+  for_each = { for name, cfg in local.sidecar_configs : name => cfg if var.enable_sidecars }
 
   family                   = "${var.project_name}-${each.key}"
   requires_compatibilities = ["FARGATE"]
@@ -120,7 +135,7 @@ resource "aws_ecs_task_definition" "sidecar" {
 # ── ECS services ──────────────────────────────────────────────────────────────
 
 resource "aws_ecs_service" "sidecar" {
-  for_each = local.sidecar_configs
+  for_each = { for name, cfg in local.sidecar_configs : name => cfg if var.enable_sidecars }
 
   name                   = "${var.project_name}-${each.key}"
   cluster                = aws_ecs_cluster.main.id

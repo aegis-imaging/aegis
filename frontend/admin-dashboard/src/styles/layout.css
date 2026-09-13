@@ -1,0 +1,30 @@
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+
+/* ── Sidebar + main layout ───────────────────────────────────────────────── */
+.layout-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Sidebar toolbar (search, theme, refresh) ──────────────────────────── */
+
+/* Mobile overlay */
+
+@media (max-width: 899px) {
+  .layout-body {
+    position: relative;
+  }
+
+}
+
+/* Legacy compat — keep .header-actions referenced elsewhere working */
+
+.tz-warning {
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 600;
+}
+

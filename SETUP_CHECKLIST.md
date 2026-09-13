@@ -2,17 +2,27 @@
 
 Personal environment setup tasks for building the MVP/POC. Complete these in order — each section unblocks the next.
 
-> **GCP Production Status (2026-02-23):** `aegis-prod-488120` is live.
+> **GCP Production Status (2026-02-24):** `<GCP_PROJECT_ID>` is live.
 > API: `https://api.aegisimaging.ai` — all services healthy, cloud smoke suite 11/11 PASS.
-> DIMSE receiver: `aegis-prod-dimse-receiver` (Compute Engine VM, `us-central1-a`, static IP `35.232.172.221`, port 11112).
+> DIMSE receiver: `aegis-prod-dimse-receiver` (Compute Engine VM, `us-central1-a`, static IP `<GCP_DIMSE_PUBLIC_IP>`, port 11112).
 > CI/CD: Cloud Build triggers active in `us-central1` (`deploy-on-develop` + `terraform-apply-on-develop`).
+>
+> **AWS Production Status (2026-02-25):** `<AWS_ACCOUNT_ID>` / `us-east-1` is live.
+> API: `https://aws.api.aegisimaging.ai` — 14 ECS Fargate services + EC2 DIMSE receiver (15 services total, matching GCP parity), RDS PostgreSQL 15, S3, ALB + Cognito auth.
+> DIMSE receiver: EC2 instance with Elastic IP (port 11112).
+> Cross-cloud DICOM routing: STOW-RS + DIMSE C-STORE verified live. GitHub Actions CI/CD active (fires on push to `develop`).
+>
+> **Azure Production Status (2026-02-28):** Live.
+> API: `https://azure.api.aegisimaging.ai` — 14 Container Apps + Azure Linux VM DIMSE receiver (15 services total), PostgreSQL Flexible Server, Azure Blob Storage, Azure Container Registry.
+> DIMSE receiver: Azure Linux VM (Standard_B2s, Debian 12, static IP `<AZURE_DIMSE_PUBLIC_IP>`, port 11112).
+> GitHub Actions OIDC CI/CD (`.github/workflows/deploy-azure.yml`) fires on push to `develop`.
 
 ---
 
 ## Monitoring & Observability
 
 **Cloud Monitoring Dashboard** (requires GCP console access):
-https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+`https://console.cloud.google.com/monitoring/dashboards?project=<GCP_PROJECT_ID>`
 
 **Alert policies** (9 active):
 - API 5xx rate, API p99 latency, API uptime check
@@ -49,7 +59,7 @@ Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC a
 
 - [ ] AEGIS Imaging LLC EIN obtained ✓
 - [ ] Open business bank account for AEGIS Imaging LLC
-- [x] Create GCP account + billing account for AEGIS Imaging LLC — project `aegis-prod-488120`, billing `016DEE-91CE5C-ECB970`
+- [x] Create GCP account + billing account for AEGIS Imaging LLC — project `<GCP_PROJECT_ID>`, billing `016DEE-91CE5C-ECB970`
 - [ ] Create Vercel account for AEGIS Imaging LLC
 - [ ] Create Brevo account for AEGIS Imaging LLC (free tier: 300 emails/day)
 
@@ -65,11 +75,11 @@ Each LLC gets its own accounts. Do not share accounts across AEGIS Imaging LLC a
 
 ## 2. GCP Project Setup
 
-- [x] Create a new GCP project under the **AEGIS Imaging LLC billing account** — `aegis-prod-488120` (region `us-central1`)
+- [x] Create a new GCP project under the **AEGIS Imaging LLC billing account** — `<GCP_PROJECT_ID>` (region `us-central1`)
 - [x] Link the AEGIS billing account to the project — `016DEE-91CE5C-ECB970`
 - [x] Install the gcloud CLI (`brew install google-cloud-sdk`)
 - [x] Authenticate: `gcloud auth login` and `gcloud auth application-default login`
-- [x] Set default project: `gcloud config set project aegis-prod-488120`
+- [x] Set default project: `gcloud config set project <GCP_PROJECT_ID>`
 
 ### Beta launch auth (GCP IAP)
 
@@ -114,11 +124,11 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 
 - [x] Copy `terraform/infra/terraform.tfvars.example` to `terraform/infra/terraform.tfvars`
 - [x] Fill in required `terraform/infra/terraform.tfvars` values:
-  - `project_id = "aegis-prod-488120"`, `region = "us-central1"`, `environment = "prod"`
+  - `project_id = "<GCP_PROJECT_ID>"`, `region = "us-central1"`, `environment = "prod"`
   - `api_domain = "api.aegisimaging.ai"`, `admin_domain = "admin.aegisimaging.ai"`
   - `iap_oauth_client_id`, `iap_oauth_client_secret`, `iap_access_members = ["user:<your-google-account-email>"]`
   - `db_password` (via Secret Manager), `db_password_secret_id`
-  - image URIs for all services at `us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services`
+  - image URIs for all services at `us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/aegis-services`
 - [x] Build and push images to Artifact Registry — all 8 services pushed at `:latest`
 - [x] Run `terraform init` in `terraform/infra/`
 - [x] Run `terraform fmt -check`
@@ -156,16 +166,16 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
   ```
 - [ ] Open the Cloud Monitoring dashboard in GCP Console:
   ```
-  https://console.cloud.google.com/monitoring/dashboards?project=aegis-prod-488120
+  https://console.cloud.google.com/monitoring/dashboards?project=<GCP_PROJECT_ID>
   ```
   Expected: "AEGIS Operations — prod" dashboard with 11 tiles (API rate/errors/latency, Cloud Run instances/memory, Cloud SQL CPU/disk/connections, sidecar 5xx, pipeline failures, stuck-study SLA alerts).
 - [ ] Confirm alert policies are active (9 total after Feature 55):
   ```bash
-  gcloud monitoring policies list --project=aegis-prod-488120 --format='table(displayName,enabled)'
+  gcloud monitoring policies list --project=<GCP_PROJECT_ID> --format='table(displayName,enabled)'
   ```
 - [ ] Confirm log-based metrics exist:
   ```bash
-  gcloud logging metrics list --project=aegis-prod-488120 --format='value(name)'
+  gcloud logging metrics list --project=<GCP_PROJECT_ID> --format='value(name)'
   # Expected: aegis-prod-pipeline-failures, aegis-prod-study-stuck
   ```
 - [ ] See `terraform/monitoring/README.md` for full metric reference and runbook links.
@@ -176,14 +186,14 @@ For the beta/MVP, use GCP Identity-Aware Proxy (IAP) to gate the admin dashboard
 The DIMSE C-STORE SCP runs on a dedicated Compute Engine VM because Cloud Run cannot expose raw TCP ports. Terraform creates the VM; Cloud Build deploys new images by updating VM metadata and resetting the instance.
 
 - [x] VM `aegis-prod-dimse-receiver` created in `us-central1-a` via `terraform/infra/dimse.tf`
-- [x] Static regional IP `35.232.172.221` assigned; firewall rule allows TCP 11112 from `0.0.0.0/0`
+- [x] Static regional IP `<GCP_DIMSE_PUBLIC_IP>` assigned; firewall rule allows TCP 11112 from `0.0.0.0/0`
 - [x] VPC-internal firewall allows TCP 8080 from Go API → DIMSE VM health endpoint
 - [x] Startup script mounts GCS staging bucket via gcsfuse at `/app/data` and starts the DIMSE container
 - [x] `dimse_receiver_image` and `dimse_api_url` set in `terraform/infra/terraform.tfvars` (stored in Secret Manager as `aegis-prod-terraform-tfvars` version 2)
 - [ ] Verify DIMSE receiver is running after a test C-STORE from PACS:
   ```bash
   # From any host with storescu installed
-  storescu -v -aec AEGIS 35.232.172.221 11112 /path/to/test.dcm
+  storescu -v -aec AEGIS <GCP_DIMSE_PUBLIC_IP> 11112 /path/to/test.dcm
   # Then verify in admin dashboard → Studies tab
   ```
 - [ ] Verify VM health endpoint (VPC-internal only):
@@ -197,7 +207,7 @@ The DIMSE C-STORE SCP runs on a dedicated Compute Engine VM because Cloud Run ca
 # Manual update (if needed):
 gcloud compute instances add-metadata aegis-prod-dimse-receiver \
   --zone=us-central1-a \
-  --metadata=dimse-image=us-central1-docker.pkg.dev/aegis-prod-488120/aegis-services/dimse-receiver:latest
+  --metadata=dimse-image=us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/aegis-services/dimse-receiver:latest
 gcloud compute instances reset aegis-prod-dimse-receiver --zone=us-central1-a
 ```
 
@@ -208,11 +218,11 @@ Cloud Build triggers were created by `scripts/gcp_setup_cloudbuild.sh` and run i
 - [x] GitHub App connection established (Cloud Build → `aegis` connection → `aegis-imaging/aegis` repo)
 - [x] Trigger `deploy-on-develop` — fires on push to `develop`; runs `cloudbuild.yaml` (builds+pushes all images, deploys Cloud Run services, hot-swaps DIMSE VM)
 - [x] Trigger `terraform-apply-on-develop` — fires when `terraform/infra/**` changes on `develop`; runs `cloudbuild.terraform.yaml`; reads `terraform.tfvars` from Secret Manager
-- [x] Cloud Build SA `aegis-cloud-build@aegis-prod-488120.iam.gserviceaccount.com` has all required IAM roles (tracked in `terraform/project/main.tf`)
+- [x] Cloud Build SA `aegis-cloud-build@<GCP_PROJECT_ID>.iam.gserviceaccount.com` has all required IAM roles (tracked in `terraform/project/main.tf`)
 
 **Monitor recent builds:**
 ```bash
-gcloud builds list --project=aegis-prod-488120 --region=us-central1 --limit=5
+gcloud builds list --project=<GCP_PROJECT_ID> --region=us-central1 --limit=5
 ```
 
 **Re-run setup (idempotent):**
@@ -251,7 +261,7 @@ curl -X POST https://<api_domain>/api/admin-users \
 
 ### GCP (Cloud SQL + Cloud Run API)
 
-- [x] Confirm DB password secret exists — `aegis-prod-db-password` in Secret Manager (`aegis-prod-488120`)
+- [x] Confirm DB password secret exists — `aegis-prod-db-password` in Secret Manager (`<GCP_PROJECT_ID>`)
 - [x] Confirm API service account has secret accessor — verified via Terraform IAM binding
 - [ ] Rotate DB password (dev drill — not yet done):
   ```bash
@@ -301,7 +311,9 @@ Manual trigger via GitHub Actions:
 
 ## 4d. Terraform — AWS HTTPS + Cognito Edge/Auth
 
-- [ ] Copy `terraform/aws/terraform.tfvars.example` to `terraform/aws/terraform.tfvars`
+> **AWS Production Status (2026-02-25): LIVE.** `https://aws.api.aegisimaging.ai` — 14 ECS Fargate services + EC2 DIMSE receiver (15 total), RDS PostgreSQL 15, S3, ALB + Cognito. Cross-cloud DICOM routing verified. GitHub Actions auto-deploy active.
+
+- [x] Copy `terraform/aws/terraform.tfvars.example` to `terraform/aws/terraform.tfvars`
 - [ ] Fill required values:
   - `aws_region`, `environment`, `project_name`
   - `acm_certificate_arn` (issued cert in the same region as ALB)
@@ -328,6 +340,140 @@ Manual trigger via GitHub Actions:
   curl -f https://<alb_dns>/healthz
   ```
 
+## 4e. Terraform — Azure Infrastructure
+
+> **Azure Status (2026-02-26): Deploying — Day 9.** Azure Container Apps + PostgreSQL Flexible Server + Azure Blob Storage + Azure Container Registry. GitHub Actions OIDC CI/CD (`.github/workflows/deploy-azure.yml`) auto-deploys on push to `develop`.
+
+### Prerequisites
+
+- [ ] Install Azure CLI: `brew install azure-cli` (macOS)
+- [ ] Log in: `az login`
+- [ ] Set subscription: `az account set --subscription <SUBSCRIPTION_ID>`
+- [ ] Install Terraform: `brew install terraform`
+
+### One-time: Create Terraform state storage
+
+```bash
+az group create --name aegis-tfstate --location eastus
+az storage account create \
+  --name aegistfstate \
+  --resource-group aegis-tfstate \
+  --sku Standard_LRS \
+  --allow-blob-public-access false
+az storage container create \
+  --name tfstate \
+  --account-name aegistfstate
+```
+
+### One-time: Create OIDC federated service principal for GitHub Actions
+
+```bash
+# Create service principal
+SP=$(az ad sp create-for-rbac --name aegis-github-actions \
+  --role Contributor \
+  --scopes /subscriptions/<SUBSCRIPTION_ID> \
+  --output json)
+
+echo "Client ID:      $(echo $SP | jq -r .appId)"
+echo "Tenant ID:      $(az account show --query tenantId -o tsv)"
+echo "Subscription:   <SUBSCRIPTION_ID>"
+
+# Add federated credentials for the develop branch (push/dispatch)
+APP_ID=$(echo $SP | jq -r .appId)
+az ad app federated-credential create \
+  --id $APP_ID \
+  --parameters '{"name":"aegis-develop","issuer":"https://token.actions.githubusercontent.com","subject":"repo:aegis-imaging/aegis:ref:refs/heads/develop","audiences":["api://AzureADTokenExchange"]}'
+
+# Add federated credential for pull requests (terraform plan on PRs)
+az ad app federated-credential create \
+  --id $APP_ID \
+  --parameters '{"name":"aegis-pull-request","issuer":"https://token.actions.githubusercontent.com","subject":"repo:aegis-imaging/aegis:pull_request","audiences":["api://AzureADTokenExchange"]}'
+```
+
+Add the following as **GitHub Secrets** on the repository:
+- `AZURE_CLIENT_ID` — service principal App ID
+- `AZURE_TENANT_ID` — Azure AD tenant ID
+- `AZURE_SUBSCRIPTION_ID` — subscription ID
+- `AZURE_ACR_REGISTRY` — set after Terraform apply (see outputs)
+- `AZURE_RESOURCE_GROUP` — e.g. `aegis-prod`
+
+Add as **GitHub Variables**:
+- `AZURE_DWV_URL` — DWV container app URL (set after first deploy)
+- `AZURE_API_URL` — API container app URL (set after first deploy)
+
+### Apply Terraform
+
+- [ ] Copy `terraform/azure/terraform.tfvars.example` to `terraform/azure/terraform.tfvars`
+- [ ] Fill required values:
+  - `azure_ad_tenant_id` (`az account show --query tenantId -o tsv`)
+  - `db_admin_password` (strong password, ≥ 16 chars)
+  - `alert_email`
+  - `first_admin_email`
+  - `api_domain` and `admin_domain` (optional — leave empty to use default ACA hostnames)
+- [ ] Run:
+  ```bash
+  terraform -chdir=terraform/azure init
+  terraform -chdir=terraform/azure fmt -check
+  terraform -chdir=terraform/azure validate
+  terraform -chdir=terraform/azure plan
+  terraform -chdir=terraform/azure apply
+  ```
+- [ ] Note the outputs:
+  ```bash
+  terraform -chdir=terraform/azure output
+  ```
+  Key outputs: `acr_login_server`, `api_url`, `admin_dashboard_url`, `acs_smtp_host`
+
+### First image push
+
+```bash
+# Build and push images manually for first deploy (before GitHub Actions is configured)
+ACR=$(terraform -chdir=terraform/azure output -raw acr_login_server)
+az acr login --name $ACR
+
+# Build all images
+docker build --platform linux/amd64 -t $ACR/api:latest api/
+docker build --platform linux/amd64 \
+  --build-arg VITE_DWV_BASE_URL=<dwv_url> \
+  --build-arg VITE_API_BASE_URL=<api_url> \
+  -t $ACR/admin-dashboard:latest frontend/admin-dashboard/
+# ... repeat for all 13 services
+
+docker push $ACR/api:latest
+# ... push all
+```
+
+### Email (Azure Communication Services)
+
+- [ ] After `terraform apply`, note the ACS SMTP config from outputs:
+  - Host: `smtp.azurecomm.net`, Port: `587`
+  - Username format: `<EntraAppClientId>|<TenantId>|<AcsResourceName>`
+  - Password: OAuth2 access token (short-lived; use the ACS connection string for simpler SMTP)
+- [ ] Alternatively: get the ACS connection string from Azure Portal → Communication Services → Keys
+  - Use connection string auth for simpler SMTP integration with standard relay tools
+- [ ] Set SMTP env vars on the API Container App:
+  ```bash
+  az containerapp update --name aegis-prod-api \
+    --resource-group aegis-prod \
+    --set-env-vars \
+      SMTP_HOST=smtp.azurecomm.net \
+      SMTP_PORT=587 \
+      SMTP_FROM=noreply@aegisimaging.ai \
+      SMTP_USERNAME="<EntraAppClientId>|<TenantId>|<AcsResourceName>" \
+      SMTP_PASSWORD="<oauth-token-or-access-key>"
+  ```
+
+### Verify deployment
+
+- [ ] API health check:
+  ```bash
+  curl -f https://<api_fqdn>/healthz | jq
+  ```
+- [ ] Auth test (Easy Auth injects header automatically when accessing admin dashboard):
+  - Open admin dashboard URL in browser → Azure AD login → redirects back
+  - Your Azure AD email must be added to `admin_users` table (via `FIRST_ADMIN_EMAIL` var)
+- [ ] Cross-cloud routing test: add Azure→GCP destination in admin dashboard, upload a study, verify STOW-RS forward
+
 ## 5. Sample DICOM Data for Local Testing
 
 - [ ] Download sample brain MRI DICOM files for testing (options below):
@@ -348,10 +494,10 @@ Manual trigger via GitHub Actions:
 
 - [ ] `cd frontend/admin-dashboard && npm install`
 - [ ] `npm run dev` — verify it runs on http://localhost:3001
-- [ ] Click **View** on any study row → Weasis viewer iframe appears inline
+- [ ] Click **View** on any study row → DWV viewer iframe appears inline
 - [ ] Click **Open in new tab ↗** → viewer opens in a new browser tab
 - [ ] Click **Audit Log** tab → shows event table (empty until actions are taken)
-- [ ] For a defaced head study: click **Review defacing** → side-by-side Weasis panel (Before/After)
+- [ ] For a defaced head study: click **Review defacing** → side-by-side DWV panel (Before/After)
 - [ ] Click **Routing** tab → Destinations and Rules sections load (empty state)
 - [ ] Click **Institutions** tab → Institutions table loads (empty state)
 
@@ -642,7 +788,7 @@ Auth is disabled by default (`AUTH_ENABLED=false`) — all admin endpoints auto-
   cd api && STORAGE_MODE=s3 S3_BUCKET=aegis-dev S3_REGION=us-east-1 S3_ENDPOINT=http://localhost:4566 go run .
   ```
 - [ ] Upload a study via the Upload Portal → verify files stored in S3 bucket
-- [ ] View study in Weasis → verify DICOMweb proxy retrieves from S3
+- [ ] View study in DWV → verify DICOMweb proxy retrieves from S3
 - [ ] Verify signed URLs work: upload + download flows complete without error
 
 ### Azure AD App Registration Setup (for production Azure deployments)
@@ -876,7 +1022,7 @@ The admin dashboard now includes a study detail view. Clicking a study UID in th
 - [ ] Verify meta row shows modality, body part, files, series, store, timestamps
 - [ ] Verify pipeline visualization shows 7 stages with color-coded dots
 - [ ] Test action buttons: Approve, Reject, Classify, Scan for PHI, etc.
-- [ ] Click "View" → Weasis viewer opens inline
+- [ ] Click "View" → DWV viewer opens inline
 - [ ] For approved studies: verify share form appears, create a share link
 - [ ] Check Audit Trail tab → shows all audit entries for this study
 - [ ] Check Routing Log tab → shows routing rule evaluations
@@ -928,7 +1074,7 @@ make test-race   # full suite with race detector
 - [ ] `docker compose up -d` — builds and starts all 11 services
 - [ ] Verify API health: `curl http://localhost:8080/healthz | python3 -m json.tool`
   - Should show `"status":"ok"`, `"database":"healthy"`, `"storage":"healthy"`, and all configured sidecar services as `"healthy"`
-- [ ] Verify Weasis loads at http://localhost:3005
+- [ ] Verify DWV loads at http://localhost:3005
 - [ ] Verify Mailpit web UI at http://localhost:8025
 
 Services started by `docker compose up`:
@@ -937,7 +1083,7 @@ Services started by `docker compose up`:
 |---------|------|-------|
 | postgres | 5432 | Data in `pgdata` named volume (persists across restarts) |
 | mailpit | 1025 / 8025 | SMTP capture + web UI |
-| weasis | 3005 | Weasis DWV viewer |
+| dwv | 3005 | DWV viewer |
 | api | 8080 | Go API (runs migrations on startup) |
 | defacing | (internal) | Defacing service |
 | phi-detection | (internal) | Burned-in PHI detection |
@@ -1232,7 +1378,7 @@ Use GitHub Organizations to separate codebases by company.
 
 ## 10. Future — Before Proposing to Work
 
-- [ ] Have a working end-to-end demo: upload → anonymize → view in Weasis
+- [ ] Have a working end-to-end demo: upload → anonymize → view in DWV
 - [ ] Prepare a 5-minute screen recording of the demo flow
 - [ ] Draft a one-page proposal covering: problem, solution, differentiation, cost estimate
 - [ ] Identify potential pilot users / departments at your institution

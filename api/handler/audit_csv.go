@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/aegis-imaging/aegis/api/middleware"
 	"github.com/aegis-imaging/aegis/api/model"
 )
 
@@ -35,8 +36,26 @@ func (s *Server) ExportAuditCSV(w http.ResponseWriter, r *http.Request) {
 		DateFrom:     dateFrom,
 		DateTo:       dateTo,
 	}
+	if t := middleware.TenantFromContext(r.Context()); t != nil {
+		f.TenantID = t.ID
+	}
+	projectID := q.Get("project_id")
+	access, ok := s.requireResearcherProjectScope(w, r, projectID)
+	if !ok {
+		return
+	}
+	institutionID := ""
+	if access != nil && access.IsSiteScoped() {
+		institutionID = *access.InstitutionID
+	}
 
-	entries, err := model.ListAuditEntries(r.Context(), s.db, f, 10000, 0)
+	var entries []model.AuditEntry
+	var err error
+	if access != nil {
+		entries, err = model.ListAuditEntriesForStudyScope(r.Context(), s.db, f, access.ProjectID, institutionID, 10000, 0)
+	} else {
+		entries, err = model.ListAuditEntries(r.Context(), s.db, f, 10000, 0)
+	}
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "failed to list audit entries")
 		return

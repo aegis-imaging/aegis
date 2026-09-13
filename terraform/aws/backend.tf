@@ -31,11 +31,12 @@ terraform {
 # ── State bucket (managed declaratively after bootstrap) ──────────────────────
 
 resource "aws_s3_bucket" "tf_state" {
-  bucket = "aegis-prod-terraform-state"
+  bucket        = "aegis-prod-terraform-state"
+  force_destroy = true # Allow destroy even with state objects (teardown)
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # lifecycle {
+  #   prevent_destroy = true  # Disabled for teardown
+  # }
 
   tags = {
     Name        = "${var.project_name}-tf-state"
@@ -80,9 +81,9 @@ resource "aws_dynamodb_table" "tf_locks" {
     type = "S"
   }
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # lifecycle {
+  #   prevent_destroy = true  # Disabled for teardown
+  # }
 
   tags = {
     Name        = "${var.project_name}-tf-locks"

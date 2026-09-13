@@ -44,7 +44,7 @@ curl -s https://api.aegisimaging.ai/healthz | jq .
 # Recent errors
 gcloud logging read \
   'resource.type="cloud_run_revision" AND severity>=ERROR' \
-  --project=aegis-prod-488119 --limit=20 --format=json | jq '.[].textPayload'
+  --project=<GCP_PROJECT_ID> --limit=20 --format=json | jq '.[].textPayload'
 
 # Study pipeline status — check for stuck studies
 curl -s 'https://api.aegisimaging.ai/api/studies?limit=10&status=defacing' \
@@ -69,6 +69,40 @@ For stuck studies, use the diagnostics endpoint:
 curl -s https://api.aegisimaging.ai/api/studies/<id>/diagnostics \
   -H 'Authorization: Bearer <token>' | jq .summary
 ```
+
+For upload attribution drift (restricted projects receiving studies with missing institution linkage), use:
+
+```bash
+# Platform-level snapshot (last 7 days)
+curl -s 'https://api.aegisimaging.ai/api/stats/institution-attribution?days=7' \
+  -H 'Authorization: Bearer <token>' | jq .
+
+# Project-scoped snapshot (required for researcher role)
+curl -s 'https://api.aegisimaging.ai/api/stats/institution-attribution?project_id=<project_uuid>&days=7' \
+  -H 'Authorization: Bearer <token>' | jq .
+```
+
+SQL fallback (Cloud SQL / psql):
+
+```sql
+SELECT
+  p.id,
+  p.slug,
+  p.name,
+  COUNT(*) AS total_studies,
+  COUNT(*) FILTER (WHERE s.institution_id IS NULL) AS unattributed_studies
+FROM studies s
+JOIN projects p ON p.id = s.project_id
+WHERE p.restricted = true
+  AND s.created_at >= now() - interval '7 days'
+GROUP BY p.id, p.slug, p.name
+ORDER BY unattributed_studies DESC, total_studies DESC;
+```
+
+Remediation:
+- Confirm upload path is using explicit institution attribution for site-scoped users.
+- Verify institution is enabled, type `sender|both`, and linked to the project as `sender|admin`.
+- Re-run failed uploads after membership/institution link corrections.
 
 ### 6. Resolve
 
@@ -108,28 +142,28 @@ Within 48 hours, add a post-mortem document to `docs/runbooks/postmortems/`:
 
 ```bash
 # View service status
-gcloud run services describe aegis-api --region=us-central1 --project=aegis-prod-488119
+gcloud run services describe aegis-api --region=us-central1 --project=<GCP_PROJECT_ID>
 
 # View recent revisions
-gcloud run revisions list --service=aegis-api --region=us-central1 --project=aegis-prod-488119
+gcloud run revisions list --service=aegis-api --region=us-central1 --project=<GCP_PROJECT_ID>
 
 # Roll back to previous revision
 PREV=$(gcloud run revisions list --service=aegis-api --region=us-central1 \
-  --project=aegis-prod-488119 --format='value(name)' | sed -n '2p')
+  --project=<GCP_PROJECT_ID> --format='value(name)' | sed -n '2p')
 gcloud run services update-traffic aegis-api \
-  --to-revisions=$PREV=100 --region=us-central1 --project=aegis-prod-488119
+  --to-revisions=$PREV=100 --region=us-central1 --project=<GCP_PROJECT_ID>
 
 # Stream live logs
 gcloud alpha logging tail \
   'resource.type="cloud_run_revision" AND resource.labels.service_name="aegis-api"' \
-  --project=aegis-prod-488119
+  --project=<GCP_PROJECT_ID>
 ```
 
 ### Cloud SQL
 
 ```bash
 # Connect to DB (requires Cloud SQL Auth Proxy or IAP tunnel)
-cloud_sql_proxy -instances=aegis-prod-488119:us-central1:aegis-prod=tcp:5432 &
+cloud_sql_proxy -instances=<GCP_PROJECT_ID>:us-central1:aegis-prod=tcp:5432 &
 psql -h 127.0.0.1 -U aegis -d aegis
 
 # Check replication lag (if replica exists)
@@ -145,7 +179,7 @@ FROM pg_stat_activity WHERE state != 'idle' ORDER BY duration DESC;
 ```bash
 # Retrieve DB password
 gcloud secrets versions access latest \
-  --secret=aegis-prod-db-password --project=aegis-prod-488119
+  --secret=aegis-prod-db-password --project=<GCP_PROJECT_ID>
 ```
 
 ### Terraform

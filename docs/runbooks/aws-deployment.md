@@ -7,8 +7,8 @@ Use this as a reference for re-provisioning, disaster recovery, or adding a seco
 
 ## Prerequisites
 
-- AWS account `301691475234` (`aegis-imaging`)
-- AWS CLI configured: `aws configure` with `aegis-deploy` IAM user credentials
+- AWS account `<AWS_ACCOUNT_ID>` (`aegis-imaging`)
+- AWS CLI configured: `aws configure` with `<deploy-iam-user>` IAM user credentials
 - Terraform >= 1.5: `brew install terraform`
 - Docker with `--platform linux/amd64` build support (Rosetta on Apple Silicon)
 - GoDaddy DNS access for `aegisimaging.ai`
@@ -21,8 +21,8 @@ Use this as a reference for re-provisioning, disaster recovery, or adding a seco
 | Detail | Value |
 |--------|-------|
 | Region | `us-east-1` |
-| Account ID | `301691475234` |
-| IAM deploy user | `aegis-deploy` (access key `AKIA****************`) |
+| Account ID | `<AWS_ACCOUNT_ID>` |
+| IAM deploy user | `<deploy-iam-user>` (access key lives only in your local AWS profile — never commit it) |
 | Terraform state bucket | `aegis-prod-terraform-state` (S3, versioned, KMS-encrypted) |
 | Terraform lock table | `aegis-terraform-locks` (DynamoDB) |
 
@@ -61,7 +61,7 @@ block in Terraform if present. Remove that block — DynamoDB encrypts at rest b
 `*.aegisimaging.ai` only covers one level of subdomain. Two-level subdomains like
 `aws.api.aegisimaging.ai` require explicit SANs.
 
-**Cert ARN (current):** `arn:aws:acm:us-east-1:301691475234:certificate/2ab6ba5a-87f1-4a1d-9cb6-88bf60033526`
+**Cert ARN (current):** `arn:aws:acm:us-east-1:<AWS_ACCOUNT_ID>:certificate/<ACM_CERT_ID>`
 
 **Covered SANs:**
 - `aegisimaging.ai`
@@ -69,7 +69,7 @@ block in Terraform if present. Remove that block — DynamoDB encrypts at rest b
 - `aws.api.aegisimaging.ai`
 - `aws.admin.aegisimaging.ai`
 
-**To add a new subdomain** (e.g. `aws.weasis.aegisimaging.ai`):
+**To add a new subdomain** (e.g. `aws.dwv.aegisimaging.ai`):
 1. ACM Console → Request certificate → DNS validation
 2. Add all existing SANs **plus** the new one
 3. Add the new DNS validation CNAME to GoDaddy (existing SANs are already validated)
@@ -99,7 +99,7 @@ terraform apply -auto-approve
 - ALB (internet-facing) with HTTPS listener + ACM cert
 - Cognito user pool + app client + hosted domain
 - ALB listener rules (host-based + path-based)
-- ECS task definitions + services: API, admin-dashboard, sidecars, Weasis
+- ECS task definitions + services: API, admin-dashboard, sidecars, DWV
 - CloudWatch log group
 - Service discovery namespace `aegis.local` (for sidecar-to-sidecar DNS)
 - SNS + SQS for event notifications
@@ -109,14 +109,14 @@ terraform apply -auto-approve
 
 ## Phase 4 — ALB DNS Architecture
 
-Single ALB `aegis-alb-2106903979.us-east-1.elb.amazonaws.com` serves all subdomains
+Single ALB `<ALB_DNS_NAME>` serves all subdomains
 via host-based listener rules:
 
 | Priority | Host | Auth | Target |
 |----------|------|------|--------|
 | 1 | `aws.api.aegisimaging.ai` | None (Go API validates Cognito JWT) | API target group |
 | 2 | `aws.admin.aegisimaging.ai` | Cognito authenticate-cognito | Admin target group |
-| 3 | `aws.weasis.aegisimaging.ai` | None (public viewer) | Weasis target group |
+| 3 | `aws.dwv.aegisimaging.ai` | None (public viewer) | DWV target group |
 | 10 | any, `/healthz` | None | API target group |
 | 20 | any, `/api/upload/*` | None | API target group |
 | 30 | any, `/api/export/*` | None | API target group |
@@ -130,9 +130,9 @@ via host-based listener rules:
 
 **GoDaddy CNAMEs** (all → same ALB):
 ```
-aws.api.aegisimaging.ai    →  aegis-alb-2106903979.us-east-1.elb.amazonaws.com
-aws.admin.aegisimaging.ai  →  aegis-alb-2106903979.us-east-1.elb.amazonaws.com
-aws.weasis.aegisimaging.ai →  aegis-alb-2106903979.us-east-1.elb.amazonaws.com
+aws.api.aegisimaging.ai    →  <ALB_DNS_NAME>
+aws.admin.aegisimaging.ai  →  <ALB_DNS_NAME>
+aws.dwv.aegisimaging.ai    →  <ALB_DNS_NAME>
 ```
 
 ---
@@ -170,37 +170,39 @@ via ECS task definition env var). Default value = `https://api.aegisimaging.ai` 
 ```bash
 aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS \
-    --password-stdin 301691475234.dkr.ecr.us-east-1.amazonaws.com
+    --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
 ```
 
 ### Build & push API
 
 ```bash
 docker build --platform linux/amd64 \
-  -t 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/api:latest \
+  -t <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/api:latest \
   -f api/Dockerfile api/
-docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/api:latest
+docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/api:latest
 ```
 
-### Build & push admin dashboard (AWS-specific: Weasis URL baked in)
+### Build & push admin dashboard (AWS-specific: DWV URL baked in)
 
 ```bash
 docker build --platform linux/amd64 \
-  --build-arg VITE_WEASIS_BASE_URL=https://aws.weasis.aegisimaging.ai \
-  -t 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:latest \
-  -f frontend/admin-dashboard/Dockerfile frontend/admin-dashboard/
-docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:latest
+  --build-arg VITE_DWV_BASE_URL=https://aws.dwv.aegisimaging.ai \
+  -t <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:latest \
+  -f frontend/admin-dashboard/Dockerfile .
+docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/admin-dashboard:latest
 ```
 
-Note: `API_URL` is NOT a build arg — it is set at runtime via ECS task definition env var.
+Note: the build context is the repo root (`.`), not `frontend/admin-dashboard/` — the
+Dockerfile copies the root `package-lock.json` and the `client/` workspace package.
+`API_URL` is NOT a build arg — it is set at runtime via ECS task definition env var.
 
-### Build & push Weasis
+### Build & push DWV
 
 ```bash
 docker build --platform linux/amd64 \
-  -t 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/weasis:latest \
-  weasis/
-docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/weasis:latest
+  -t <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/dwv:latest \
+  dwv/
+docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/dwv:latest
 ```
 
 ### Build & push sidecars (defacing, phi-detection, qc-service, bids-service,
@@ -209,9 +211,9 @@ docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/weasis:latest
 ```bash
 for svc in defacing phi-detection qc-service bids-service classification-service protocol-service synth-service; do
   docker build --platform linux/amd64 \
-    -t 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/${svc}:latest \
+    -t <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/${svc}:latest \
     ${svc}/
-  docker push 301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/${svc}:latest
+  docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/${svc}:latest
 done
 ```
 
@@ -237,7 +239,7 @@ aws ecs update-service \
 
 aws ecs update-service \
   --cluster aegis-cluster \
-  --service aegis-weasis \
+  --service aegis-dwv \
   --force-new-deployment \
   --region us-east-1
 ```
@@ -246,7 +248,7 @@ Monitor rollout:
 ```bash
 aws ecs describe-services \
   --cluster aegis-cluster \
-  --services aegis-api aegis-admin-dashboard aegis-weasis \
+  --services aegis-api aegis-admin-dashboard aegis-dwv \
   --region us-east-1 \
   --query 'services[*].{name:serviceName,running:runningCount,desired:desiredCount,status:status}'
 ```
@@ -261,7 +263,7 @@ After infrastructure is up, create a Cognito user and register them in the `admi
 
 ```bash
 aws cognito-idp admin-create-user \
-  --user-pool-id us-east-1_h0lDV2FpU \
+  --user-pool-id <COGNITO_USER_POOL_ID> \
   --username ops@aegisimaging.ai \
   --user-attributes \
     Name=email,Value=ops@aegisimaging.ai \
@@ -291,7 +293,7 @@ After bootstrapping, set `AUTH_ENABLED=true` in the API task definition.
 
 ```bash
 aws cognito-idp admin-create-user \
-  --user-pool-id us-east-1_h0lDV2FpU \
+  --user-pool-id <COGNITO_USER_POOL_ID> \
   --username NEW_EMAIL \
   --user-attributes Name=email,Value=NEW_EMAIL Name=email_verified,Value=true \
   --temporary-password "TempPass123!@#" \
@@ -307,13 +309,13 @@ Then register in `admin_users` via the Users tab in the admin dashboard.
 | Resource | Value |
 |----------|-------|
 | VPC | (see `terraform output`) |
-| ALB DNS | `aegis-alb-2106903979.us-east-1.elb.amazonaws.com` |
-| ACM cert | `arn:aws:acm:us-east-1:301691475234:certificate/2ab6ba5a-87f1-4a1d-9cb6-88bf60033526` |
-| Cognito user pool | `us-east-1_h0lDV2FpU` |
+| ALB DNS | `<ALB_DNS_NAME>` |
+| ACM cert | `arn:aws:acm:us-east-1:<AWS_ACCOUNT_ID>:certificate/<ACM_CERT_ID>` |
+| Cognito user pool | `<COGNITO_USER_POOL_ID>` |
 | Cognito domain | `aegis-prod-auth` |
 | ECS cluster | `aegis-cluster` |
 | RDS identifier | (see `terraform output`) |
-| ECR prefix | `301691475234.dkr.ecr.us-east-1.amazonaws.com/aegis/` |
+| ECR prefix | `<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aegis/` |
 
 ---
 
@@ -337,7 +339,7 @@ aws ecs update-service --cluster aegis-cluster --service aegis-api \
 
 ### List Cognito users
 ```bash
-aws cognito-idp list-users --user-pool-id us-east-1_h0lDV2FpU --region us-east-1
+aws cognito-idp list-users --user-pool-id <COGNITO_USER_POOL_ID> --region us-east-1
 ```
 
 ### Get all ECR repository URLs
@@ -356,9 +358,9 @@ cd terraform/aws && terraform output ecr_repositories
 | File storage | `STORAGE_MODE=gcs` | `STORAGE_MODE=s3` |
 | Containers | Cloud Run | ECS Fargate |
 | Admin dashboard API URL | `https://api.aegisimaging.ai` (default) | `https://aws.api.aegisimaging.ai` (via `API_URL` env) |
-| Weasis URL | `https://weasis-uk5cvzf5nq-uc.a.run.app` (Cloud Run, baked as build arg) | `https://aws.weasis.aegisimaging.ai` (baked as build arg) |
-| CI/CD | Cloud Build auto-deploys on push to `develop` | Manual ECR push + ECS force-deploy (no CI yet) |
-| Terraform state | GCS bucket `aegis-prod-488120-tfstate` | S3 bucket `aegis-prod-terraform-state` |
+| DWV URL | `https://dwv-<CLOUD_RUN_HASH>-uc.a.run.app` (Cloud Run, baked as build arg) | `https://aws.dwv.aegisimaging.ai` (baked as build arg) |
+| CI/CD | GitHub Actions deploys on push to `main` (`deploy-gcp.yml`) | GitHub Actions deploys on push to `main` (`deploy-aws.yml`, once `AWS_CI_ENABLED` is `true`) |
+| Terraform state | GCS bucket `<GCP_PROJECT_ID>-tfstate` | S3 bucket `aegis-prod-terraform-state` |
 
 ---
 
@@ -366,11 +368,11 @@ cd terraform/aws && terraform output ecr_repositories
 
 ### ALB Target Group Port vs Container Port
 Docker Compose `ports: "HOST:CONTAINER"` shows host-side mapping. ECS `containerPort` must be the
-**container** port (`8080`), not the host port. The Weasis docker-compose maps `3005:8080` — the
+**container** port (`8080`), not the host port. The DWV docker-compose maps `3005:8080` — the
 container listens on `8080`.
 
 ### `envsubst` Requires Exported Variables
-`docker-entrypoint.sh` in the Weasis container sets `API_URL` as a shell variable. If `API_URL` is
+`docker-entrypoint.sh` in the DWV container sets `API_URL` as a shell variable. If `API_URL` is
 not already in the container's exported environment, `envsubst` (a child process) sees it as unset
 and substitutes an empty string. The symptom is:
 ```
@@ -387,12 +389,11 @@ both the target group (new port) and the listener rule (pointing to new ARN).
 
 ---
 
-## Adding CI/CD for AWS
+## CI/CD for AWS
 
-Currently AWS is deployed manually. To add automation (GitHub Actions recommended):
-
-1. Add GitHub secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ACCOUNT_ID`
-2. Create `.github/workflows/deploy-aws.yml` triggered on push to `develop`
-3. Steps: ECR login → build+push images → terraform apply → ECS force-deploy
+Automated by `.github/workflows/deploy-aws.yml` (images and ECS rollout) and
+`.github/workflows/terraform-aws.yml` (infrastructure), both on push to `main`
+with OIDC role assumption and no access keys. Bootstrap and the required
+secrets and variables are in `ci-cd.md`.
 
 See `.github/workflows/ci.yml` for the existing GCP Cloud Build trigger pattern.

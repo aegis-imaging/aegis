@@ -1,0 +1,184 @@
+name: Terraform GCP
+
+# Plan on pull requests; apply on merge to main behind the gcp-prod
+# environment approval. Same pattern as terraform-aws.yml and
+# terraform-azure.yml. Auth is Workload Identity Federation — no keys.
+#
+# Repo secrets:   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT
+# tfvars:         Secret Manager secret named by the GCP_TFVARS_SECRET variable
+#                 (preferred: viewable and versioned in the Console), else the
+#                 GCP_TERRAFORM_TFVARS repository secret
+# Repo variables: GCP_PROJECT_ID; optional GCP_PLAN_ARCHIVE = gs://<state bucket>/plans
+#                 (full plan for the approver, written to the private bucket)
+# Environment:    gcp-prod — its required reviewers are the approval gate
+#
+# Logs on a public repository are public: plan and apply run through
+# scripts/terraform_ci.sh, which prints resource-level messages only, and
+# no plan file is ever uploaded as an artifact.
+#
+# terraform/project/ is intentionally not managed here (KMS keys with
+# prevent_destroy, project-level IAM). Apply it locally.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "terraform/infra/**"
+      - "scripts/terraform_ci.sh"
+      - ".github/workflows/terraform-gcp.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/infra/**"
+      - "scripts/terraform_ci.sh"
+      - ".github/workflows/terraform-gcp.yml"
+  workflow_dispatch:
+    inputs:
+      confirm_apply:
+        description: "Type APPLY to apply after planning"
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-gcp
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  plan:
+    name: Terraform Plan (GCP)
+    # Pull requests from forks carry no OIDC identity for this repo; skip them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mask project identifier in logs
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: '[ -z "$PROJECT_ID" ] || echo "::add-mask::$PROJECT_ID"'
+
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+          terraform_wrapper: false
+
+      # fmt is checked before the tfvars file exists: it comes from a secret,
+      # is never committed, and need not be canonically formatted.
+      - name: Terraform fmt check
+        run: terraform -chdir=terraform/infra fmt -check
+
+      # tfvars come from the Secret Manager secret named by GCP_TFVARS_SECRET
+      # (viewable and versioned in the Console), else from the
+      # GCP_TERRAFORM_TFVARS repository secret. The file is parse-checked
+      # here so a bad edit fails with a line number, never a value.
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_SECRET: ${{ vars.GCP_TFVARS_SECRET }}
+          TFVARS_CONTENT: ${{ secrets.GCP_TERRAFORM_TFVARS }}
+        run: |
+          if [ -n "$TFVARS_SECRET" ]; then
+            gcloud secrets versions access latest --secret="$TFVARS_SECRET" > terraform/infra/terraform.tfvars
+          elif [ -n "$TFVARS_CONTENT" ]; then
+            printf '%s\n' "$TFVARS_CONTENT" > terraform/infra/terraform.tfvars
+          else
+            echo "::error::set the GCP_TFVARS_SECRET variable (Secret Manager secret name) or the GCP_TERRAFORM_TFVARS secret"
+            exit 1
+          fi
+          if ! err=$(terraform -chdir=terraform/infra fmt terraform.tfvars 2>&1 >/dev/null); then
+            echo "::error::terraform.tfvars does not parse ($(echo "$err" | grep -oE 'line [0-9]+' | head -1)) — every 'name = value' must be on its own line"
+            exit 1
+          fi
+
+      - name: Terraform init
+        run: terraform -chdir=terraform/infra init -input=false
+
+      - name: Terraform validate
+        run: terraform -chdir=terraform/infra validate
+
+      # Full attribute-level plan goes to the private state bucket when
+      # GCP_PLAN_ARCHIVE is set (gs://<state bucket>/plans); logs stay resource-level.
+      - name: Terraform plan
+        env:
+          PLAN_ARCHIVE: ${{ vars.GCP_PLAN_ARCHIVE }}
+        run: ./scripts/terraform_ci.sh plan terraform/infra
+
+  approve:
+    name: Approve apply (gcp-prod)
+    needs: plan
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    runs-on: ubuntu-latest
+    environment: gcp-prod
+    steps:
+      - run: echo "gcp-prod approval granted; applying."
+
+  apply:
+    name: Terraform Apply (GCP)
+    needs: [plan, approve]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mask project identifier in logs
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: '[ -z "$PROJECT_ID" ] || echo "::add-mask::$PROJECT_ID"'
+
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+          terraform_wrapper: false
+
+      # tfvars come from the Secret Manager secret named by GCP_TFVARS_SECRET
+      # (viewable and versioned in the Console), else from the
+      # GCP_TERRAFORM_TFVARS repository secret. The file is parse-checked
+      # here so a bad edit fails with a line number, never a value.
+      - name: Write terraform.tfvars
+        env:
+          TFVARS_SECRET: ${{ vars.GCP_TFVARS_SECRET }}
+          TFVARS_CONTENT: ${{ secrets.GCP_TERRAFORM_TFVARS }}
+        run: |
+          if [ -n "$TFVARS_SECRET" ]; then
+            gcloud secrets versions access latest --secret="$TFVARS_SECRET" > terraform/infra/terraform.tfvars
+          elif [ -n "$TFVARS_CONTENT" ]; then
+            printf '%s\n' "$TFVARS_CONTENT" > terraform/infra/terraform.tfvars
+          else
+            echo "::error::set the GCP_TFVARS_SECRET variable (Secret Manager secret name) or the GCP_TERRAFORM_TFVARS secret"
+            exit 1
+          fi
+          if ! err=$(terraform -chdir=terraform/infra fmt terraform.tfvars 2>&1 >/dev/null); then
+            echo "::error::terraform.tfvars does not parse ($(echo "$err" | grep -oE 'line [0-9]+' | head -1)) — every 'name = value' must be on its own line"
+            exit 1
+          fi
+
+      - name: Terraform init
+        run: terraform -chdir=terraform/infra init -input=false
+
+      # A fresh plan is applied rather than a plan file carried between jobs:
+      # plan files contain every variable value and cannot be shared safely
+      # on a public repository.
+      - name: Terraform apply
+        run: ./scripts/terraform_ci.sh apply terraform/infra

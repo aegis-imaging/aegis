@@ -152,32 +152,56 @@ variable "sidecar_image_tag" {
   default     = "latest"
 }
 
+variable "enable_sidecars" {
+  description = "Run the nine Python processing sidecars on ECS. false = no sidecar tasks and the API's *_SERVICE_URL env vars are blank, so those pipeline steps are skipped (minimal footprint)."
+  type        = bool
+  default     = true
+}
+
+variable "enable_dwv" {
+  description = "Run the DWV viewer ECS service. false = the viewer hostname returns 503 from the ALB."
+  type        = bool
+  default     = true
+}
+
+variable "enable_mcp_server" {
+  description = "Run the MCP server ECS service. false = the admin dashboard's /agent/ proxy has no upstream."
+  type        = bool
+  default     = true
+}
+
 variable "dimse_receiver_image" {
   description = "Full ECR image URI for the DIMSE receiver EC2 instance (empty = skip all DIMSE resources)"
   type        = string
   default     = ""
 }
 
-variable "weasis_domain" {
-  description = "Custom FQDN for Weasis viewer (e.g. aws.weasis.aegisimaging.ai). Empty = use raw ALB DNS."
+variable "dimse_source_ranges" {
+  description = "CIDR ranges allowed to reach DIMSE C-STORE on TCP 11112. Restrict to known PACS IPs in production."
+  type        = list(string)
+  default     = ["203.0.113.0/24"] # RFC 5737 TEST-NET-3 placeholder — replace with real PACS IP ranges
+}
+
+variable "dwv_domain" {
+  description = "Custom FQDN for DWV viewer (e.g. aws.dwv.aegisimaging.ai). Empty = use raw ALB DNS."
   type        = string
   default     = ""
 }
 
-variable "weasis_image_tag" {
-  description = "Container image tag for Weasis ECS task"
+variable "dwv_image_tag" {
+  description = "Container image tag for DWV ECS task"
   type        = string
   default     = "latest"
 }
 
-variable "weasis_cpu" {
-  description = "CPU units for Weasis ECS task definition"
+variable "dwv_cpu" {
+  description = "CPU units for DWV ECS task definition"
   type        = number
   default     = 256
 }
 
-variable "weasis_memory" {
-  description = "Memory (MiB) for Weasis ECS task definition"
+variable "dwv_memory" {
+  description = "Memory (MiB) for DWV ECS task definition"
   type        = number
   default     = 512
 }
@@ -196,6 +220,55 @@ variable "ses_smtp_region" {
 
 variable "first_admin_email" {
   description = "Seeds the first admin user in admin_users on startup (idempotent). Set to ops email."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_image_tag" {
+  description = "Container image tag for the MCP server."
+  type        = string
+  default     = "latest"
+}
+
+variable "mcp_aegis_api_token" {
+  description = "AEGIS API bearer token for the MCP server (stored in Secrets Manager; sensitive)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "landing_domain" {
+  description = "Custom FQDN for the landing page (e.g. aws.aegisimaging.ai). Empty = no landing page."
+  type        = string
+  default     = ""
+}
+
+variable "landing_image_tag" {
+  description = "Container image tag for the landing page ECS task. Empty = skip landing page resources."
+  type        = string
+  default     = ""
+}
+
+variable "landing_cpu" {
+  description = "CPU units for landing page ECS task definition"
+  type        = number
+  default     = 256
+}
+
+variable "landing_memory" {
+  description = "Memory (MiB) for landing page ECS task definition"
+  type        = number
+  default     = 512
+}
+
+variable "upload_portal_domain" {
+  description = "Custom FQDN for the upload portal (e.g. aws.upload.aegisimaging.ai). Empty = no upload portal."
+  type        = string
+  default     = ""
+}
+
+variable "upload_portal_image_tag" {
+  description = "Container image tag for the upload portal ECS task. Empty = skip upload portal resources."
   type        = string
   default     = ""
 }
@@ -324,8 +397,9 @@ resource "aws_kms_alias" "main" {
 # --- S3 (DICOM file storage) ---
 
 resource "aws_s3_bucket" "dicom" {
-  bucket = "${var.project_name}-dicom-${var.environment}"
-  tags   = { Name = "${var.project_name}-dicom" }
+  bucket        = "${var.project_name}-dicom-${var.environment}"
+  force_destroy = true # Allow destroy even with objects present (teardown)
+  tags          = { Name = "${var.project_name}-dicom" }
 }
 
 resource "aws_s3_bucket_versioning" "dicom" {
@@ -363,6 +437,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "dicom" {
     filter { prefix = "staging/" }
 
     expiration { days = 7 }
+  }
+
+  rule {
+    id     = "archive-to-glacier"
+    status = "Enabled"
+
+    filter { prefix = "dicom/" }
+
+    transition {
+      days          = 30
+      storage_class = "GLACIER_IR"
+    }
   }
 }
 
@@ -416,8 +502,8 @@ resource "aws_db_instance" "main" {
 
   backup_retention_period   = 7
   multi_az                  = false # Enable for production HA
-  deletion_protection       = true
-  skip_final_snapshot       = false
+  deletion_protection       = false # Disabled for teardown
+  skip_final_snapshot       = true  # Skip final snapshot for teardown
   final_snapshot_identifier = "${var.project_name}-final-snapshot"
 
   tags = { Name = "${var.project_name}-postgres" }
@@ -426,16 +512,16 @@ resource "aws_db_instance" "main" {
 # --- ECR (Container Registry) ---
 
 locals {
-  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "dimse-receiver", "weasis"]
+  services = ["api", "admin-dashboard", "defacing", "phi-detection", "qc-service", "bids-service", "classification-service", "protocol-service", "synth-service", "analytics-service", "sct-service", "dimse-receiver", "dwv", "mcp-server", "landing", "upload-portal"]
 
-  api_image    = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
-  admin_image  = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
-  weasis_image = "${aws_ecr_repository.services["weasis"].repository_url}:${var.weasis_image_tag}"
+  api_image   = "${aws_ecr_repository.services["api"].repository_url}:${var.api_image_tag}"
+  admin_image = "${aws_ecr_repository.services["admin-dashboard"].repository_url}:${var.admin_image_tag}"
+  dwv_image   = "${aws_ecr_repository.services["dwv"].repository_url}:${var.dwv_image_tag}"
 
   # Friendly FQDNs — use custom domains when set, fall back to raw ALB DNS.
-  api_fqdn    = var.api_domain != "" ? var.api_domain : aws_lb.main.dns_name
-  admin_fqdn  = var.admin_domain != "" ? var.admin_domain : aws_lb.main.dns_name
-  weasis_fqdn = var.weasis_domain != "" ? var.weasis_domain : aws_lb.main.dns_name
+  api_fqdn   = var.api_domain != "" ? var.api_domain : aws_lb.main.dns_name
+  admin_fqdn = var.admin_domain != "" ? var.admin_domain : aws_lb.main.dns_name
+  dwv_fqdn   = var.dwv_domain != "" ? var.dwv_domain : aws_lb.main.dns_name
 
   cognito_callback_urls = length(var.cognito_callback_urls) > 0 ? var.cognito_callback_urls : [
     "https://${local.admin_fqdn}/oauth2/idpresponse"
@@ -445,10 +531,11 @@ locals {
     "https://${local.admin_fqdn}/logout"
   ]
 
-  resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : [
+  resolved_api_allowed_origins = length(var.api_allowed_origins) > 0 ? var.api_allowed_origins : compact([
     "https://${local.admin_fqdn}",
-    "https://${local.weasis_fqdn}",
-  ]
+    "https://${local.dwv_fqdn}",
+    var.landing_domain != "" ? "https://${var.landing_domain}" : "",
+  ])
 
   # SES SMTP endpoint — region-specific. Use ses_smtp_region override when set,
   # otherwise fall back to the primary deployment region.
@@ -488,6 +575,10 @@ locals {
       priority = 80
       paths    = ["/dicomweb*", "/dicomweb-raw*"]
     }
+    stow = {
+      priority = 85
+      paths    = ["/api/stow", "/api/stow/*"]
+    }
   }
 }
 
@@ -496,6 +587,7 @@ resource "aws_ecr_repository" "services" {
 
   name                 = "${var.project_name}/${each.value}"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true # Allow destroy even with images present (teardown)
 
   image_scanning_configuration { scan_on_push = true }
 
@@ -625,8 +717,8 @@ resource "aws_lb_target_group" "admin" {
   tags = { Name = "${var.project_name}-admin-tg" }
 }
 
-resource "aws_lb_target_group" "weasis" {
-  name        = "${var.project_name}-weasis"
+resource "aws_lb_target_group" "dwv" {
+  name        = "${var.project_name}-dwv"
   port        = 8080
   protocol    = "HTTP"
   target_type = "ip"
@@ -641,7 +733,7 @@ resource "aws_lb_target_group" "weasis" {
     matcher             = "200-399"
   }
 
-  tags = { Name = "${var.project_name}-weasis-tg" }
+  tags = { Name = "${var.project_name}-dwv-tg" }
 }
 
 # HTTP listener — redirects to HTTPS
@@ -837,21 +929,21 @@ resource "aws_lb_listener_rule" "admin_subdomain" {
   }
 }
 
-resource "aws_lb_listener_rule" "weasis_subdomain" {
-  count        = var.weasis_domain != "" ? 1 : 0
+resource "aws_lb_listener_rule" "dwv_subdomain" {
+  count        = var.dwv_domain != "" ? 1 : 0
   listener_arn = aws_lb_listener.https.arn
   priority     = 3
 
-  # Weasis is served as a public iframe target — no Cognito gate on the container itself.
+  # DWV is served as a public iframe target — no Cognito gate on the container itself.
   # Security is provided by the Go API's DICOMweb auth (X-Amzn-Oidc-Data on /api/* calls).
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.weasis.arn
+    target_group_arn = aws_lb_target_group.dwv.arn
   }
 
   condition {
     host_header {
-      values = [var.weasis_domain]
+      values = [var.dwv_domain]
     }
   }
 }
@@ -930,6 +1022,17 @@ data "aws_iam_policy_document" "ecs_task_runtime" {
       "${aws_s3_bucket.dicom.arn}/*"
     ]
   }
+
+  # Required for KMS-encrypted S3 bucket: PutObject needs GenerateDataKey,
+  # GetObject needs Decrypt.
+  statement {
+    effect = "Allow"
+    actions = [
+      "kms:GenerateDataKey",
+      "kms:Decrypt"
+    ]
+    resources = [aws_kms_key.main.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "ecs_task_runtime" {
@@ -975,13 +1078,15 @@ resource "aws_ecs_task_definition" "api" {
         { name = "AUTH_ENABLED", value = "true" },
         { name = "AUTH_PROVIDER", value = "aws" },
         { name = "PIPELINE_AUTO", value = "true" },
-        { name = "DEFACING_SERVICE_URL", value = "http://defacing.aegis.local:8080" },
-        { name = "PHI_DETECTION_SERVICE_URL", value = "http://phi-detection.aegis.local:8080" },
-        { name = "QC_SERVICE_URL", value = "http://qc-service.aegis.local:8080" },
-        { name = "BIDS_SERVICE_URL", value = "http://bids-service.aegis.local:8080" },
-        { name = "CLASSIFICATION_SERVICE_URL", value = "http://classification-service.aegis.local:8080" },
-        { name = "PROTOCOL_SERVICE_URL", value = "http://protocol-service.aegis.local:8080" },
-        { name = "SYNTH_SERVICE_URL", value = "http://synth-service.aegis.local:8080" },
+        { name = "DEFACING_SERVICE_URL", value = var.enable_sidecars ? "http://defacing.aegis.local:8080" : "" },
+        { name = "PHI_DETECTION_SERVICE_URL", value = var.enable_sidecars ? "http://phi-detection.aegis.local:8080" : "" },
+        { name = "QC_SERVICE_URL", value = var.enable_sidecars ? "http://qc-service.aegis.local:8080" : "" },
+        { name = "BIDS_SERVICE_URL", value = var.enable_sidecars ? "http://bids-service.aegis.local:8080" : "" },
+        { name = "CLASSIFICATION_SERVICE_URL", value = var.enable_sidecars ? "http://classification-service.aegis.local:8080" : "" },
+        { name = "PROTOCOL_SERVICE_URL", value = var.enable_sidecars ? "http://protocol-service.aegis.local:8080" : "" },
+        { name = "SYNTH_SERVICE_URL", value = var.enable_sidecars ? "http://synth-service.aegis.local:8080" : "" },
+        { name = "ANALYTICS_SERVICE_URL", value = var.enable_sidecars ? "http://analytics-service.aegis.local:8080" : "" },
+        { name = "SCT_SERVICE_URL", value = var.enable_sidecars ? "http://sct-service.aegis.local:8080" : "" },
         { name = "DIMSE_RECEIVER_URL", value = try("http://${aws_instance.dimse_receiver[0].private_ip}:8080", "") },
         { name = "FIRST_ADMIN_EMAIL", value = var.first_admin_email },
         { name = "SMTP_HOST", value = local.ses_smtp_hostname },
@@ -1059,8 +1164,15 @@ resource "aws_ecs_task_definition" "admin" {
         }
       ]
       environment = [
-        # nginx uses this at startup (envsubst) to proxy /api/* to the correct cloud API.
-        { name = "API_URL", value = "https://${local.api_fqdn}" },
+        # nginx uses these at startup (envsubst) to configure backend proxies.
+        # Use internal Cloud Map DNS for API so the Cognito JWT injected by the
+        # admin ALB is forwarded intact — the public ALB strips X-Amzn-Oidc-Data
+        # on a second hop, breaking auth middleware.
+        { name = "API_URL", value = "http://api.aegis.local:8080" },
+        { name = "MCP_SERVER_URL", value = "http://mcp-server.aegis.local:8080" },
+        # AWS VPC DNS — re-resolves service discovery hostnames (e.g. api.aegis.local) every 10s.
+        # Prevents nginx from caching stale task IPs after ECS task replacements.
+        { name = "NGINX_RESOLVER_DIRECTIVE", value = "resolver 169.254.169.253 valid=10s;" },
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -1102,21 +1214,23 @@ resource "aws_ecs_service" "admin" {
   depends_on = [aws_lb_listener.https]
 }
 
-# --- Weasis DWV viewer ---
+# --- DWV viewer ---
 
-resource "aws_ecs_task_definition" "weasis" {
-  family                   = "${var.project_name}-weasis"
+resource "aws_ecs_task_definition" "dwv" {
+  count = var.enable_dwv ? 1 : 0
+
+  family                   = "${var.project_name}-dwv"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = tostring(var.weasis_cpu)
-  memory                   = tostring(var.weasis_memory)
+  cpu                      = tostring(var.dwv_cpu)
+  memory                   = tostring(var.dwv_memory)
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([
     {
-      name      = "weasis"
-      image     = local.weasis_image
+      name      = "dwv"
+      image     = local.dwv_image
       essential = true
       portMappings = [
         {
@@ -1133,17 +1247,19 @@ resource "aws_ecs_task_definition" "weasis" {
         options = {
           awslogs-group         = aws_cloudwatch_log_group.main.name
           awslogs-region        = var.aws_region
-          awslogs-stream-prefix = "weasis"
+          awslogs-stream-prefix = "dwv"
         }
       }
     }
   ])
 }
 
-resource "aws_ecs_service" "weasis" {
-  name            = "${var.project_name}-weasis"
+resource "aws_ecs_service" "dwv" {
+  count = var.enable_dwv ? 1 : 0
+
+  name            = "${var.project_name}-dwv"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.weasis.arn
+  task_definition = aws_ecs_task_definition.dwv[0].arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
@@ -1159,8 +1275,8 @@ resource "aws_ecs_service" "weasis" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.weasis.arn
-    container_name   = "weasis"
+    target_group_arn = aws_lb_target_group.dwv.arn
+    container_name   = "dwv"
     container_port   = 8080
   }
 
@@ -1287,8 +1403,8 @@ output "cognito_user_pool_domain" {
   value = aws_cognito_user_pool_domain.admin.domain
 }
 
-output "weasis_base_url" {
-  value = "https://${local.weasis_fqdn}/"
+output "dwv_base_url" {
+  value = "https://${local.dwv_fqdn}/"
 }
 
 output "ecr_repositories" {
@@ -1310,4 +1426,273 @@ output "ses_dkim_tokens" {
 output "ses_smtp_username" {
   description = "SES SMTP username (IAM access key ID)"
   value       = aws_iam_access_key.ses_smtp.id
+}
+
+output "nat_egress_ip" {
+  description = "Static NAT Gateway EIP — use for SMTP allowlisting and firewall rules"
+  value       = aws_eip.nat.public_ip
+}
+
+# ── Landing Page (optional) ──────────────────────────────────────────────────
+
+locals {
+  landing_enabled = var.landing_image_tag != ""
+  landing_image   = local.landing_enabled ? "${aws_ecr_repository.services["landing"].repository_url}:${var.landing_image_tag}" : ""
+  landing_fqdn    = var.landing_domain != "" ? var.landing_domain : aws_lb.main.dns_name
+}
+
+resource "aws_lb_target_group" "landing" {
+  count = local.landing_enabled ? 1 : 0
+
+  name        = "${var.project_name}-landing"
+  port        = 8080
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.main.id
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher             = "200-399"
+  }
+
+  tags = { Name = "${var.project_name}-landing-tg" }
+}
+
+resource "aws_ecs_task_definition" "landing" {
+  count = local.landing_enabled ? 1 : 0
+
+  family                   = "${var.project_name}-landing"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = tostring(var.landing_cpu)
+  memory                   = tostring(var.landing_memory)
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "landing"
+      image     = local.landing_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "VITE_API_BASE_URL", value = "https://${local.api_fqdn}" },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.main.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "landing"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Name        = "${var.project_name}-landing"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecs_service" "landing" {
+  count = local.landing_enabled ? 1 : 0
+
+  name            = "${var.project_name}-landing"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.landing[0].arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.landing[0].arn
+    container_name   = "landing"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.https]
+
+  tags = {
+    Name        = "${var.project_name}-landing"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+# Landing page uses host-based routing (priority 4, after api/admin/dwv subdomains).
+# No Cognito auth — public-facing marketing site.
+resource "aws_lb_listener_rule" "landing_subdomain" {
+  count        = local.landing_enabled && var.landing_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 4
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.landing[0].arn
+  }
+
+  condition {
+    host_header {
+      values = [var.landing_domain]
+    }
+  }
+}
+
+output "landing_base_url" {
+  description = "Landing page URL (empty when landing is not deployed)"
+  value       = local.landing_enabled ? "https://${local.landing_fqdn}/" : ""
+}
+
+# ── Upload Portal (optional) ─────────────────────────────────────────────────
+
+locals {
+  upload_portal_enabled = var.upload_portal_image_tag != ""
+  upload_portal_image   = local.upload_portal_enabled ? "${aws_ecr_repository.services["upload-portal"].repository_url}:${var.upload_portal_image_tag}" : ""
+  upload_portal_fqdn    = var.upload_portal_domain != "" ? var.upload_portal_domain : aws_lb.main.dns_name
+}
+
+resource "aws_lb_target_group" "upload_portal" {
+  count = local.upload_portal_enabled ? 1 : 0
+
+  name        = "${var.project_name}-upload-portal"
+  port        = 8080
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.main.id
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher             = "200-399"
+  }
+
+  tags = { Name = "${var.project_name}-upload-portal-tg" }
+}
+
+resource "aws_ecs_task_definition" "upload_portal" {
+  count = local.upload_portal_enabled ? 1 : 0
+
+  family                   = "${var.project_name}-upload-portal"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "upload-portal"
+      image     = local.upload_portal_image
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        # Overrides the default GCP API URL baked into the image at build time.
+        { name = "API_URL", value = "https://${local.api_fqdn}" },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.main.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "upload-portal"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Name        = "${var.project_name}-upload-portal"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecs_service" "upload_portal" {
+  count = local.upload_portal_enabled ? 1 : 0
+
+  name            = "${var.project_name}-upload-portal"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.upload_portal[0].arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.upload_portal[0].arn
+    container_name   = "upload-portal"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.https]
+
+  tags = {
+    Name        = "${var.project_name}-upload-portal"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+# Upload portal uses host-based routing (priority 5, public — no Cognito auth).
+resource "aws_lb_listener_rule" "upload_portal_subdomain" {
+  count        = local.upload_portal_enabled && var.upload_portal_domain != "" ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 5
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.upload_portal[0].arn
+  }
+
+  condition {
+    host_header {
+      values = [var.upload_portal_domain]
+    }
+  }
+}
+
+output "upload_portal_base_url" {
+  description = "Upload portal URL (empty when upload portal is not deployed)"
+  value       = local.upload_portal_enabled ? "https://${local.upload_portal_fqdn}/" : ""
 }

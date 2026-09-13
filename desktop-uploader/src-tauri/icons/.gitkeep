@@ -1,0 +1,3 @@
+# Place generated icon assets here (icon.icns, icon.ico, 32x32.png, 128x128.png, etc.)
+# Run `pnpm tauri icon path/to/source.png` to regenerate from a 1024x1024 source.
+# Until icons are generated this dir exists only so Cargo's bundler can find it.

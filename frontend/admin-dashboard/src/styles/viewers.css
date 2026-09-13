@@ -1,0 +1,180 @@
+/* ── Viewer panel ─────────────────────────────────────────────────────────── */
+.viewer-panel {
+  border: 1px solid #d8b4fe;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1a2e;
+  margin-top: 8px;
+}
+
+.viewer-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #16213e;
+}
+
+.viewer-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
+.viewer-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.viewer-open-tab {
+  font-size: 12px;
+  color: #a78bfa;
+  text-decoration: none;
+}
+
+.viewer-open-tab:hover {
+  text-decoration: underline;
+}
+
+.viewer-iframe {
+  display: block;
+  width: 100%;
+  height: 640px;
+  border: none;
+}
+
+/* ── Defacing review panel ───────────────────────────────────────────────── */
+.deface-panel {
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1a2e;
+  margin-top: 8px;
+}
+
+.deface-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #16213e;
+}
+
+.deface-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deface-yoke-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid #374151;
+  background: #1f2d4a;
+  color: #9ca3af;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+
+.deface-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fde68a;
+  margin-right: 8px;
+}
+
+.deface-panel-uid {
+  font-family: monospace;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.deface-panel-hint {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #9ca3af;
+  background: #16213e;
+  border-bottom: 1px solid #1f2d4a;
+}
+
+.deface-viewers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.deface-viewer-col {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #1f2d4a;
+}
+
+.deface-viewer-col:last-child {
+  border-right: none;
+}
+
+.deface-viewer-label {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: #0f172a;
+}
+
+.deface-viewer-label--before { color: #94a3b8; }  /* slate — neutral "before/raw" */
+.deface-viewer-label--after  { color: #0d9488; }  /* teal — positive "after/defaced" */
+
+.deface-slice-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #0f172a;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.deface-slice-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.deface-slice-btn:hover {
+  color: #5eead4;
+  background: #0f3a35;
+}
+
+.deface-slice-counter {
+  font-family: monospace;
+  font-size: 11px;
+  color: #e2e8f0;
+  min-width: 48px;
+  text-align: center;
+  padding: 0 2px;
+}
+
+.deface-open-tab {
+  padding: 3px 12px;
+  font-size: 11px;
+  background: #0f172a;
+  display: block;
+  text-align: right;
+}
+
+.deface-iframe {
+  display: block;
+  width: 100%;
+  height: 560px;
+  border: none;
+}
+

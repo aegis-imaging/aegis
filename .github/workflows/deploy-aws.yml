@@ -1,29 +1,70 @@
-# ── AWS Deploy — auto-deploy on push to develop ────────────────────────────────
-#
-# Mirrors the GCP Cloud Build trigger (cloudbuild.yaml) for the AWS environment.
-# Triggers on every push to develop, runs in parallel with the GCP Cloud Build.
-#
-# Required GitHub Secrets:
-#   AWS_ACCESS_KEY_ID      — IAM user with ECR push + ECS update + SSM write
-#   AWS_SECRET_ACCESS_KEY  — corresponding secret key
-#   AWS_ACCOUNT_ID         — 12-digit AWS account ID
-#
-# Phase 1: Build all 11 service images in parallel (matrix) and push to ECR.
-# Phase 2: Update all 10 ECS services (force new deployment) + reboot DIMSE EC2.
-
 name: Deploy to AWS
+
+# Builds every service image, pushes to ECR, and rolls the ECS services that
+# exist (services switched off by the minimal-footprint flags are skipped).
+# Fires on every push to main; same shape as deploy-gcp.yml. Auth is
+# GitHub OIDC assuming the deploy role from terraform/aws/github_actions_oidc.tf
+# (output github_actions_deploy_role_arn) — scoped to ECR, ECS, SSM and the
+# DIMSE instance reboot.
+#
+# Repo secrets:   AWS_DEPLOY_ROLE_ARN
+# Repo variables: AWS_CI_ENABLED=true, AWS_REGION, AWS_API_URL, AWS_ADMIN_URL
+#                 optional: AWS_PROJECT_NAME (default aegis), AWS_DWV_URL,
+#                 AWS_BUILD_SERVICES (space-separated subset, e.g. "api admin-dashboard"),
+#                 AWS_DIMSE_INSTANCE_ID (set to also roll the DIMSE receiver VM)
+#
+# ECS task definitions reference the :latest tag (api_image_tag etc. in
+# terraform/aws), so a forced new deployment picks up the image pushed here.
+# Nothing runs until AWS_CI_ENABLED is "true".
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.pdf"
+      - "frontend/landing/**"
+      - "terraform/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+env:
+  PROJECT: ${{ vars.AWS_PROJECT_NAME || 'aegis' }}
+  REGION: ${{ vars.AWS_REGION }}
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  # ── Phase 1: Build and push all images ──────────────────────────────────────
+  validate:
+    name: Validate required configuration
+    if: vars.AWS_CI_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets and variables
+        env:
+          ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          API_URL: ${{ vars.AWS_API_URL }}
+        run: |
+          missing=()
+          [[ -n "$ROLE_ARN" ]] || missing+=("AWS_DEPLOY_ROLE_ARN (secret)")
+          [[ -n "$REGION" ]]   || missing+=("AWS_REGION (variable)")
+          [[ -n "$API_URL" ]]  || missing+=("AWS_API_URL (variable)")
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            printf '::error::missing: %s\n' "${missing[@]}"
+            exit 1
+          fi
 
   build:
     name: Build ${{ matrix.service }}
+    needs: validate
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
@@ -34,153 +75,185 @@ jobs:
           - service: admin-dashboard
             context: .
             dockerfile: frontend/admin-dashboard/Dockerfile
-            build_args: "--build-arg VITE_WEASIS_BASE_URL=https://aws.weasis.aegisimaging.ai"
-          - service: weasis
-            context: weasis
-            dockerfile: weasis/Dockerfile
+            build_args: "--build-arg VITE_DWV_BASE_URL=$DWV_URL --build-arg VITE_OHIF_BASE_URL="
+          - service: upload-portal
+            context: .
+            dockerfile: frontend/upload-portal/Dockerfile
+          - service: dwv
+            context: dwv
+            dockerfile: dwv/Dockerfile
+          - service: mcp-server
+            context: mcp-server
+            dockerfile: mcp-server/Dockerfile
           - service: defacing
             context: defacing
             dockerfile: defacing/Dockerfile
-          - service: phi-detection
-            context: phi-detection
-            dockerfile: phi-detection/Dockerfile
-          - service: qc-service
-            context: qc-service
-            dockerfile: qc-service/Dockerfile
-          - service: bids-service
-            context: bids-service
-            dockerfile: bids-service/Dockerfile
-          - service: classification-service
-            context: classification-service
-            dockerfile: classification-service/Dockerfile
-          - service: protocol-service
-            context: protocol-service
-            dockerfile: protocol-service/Dockerfile
-          - service: synth-service
-            context: synth-service
-            dockerfile: synth-service/Dockerfile
+          # The six light sidecars ship in one image; terraform/aws expects a
+          # repository per sidecar, so the same build is pushed under each name.
+          - service: dicom-tools
+            context: dicom-tools
+            dockerfile: dicom-tools/Dockerfile
+            push_as: "phi-detection qc-service bids-service classification-service protocol-service synth-service"
+          - service: analytics-service
+            context: analytics-service
+            dockerfile: analytics-service/Dockerfile
+          - service: sct-service
+            context: sct-service
+            dockerfile: sct-service/Dockerfile
           - service: dimse-receiver
             context: dimse-receiver
             dockerfile: dimse-receiver/Dockerfile
-
+    env:
+      DWV_URL: ${{ vars.AWS_DWV_URL }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Skip services outside AWS_BUILD_SERVICES
+        id: gate
+        env:
+          FILTER: ${{ vars.AWS_BUILD_SERVICES }}
+          SERVICE: ${{ matrix.service }}
+          PUSH_AS: ${{ matrix.push_as }}
+        run: |
+          wanted=1
+          if [[ -n "$FILTER" ]]; then
+            wanted=0
+            for name in $SERVICE ${PUSH_AS:-}; do
+              [[ " ${FILTER//,/ } " == *" $name "* ]] && wanted=1
+            done
+          fi
+          echo "build=$wanted" >> "$GITHUB_OUTPUT"
+          [[ "$wanted" == 1 ]] || echo "::notice::$SERVICE not in AWS_BUILD_SERVICES — skipped"
 
-      - name: Configure AWS credentials
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.build == '1'
+
+      - name: Authenticate to AWS (OIDC)
+        if: steps.gate.outputs.build == '1'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Log in to ECR
+      - name: Login to ECR
+        if: steps.gate.outputs.build == '1'
+        id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push
+        if: steps.gate.outputs.build == '1'
         env:
-          ECR_PREFIX:  ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/aegis
-          IMAGE_TAG:   ${{ github.sha }}
-          SERVICE:     ${{ matrix.service }}
-          DOCKERFILE:  ${{ matrix.dockerfile }}
-          CTX:         ${{ matrix.context }}
-          BUILD_ARGS:  ${{ matrix.build_args }}
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          SERVICE: ${{ matrix.service }}
+          CTX: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          BUILD_ARGS: ${{ matrix.build_args }}
+          PUSH_AS: ${{ matrix.push_as }}
         run: |
-          IMAGE="$ECR_PREFIX/$SERVICE"
-          SHA_TAG="$IMAGE:$IMAGE_TAG"
-          LATEST_TAG="$IMAGE:latest"
-
-          docker build \
-            --platform linux/amd64 \
-            --file "$DOCKERFILE" \
-            --tag  "$SHA_TAG" \
-            --tag  "$LATEST_TAG" \
-            ${BUILD_ARGS:+$BUILD_ARGS} \
-            "$CTX"
-
-          docker push "$SHA_TAG"
-          docker push "$LATEST_TAG"
-
-  # ── Phase 2: Deploy ECS services + DIMSE EC2 ────────────────────────────────
-
-  deploy-ecs:
-    name: Deploy ECS services
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
-
-      - name: Force new deployment for all ECS services
-        run: |
-          CLUSTER="aegis-cluster"
-          for SVC in \
-            aegis-api \
-            aegis-admin-dashboard \
-            aegis-weasis \
-            aegis-defacing \
-            aegis-phi-detection \
-            aegis-qc-service \
-            aegis-bids-service \
-            aegis-classification-service \
-            aegis-protocol-service \
-            aegis-synth-service; do
-            echo "Updating $SVC..."
-            aws ecs update-service \
-              --cluster "$CLUSTER" \
-              --service  "$SVC" \
-              --force-new-deployment \
-              --no-cli-pager
+          set -euo pipefail
+          expanded=""
+          [[ -z "${BUILD_ARGS:-}" ]] || expanded=$(eval echo "$BUILD_ARGS")
+          docker build --platform linux/amd64 --file "$DOCKERFILE" --tag "build:$SERVICE" ${expanded:+$expanded} "$CTX"
+          for name in ${PUSH_AS:-$SERVICE}; do
+            repo="$REGISTRY/$PROJECT/$name"
+            docker tag "build:$SERVICE" "$repo:$IMAGE_TAG"
+            docker tag "build:$SERVICE" "$repo:latest"
+            docker push "$repo:$IMAGE_TAG"
+            docker push "$repo:latest"
           done
 
-  deploy-dimse:
-    name: Deploy DIMSE EC2
+  rollout:
+    name: Roll ECS services
     needs: build
     runs-on: ubuntu-latest
-
     steps:
-      - name: Configure AWS credentials
+      - name: Authenticate to AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            us-east-1
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Update DIMSE image SSM parameter
+      - name: Force new deployment on every service that exists
+        run: |
+          set -euo pipefail
+          cluster="$PROJECT-cluster"
+          rolled=()
+          for svc in api admin-dashboard dwv mcp-server defacing phi-detection qc-service bids-service classification-service protocol-service synth-service analytics-service sct-service; do
+            name="$PROJECT-$svc"
+            status=$(aws ecs describe-services --cluster "$cluster" --services "$name" \
+                       --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
+            if [[ "$status" == "ACTIVE" ]]; then
+              aws ecs update-service --cluster "$cluster" --service "$name" --force-new-deployment >/dev/null
+              rolled+=("$name")
+              echo "rolled $name"
+            else
+              echo "skip $name ($status)"
+            fi
+          done
+          [[ ${#rolled[@]} -gt 0 ]] || { echo "::error::no ECS services found in $cluster"; exit 1; }
+          echo "ROLLED=${rolled[*]}" >> "$GITHUB_ENV"
+
+      - name: Wait for the API and admin services to stabilise
+        run: |
+          set -euo pipefail
+          wait_for=()
+          for name in "$PROJECT-api" "$PROJECT-admin-dashboard"; do
+            [[ " $ROLLED " == *" $name "* ]] && wait_for+=("$name")
+          done
+          [[ ${#wait_for[@]} -gt 0 ]] || exit 0
+          aws ecs wait services-stable --cluster "$PROJECT-cluster" --services "${wait_for[@]}"
+
+  dimse:
+    name: Roll DIMSE receiver VM
+    needs: build
+    if: vars.AWS_DIMSE_INSTANCE_ID != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # The instance's startup script reads /aegis/dimse-image and pulls it on
+      # boot (terraform/aws/dimse.tf), so updating the parameter and rebooting
+      # is the whole deployment.
+      - name: Point the instance at the new image and reboot
         env:
-          ECR_PREFIX: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/aegis
-          IMAGE_TAG:  ${{ github.sha }}
+          INSTANCE_ID: ${{ vars.AWS_DIMSE_INSTANCE_ID }}
         run: |
-          NEW_IMAGE="$ECR_PREFIX/dimse-receiver:$IMAGE_TAG"
-          aws ssm put-parameter \
-            --name  /aegis/dimse-image \
-            --value "$NEW_IMAGE" \
-            --type  String \
-            --overwrite \
-            --no-cli-pager
-          echo "SSM /aegis/dimse-image -> $NEW_IMAGE"
+          set -euo pipefail
+          account=$(aws sts get-caller-identity --query Account --output text)
+          image="$account.dkr.ecr.$REGION.amazonaws.com/$PROJECT/dimse-receiver:$IMAGE_TAG"
+          aws ssm put-parameter --name /aegis/dimse-image --value "$image" --overwrite >/dev/null
+          aws ec2 reboot-instances --instance-ids "$INSTANCE_ID"
+          echo "rebooted $INSTANCE_ID with dimse-receiver:$IMAGE_TAG"
 
-      - name: Reboot DIMSE EC2 instance
+  smoke:
+    name: Post-deploy smoke check
+    needs: rollout
+    runs-on: ubuntu-latest
+    env:
+      API_URL: ${{ vars.AWS_API_URL }}
+      ADMIN_URL: ${{ vars.AWS_ADMIN_URL }}
+    steps:
+      - name: API health
         run: |
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=aegis-dimse-receiver" \
-              "Name=instance-state-name,Values=running" \
-            --query "Reservations[0].Instances[0].InstanceId" \
-            --output text \
-            --no-cli-pager)
+          for attempt in 1 2 3 4 5 6; do
+            status=$(curl -s -o /tmp/healthz.json -w '%{http_code}' "$API_URL/healthz" || echo 000)
+            if [[ "$status" == "200" ]]; then
+              cat /tmp/healthz.json; echo
+              exit 0
+            fi
+            echo "attempt $attempt: HTTP $status; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::API health check failed"
+          exit 1
 
-          if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
-            echo "No running DIMSE instance found — skipping reboot (DIMSE not deployed yet)"
-            exit 0
-          fi
-
-          echo "Rebooting DIMSE instance: $INSTANCE_ID"
-          aws ec2 reboot-instances \
-            --instance-ids "$INSTANCE_ID" \
-            --no-cli-pager
+      - name: Admin sign-in page reachable
+        if: env.ADMIN_URL != ''
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' -I "$ADMIN_URL" || echo 000)
+          case "$status" in
+            200|301|302|401|403) echo "admin reachable (HTTP $status)" ;;
+            *) echo "::error::admin endpoint not reachable (HTTP $status)"; exit 1 ;;
+          esac

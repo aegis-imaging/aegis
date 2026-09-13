@@ -32,22 +32,19 @@ type AgentPanelProps = {
   prefillStudyUid?: string
 }
 
-const GEMINI_MODELS = [
-  { value: '', label: 'Server default' },
-  // Gemini 3 series (latest)
-  { value: 'google/gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
-  { value: 'google/gemini-3-pro-preview',   label: 'Gemini 3 Pro (Preview)' },
-  { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
-  // Gemini 2.5 series
-  { value: 'google/gemini-2.5-pro',            label: 'Gemini 2.5 Pro' },
-  { value: 'google/gemini-2.5-flash',          label: 'Gemini 2.5 Flash' },
-  { value: 'google/gemini-2.5-flash-lite',     label: 'Gemini 2.5 Flash-Lite' },
-  // Gemini 2.0 series
-  { value: 'google/gemini-2.0-flash-001',      label: 'Gemini 2.0 Flash' },
-  { value: 'google/gemini-2.0-flash-lite-001', label: 'Gemini 2.0 Flash Lite' },
-  // Gemini 1.5 series (legacy)
-  { value: 'google/gemini-1.5-pro-001',        label: 'Gemini 1.5 Pro' },
-  { value: 'google/gemini-1.5-flash-001',      label: 'Gemini 1.5 Flash' },
+const FALLBACK_MODELS = [
+  { value: 'google/gemini-2.5-pro',        label: 'Gemini 2.5 Pro' },
+  { value: 'google/gemini-2.5-flash',      label: 'Gemini 2.5 Flash' },
+  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
+]
+
+const EXAMPLE_PROMPTS = [
+  { label: 'Why is this stuck?', text: 'Why is this study stuck and what should I do to fix it?' },
+  { label: 'Routing issue?', text: 'Why did this study fail to route to its destination?' },
+  { label: 'Pipeline failed?', text: 'Which pipeline steps failed and what are the errors?' },
+  { label: 'Defacing OK?', text: 'Was defacing successful and what is the QA score?' },
+  { label: 'Approve this?', text: 'Should I approve this study? Are there any blockers or concerns?' },
+  { label: 'What happened?', text: 'Summarize everything that has happened to this study so far.' },
 ]
 
 export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps) {
@@ -61,6 +58,16 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AgentResult | null>(null)
+  const [availableModels, setAvailableModels] = useState<{ value: string; label: string }[]>(FALLBACK_MODELS)
+
+  useEffect(() => {
+    fetch(`${baseUrl}/info`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => {
+        if (json?.data?.models?.length) setAvailableModels(json.data.models)
+      })
+      .catch(() => { /* keep fallback */ })
+  }, [baseUrl])
 
   useEffect(() => {
     if (prefillStudyId || prefillStudyUid) {
@@ -133,55 +140,81 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
       <div className="agent-panel__header">
         <div>
           <h2>AEGIS Agent</h2>
-          <p>Read-only study status and diagnostics assistant</p>
+          <p>
+            AI-powered study diagnostics — ask why a study is stuck, why routing failed, what pipeline steps ran, and more.
+            Paste a study UUID or StudyInstanceUID, then ask a question or pick an example below.
+          </p>
         </div>
       </div>
 
       <div className="agent-form">
         <div className="form-row">
           <input
-            className="form-input"
+            className="aegis-filter"
             type="text"
-            placeholder="Study UUID"
+            placeholder="Study UUID (e.g. 7445e605-…)"
             value={studyId}
             onChange={(e) => setStudyId(e.target.value)}
+            title="The database UUID for the study — copy it from the study detail page"
           />
           <input
-            className="form-input"
+            className="aegis-filter"
             type="text"
-            placeholder="StudyInstanceUID"
+            placeholder="StudyInstanceUID (e.g. 1.2.826.0.1…)"
             value={studyUid}
             onChange={(e) => setStudyUid(e.target.value)}
+            title="The DICOM StudyInstanceUID — copy it from the Synth Generator or study list"
           />
         </div>
         <div className="form-row">
           <input
-            className="form-input"
+            className="aegis-filter"
             type="text"
-            placeholder="Question (optional)"
+            placeholder="Ask a question — or pick one below ↓"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
+            title="Leave blank for a general status summary, or type a specific question"
           />
         </div>
+
+        {/* Example prompt chips */}
+        <div className="agent-prompts">
+          <span className="agent-prompts__label">Try:</span>
+          {EXAMPLE_PROMPTS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              className={`agent-prompt-chip${question === p.text ? ' agent-prompt-chip--active' : ''}`}
+              onClick={() => setQuestion(question === p.text ? '' : p.text)}
+              title={p.text}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
         <div className="form-row">
           <input
-            className="form-input"
+            className="aegis-filter"
             type="password"
             placeholder="Agent API key (optional)"
             value={agentApiKey}
             onChange={(e) => setAgentApiKey(e.target.value)}
+            title="Leave blank to use the server-configured API key, or enter your own for rate-limiting purposes"
           />
           <select
-            className="form-input"
+            className="aegis-filter"
             value={model}
             onChange={(e) => setModel(e.target.value)}
+            title="'Server default' uses the model configured on the MCP server."
           >
-            {GEMINI_MODELS.map((m) => (
+            <option value="">Server default</option>
+            {availableModels.map((m) => (
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
         </div>
-        <label className="form-checkbox">
+        <label className="form-checkbox" title="Ask the agent to suggest concrete remediation steps based on what it finds">
           <input
             type="checkbox"
             checked={includeNextSteps}
@@ -189,15 +222,15 @@ export function AgentPanel({ prefillStudyId, prefillStudyUid }: AgentPanelProps)
           />
           Include next steps
         </label>
-        <div className="form-row form-row--actions">
-          <button type="button" className="btn-primary" onClick={submit} disabled={loading}>
+        <div className="aegis-form-actions">
+          <button type="button" className="aegis-btn-primary" onClick={submit} disabled={loading}>
             {loading ? 'Running…' : 'Ask agent'}
           </button>
-          <button type="button" className="btn-secondary" onClick={resetForm} disabled={loading}>
+          <button type="button" className="aegis-btn-secondary" onClick={resetForm} disabled={loading}>
             Clear
           </button>
         </div>
-        {error && <div className="form-error">{error}</div>}
+        {error && <div className="aegis-error">{error}</div>}
       </div>
 
       {data && (

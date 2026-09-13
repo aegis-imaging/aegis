@@ -5,12 +5,11 @@ from __future__ import annotations
 import io
 import logging
 import threading
-from pathlib import Path
 from typing import Any
 
 from app import config
 from app.ingest import StudyAccumulator, submit_ingest
-from app.storage_backend import next_file_index, write_dicom
+from app.storage_backend import write_dicom
 
 log = logging.getLogger(__name__)
 
@@ -27,18 +26,27 @@ def _load_pynetdicom():
         VerificationPresentationContexts,
         evt,
     )
+    from pynetdicom.presentation import build_context
 
-    return AE, AllStoragePresentationContexts, VerificationPresentationContexts, evt
+    return AE, AllStoragePresentationContexts, VerificationPresentationContexts, evt, build_context
 
 
-def _get_file_index(study_dir: Path) -> int:
-    """Return the next 0-based file index for a study directory.
-
-    Counts existing .dcm files so re-sends don't overwrite.
-    """
-    if not study_dir.exists():
-        return 0
-    return len(list(study_dir.glob("*.dcm")))
+# All transfer syntaxes we accept — includes compressed formats so PACS can
+# send JPEG2000, JPEG-LS, and RLE without transcoding first.
+ACCEPTED_TRANSFER_SYNTAXES = [
+    "1.2.840.10008.1.2",        # Implicit VR Little Endian
+    "1.2.840.10008.1.2.1",      # Explicit VR Little Endian
+    "1.2.840.10008.1.2.2",      # Explicit VR Big Endian
+    "1.2.840.10008.1.2.4.50",   # JPEG Baseline
+    "1.2.840.10008.1.2.4.51",   # JPEG Extended
+    "1.2.840.10008.1.2.4.57",   # JPEG Lossless
+    "1.2.840.10008.1.2.4.70",   # JPEG Lossless SV1
+    "1.2.840.10008.1.2.4.80",   # JPEG-LS Lossless
+    "1.2.840.10008.1.2.4.81",   # JPEG-LS Near-Lossless
+    "1.2.840.10008.1.2.4.90",   # JPEG 2000 Lossless
+    "1.2.840.10008.1.2.4.91",   # JPEG 2000
+    "1.2.840.10008.1.2.5",      # RLE Lossless
+]
 
 
 def handle_echo(event: Any) -> int:
@@ -59,24 +67,34 @@ def handle_store(event: Any) -> int:
 
     study_uid = str(study_uid)
 
+    sop_instance_uid = getattr(ds, "SOPInstanceUID", None)
+    if not sop_instance_uid:
+        log.warning("C-STORE: missing SOPInstanceUID for study %s, rejecting", study_uid)
+        return 0xC000  # Failure
+
+    sop_instance_uid = str(sop_instance_uid)
+
     # Extract metadata
     modality = str(getattr(ds, "Modality", ""))
     body_part = str(getattr(ds, "BodyPartExamined", ""))
     study_desc = str(getattr(ds, "StudyDescription", ""))
+    study_date = str(getattr(ds, "StudyDate", ""))
     series_uid = str(getattr(ds, "SeriesInstanceUID", ""))
     calling_ae = str(getattr(event.assoc.requestor, "ae_title", ""))
 
     # Write file to configured storage backend (local filesystem or S3).
+    # Files are named by SOP Instance UID (unique per instance) so concurrent
+    # associations receiving the same study cannot overwrite each other's
+    # slices, and re-sent instances overwrite themselves idempotently.
     try:
-        file_index = next_file_index(study_uid)
         buf = io.BytesIO()
         ds.save_as(buf, write_like_original=False)
-        write_dicom(study_uid, file_index, buf.getvalue())
+        write_dicom(study_uid, sop_instance_uid, buf.getvalue())
     except Exception as e:
         log.error("Failed to save DICOM file for study %s: %s", study_uid, e)
         return 0xC000  # Failure
 
-    log.debug("Saved file %d for study %s", file_index, study_uid)
+    log.debug("Saved instance %s for study %s", sop_instance_uid, study_uid)
 
     # Update per-association accumulator
     assoc_id = id(event.assoc)
@@ -90,6 +108,7 @@ def handle_store(event: Any) -> int:
                 modality=modality,
                 body_part=body_part,
                 study_description=study_desc,
+                study_date=study_date,
                 calling_ae_title=calling_ae,
             )
         acc = studies[study_uid]
@@ -105,20 +124,24 @@ def handle_store(event: Any) -> int:
     return 0x0000  # Success
 
 
-def handle_release(event: Any) -> None:
-    """Handle association release — trigger ingest for each received study."""
-    assoc_id = id(event.assoc)
+def _ingest_association_studies(assoc_id: int, reason: str) -> None:
+    """Pop association state and trigger ingest for each received study.
 
+    Pop-and-check makes this safe to call from multiple teardown events
+    (e.g. EVT_RELEASED followed by EVT_CONN_CLOSE): whichever fires first
+    takes the state; later calls find nothing and are no-ops.
+    """
     with _state_lock:
         studies = _association_state.pop(assoc_id, {})
 
     if not studies:
-        log.debug("Association released with no stored files")
+        log.debug("Association %s with no stored files pending ingest", reason)
         return
 
     for study_uid, acc in studies.items():
         log.info(
-            "Association released — ingesting study %s (%d files, %d series, AE: %s)",
+            "Association %s — ingesting study %s (%d files, %d series, AE: %s)",
+            reason,
             study_uid,
             acc.file_count,
             len(acc.series_uids),
@@ -130,14 +153,46 @@ def handle_release(event: Any) -> None:
             log.error("Ingest trigger failed for %s: %s", study_uid, e)
 
 
+def handle_release(event: Any) -> None:
+    """Handle association release — trigger ingest for each received study."""
+    _ingest_association_studies(id(event.assoc), reason="released")
+
+
+def handle_abort(event: Any) -> None:
+    """Handle A-ABORT — ingest whatever was received before the abort.
+
+    Files are already durably written by handle_store, so a partial study
+    is still worth ingesting rather than leaving orphaned on disk.
+    """
+    _ingest_association_studies(id(event.assoc), reason="aborted")
+
+
+def handle_conn_close(event: Any) -> None:
+    """Handle TCP connection close — ingest anything not already ingested.
+
+    Fires after normal release too; the pop-and-check in
+    _ingest_association_studies prevents double ingest.
+    """
+    _ingest_association_studies(id(event.assoc), reason="connection closed")
+
+
 def create_scp():
-    """Create and configure the DICOM Application Entity."""
-    AE, all_storage_contexts, verification_contexts, _ = _load_pynetdicom()
+    """Create and configure the DICOM Application Entity.
+
+    Accepts all storage SOP classes with all common transfer syntaxes
+    including compressed formats (JPEG2000, JPEG-LS, RLE). This allows
+    PACS systems to send compressed DICOM without transcoding first.
+    """
+    AE, all_storage_contexts, verification_contexts, _, build_context = _load_pynetdicom()
 
     ae = AE(ae_title=config.DIMSE_AE_TITLE)
 
-    # Accept all storage SOP classes + verification
-    ae.supported_contexts = all_storage_contexts + verification_contexts
+    # Build contexts with all transfer syntaxes for each SOP class
+    contexts = []
+    for ctx in all_storage_contexts:
+        contexts.append(build_context(ctx.abstract_syntax, ACCEPTED_TRANSFER_SYNTAXES))
+
+    ae.supported_contexts = contexts + verification_contexts
 
     # Limit concurrent associations
     ae.maximum_associations = config.DIMSE_MAX_ASSOCIATIONS
@@ -147,11 +202,13 @@ def create_scp():
 
 def _get_scp_handlers() -> list[tuple[Any, Any]]:
     """Build pynetdicom event handler mapping lazily."""
-    _, _, _, evt = _load_pynetdicom()
+    _, _, _, evt, _ = _load_pynetdicom()
     return [
         (evt.EVT_C_ECHO, handle_echo),
         (evt.EVT_C_STORE, handle_store),
         (evt.EVT_RELEASED, handle_release),
+        (evt.EVT_ABORTED, handle_abort),
+        (evt.EVT_CONN_CLOSE, handle_conn_close),
     ]
 
 

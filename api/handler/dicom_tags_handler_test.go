@@ -12,6 +12,7 @@ import (
 	"github.com/suyashkumar/dicom/pkg/tag"
 	"github.com/suyashkumar/dicom/pkg/uid"
 
+	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/storage"
 	"github.com/aegis-imaging/aegis/api/testutil"
 	"github.com/stretchr/testify/assert"
@@ -139,4 +140,36 @@ func TestInspectDicomTags_Success(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "Modality tag should be present in response")
+}
+
+func TestInspectDicomTags_SiteScopedOutOfSiteDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv, _ := dicomTestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+
+	instA := createInstitution(t, db, "sender", "PACS_TAGS_A", true)
+	instB := createInstitution(t, db, "sender", "PACS_TAGS_B", true)
+
+	_, err := db.ExecContext(context.Background(), `UPDATE studies SET institution_id = $1 WHERE id = $2`, instA.ID, study.ID)
+	require.NoError(t, err)
+
+	researcher := testutil.CreateTestAdminUser(t, db, "dicom-tags-site@test.com", "researcher")
+	instBID := instB.ID
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:     proj.ID,
+		AdminUserID:   researcher.ID,
+		Role:          "site_viewer",
+		InstitutionID: &instBID,
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/studies/"+study.StudyInstanceUID+"/dicom-tags", nil)
+	req.SetPathValue("studyUID", study.StudyInstanceUID)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.InspectDicomTags(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "study not found")
 }

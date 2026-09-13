@@ -1,20 +1,22 @@
 # AEGIS Next Feature Prioritization Backlog
 
-Review date: 2026-02-23
+Review date: 2026-02-26
 Scope reviewed: All services, API, frontend, Terraform, CI, MCP, docs.
 
-## Current-State Snapshot (as of 2026-02-23)
+## Current-State Snapshot (as of 2026-02-26)
 
-- **GCP production is live**: deployed to `aegis-prod-488119`, `us-central1`
-- All P0/P1/P2 items from the 2026-02-20 backlog are **complete** (see archived section below)
-- Full operator tooling in place: MCP server, batch import, DIMSE retry proxy, cloud smoke tests
-- All 7 Python processing sidecars deployed and tested (206+ pytest tests)
-- Go API: 120+ tests, full routing/audit/export/share pipeline
-- Admin dashboard: diagnostics tab, bulk actions, CSV export, study notes, shares management
-- Export portal: enhanced study info display with badges, countdown timers
-- CI matrix: 14 jobs covering Go, Python (7×), TypeScript (5×), Docker (8×)
+- **GCP production is live**: `<GCP_PROJECT_ID>`, `us-central1` — day 7
+- **AWS production is live**: `<AWS_ACCOUNT_ID>`, `us-east-1` — day 8; cross-cloud routing GCP→AWS verified
+- **Azure live**: Container Apps + PostgreSQL Flex + Azure Blob — live as of Feb 26
+- Go API: 126+ routes, 64 handler files, all fully implemented
+- 400+ automated tests (160+ Go integration tests, 244+ Python pytest tests across 8 sidecars)
+- MCP Server: 52+ read tools + 29+ write tools — all APIs covered
+- Agent orchestrator: DICOM tag provenance + 9 diagnostic tools (PRs #245–246)
+- Admin dashboard: 17 management tabs — full-featured
+- All 7 Python processing sidecars deployed and tested on GCP and AWS
+- Private beta active (invite-gated via landing page)
 
-## Completed Items (Archived from Previous Backlog)
+## Completed Items (Archived from All Previous Backlogs)
 
 | # | Feature | Completed |
 |---|---------|-----------|
@@ -29,23 +31,39 @@ Scope reviewed: All services, API, frontend, Terraform, CI, MCP, docs.
 | P1-9 | Study diagnostics endpoint + diagnostics panel in dashboard | 2026-02-22 |
 | P1-10 | Makefile lint/CI parity improvements | 2026-02-22 |
 | P2-11 | MCP Server MVP Phase 0 (read-only tools) | 2026-02-21 |
-| P2-12 | MCP Server Phase 1 (guarded write tools, MCP_ENABLE_WRITE_TOOLS) | 2026-02-21 |
-| P2-13 | MCP security hardening (readonly mode, MCP_CALLER_ID, operator key) | 2026-02-21 |
+| P2-12 | MCP Server Phase 1 (guarded write tools) | 2026-02-21 |
+| P2-13 | MCP security hardening (readonly mode, operator key) | 2026-02-21 |
 | P2-14 | MCP DIMSE operator tools (retry/replay via /api/dimse/retry proxy) | 2026-02-21 |
-| Q-1 | Docker-compose OHIF service fix + CI docker matrix | 2026-02-22 |
-| Q-2 | MCP get_study_by_uid path fix + /api/studies/by-uid alias | 2026-02-22 |
-| Q-3 | Bulk study approve/reject (multi-select + POST /api/studies/bulk) | 2026-02-22 |
-| Q-4 | Study CSV export (GET /api/studies.csv + dashboard download button) | 2026-02-22 |
-| Q-5 | Export portal enhancement (badges, description, UID display, instance count) | 2026-02-22 |
-| Q-6 | Admin study notes (stored as audit entries, inline form in detail panel) | 2026-02-22 |
-| Q-7 | Shares tab improvements (email search, countdown display, Note column) | 2026-02-22 |
-| Q-8 | Executive summary + architecture diagram + PDF regeneration | 2026-02-22 |
-| Q-9 | DIMSE receiver deployed to Compute Engine VM (`aegis-prod-dimse-receiver`, static IP `35.232.172.221`, TCP 11112) | 2026-02-23 |
-| Q-10 | Cloud Build CI/CD triggers (`deploy-on-develop` + `terraform-apply-on-develop`) active in `us-central1` | 2026-02-23 |
-| Q-11 | MCP agent Zod validation fix (invalid response: missing summary bug) | 2026-02-23 |
-| Q-12 | Cloud Build SA IAM hardening — all required roles for `terraform apply` tracked in Terraform + setup script | 2026-02-23 |
+| Q-1 | Bulk study approve/reject/delete (POST /api/studies/bulk) | 2026-02-22 |
+| Q-2 | Study CSV export (GET /api/studies.csv + dashboard button) | 2026-02-22 |
+| Q-3 | Admin study notes (stored as audit entries) | 2026-02-22 |
+| Q-4 | Export portal enhancement (badges, description, UID, countdown) | 2026-02-22 |
+| Q-5 | Shares tab improvements (email search, countdown, Note column) | 2026-02-22 |
+| Q-6 | Executive summary + architecture diagram + PDF | 2026-02-22 |
+| Q-7 | DIMSE receiver on Compute Engine VM (static IP `<GCP_DIMSE_PUBLIC_IP>`, TCP 11112) | 2026-02-23 |
+| Q-8 | Cloud Build CI/CD triggers active | 2026-02-23 |
+| P1-F1 | Production observability dashboard (9 alert policies, Cloud Monitoring) | 2026-02-23 |
+| P1-F2 | Study SLA / stuck-detection alerting (GET /api/studies/stuck, scheduler) | 2026-02-23 |
+| P1-F3 | Webhook / event notification system (5 events, HMAC, 3× retry) | 2026-02-24 |
+| P1-F4 | Study re-processing workflow (POST /api/studies/{id}/reset-pipeline-step) | 2026-02-24 |
+| P1-F5 | Defacing visual QA score (SSIM-based, stored on study record) | 2026-02-24 |
+| P1-F6 | Study annotation / label system (bulk label, search, filter) | 2026-02-24 |
+| P1-F7 | Per-project dashboard views (global project selector, localStorage) | 2026-02-24 |
+| P2-F8 | Subject-session linking (subject_id, cohort report) | 2026-02-24 |
+| P2-F9 | API key management (named bearer tokens, scoped, rotatable) | 2026-02-24 |
+| P2-F10 | BIDS bulk export (project-level merged ZIP, GET /api/projects/{id}/bids-export) | 2026-02-24 |
+| P2-F11 | PHI detection confidence tuning (per-project thresholds via API + dashboard) | 2026-02-24 |
+| P2-F12 | Study relationships (baseline, follow_up, comparison, replicate) | 2026-02-24 |
+| P2-F13 | Export share extension + revocation reason | 2026-02-24 |
+| P2-F14 | Routing rule export/import/reorder/simulate | 2026-02-24 |
+| P2-F15 | Destination health probe scheduler + connectivity test | 2026-02-24 |
+| P2-F16 | Pipeline funnel + project health summary stats | 2026-02-25 |
+| P2-F17 | AWS production deployment (ECS Fargate, RDS, S3, ALB + Cognito) | 2026-02-25 |
+| P2-F18 | Cross-cloud DICOM routing GCP→AWS STOW-RS verified live | 2026-02-25 |
+| P2-F19 | Agent orchestrator expansion (DICOM tag provenance + 9 diagnostic tools) | 2026-02-25 |
+| P2-F20 | Azure Container Apps deployment (Terraform + GitHub Actions OIDC) | 2026-02-26 |
 
-## New Feature Candidates
+## New Feature Candidates (Q2 2026)
 
 Scoring:
 - Impact: 1-5 (higher = more operator/researcher/patient value)
@@ -54,44 +72,42 @@ Scoring:
 
 | Rank | Priority | Feature | Why Next | Impact | Effort |
 |---|---|---|---|---:|---|
-| 1 | P0 | **Production observability dashboard** (Cloud Monitoring / Grafana — study throughput, pipeline latency, error rates, sidecar health) | Blind-flying in prod; first real pilot traffic needs visibility | 5 | M |
-| 2 | P0 | **Study SLA / stuck-detection alerting** (configurable age thresholds per pipeline stage → email/webhook alert when study is stuck longer than N minutes) | Operators need proactive notification, not manual dashboard polling | 5 | M |
-| 3 | P1 | **Webhook / event notification system** (POST to external URL on study status transitions — approved, rejected, export complete) | Enables downstream automation without polling | 4 | M |
-| 4 | P1 | **Study re-processing workflow** (re-trigger any pipeline step on an already-processed study; re-deface, re-scan PHI, re-classify without full re-upload) | Critical for production error recovery and pilot QC cycles | 4 | M |
-| 5 | P1 | **Automated defacing visual QA** (pixel-level diff scoring raw vs. clean; flag studies where defacing similarity is too high or too low) | Catch defacing failures without manual OHIF review of every study | 4 | L |
-| 6 | P1 | **Study annotation / structured labeling** (admin-applied key-value tags on studies; searchable, filterable, exportable in CSV) | Researchers need custom metadata beyond DICOM tags | 3 | M |
-| 7 | P1 | **Per-project dashboard views** (filter all dashboard panels by project; project-scoped stats and audit trail) | Multi-project pilots need scoped operator views | 3 | M |
-| 8 | P2 | **Subject-session linking** (group studies from the same de-identified subject across sessions using deterministic pseudonym; privacy-preserving cross-visit tracking) | Longitudinal studies require linking visits without exposing real patient IDs | 5 | L |
-| 9 | P2 | **API key management** (named long-lived API keys for programmatic access; scoped to project + role; key rotation and revocation) | Some integrations cannot use IAP/Cognito browser flows | 3 | M |
-| 10 | P2 | **Batch export improvements** (export entire project to ZIP or BIDS; schedule nightly export; progress tracking for large batches) | Research delivery workflows need full-project exports | 3 | M |
-| 11 | P2 | **PHI detection confidence tuning UI** (per-project OCR threshold configuration; flagged-findings review workflow with accept/dismiss per finding) | Production PHI flag rates need operator-tunable thresholds | 3 | M |
-| 12 | P2 | **Multi-site / federated query stub** (list studies across multiple AEGIS instances via MCP aggregation; groundwork for consortium deployments) | Long-term strategic: multi-site neuroimaging consortia | 4 | XL |
-| 13 | P2 | **DICOM conformance statement** (formal documentation of AEGIS DICOMweb and DIMSE conformance — modalities, transfer syntaxes, SOP classes) | Required for enterprise PACS vendor certification and pilot sign-off | 2 | S |
+| 1 | P0 | **Azure cross-cloud routing verification** (smoke test + GCP→Azure STOW-RS routing) | Azure is live — close the loop on three-cloud routing | 4 | S |
+| 2 | P0 | **SMTP / email configuration for production** (share notifications, pipeline alerts, digests) | Email features are silent no-ops; needed before first real pilot users | 5 | S |
+| 3 | P0 | **SOC 2 Type I audit initiation** (select auditor, complete controls inventory, remediate gaps) | Required for enterprise customer pilots — HIPAA + SOC 2 together make the strongest compliance story | 5 | M |
+| 4 | P1 | **DIMSE C-MOVE / C-FIND** (active PACS pull — SCU role for query+retrieve) | Enables AEGIS to pull from PACS rather than waiting for push; unlocks enterprise PACS integration | 5 | L |
+| 5 | P1 | **AWS Marketplace listing** (SaaS contract listing for enterprise procurement) | Many enterprise buyers require AWS Marketplace for procurement; direct revenue channel | 4 | M |
+| 6 | P1 | **HL7 FHIR notifications** (fire FHIR DiagnosticReport or ImagingStudy resources to EMR/RIS on study events) | Required for deep EMR integration; connects AEGIS to Epic, Cerner, etc. | 4 | L |
+| 7 | P1 | **Production BAA** (Business Associate Agreement template + countersigning workflow) | Required before any real PHI touches the platform; first pilot customer needs signed BAA | 5 | S |
+| 8 | P2 | **DICOM conformance statement refinement** (publish formal PS3.2 conformance statement for GCP, AWS, Azure deployments) | Required for PACS vendor certification; enterprise IT departments require this before deployment | 3 | S |
+| 9 | P2 | **On-premises deployment guide** (Helm chart or Docker Compose for airgapped/on-premises environments) | Some research institutions have strict data residency; on-prem expands TAM | 4 | L |
+| 10 | P2 | **Multi-tenant SaaS mode** (per-organization database isolation; tenant provisioning API) | Enables AEGIS to serve multiple customers from one platform; scales revenue without N cloud deployments | 5 | XL |
+| 11 | P2 | **Cross-tenant federated sharing** (activate federation peer registry — peer AEGIS instances exchange approved studies) | Long-term strategic: multi-institution neuroimaging consortia; federation registry already exists | 4 | L |
+| 12 | P2 | **TCIA import automation** (scheduled batch imports from TCIA collections; enriches pilot data for demos) | Demo / pilot value — shows AEGIS processing real clinical datasets hands-free | 3 | S |
 
-## Recommended Execution Order
+## Recommended Execution Order (Q2 2026)
 
-For post-pilot production hardening:
+For post-beta production readiness:
 
-1. Feature #1 (observability dashboard) — deploy first, then watch
-2. Feature #2 (SLA stuck-detection alerts) — operators must be notified proactively
-3. Feature #3 (webhooks) — enables downstream automation pipelines
-4. Feature #4 (re-processing) — essential for QC cycles and production error recovery
-5. Feature #5 (automated defacing QA) — close the manual review bottleneck
-6. Feature #6-#7 (annotations, per-project views) — researcher UX improvements
-7. Feature #8 (subject-session linking) — longitudinal capability
-8. Feature #9-#11 (API keys, batch export, PHI tuning)
-9. Feature #12-#13 (federated query, conformance statement)
+1. Feature #1 (Azure verification) — close three-cloud loop immediately
+2. Feature #7 (BAA) + Feature #3 (SOC 2) — legal must happen in parallel with dev
+3. Feature #2 (SMTP) — email before first real pilot user signs up
+4. Feature #4 (DIMSE C-MOVE) — unlocks enterprise PACS pull integration
+5. Feature #5 (AWS Marketplace) — enterprise procurement channel
+6. Feature #6 (HL7 FHIR) — EMR integration for clinical sites
+7. Feature #8 (conformance statement) — PACS vendor cert
+8. Feature #9-#11 (on-prem, multi-tenant, federation) — longer horizon
 
 ## Branch Naming Suggestions
 
-- `feature/prod-observability-dashboard`
-- `feature/study-sla-alerting`
-- `feature/webhook-event-notifications`
-- `feature/study-reprocessing`
-- `feature/defacing-visual-qa`
-- `feature/study-annotations`
-- `feature/per-project-dashboard-views`
-- `feature/subject-session-linking`
-- `feature/api-key-management`
-- `feature/batch-export-improvements`
-- `feature/phi-confidence-tuning-ui`
+- `feature/azure-crosscloud-routing`
+- `feature/production-smtp-config`
+- `feature/soc2-audit-prep`
+- `feature/dimse-cmove-cfind`
+- `feature/aws-marketplace-listing`
+- `feature/hl7-fhir-notifications`
+- `feature/baa-workflow`
+- `feature/dicom-conformance-v2`
+- `feature/onprem-deployment-guide`
+- `feature/multi-tenant-saas`
+- `feature/cross-tenant-federation`

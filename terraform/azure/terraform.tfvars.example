@@ -1,0 +1,73 @@
+# AEGIS — Azure Terraform variables example
+# Copy to terraform.tfvars and fill in your values.
+# Never commit terraform.tfvars — it contains secrets.
+
+azure_region       = "eastus2"
+environment        = "prod"
+project_name       = "aegis"
+
+# ── Azure AD ──────────────────────────────────────────────────────────────────
+# Get from: az account show --query tenantId -o tsv
+azure_ad_tenant_id = "00000000-0000-0000-0000-000000000000"
+
+# ── Custom Domains (optional) ─────────────────────────────────────────────────
+# Leave empty to use the default .azurecontainerapps.io domains.
+api_domain   = "azure.api.aegisimaging.ai"
+admin_domain = "azure.admin.aegisimaging.ai"
+
+# ── Database ──────────────────────────────────────────────────────────────────
+db_admin_username = "aegis"
+db_admin_password = "CHANGE_ME_USE_A_STRONG_PASSWORD"
+db_sku_name       = "B_Standard_B2s"  # cheapest; use GP_Standard_D2s_v3 for prod load
+db_storage_mb     = 32768             # 32 GB
+
+# ── Minimal footprint ────────────────────────────────────────────────────────
+# Keeps the API, admin dashboard, PostgreSQL and Blob Storage so the health
+# endpoint and sign-in page answer; drops every other Container App.
+# See docs/runbooks/minimal-footprint.md.
+# enable_sidecars      = false
+# enable_dwv           = false
+# enable_mcp_server    = false
+# enable_upload_portal = false
+# api_cpu              = 0.5
+# api_memory           = "1Gi"
+# db_sku_name          = "B_Standard_B1ms"
+# dimse_receiver_image = ""
+
+# ── Monitoring ────────────────────────────────────────────────────────────────
+alert_email = "ops@aegisimaging.ai"
+
+# ── Email (Azure Communication Services) ─────────────────────────────────────
+smtp_from = "noreply@aegisimaging.ai"
+
+# After deploying ACS, retrieve SMTP credentials from the Azure portal:
+#   Communication Services resource → Settings → Keys
+#   smtp_username = the ACS resource name (e.g. "aegis-prod-acs")
+#   smtp_password = the Primary Key value shown on that page
+# Leave empty to disable email (SMTP_HOST will be blank → silent no-op in Go API).
+smtp_username = ""
+smtp_password = ""
+
+# ── Application URLs ──────────────────────────────────────────────────────────
+contact_email       = "contact@aegisimaging.ai"
+admin_dashboard_url = "https://azure.admin.aegisimaging.ai"
+landing_base_url    = "https://aegisimaging.ai"
+
+# ── First Admin Bootstrap ─────────────────────────────────────────────────────
+first_admin_email = "ops@aegisimaging.ai"
+
+# ── MCP Server ────────────────────────────────────────────────────────────────
+# Option A: Azure OpenAI
+# azure_openai_endpoint = "https://aegis.openai.azure.com/"
+# azure_openai_api_key  = "CHANGE_ME"
+
+# Option B: Anthropic API directly (leave azure_openai_endpoint empty)
+# anthropic_api_key = "sk-ant-CHANGE_ME"
+
+# ── DIMSE Receiver ───────────────────────────────────────────────────────────
+# Set dimse_receiver_image to enable the DIMSE VM (Debian 12, Docker).
+# Leave empty to skip all DIMSE VM resources.
+dimse_receiver_image = "<acr-name>.azurecr.io/dimse-receiver:latest"
+dimse_vm_size        = "Standard_D2s_v3"
+dimse_ssh_public_key = "ssh-rsa AAAAB3Nz... <your-public-key>"
+dimse_source_ranges  = ["203.0.113.0/24"]  # PLACEHOLDER — replace with real PACS IP ranges

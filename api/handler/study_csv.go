@@ -28,15 +28,25 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f := model.StudyFilters{
-		ProjectID: q.Get("project_id"),
-		Status:    q.Get("status"),
-		Modality:  q.Get("modality"),
-		BodyPart:  q.Get("body_part"),
-		Source:    q.Get("source"),
-		Search:    q.Get("search"),
-		Label:     q.Get("label"),
-		DateFrom:  dateFrom,
-		DateTo:    dateTo,
+		ProjectID:     q.Get("project_id"),
+		Status:        q.Get("status"),
+		Modality:      q.Get("modality"),
+		BodyPart:      q.Get("body_part"),
+		Source:        q.Get("source"),
+		Search:        q.Get("search"),
+		Label:         q.Get("label"),
+		InstitutionID: q.Get("institution_id"),
+		StudyDateFrom: q.Get("study_date_from"),
+		StudyDateTo:   q.Get("study_date_to"),
+		DateFrom:      dateFrom,
+		DateTo:        dateTo,
+	}
+	access, ok := s.requireResearcherProjectScope(w, r, f.ProjectID)
+	if !ok {
+		return
+	}
+	if access != nil && access.IsSiteScoped() {
+		f.InstitutionID = *access.InstitutionID
 	}
 
 	studies, err := model.ListStudies(r.Context(), s.db, f, 10000, 0)
@@ -51,10 +61,10 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{
-		"id", "study_instance_uid", "modality", "body_part", "study_description",
+		"id", "study_instance_uid", "modality", "body_part", "study_description", "study_date",
 		"status", "source", "series_count", "instance_count", "dicom_store",
-		"defacing_required", "phi_scan_status", "qc_status", "bids_status",
-		"classification_status", "protocol_status", "export_status",
+		"defacing_required", "phi_scan_status", "pixel_redaction_status", "qc_status", "bids_status",
+		"classification_status", "protocol_status", "analytics_status", "export_status",
 		"project_id", "institution_id", "created_at", "updated_at",
 	})
 
@@ -63,12 +73,17 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 		if st.InstitutionID != nil {
 			instID = *st.InstitutionID
 		}
+		studyDate := ""
+		if st.StudyDate != nil {
+			studyDate = *st.StudyDate
+		}
 		_ = cw.Write([]string{
 			st.ID,
 			st.StudyInstanceUID,
 			st.Modality,
 			st.BodyPart,
 			st.StudyDescription,
+			studyDate,
 			st.Status,
 			st.Source,
 			strconv.Itoa(st.SeriesCount),
@@ -76,10 +91,12 @@ func (s *Server) ExportStudiesCSV(w http.ResponseWriter, r *http.Request) {
 			st.DicomStore,
 			strconv.FormatBool(st.DefacingRequired),
 			st.PhiScanStatus,
+			st.PixelRedactionStatus,
 			st.QcStatus,
 			st.BidsStatus,
 			st.ClassificationStatus,
 			st.ProtocolStatus,
+			st.AnalyticsStatus,
 			st.ExportStatus,
 			st.ProjectID,
 			instID,

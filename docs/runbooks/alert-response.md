@@ -3,6 +3,137 @@
 This runbook maps each Terraform-provisioned alert policy to a triage procedure.
 All alerts fire to the email address set in `alert_email` (terraform/infra/terraform.tfvars).
 
+## Cross-Cloud Deployment Ops Entry Points
+
+Use this quick index to jump to the right deployment or failure surface.
+
+### AWS
+
+- **App deploy workflow**: GitHub Actions → `Deploy to AWS`
+- **Terraform workflow**: GitHub Actions → `Terraform AWS`
+- **Terraform failure signal**: GitHub Actions → `Terraform AWS Failure Alert`
+- **Failure signal scope**: reports failed `Terraform AWS` runs on `main` only
+- **Apply approval gate**: GitHub Environment `aws-prod`
+
+### Azure
+
+- **App deploy workflow**: GitHub Actions → `Deploy to Azure`
+- **Terraform workflow**: GitHub Actions → `Terraform Azure`
+- **Terraform failure signal**: GitHub Actions → `Terraform Azure Failure Alert`
+- **Failure signal scope**: reports failed `Terraform Azure` runs on `main` only
+- **Apply approval gate**: GitHub Environment `azure-prod`
+
+### GCP
+
+- **App deploy workflow**: GitHub Actions → `Deploy to GCP` (on push to `main`)
+- **Terraform workflow**: GitHub Actions → `Terraform GCP` (apply on `main`, approval gate `gcp-prod`)
+- **Cloud Build failure signal**: GitHub Actions → `GCP Cloud Build Failure Alert`
+- **Failure check cadence/default window**: every 30 minutes with 30-minute default lookback on scheduled runs (`workflow_dispatch` default remains 60 minutes)
+- **Primary health check endpoint**: `https://api.aegisimaging.ai/healthz`
+- **Failure signal auth secrets**: `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`
+
+## GCP Cloud Build Failure Signal
+
+Use this section when `GCP Cloud Build Failure Alert` reports one or more failed builds.
+
+### Triage a reported failure
+
+1. Open **Actions → GCP Cloud Build Failure Alert** and review the failed build links in the run summary.
+2. Open the Cloud Build run URL for the most recent failed build.
+3. Check the failed step first (build image, push image, deploy, or terraform apply).
+4. Confirm whether failure is app deploy (`cloudbuild.yaml`) or infra deploy (`cloudbuild.terraform.yaml`).
+5. Re-run the failed pipeline only after the underlying issue is corrected.
+
+### Fast checks
+
+- Verify the build trigger and branch match expected production flow (`main`).
+- Confirm Artifact Registry image push success before deploy steps.
+- For Terraform failures, check state backend access and provider authentication first.
+
+### Manual investigation commands
+
+Manual run (without failing the checker workflow) for quick inspection:
+
+```bash
+gh workflow run "GCP Cloud Build Failure Alert" \
+   -f lookback_minutes=60 \
+   -f fail_on_detection=false
+```
+
+```bash
+gcloud builds list --project=<GCP_PROJECT_ID> --sort-by=~createTime --limit=10
+```
+
+```bash
+gcloud builds log <BUILD_ID> --project=<GCP_PROJECT_ID>
+```
+
+```bash
+gcloud builds describe <BUILD_ID> --project=<GCP_PROJECT_ID> --format=json | jq '.status, .images, .substitutions'
+```
+
+## AWS Terraform Apply Approval Gate (`aws-prod`)
+
+Use this section whenever the `Terraform AWS` workflow is waiting for deployment approval.
+
+### Approve a pending apply
+
+1. Open **Actions → Terraform AWS** and select the most recent run on `main`.
+2. Confirm the `Terraform Plan (AWS)` job completed successfully.
+3. Open the pending deployment card for environment `aws-prod`.
+4. Click **Review deployments** and then **Approve and deploy**.
+5. Monitor `Terraform Apply (AWS)` until completion.
+
+### Reject a pending apply
+
+1. Open the pending deployment card for `aws-prod`.
+2. Click **Review deployments** and choose **Reject**.
+3. Add a short reason (for example: unexpected resource replacement).
+4. Open a follow-up issue/PR to fix the plan before re-running.
+
+### Fast checks before approving
+
+- Verify the run is from `main` and repository `aegis-imaging/aegis`.
+- Open `tfplan.txt` artifact and confirm no unexpected destructive changes.
+- Confirm the triggering commit/PR matches the intended infrastructure change.
+
+### If apply fails
+
+- Open **Actions → Terraform AWS Failure Alert** for the failure summary and direct run URL.
+- Triage from the failed step in `Terraform Apply (AWS)` first.
+- If state lock-related, wait for lock expiry or clear lock only with operator approval.
+
+## Azure Terraform Apply Approval Gate (`azure-prod`)
+
+Use this section whenever the `Terraform Azure` workflow is waiting for deployment approval.
+
+### Approve a pending apply
+
+1. Open **Actions → Terraform Azure** and select the most recent run on `main`.
+2. Confirm the `Terraform Plan (Azure)` job completed successfully.
+3. Open the pending deployment card for environment `azure-prod`.
+4. Click **Review deployments** and then **Approve and deploy**.
+5. Monitor `Terraform Apply (Azure)` until completion.
+
+### Reject a pending apply
+
+1. Open the pending deployment card for `azure-prod`.
+2. Click **Review deployments** and choose **Reject**.
+3. Add a short reason (for example: unexpected resource replacement).
+4. Open a follow-up issue/PR to fix the plan before re-running.
+
+### Fast checks before approving
+
+- Verify the run is from `main` and repository `aegis-imaging/aegis`.
+- Open `tfplan.txt` artifact and confirm no unexpected destructive changes.
+- Confirm the triggering commit/PR matches the intended infrastructure change.
+
+### If apply fails
+
+- Open **Actions → Terraform Azure Failure Alert** for the failure summary and direct run URL.
+- Triage from the failed step in `Terraform Apply (Azure)` first.
+- If state lock-related, wait for lock expiry or clear lock only with operator approval.
+
 ---
 
 ## API 5xx Rate High
@@ -18,7 +149,7 @@ All alerts fire to the email address set in `alert_email` (terraform/infra/terra
    ```bash
    gcloud logging read \
      'resource.type="cloud_run_revision" AND resource.labels.service_name="aegis-api" AND severity>=ERROR' \
-     --project=aegis-prod-488119 --limit=50 --format=json | jq '.[].textPayload'
+     --project=<GCP_PROJECT_ID> --limit=50 --format=json | jq '.[].textPayload'
    ```
 
 2. **Check `/healthz`**
@@ -36,7 +167,7 @@ All alerts fire to the email address set in `alert_email` (terraform/infra/terra
    ```bash
    gcloud run services update-traffic aegis-api \
      --to-revisions=PREV_REVISION=100 \
-     --region=us-central1 --project=aegis-prod-488119
+     --region=us-central1 --project=<GCP_PROJECT_ID>
    ```
 
 5. **Scale out if overloaded**
@@ -44,7 +175,7 @@ All alerts fire to the email address set in `alert_email` (terraform/infra/terra
    ```bash
    gcloud run services update aegis-api \
      --max-instances=50 \
-     --region=us-central1 --project=aegis-prod-488119
+     --region=us-central1 --project=<GCP_PROJECT_ID>
    ```
 
 ---
@@ -67,20 +198,20 @@ All alerts fire to the email address set in `alert_email` (terraform/infra/terra
 
    ```bash
    gcloud compute backend-services describe aegis-api-backend \
-     --global --project=aegis-prod-488119 --format=json | jq '.backends[].balancingMode'
+     --global --project=<GCP_PROJECT_ID> --format=json | jq '.backends[].balancingMode'
    ```
 
 3. **Check Cloud Run service status**
 
    ```bash
    gcloud run services describe aegis-api \
-     --region=us-central1 --project=aegis-prod-488119 --format=json | jq '.status.conditions'
+     --region=us-central1 --project=<GCP_PROJECT_ID> --format=json | jq '.status.conditions'
    ```
 
 4. **Check SSL certificate** — an expired cert will cause uptime check failures:
 
    ```bash
-   gcloud compute ssl-certificates list --project=aegis-prod-488119
+   gcloud compute ssl-certificates list --project=<GCP_PROJECT_ID>
    ```
 
 ---
@@ -100,7 +231,7 @@ All alerts fire to the email address set in `alert_email` (terraform/infra/terra
    ```bash
    gcloud run services update aegis-api \
      --min-instances=2 \
-     --region=us-central1 --project=aegis-prod-488119
+     --region=us-central1 --project=<GCP_PROJECT_ID>
    ```
 
 3. **Check sidecar timeouts** — if a sidecar (defacing, PHI scan) is slow, requests that
@@ -126,7 +257,7 @@ All alerts fire to the email address set in `alert_email` (terraform/infra/terra
 1. **Identify top queries**
 
    ```bash
-   gcloud sql connect aegis-prod --user=aegis --project=aegis-prod-488119
+   gcloud sql connect aegis-prod --user=aegis --project=<GCP_PROJECT_ID>
    ```
 
    Then in psql:

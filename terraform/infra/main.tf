@@ -65,13 +65,25 @@ variable "api_domain" {
   type        = string
 }
 
-variable "admin_domain" {
-  description = "FQDN routed to the admin dashboard backend (example: admin.aegisimaging.ai)"
+variable "landing_domain" {
+  description = "FQDN of the public landing site (example: aegisimaging.ai). Served by Cloudflare Pages from frontend/landing, not by this load balancer; listed here only so it is in the API CORS allowlist."
+  type        = string
+  default     = ""
+}
+
+variable "app_domain" {
+  description = "FQDN of the unified application (example: app.aegisimaging.ai). Serves the admin-dashboard React app behind IAP — XNAT routes at /, admin tabs at /admin/*, public about pages at /about."
   type        = string
 }
 
-variable "landing_domain" {
-  description = "FQDN for the public marketing / landing page (example: aegisimaging.ai). Leave empty to skip landing page deployment."
+variable "extra_lb_domains" {
+  description = "Additional hostnames the load balancer certificate must cover, e.g. the apex while DNS is being moved to Cloudflare Pages. Every entry must resolve to the LB IP or certificate provisioning fails."
+  type        = list(string)
+  default     = []
+}
+
+variable "upload_portal_domain" {
+  description = "FQDN for the public upload portal (example: upload.aegisimaging.ai). Leave empty to skip upload portal deployment."
   type        = string
   default     = ""
 }
@@ -139,39 +151,65 @@ variable "defacing_image" {
   type        = string
 }
 
-variable "phi_detection_image" {
-  description = "Container image URI for the PHI detection sidecar"
+variable "dicom_tools_image" {
+  description = "Container image URI for the consolidated dicom-tools sidecar (hosts phi-detection, qc, bids, classification, protocol, synth under one Cloud Run service)"
   type        = string
+}
+
+# The per-sidecar image variables below are retained as inputs to preserve
+# tfvars compatibility during the consolidation rollout — Cloud Build still
+# tries to set them from the previous secret. They are no longer used by
+# the resource graph; only var.dicom_tools_image drives the merged service.
+variable "phi_detection_image" {
+  description = "(deprecated) was the PHI detection sidecar image; consolidated into dicom_tools_image."
+  type        = string
+  default     = ""
 }
 
 variable "qc_service_image" {
-  description = "Container image URI for the QC sidecar"
+  description = "(deprecated) was the QC sidecar image; consolidated into dicom_tools_image."
   type        = string
+  default     = ""
 }
 
 variable "bids_service_image" {
-  description = "Container image URI for the BIDS sidecar"
+  description = "(deprecated) was the BIDS sidecar image; consolidated into dicom_tools_image."
   type        = string
+  default     = ""
 }
 
 variable "classification_service_image" {
-  description = "Container image URI for the classification sidecar"
+  description = "(deprecated) was the classification sidecar image; consolidated into dicom_tools_image."
   type        = string
+  default     = ""
 }
 
 variable "protocol_service_image" {
-  description = "Container image URI for the protocol sidecar"
+  description = "(deprecated) was the protocol sidecar image; consolidated into dicom_tools_image."
   type        = string
+  default     = ""
 }
 
-variable "landing_image" {
-  description = "Container image URI for the landing page (React + nginx). Empty = landing Cloud Run service not deployed."
+variable "upload_portal_image" {
+  description = "Container image URI for the upload portal (React + nginx). Empty = upload portal Cloud Run service not deployed."
   type        = string
   default     = ""
 }
 
 variable "synth_service_image" {
   description = "Container image URI for the synthetic MRI sidecar (empty = service not deployed)"
+  type        = string
+  default     = ""
+}
+
+variable "sct_service_image" {
+  description = "Container image URI for the SCT (Spinal Cord Toolbox) sidecar (empty = service not deployed)"
+  type        = string
+  default     = ""
+}
+
+variable "analytics_service_image" {
+  description = "Container image URI for the analytics sidecar (empty = service not deployed)"
   type        = string
   default     = ""
 }
@@ -195,8 +233,8 @@ variable "synth_service_url" {
   default     = ""
 }
 
-variable "weasis_image" {
-  description = "Container image URI for the DWV/WEASIS viewer (empty = disabled)"
+variable "dwv_image" {
+  description = "Container image URI for the DWV viewer (empty = disabled)"
   type        = string
   default     = ""
 }
@@ -214,9 +252,9 @@ variable "api_memory" {
 }
 
 variable "api_min_instances" {
-  description = "Minimum API Cloud Run instances"
+  description = "Minimum API Cloud Run instances (0 = scale-to-zero for dev cost savings)"
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "api_max_instances" {
@@ -249,6 +287,12 @@ variable "sidecar_max_instances" {
   default     = 5
 }
 
+variable "kms_crypto_key_id" {
+  description = "Optional Cloud KMS crypto key resource ID for CMEK encryption on GCS buckets and Cloud SQL. Created by terraform/project module. Empty = Google-managed default encryption."
+  type        = string
+  default     = ""
+}
+
 variable "vpc_cidr" {
   description = "CIDR range for primary application subnet"
   type        = string
@@ -268,9 +312,9 @@ variable "db_private_peering_prefix_length" {
 }
 
 variable "db_tier" {
-  description = "Cloud SQL machine tier"
+  description = "Cloud SQL machine tier (db-f1-micro for dev, db-custom-2-7680 for prod)"
   type        = string
-  default     = "db-custom-2-7680"
+  default     = "db-f1-micro"
 }
 
 variable "db_availability_type" {
@@ -280,9 +324,9 @@ variable "db_availability_type" {
 }
 
 variable "db_disk_size_gb" {
-  description = "Cloud SQL disk size in GB"
+  description = "Cloud SQL disk size in GB (10 for dev, 50 for prod)"
   type        = number
-  default     = 50
+  default     = 10
 }
 
 variable "db_password" {
@@ -373,19 +417,6 @@ variable "contact_email" {
   default     = "contact@aegisimaging.ai"
 }
 
-variable "gate_enabled" {
-  description = "Enable server-side invite gate on landing page (GATE_ENABLED env var)"
-  type        = bool
-  default     = false
-}
-
-variable "gate_secret" {
-  description = "HMAC secret for landing page invite gate tokens (GATE_SECRET env var)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
 variable "allowed_origins" {
   description = "Optional CORS origins override. If empty, defaults to API + admin domains."
   type        = list(string)
@@ -448,30 +479,31 @@ locals {
 
   sidecar_services = merge(
     {
-      defacing               = var.defacing_image
-      phi-detection          = var.phi_detection_image
-      qc-service             = var.qc_service_image
-      bids-service           = var.bids_service_image
-      classification-service = var.classification_service_image
-      protocol-service       = var.protocol_service_image
+      # dicom-tools consolidates six former sidecars (phi-detection, qc-service,
+      # bids-service, classification-service, protocol-service, synth-service)
+      # into one Cloud Run service. The Go API reaches each former endpoint via
+      # DICOM_TOOLS_URL + sub-module prefix; see api/config/config.go sidecarURL().
+      dicom-tools = var.dicom_tools_image
+      # Heavy sidecars stay separate because their system-level toolchains
+      # (FreeSurfer, FSL, ANTs, scikit-image with native deps) don't share an image.
+      defacing = var.defacing_image
     },
-    # synth-service: optional sidecar for synthetic brain MRI generation.
-    # Omit from the map when the image is not provided so the for_each loop
-    # does not attempt to create a Cloud Run service with an empty image URI.
-    var.synth_service_image != "" ? { synth-service = var.synth_service_image } : {}
+    var.sct_service_image != "" ? { sct-service = var.sct_service_image } : {},
+    var.analytics_service_image != "" ? { analytics-service = var.analytics_service_image } : {}
   )
 
-  lb_domains = distinct(compact([
+  lb_domains = distinct(compact(concat([
     var.api_domain,
-    var.admin_domain,
-    var.landing_domain,
-    var.landing_domain != "" ? "www.${var.landing_domain}" : "",
-  ]))
+    var.app_domain,
+    var.upload_portal_domain,
+  ], var.extra_lb_domains)))
 
-  resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : [
+  resolved_allowed_origins = length(var.allowed_origins) > 0 ? var.allowed_origins : compact([
     "https://${var.api_domain}",
-    "https://${var.admin_domain}",
-  ]
+    "https://${var.app_domain}",
+    var.landing_domain != "" ? "https://${var.landing_domain}" : "",
+    var.upload_portal_domain != "" ? "https://${var.upload_portal_domain}" : "",
+  ])
 }
 
 check "db_password_source" {
@@ -594,6 +626,13 @@ resource "google_storage_bucket" "staging" {
       age = 7
     }
   }
+
+  dynamic "encryption" {
+    for_each = var.kms_crypto_key_id != "" ? [1] : []
+    content {
+      default_kms_key_name = var.kms_crypto_key_id
+    }
+  }
 }
 
 resource "google_storage_bucket" "archive" {
@@ -611,12 +650,21 @@ resource "google_storage_bucket" "archive" {
       age = 30
     }
   }
+
+  dynamic "encryption" {
+    for_each = var.kms_crypto_key_id != "" ? [1] : []
+    content {
+      default_kms_key_name = var.kms_crypto_key_id
+    }
+  }
 }
 
 resource "google_sql_database_instance" "aegis" {
   name             = "${local.name_prefix}-postgres"
   database_version = "POSTGRES_15"
   region           = var.region
+
+  encryption_key_name = var.kms_crypto_key_id != "" ? var.kms_crypto_key_id : null
 
   depends_on = [google_service_networking_connection.private_vpc_connection]
 
@@ -854,11 +902,11 @@ resource "google_cloud_run_service_iam_member" "sidecar_invoker" {
   member   = "allUsers"
 }
 
-# --- Cloud Run DWV (WEASIS) Viewer ---
+# --- Cloud Run DWV Viewer ---
 
-resource "google_cloud_run_v2_service" "weasis" {
-  count    = var.weasis_image != "" ? 1 : 0
-  name     = "weasis"
+resource "google_cloud_run_v2_service" "dwv" {
+  count    = var.dwv_image != "" ? 1 : 0
+  name     = "dwv"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -873,7 +921,7 @@ resource "google_cloud_run_v2_service" "weasis" {
     }
 
     containers {
-      image = var.weasis_image
+      image = var.dwv_image
 
       env {
         name  = "API_URL"
@@ -901,10 +949,10 @@ resource "google_cloud_run_v2_service" "weasis" {
   }
 }
 
-resource "google_cloud_run_service_iam_member" "weasis_invoker" {
-  count    = var.weasis_image != "" ? 1 : 0
+resource "google_cloud_run_service_iam_member" "dwv_invoker" {
+  count    = var.dwv_image != "" ? 1 : 0
   location = var.region
-  service  = google_cloud_run_v2_service.weasis[0].name
+  service  = google_cloud_run_v2_service.dwv[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -1014,6 +1062,10 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.export_portal_base_url
       }
       env {
+        name  = "LANDING_BASE_URL"
+        value = "https://${var.app_domain}"
+      }
+      env {
         name  = "APP_TIMEZONE"
         value = "UTC"
       }
@@ -1053,35 +1105,34 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "DEFACING_SERVICE_URL"
         value = google_cloud_run_v2_service.sidecars["defacing"].uri
       }
+      # Six former sidecars (phi-detection, qc, bids, classification, protocol,
+      # synth) are consolidated into the single dicom-tools service. The Go API
+      # config helper sidecarURL() derives per-sidecar URLs by appending the
+      # sub-module prefix (e.g. DICOM_TOOLS_URL + "/phi") so handler call sites
+      # don't need to change.
       env {
-        name  = "PHI_DETECTION_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["phi-detection"].uri
-      }
-      env {
-        name  = "QC_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["qc-service"].uri
-      }
-      env {
-        name  = "BIDS_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["bids-service"].uri
-      }
-      env {
-        name  = "CLASSIFICATION_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["classification-service"].uri
-      }
-      env {
-        name  = "PROTOCOL_SERVICE_URL"
-        value = google_cloud_run_v2_service.sidecars["protocol-service"].uri
+        name  = "DICOM_TOOLS_URL"
+        value = google_cloud_run_v2_service.sidecars["dicom-tools"].uri
       }
       dynamic "env" {
-        # Prefer an explicit URL override; fall back to the Terraform-managed
-        # synth-service Cloud Run URI when synth_service_image is set.
-        for_each = var.synth_service_url != "" ? [var.synth_service_url] : (
-          var.synth_service_image != "" ? [google_cloud_run_v2_service.sidecars["synth-service"].uri] : []
-        )
+        for_each = var.sct_service_image != "" ? [google_cloud_run_v2_service.sidecars["sct-service"].uri] : []
         content {
-          name  = "SYNTH_SERVICE_URL"
+          name  = "SCT_SERVICE_URL"
           value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.analytics_service_image != "" ? [google_cloud_run_v2_service.sidecars["analytics-service"].uri] : []
+        content {
+          name  = "ANALYTICS_SERVICE_URL"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = local.dimse_enabled ? [google_compute_instance.dimse_receiver[0].network_interface[0].network_ip] : []
+        content {
+          name  = "DIMSE_RECEIVER_URL"
+          value = "http://${env.value}:8080"
         }
       }
 
@@ -1139,7 +1190,7 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
     service_account = google_service_account.admin.email
 
     scaling {
-      min_instance_count = 1
+      min_instance_count = 0 # Scale-to-zero for dev cost savings (was 1)
       max_instance_count = 5
     }
 
@@ -1151,6 +1202,13 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
           cpu    = "1000m"
           memory = "1Gi"
         }
+      }
+
+      # nginx uses variable-based proxy_pass for /api/ and /agent/ — requires an
+      # explicit resolver directive so nginx can resolve hostnames at request time.
+      env {
+        name  = "NGINX_RESOLVER_DIRECTIVE"
+        value = "resolver 169.254.169.254 valid=30s;"
       }
 
       liveness_probe {
@@ -1172,15 +1230,21 @@ resource "google_cloud_run_v2_service" "admin_dashboard" {
   }
 }
 
-# --- Landing page Cloud Run service ---
+# --- Landing page ---
+#
+# The public landing site (frontend/landing) is a static build hosted on
+# Cloudflare Pages at var.landing_domain; it has no Cloud Run service and no
+# LB backend here. The admin-dashboard app still serves /about/* via a no-IAP
+# backend (google_compute_backend_service.admin_public) on var.app_domain.
 
-resource "google_cloud_run_v2_service" "landing" {
-  count    = var.landing_image != "" ? 1 : 0
-  name     = "${local.name_prefix}-landing"
+# --- Upload portal Cloud Run service ---
+
+resource "google_cloud_run_v2_service" "upload_portal" {
+  count    = var.upload_portal_image != "" ? 1 : 0
+  name     = "${local.name_prefix}-upload-portal"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
-  # Landing is a stateless nginx container — no data to protect, safe to replace.
   deletion_protection = false
 
   template {
@@ -1190,7 +1254,7 @@ resource "google_cloud_run_v2_service" "landing" {
     }
 
     containers {
-      image = var.landing_image
+      image = var.upload_portal_image
 
       resources {
         limits = {
@@ -1201,18 +1265,8 @@ resource "google_cloud_run_v2_service" "landing" {
       }
 
       env {
-        name  = "API_BASE_URL"
+        name  = "API_URL"
         value = "https://${var.api_domain}"
-      }
-
-      env {
-        name  = "GATE_ENABLED"
-        value = var.gate_enabled ? "true" : "false"
-      }
-
-      env {
-        name  = "GATE_SECRET"
-        value = var.gate_secret
       }
 
       liveness_probe {
@@ -1229,11 +1283,11 @@ resource "google_cloud_run_v2_service" "landing" {
   }
 }
 
-# Landing page is public — no IAP, no auth required.
-resource "google_cloud_run_service_iam_member" "landing_invoker" {
-  count    = var.landing_image != "" ? 1 : 0
+# Upload portal is public — invite gate is client-side (baked at build time).
+resource "google_cloud_run_service_iam_member" "upload_portal_invoker" {
+  count    = var.upload_portal_image != "" ? 1 : 0
   location = var.region
-  service  = google_cloud_run_v2_service.landing[0].name
+  service  = google_cloud_run_v2_service.upload_portal[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
@@ -1356,11 +1410,11 @@ resource "google_cloud_run_v2_service" "mcp_server" {
       }
       env {
         name  = "MCP_AGENT_LLM_MODEL"
-        value = "google/gemini-2.0-flash-001"
+        value = "google/gemini-2.5-flash"
       }
       env {
         name  = "MCP_AGENT_ALLOWED_ORIGIN"
-        value = "https://${var.admin_domain}"
+        value = "https://${var.app_domain}"
       }
       env {
         name  = "MCP_AGENT_REQUIRE_AUTH"
@@ -1433,7 +1487,12 @@ resource "google_compute_global_address" "lb_ip" {
 }
 
 resource "google_compute_managed_ssl_certificate" "lb_cert" {
-  name = "${local.name_prefix}-lb-cert-v3"
+  # Managed certs in GCP are immutable, so any change to local.lb_domains
+  # must create a fresh resource alongside the old one (create_before_destroy),
+  # switch the LB to it, then garbage-collect the old. Reusing a name on a
+  # domain change yields a 409 "already exists" and aborts the apply, so the
+  # name is derived from the (sorted) domain list instead of a hand-bumped suffix.
+  name = "${local.name_prefix}-lb-cert-${substr(md5(join(",", sort(local.lb_domains))), 0, 8)}"
   managed {
     domains = local.lb_domains
   }
@@ -1442,19 +1501,19 @@ resource "google_compute_managed_ssl_certificate" "lb_cert" {
   }
 }
 
-resource "google_compute_region_network_endpoint_group" "landing_neg" {
-  count                 = var.landing_image != "" ? 1 : 0
-  name                  = "${local.name_prefix}-landing-neg"
+resource "google_compute_region_network_endpoint_group" "upload_portal_neg" {
+  count                 = var.upload_portal_image != "" ? 1 : 0
+  name                  = "${local.name_prefix}-upload-portal-neg"
   region                = var.region
   network_endpoint_type = "SERVERLESS"
   cloud_run {
-    service = google_cloud_run_v2_service.landing[0].name
+    service = google_cloud_run_v2_service.upload_portal[0].name
   }
 }
 
-resource "google_compute_backend_service" "landing" {
-  count                 = var.landing_image != "" ? 1 : 0
-  name                  = "${local.name_prefix}-landing-backend"
+resource "google_compute_backend_service" "upload_portal" {
+  count                 = var.upload_portal_image != "" ? 1 : 0
+  name                  = "${local.name_prefix}-upload-portal-backend"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   protocol              = "HTTP"
 
@@ -1464,7 +1523,7 @@ resource "google_compute_backend_service" "landing" {
   }
 
   backend {
-    group = google_compute_region_network_endpoint_group.landing_neg[0].id
+    group = google_compute_region_network_endpoint_group.upload_portal_neg[0].id
   }
 }
 
@@ -1526,15 +1585,38 @@ resource "google_compute_backend_service" "admin" {
   }
 }
 
+# Public (no-IAP) backend for the /about/* paths.
+#
+# Points at the SAME Cloud Run NEG as the IAP-gated `admin` backend above,
+# so the unified React bundle serves both auth-gated and public routes.
+# GCP IAP is configured per-backend-service, not per-path on a single
+# backend, so the only way to expose a subset of paths publicly is to
+# attach the same Cloud Run service to a second backend service without
+# the `iap {}` block, and route /about/* to it via URL-map path rules.
+resource "google_compute_backend_service" "admin_public" {
+  name                  = "${local.name_prefix}-admin-public-backend"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  protocol              = "HTTP"
+
+  log_config {
+    enable      = true
+    sample_rate = 0.1
+  }
+
+  backend {
+    group = google_compute_region_network_endpoint_group.admin_neg.id
+  }
+}
+
 resource "google_compute_url_map" "https" {
   name            = "${local.name_prefix}-https-map"
-  default_service = var.landing_image != "" ? google_compute_backend_service.landing[0].id : google_compute_backend_service.api.id
+  default_service = google_compute_backend_service.admin.id
 
   dynamic "host_rule" {
-    for_each = var.landing_domain != "" ? [1] : []
+    for_each = var.upload_portal_domain != "" ? [1] : []
     content {
-      hosts        = [var.landing_domain]
-      path_matcher = "landing"
+      hosts        = [var.upload_portal_domain]
+      path_matcher = "upload-portal"
     }
   }
 
@@ -1543,16 +1625,20 @@ resource "google_compute_url_map" "https" {
     path_matcher = "api"
   }
 
+  # App hostname (e.g. app.aegisimaging.ai) serves the unified app. The apex
+  # is the public landing site on Cloudflare Pages and never reaches this LB.
+  # Default: IAP-gated `admin` backend (XNAT, /admin/*, /search, etc.).
+  # Path rule: /about and /about/* route to `admin_public` (no IAP).
   host_rule {
-    hosts        = [var.admin_domain]
-    path_matcher = "admin"
+    hosts        = [var.app_domain]
+    path_matcher = "app"
   }
 
   dynamic "path_matcher" {
-    for_each = var.landing_image != "" ? [1] : []
+    for_each = var.upload_portal_image != "" ? [1] : []
     content {
-      name            = "landing"
-      default_service = google_compute_backend_service.landing[0].id
+      name            = "upload-portal"
+      default_service = google_compute_backend_service.upload_portal[0].id
     }
   }
 
@@ -1562,9 +1648,13 @@ resource "google_compute_url_map" "https" {
   }
 
   path_matcher {
-    name            = "admin"
+    name            = "app"
     default_service = google_compute_backend_service.admin.id
-    # No path rules needed — nginx proxies /api/* to the API backend internally.
+
+    path_rule {
+      paths   = ["/about", "/about/*"]
+      service = google_compute_backend_service.admin_public.id
+    }
   }
 
 }
@@ -1887,6 +1977,28 @@ resource "google_logging_metric" "study_stuck" {
   }
 }
 
+resource "google_logging_metric" "destination_probe_failures" {
+  name   = "aegis-${var.environment}-destination-probe-failures"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"destination.tested\" AND textPayload:\"success\\\":false\""
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "AEGIS destination probe failures"
+  }
+}
+
+resource "google_logging_metric" "dimse_dead_letter" {
+  name   = "aegis-${var.environment}-dimse-dead-letter"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${google_cloud_run_v2_service.api.name}\" AND textPayload:\"dead-letter\""
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "AEGIS DIMSE dead-letter indicators"
+  }
+}
+
 # Counts every "pipeline: dispatching ..." log line from the Go API.
 # Each dispatch fires once per pipeline service dispatched per study, so this
 # metric tracks pipeline throughput / study processing activity over time.
@@ -1907,6 +2019,8 @@ resource "time_sleep" "wait_for_log_metrics" {
   depends_on = [
     google_logging_metric.pipeline_failures,
     google_logging_metric.study_stuck,
+    google_logging_metric.destination_probe_failures,
+    google_logging_metric.dimse_dead_letter,
   ]
   create_duration = "600s"
 }
@@ -2017,6 +2131,76 @@ resource "google_monitoring_alert_policy" "pipeline_failure_alert" {
   }
 }
 
+resource "google_monitoring_alert_policy" "destination_probe_failure_alert" {
+  display_name = "AEGIS destination probe failures (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+  depends_on   = [time_sleep.wait_for_log_metrics]
+
+  conditions {
+    display_name = "Destination probe failures > 0 in 5m"
+    condition_threshold {
+      filter          = "metric.type = \"logging.googleapis.com/user/${google_logging_metric.destination_probe_failures.name}\" AND resource.type = \"cloud_run_revision\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "Destination connectivity probes are failing. Check destination configuration, egress network rules, and /api/destinations/{id}/test results."
+  }
+
+  user_labels = {
+    service  = "routing"
+    severity = "warning"
+  }
+}
+
+resource "google_monitoring_alert_policy" "dimse_dead_letter_alert" {
+  display_name = "AEGIS DIMSE dead-letter risk (${var.environment})"
+  combiner     = "OR"
+  enabled      = var.enable_monitoring_alerts
+  depends_on   = [time_sleep.wait_for_log_metrics]
+
+  conditions {
+    display_name = "DIMSE dead-letter indicators > 0 in 5m"
+    condition_threshold {
+      filter          = "metric.type = \"logging.googleapis.com/user/${google_logging_metric.dimse_dead_letter.name}\" AND resource.type = \"cloud_run_revision\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_SUM"
+      }
+    }
+  }
+
+  notification_channels = local.notification_channels
+
+  documentation {
+    content = "DIMSE dead-letter/retry risk detected. Check DIMSE retry status endpoints and ingest queue health before data loss risk increases."
+  }
+
+  user_labels = {
+    service  = "dimse"
+    severity = "critical"
+  }
+}
+
 # --- Cloud Monitoring Dashboard ---
 
 resource "google_monitoring_dashboard" "aegis" {
@@ -2091,12 +2275,8 @@ output "sidecar_service_uris" {
   value = { for name, svc in google_cloud_run_v2_service.sidecars : name => svc.uri }
 }
 
-output "weasis_service_uri" {
-  value = var.weasis_image != "" ? google_cloud_run_v2_service.weasis[0].uri : ""
-}
-
-output "landing_service_uri" {
-  value = var.landing_image != "" ? google_cloud_run_v2_service.landing[0].uri : ""
+output "dwv_service_uri" {
+  value = var.dwv_image != "" ? google_cloud_run_v2_service.dwv[0].uri : ""
 }
 
 output "load_balancer_ip" {
@@ -2116,11 +2296,11 @@ output "api_auth_me_url" {
 }
 
 output "admin_base_url" {
-  value = "https://${var.admin_domain}"
+  value = "https://${var.app_domain}"
 }
 
 output "admin_root_url" {
-  value = "https://${var.admin_domain}/"
+  value = "https://${var.app_domain}/"
 }
 
 output "cloud_armor_policy_name" {

@@ -1,0 +1,27 @@
+name: Compliance Snapshot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 13 * * 1" # Mondays 13:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Generate compliance snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure check scripts executable
+        run: |
+          chmod +x scripts/check-*.sh
+          chmod +x scripts/generate-compliance-snapshot.sh
+      - name: Generate snapshot
+        run: ./scripts/generate-compliance-snapshot.sh
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-snapshot
+          path: docs/monitoring/compliance-snapshot.md

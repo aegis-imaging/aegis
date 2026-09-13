@@ -14,6 +14,7 @@ import (
 
 	"github.com/aegis-imaging/aegis/api/model"
 	"github.com/aegis-imaging/aegis/api/routing"
+	"github.com/aegis-imaging/aegis/api/webhook"
 )
 
 type ingestRequest struct {
@@ -87,12 +88,17 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	bodyPart := strings.ToUpper(req.Metadata.BodyPart)
 	defacingRequired := bodyPart == "HEAD" || bodyPart == "BRAIN"
 
+	var studyDate *string
+	if req.Metadata.StudyDate != "" {
+		studyDate = &req.Metadata.StudyDate
+	}
 	study := &model.Study{
 		ProjectID:        project.ID,
 		StudyInstanceUID: studyUID,
 		Modality:         req.Metadata.Modality,
 		BodyPart:         req.Metadata.BodyPart,
 		StudyDescription: req.Metadata.StudyDescription,
+		StudyDate:        studyDate,
 		SeriesCount:      req.Metadata.SeriesCount,
 		InstanceCount:    req.Metadata.InstanceCount,
 		Status:           "received",
@@ -162,6 +168,8 @@ func (s *Server) InternalIngest(w http.ResponseWriter, r *http.Request) {
 	}
 	model.CreateAuditEntry(r.Context(), s.db, "ingest.internal", actorEmail(r), "study", study.ID, clientIP(r), detail)
 	s.publishStudyEvent("study.created", study.ID, study.ProjectID, "received")
+	// Detach cancellation: the goroutine outlives the request (values kept).
+	go webhook.Deliver(context.WithoutCancel(r.Context()), s.db, "study.created", study)
 
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"status":  "received",

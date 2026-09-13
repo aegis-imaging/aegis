@@ -22,11 +22,10 @@ type allSharesResponse struct {
 }
 
 type shareDownloadsResponse struct {
-	ShareID   string               `json:"share_id"`
+	ShareID   string                 `json:"share_id"`
 	Downloads []model.ExportDownload `json:"downloads"`
-	Total     int                  `json:"total"`
+	Total     int                    `json:"total"`
 }
-
 
 func TestListAllShares_Empty(t *testing.T) {
 	db := testutil.TestDB(t)
@@ -218,4 +217,96 @@ func TestListAllShares_DownloadCountReflectsDownloads(t *testing.T) {
 	var s model.ExportShare
 	require.NoError(t, json.Unmarshal(resp.Shares[0], &s))
 	assert.Equal(t, 3, s.DownloadCount)
+}
+
+func TestListAllShares_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "shares-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/shares", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAllShares(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestListAllShares_ResearcherWithProjectScopeAllowed(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	study := testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "shares-allowed@test.com", "researcher")
+
+	require.NoError(t, model.CreateProjectMember(context.Background(), db, &model.ProjectMember{
+		ProjectID:   proj.ID,
+		AdminUserID: researcher.ID,
+		Role:        "coordinator",
+	}))
+
+	_, err := model.CreateExportShare(t.Context(), db, study.ID, "hash-scoped", "scoped@test.com", "", "admin", time.Now().Add(24*time.Hour), nil)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/api/shares?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAllShares(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var result allSharesResponse
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&result))
+	assert.Equal(t, 1, result.Total)
+	assert.Len(t, result.Shares, 1)
+}
+
+func TestListAllShares_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	testutil.CreateTestStudy(t, db, proj.ID)
+	researcher := testutil.CreateTestAdminUser(t, db, "shares-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/shares?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.ListAllShares(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
+}
+
+func TestGetExportAnalytics_ResearcherRequiresProjectScope(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "analytics-researcher@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/export-analytics", nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetExportAnalytics(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project_id is required for researcher queries")
+}
+
+func TestGetExportAnalytics_ResearcherWithProjectScopeWithoutMembershipDenied(t *testing.T) {
+	db := testutil.TestDB(t)
+	srv := testutil.TestServer(t, db)
+	proj := testutil.SeedProject(t, db)
+	researcher := testutil.CreateTestAdminUser(t, db, "analytics-denied@test.com", "researcher")
+
+	req := httptest.NewRequest("GET", "/api/export-analytics?project_id="+proj.ID, nil)
+	req = withResearcherUser(req, researcher.ID, researcher.Email)
+	rr := httptest.NewRecorder()
+
+	srv.GetExportAnalytics(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "project not found")
 }

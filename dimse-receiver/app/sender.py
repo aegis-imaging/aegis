@@ -73,11 +73,12 @@ def forward_study(
     AE = _load_pynetdicom_ae()
     ae = AE(ae_title=config.DIMSE_AE_TITLE)
 
-    datasets = []
+    # First pass: header-only reads (stop_before_pixels) to collect the
+    # presentation contexts. Full datasets are read one at a time during the
+    # send loop so the whole study is never held in memory at once.
     added_contexts: set[tuple[str, str]] = set()
     for path in files:
-        ds = pydicom.dcmread(path, force=True)
-        datasets.append(ds)
+        ds = pydicom.dcmread(path, stop_before_pixels=True, force=True)
         sop_uid = str(getattr(ds, "SOPClassUID", ""))
         ts_uid = str(getattr(getattr(ds, "file_meta", None), "TransferSyntaxUID", ""))
         if not sop_uid:
@@ -100,8 +101,10 @@ def forward_study(
     sent = 0
     failed = 0
     try:
-        for ds in datasets:
+        for path in files:
+            ds = pydicom.dcmread(path, force=True)
             status = assoc.send_c_store(ds)
+            del ds  # release pixel data before reading the next file
             if _status_ok(status):
                 sent += 1
             else:
@@ -123,7 +126,186 @@ def forward_study(
         port,
         ae_title,
     )
-    return {"files_total": len(datasets), "files_sent": sent, "files_failed": failed}
+    return {"files_total": len(files), "files_sent": sent, "files_failed": failed}
+
+
+def send_cfind(
+    host: str,
+    port: int,
+    ae_title: str,
+    query_level: str,
+    query_params: dict,
+) -> list[dict]:
+    """Send C-FIND to a remote DIMSE AE and return matching datasets.
+
+    Args:
+        host: Remote AE host.
+        port: Remote AE port.
+        ae_title: Remote AE title.
+        query_level: DICOM query/retrieve level — ``PATIENT``, ``STUDY``,
+            ``SERIES``, or ``IMAGE``.
+        query_params: Dict mapping DICOM keyword → value (e.g.
+            ``{"PatientID": "12345", "StudyDate": "20240101-20240201"}``).
+            Empty-string values are valid (wildcard match).
+
+    Returns:
+        List of matching datasets serialised as ``{keyword: value}`` dicts.
+
+    Raises:
+        RuntimeError: if association fails or the C-FIND response is an error.
+    """
+    from pynetdicom.sop_class import (  # type: ignore[import]
+        StudyRootQueryRetrieveInformationModelFind,
+        PatientRootQueryRetrieveInformationModelFind,
+    )
+
+    AE = _load_pynetdicom_ae()
+    ae = AE(ae_title=config.DIMSE_AE_TITLE)
+
+    level_upper = query_level.upper()
+    if level_upper == "PATIENT":
+        sop_class = PatientRootQueryRetrieveInformationModelFind
+    else:
+        sop_class = StudyRootQueryRetrieveInformationModelFind
+
+    ae.add_requested_context(sop_class)
+
+    assoc = ae.associate(host, int(port), ae_title=ae_title)
+    if not assoc.is_established:
+        raise RuntimeError(
+            f"DIMSE association failed to {host}:{port} (AE={ae_title})"
+        )
+
+    import pydicom
+    from pydicom.uid import generate_uid
+
+    ds = pydicom.dataset.Dataset()
+    ds.QueryRetrieveLevel = level_upper
+    # Apply caller-supplied key/value pairs.
+    for keyword, value in query_params.items():
+        try:
+            setattr(ds, keyword, value)
+        except AttributeError:
+            log.warning("C-FIND: unknown DICOM keyword %r — skipping", keyword)
+
+    results: list[dict] = []
+    try:
+        responses = assoc.send_c_find(ds, sop_class)
+        for status, identifier in responses:
+            if status is None:
+                raise RuntimeError("C-FIND connection reset (no status received)")
+            code = getattr(status, "Status", None)
+            # 0xFF00 = Pending; 0xFF01 = Pending with warnings; 0x0000 = Success
+            if code in (0xFF00, 0xFF01) and identifier is not None:
+                row: dict = {}
+                for elem in identifier:
+                    if elem.keyword:
+                        try:
+                            row[elem.keyword] = str(elem.value)
+                        except Exception:
+                            row[elem.keyword] = ""
+                results.append(row)
+            elif code == 0x0000:
+                break  # success, no more pending results
+            elif code is not None and code != 0x0000:
+                raise RuntimeError(f"C-FIND returned error status: {code:#06x}")
+    finally:
+        assoc.release()
+
+    log.info(
+        "C-FIND complete: host=%s port=%d ae=%s level=%s results=%d",
+        host,
+        port,
+        ae_title,
+        level_upper,
+        len(results),
+    )
+    return results
+
+
+def send_cmove(
+    host: str,
+    port: int,
+    ae_title: str,
+    study_instance_uid: str,
+    move_destination: str,
+) -> dict:
+    """Send C-MOVE to a remote PACS to push a study to *move_destination* AE.
+
+    The remote PACS opens a new C-STORE association back to the specified
+    ``move_destination`` AE title (normally AEGIS's own SCP listening on
+    port 11112). Files arrive through the existing SCP path and are ingested
+    by the normal ``EVT_RELEASED`` handler.
+
+    Args:
+        host: Remote PACS host.
+        port: Remote PACS DIMSE port.
+        ae_title: Remote PACS AE title.
+        study_instance_uid: DICOM StudyInstanceUID to retrieve.
+        move_destination: Destination AE title that the PACS will push to.
+            Defaults to this SCP's own AE title when empty.
+
+    Returns:
+        dict with ``success``, ``study_instance_uid``, ``move_destination``,
+        and ``final_status`` (hex string or ``null``).
+
+    Raises:
+        RuntimeError: if association fails or C-MOVE returns an error status.
+    """
+    from pynetdicom.sop_class import (  # type: ignore[import]
+        StudyRootQueryRetrieveInformationModelMove,
+    )
+
+    import pydicom
+
+    dest = move_destination.strip() or config.DIMSE_AE_TITLE
+
+    AE = _load_pynetdicom_ae()
+    ae = AE(ae_title=config.DIMSE_AE_TITLE)
+    ae.add_requested_context(StudyRootQueryRetrieveInformationModelMove)
+
+    assoc = ae.associate(host, int(port), ae_title=ae_title)
+    if not assoc.is_established:
+        raise RuntimeError(
+            f"DIMSE association failed to {host}:{port} (AE={ae_title})"
+        )
+
+    ds = pydicom.dataset.Dataset()
+    ds.QueryRetrieveLevel = "STUDY"
+    ds.StudyInstanceUID = study_instance_uid
+
+    final_status_code = None
+    try:
+        responses = assoc.send_c_move(
+            ds, dest, StudyRootQueryRetrieveInformationModelMove
+        )
+        for status, _identifier in responses:
+            if status is not None:
+                code = getattr(status, "Status", None)
+                if code is not None:
+                    final_status_code = code
+    finally:
+        assoc.release()
+
+    if final_status_code is not None and final_status_code != 0x0000:
+        raise RuntimeError(
+            f"C-MOVE returned non-success status: {final_status_code:#06x}"
+        )
+
+    log.info(
+        "C-MOVE complete: host=%s port=%d ae=%s study=%s dest=%s",
+        host,
+        port,
+        ae_title,
+        study_instance_uid,
+        dest,
+    )
+    return {
+        "success": True,
+        "study_instance_uid": study_instance_uid,
+        "move_destination": dest,
+        "final_status": hex(final_status_code) if final_status_code is not None else None,
+    }
 
 
 def send_echo(host: str, port: int, ae_title: str) -> dict:
