@@ -33,7 +33,7 @@ ENV VITE_OHIF_BASE_URL=$VITE_OHIF_BASE_URL
 WORKDIR /app/frontend/admin-dashboard
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 # gettext provides envsubst, used to hydrate API_URL into nginx config at startup.
 RUN apk add --no-cache gettext
 
