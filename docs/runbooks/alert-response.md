@@ -12,7 +12,7 @@ Use this quick index to jump to the right deployment or failure surface.
 - **App deploy workflow**: GitHub Actions → `Deploy to AWS`
 - **Terraform workflow**: GitHub Actions → `Terraform AWS`
 - **Terraform failure signal**: GitHub Actions → `Terraform AWS Failure Alert`
-- **Failure signal scope**: reports failed `Terraform AWS` runs on `develop` only
+- **Failure signal scope**: reports failed `Terraform AWS` runs on `main` only
 - **Apply approval gate**: GitHub Environment `aws-prod`
 
 ### Azure
@@ -20,13 +20,13 @@ Use this quick index to jump to the right deployment or failure surface.
 - **App deploy workflow**: GitHub Actions → `Deploy to Azure`
 - **Terraform workflow**: GitHub Actions → `Terraform Azure`
 - **Terraform failure signal**: GitHub Actions → `Terraform Azure Failure Alert`
-- **Failure signal scope**: reports failed `Terraform Azure` runs on `develop` only
+- **Failure signal scope**: reports failed `Terraform Azure` runs on `main` only
 - **Apply approval gate**: GitHub Environment `azure-prod`
 
 ### GCP
 
-- **App deploy pipeline**: Cloud Build trigger using `cloudbuild.yaml`
-- **Terraform infra pipeline**: Cloud Build trigger using `cloudbuild.terraform.yaml`
+- **App deploy workflow**: GitHub Actions → `Deploy to GCP` (on push to `main`)
+- **Terraform workflow**: GitHub Actions → `Terraform GCP` (apply on `main`, approval gate `gcp-prod`)
 - **Cloud Build failure signal**: GitHub Actions → `GCP Cloud Build Failure Alert`
 - **Failure check cadence/default window**: every 30 minutes with 30-minute default lookback on scheduled runs (`workflow_dispatch` default remains 60 minutes)
 - **Primary health check endpoint**: `https://api.aegisimaging.ai/healthz`
@@ -46,7 +46,7 @@ Use this section when `GCP Cloud Build Failure Alert` reports one or more failed
 
 ### Fast checks
 
-- Verify the build trigger and branch match expected production flow (`develop`).
+- Verify the build trigger and branch match expected production flow (`main`).
 - Confirm Artifact Registry image push success before deploy steps.
 - For Terraform failures, check state backend access and provider authentication first.
 
@@ -78,7 +78,7 @@ Use this section whenever the `Terraform AWS` workflow is waiting for deployment
 
 ### Approve a pending apply
 
-1. Open **Actions → Terraform AWS** and select the most recent run on `develop`.
+1. Open **Actions → Terraform AWS** and select the most recent run on `main`.
 2. Confirm the `Terraform Plan (AWS)` job completed successfully.
 3. Open the pending deployment card for environment `aws-prod`.
 4. Click **Review deployments** and then **Approve and deploy**.
@@ -93,7 +93,7 @@ Use this section whenever the `Terraform AWS` workflow is waiting for deployment
 
 ### Fast checks before approving
 
-- Verify the run is from `develop` and repository `aegis-imaging/aegis`.
+- Verify the run is from `main` and repository `aegis-imaging/aegis`.
 - Open `tfplan.txt` artifact and confirm no unexpected destructive changes.
 - Confirm the triggering commit/PR matches the intended infrastructure change.
 
@@ -109,7 +109,7 @@ Use this section whenever the `Terraform Azure` workflow is waiting for deployme
 
 ### Approve a pending apply
 
-1. Open **Actions → Terraform Azure** and select the most recent run on `develop`.
+1. Open **Actions → Terraform Azure** and select the most recent run on `main`.
 2. Confirm the `Terraform Plan (Azure)` job completed successfully.
 3. Open the pending deployment card for environment `azure-prod`.
 4. Click **Review deployments** and then **Approve and deploy**.
@@ -124,7 +124,7 @@ Use this section whenever the `Terraform Azure` workflow is waiting for deployme
 
 ### Fast checks before approving
 
-- Verify the run is from `develop` and repository `aegis-imaging/aegis`.
+- Verify the run is from `main` and repository `aegis-imaging/aegis`.
 - Open `tfplan.txt` artifact and confirm no unexpected destructive changes.
 - Confirm the triggering commit/PR matches the intended infrastructure change.
 

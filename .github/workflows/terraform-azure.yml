@@ -1,6 +1,6 @@
 name: Terraform Azure
 
-# Plan on pull requests; apply on merge to develop behind the azure-prod
+# Plan on pull requests; apply on merge to main behind the azure-prod
 # environment approval. Same pattern as terraform-gcp.yml. Auth is GitHub
 # OIDC against the Entra app registration created by
 # scripts/azure_bootstrap_github_oidc.sh — no client secrets.
@@ -16,13 +16,13 @@ name: Terraform Azure
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     paths:
       - "terraform/azure/**"
       - "scripts/terraform_ci.sh"
       - ".github/workflows/terraform-azure.yml"
   push:
-    branches: [develop]
+    branches: [main]
     paths:
       - "terraform/azure/**"
       - "scripts/terraform_ci.sh"
@@ -99,7 +99,7 @@ jobs:
   approve:
     name: Approve apply (azure-prod)
     needs: plan
-    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
     runs-on: ubuntu-latest
     environment: azure-prod
     steps:
@@ -108,7 +108,7 @@ jobs:
   apply:
     name: Terraform Apply (Azure)
     needs: [plan, approve]
-    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

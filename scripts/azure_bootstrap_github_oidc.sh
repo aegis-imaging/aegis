@@ -61,6 +61,7 @@ federated_credential() {
   echo "    created federated credential $name -> $subject"
 }
 echo "==> federated credentials for $REPO"
+federated_credential github-main "repo:${REPO}:ref:refs/heads/main"
 federated_credential github-develop "repo:${REPO}:ref:refs/heads/develop"
 federated_credential github-pull-request "repo:${REPO}:pull_request"
 federated_credential github-env-azure-prod "repo:${REPO}:environment:azure-prod"

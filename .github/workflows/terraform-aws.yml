@@ -1,6 +1,6 @@
 name: Terraform AWS
 
-# Plan on pull requests; apply on merge to develop behind the aws-prod
+# Plan on pull requests; apply on merge to main behind the aws-prod
 # environment approval. Same pattern as terraform-gcp.yml. Auth is GitHub
 # OIDC assuming the role created by terraform/aws/github_actions_oidc.tf
 # (output github_actions_terraform_role_arn) — no access keys.
@@ -20,13 +20,13 @@ name: Terraform AWS
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     paths:
       - "terraform/aws/**"
       - "scripts/terraform_ci.sh"
       - ".github/workflows/terraform-aws.yml"
   push:
-    branches: [develop]
+    branches: [main]
     paths:
       - "terraform/aws/**"
       - "scripts/terraform_ci.sh"
@@ -97,7 +97,7 @@ jobs:
   approve:
     name: Approve apply (aws-prod)
     needs: plan
-    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
     runs-on: ubuntu-latest
     environment: aws-prod
     steps:
@@ -106,7 +106,7 @@ jobs:
   apply:
     name: Terraform Apply (AWS)
     needs: [plan, approve]
-    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

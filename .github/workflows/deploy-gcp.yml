@@ -1,7 +1,8 @@
 name: Deploy to GCP
 
 # Replaces GCP Cloud Build trigger `deploy-on-develop` (cloudbuild.yaml).
-# Fires on every push to `develop` and can also be triggered manually.
+# Fires on every push to `main` (the release branch; `develop` is promoted to
+# `main` by pull request) and can also be triggered manually.
 #
 # Prerequisites — set in GitHub repo secrets / variables:
 #   Secrets:
@@ -25,7 +26,7 @@ name: Deploy to GCP
 on:
   push:
     branches:
-      - develop
+      - main
     paths-ignore:
       - "docs/**"
       - "**/*.md"
