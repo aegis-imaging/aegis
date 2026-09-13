@@ -12,7 +12,7 @@
 # To include mri_reface, build with:   --build-arg INCLUDE_MRI_REFACE=true
 # (mri_reface requires MATLAB Runtime + ANTs + NiftyReg — adds ~3 GB)
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ARG INCLUDE_MRI_DEFACE=false
 ARG INCLUDE_MRI_REFACE=false
