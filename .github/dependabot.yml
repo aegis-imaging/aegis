@@ -1,21 +1,117 @@
 
-# Basic `dependabot.yml` file with
-# minimum configuration for two package managers
-
 version: 2
 updates:
-  # Enable version updates for npm
+  # Root workspace
   - package-ecosystem: "npm"
-    # Look for `package.json` and `lock` files in the `root` directory
     directory: "/"
-    # Check the npm registry for updates every day (weekdays)
     schedule:
       interval: "daily"
 
-  # Enable version updates for Docker
+  # client
+  - package-ecosystem: "npm"
+    directory: "/client"
+    schedule:
+      interval: "daily"
+
+  # desktop-uploader
+  - package-ecosystem: "npm"
+    directory: "/desktop-uploader"
+    schedule:
+      interval: "daily"
+
+  # dwv
+  - package-ecosystem: "npm"
+    directory: "/dwv"
+    schedule:
+      interval: "daily"
+
+  # frontend/admin-dashboard
+  - package-ecosystem: "npm"
+    directory: "/frontend/admin-dashboard"
+    schedule:
+      interval: "daily"
+
+  # frontend/export-portal
+  - package-ecosystem: "npm"
+    directory: "/frontend/export-portal"
+    schedule:
+      interval: "daily"
+
+  # frontend/landing
+  - package-ecosystem: "npm"
+    directory: "/frontend/landing"
+    schedule:
+      interval: "daily"
+
+  # frontend/upload-portal
+  - package-ecosystem: "npm"
+    directory: "/frontend/upload-portal"
+    schedule:
+      interval: "daily"
+
+  # mcp-server
+  - package-ecosystem: "npm"
+    directory: "/mcp-server"
+    schedule:
+      interval: "daily"
+
+  # Docker images
   - package-ecosystem: "docker"
-    # Look for a `Dockerfile` in the `root` directory
-    directory: "/"
-    # Check for updates once a week
+    directory: "/analytics-service"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/api"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/defacing"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/dicom-tools"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/dimse-receiver"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/dwv"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/frontend/admin-dashboard"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/frontend/upload-portal"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/mcp-server"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/ohif"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/router"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "docker"
+    directory: "/sct-service"
     schedule:
       interval: "weekly"
