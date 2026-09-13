@@ -23,7 +23,7 @@ RUN npm ci --workspace=@aegis/upload-portal --ignore-scripts
 WORKDIR /app/frontend/upload-portal
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 # gettext provides envsubst, used to hydrate API_URL into nginx config at startup.
 RUN apk add --no-cache gettext
 
