@@ -3,7 +3,7 @@
 # Receives DICOM studies over DIMSE C-STORE (port 11112), writes files to the
 # shared data volume, then triggers Go API ingest via POST /api/ingest.
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # DICOM decompression libraries (JPEG2000, JPEG-LS, RLE).
 RUN apt-get update && apt-get install -y --no-install-recommends \
