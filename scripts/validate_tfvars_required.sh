@@ -21,8 +21,9 @@ fi
 missing=()
 
 for key in "$@"; do
-  # Allow optional whitespace and quoted/unquoted values.
-  if ! rg -q --pcre2 "^\s*${key}\s*=\s*(\"[^\"]+\"|[^#\s][^#]*)\s*(#.*)?$" "$TFVARS_PATH"; then
+  # Allow optional whitespace and quoted/unquoted values. Plain grep: the
+  # GitHub runner image has no ripgrep.
+  if ! grep -Eq "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*(\"[^\"]+\"|[^#\"[:space:]][^#]*)[[:space:]]*(#.*)?$" "$TFVARS_PATH"; then
     missing+=("$key")
   fi
 done
