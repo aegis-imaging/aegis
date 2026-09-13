@@ -24,11 +24,11 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "dcmjs": "^0.50.1",
+    "dcmjs": "^0.52.0",
     "dicom-parser": "^1.8.21"
   },
   "devDependencies": {
     "typescript": "~5.7.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.11"
   }
 }
