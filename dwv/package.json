@@ -11,6 +11,6 @@
     "dwv": "^0.36.1"
   },
   "devDependencies": {
-    "vite": "^6.4.3"
+    "vite": "^8.3.0"
   }
 }
