@@ -7,7 +7,7 @@
 # Optional cloud OCR backends for phi-detection are still available via the
 # same INCLUDE_* build args as the old phi-detection image.
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Install tesseract-ocr (phi OCR fallback) + DICOM decompression libraries.
 RUN apt-get update && \
