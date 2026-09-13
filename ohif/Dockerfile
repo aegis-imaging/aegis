@@ -12,7 +12,7 @@
 #   docker run -e API_URL=http://api:8080 -p 3006:8080 ohif
 # ──────────────────────────────────────────────────────────────────────────────
 
-FROM ohif/app:v3.11.0
+FROM ohif/app:v3.13.8
 
 # Switch to root to install packages (ohif/app runs as non-root by default)
 USER root
