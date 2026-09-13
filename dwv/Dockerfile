@@ -10,7 +10,7 @@ COPY . .
 RUN npm run build
 
 # ── Stage 2: Serve with nginx ─────────────────────────────────────────────────
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 
 # gettext provides envsubst for runtime API_URL substitution in nginx config
 RUN apk add --no-cache gettext
