@@ -48,6 +48,7 @@ data "aws_iam_policy_document" "github_actions_deploy_assume_role" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
+        "repo:${var.github_actions_repo}:ref:refs/heads/main",
         "repo:${var.github_actions_repo}:ref:refs/heads/develop",
         "repo:${var.github_actions_repo}:pull_request"
       ]
@@ -150,7 +151,7 @@ resource "aws_iam_role_policy_attachment" "github_actions_deploy" {
 # same repository-scoped trust policy.
 
 variable "github_actions_terraform_role_name" {
-  description = "IAM role name assumed by the GitHub Actions terraform workflow (plan on PRs, apply on develop)"
+  description = "IAM role name assumed by the GitHub Actions terraform workflow (plan on PRs, apply on main)"
   type        = string
   default     = "aegis-github-actions-terraform"
 }

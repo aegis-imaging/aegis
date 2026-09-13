@@ -19,7 +19,7 @@ set -euo pipefail
 
 AEGIS_HOME=${AEGIS_HOME:-/srv/aegis}
 REPO_URL=${AEGIS_REPO_URL:-https://github.com/aegis-imaging/aegis.git}
-REPO_BRANCH=${AEGIS_REPO_BRANCH:-develop}
+REPO_BRANCH=${AEGIS_REPO_BRANCH:-main}
 
 log()   { printf '\033[1;36m▶\033[0m %s\n' "$*"; }
 warn()  { printf '\033[1;33m⚠\033[0m %s\n' "$*"; }

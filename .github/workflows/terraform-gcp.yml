@@ -1,6 +1,6 @@
 name: Terraform GCP
 
-# Plan on pull requests; apply on merge to develop behind the gcp-prod
+# Plan on pull requests; apply on merge to main behind the gcp-prod
 # environment approval. Same pattern as terraform-aws.yml and
 # terraform-azure.yml. Auth is Workload Identity Federation — no keys.
 #
@@ -21,13 +21,13 @@ name: Terraform GCP
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     paths:
       - "terraform/infra/**"
       - "scripts/terraform_ci.sh"
       - ".github/workflows/terraform-gcp.yml"
   push:
-    branches: [develop]
+    branches: [main]
     paths:
       - "terraform/infra/**"
       - "scripts/terraform_ci.sh"
@@ -120,7 +120,7 @@ jobs:
   approve:
     name: Approve apply (gcp-prod)
     needs: plan
-    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
     runs-on: ubuntu-latest
     environment: gcp-prod
     steps:
@@ -129,7 +129,7 @@ jobs:
   apply:
     name: Terraform Apply (GCP)
     needs: [plan, approve]
-    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_apply == 'APPLY'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

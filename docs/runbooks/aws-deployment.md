@@ -359,7 +359,7 @@ cd terraform/aws && terraform output ecr_repositories
 | Containers | Cloud Run | ECS Fargate |
 | Admin dashboard API URL | `https://api.aegisimaging.ai` (default) | `https://aws.api.aegisimaging.ai` (via `API_URL` env) |
 | DWV URL | `https://dwv-<CLOUD_RUN_HASH>-uc.a.run.app` (Cloud Run, baked as build arg) | `https://aws.dwv.aegisimaging.ai` (baked as build arg) |
-| CI/CD | Cloud Build auto-deploys on push to `develop` | Manual ECR push + ECS force-deploy (no CI yet) |
+| CI/CD | GitHub Actions deploys on push to `main` (`deploy-gcp.yml`) | GitHub Actions deploys on push to `main` (`deploy-aws.yml`, once `AWS_CI_ENABLED` is `true`) |
 | Terraform state | GCS bucket `<GCP_PROJECT_ID>-tfstate` | S3 bucket `aegis-prod-terraform-state` |
 
 ---
@@ -389,12 +389,11 @@ both the target group (new port) and the listener rule (pointing to new ARN).
 
 ---
 
-## Adding CI/CD for AWS
+## CI/CD for AWS
 
-Currently AWS is deployed manually. To add automation (GitHub Actions recommended):
-
-1. Add GitHub secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ACCOUNT_ID`
-2. Create `.github/workflows/deploy-aws.yml` triggered on push to `develop`
-3. Steps: ECR login → build+push images → terraform apply → ECS force-deploy
+Automated by `.github/workflows/deploy-aws.yml` (images and ECS rollout) and
+`.github/workflows/terraform-aws.yml` (infrastructure), both on push to `main`
+with OIDC role assumption and no access keys. Bootstrap and the required
+secrets and variables are in `ci-cd.md`.
 
 See `.github/workflows/ci.yml` for the existing GCP Cloud Build trigger pattern.

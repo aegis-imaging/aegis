@@ -2,7 +2,7 @@ name: Deploy to AWS
 
 # Builds every service image, pushes to ECR, and rolls the ECS services that
 # exist (services switched off by the minimal-footprint flags are skipped).
-# Fires on every push to develop; same shape as deploy-gcp.yml. Auth is
+# Fires on every push to main; same shape as deploy-gcp.yml. Auth is
 # GitHub OIDC assuming the deploy role from terraform/aws/github_actions_oidc.tf
 # (output github_actions_deploy_role_arn) — scoped to ECR, ECS, SSM and the
 # DIMSE instance reboot.
@@ -19,7 +19,7 @@ name: Deploy to AWS
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
     paths-ignore:
       - "docs/**"
       - "**/*.md"

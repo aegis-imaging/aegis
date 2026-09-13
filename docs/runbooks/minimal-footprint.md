@@ -91,7 +91,7 @@ once, put the tfvars in the `AWS_TERRAFORM_TFVARS` secret, set the variable
 `AWS_BUILD_SERVICES` to `api admin-dashboard`, then dispatch **Terraform AWS**
 with `APPLY` and approve `aws-prod`. When it finishes, dispatch **Deploy to
 AWS** once so the two images exist and the tasks start; every later merge to
-`develop` rolls them automatically. Then create the first Cognito user
+`main` rolls them automatically. Then create the first Cognito user
 (aws-deployment.md, Phase 8):
 
 ```bash
@@ -113,7 +113,7 @@ admin task definitions updated (new sizes, blank `*_SERVICE_URL`). Nothing
 touches RDS, S3, the ALB or Cognito. Then dispatch again with `APPLY` and
 approve `aws-prod`.
 
-Images already in ECR are reused; each merge to `develop` rebuilds and rolls
+Images already in ECR are reused; each merge to `main` rebuilds and rolls
 the services that exist.
 
 ### 3. DNS (Cloudflare, DNS-only / grey cloud)

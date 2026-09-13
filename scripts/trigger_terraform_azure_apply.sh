@@ -2,18 +2,18 @@
 set -euo pipefail
 
 WORKFLOW_NAME="Terraform Azure"
-REF="develop"
+REF="main"
 CONFIRM_VALUE="APPLY"
 WATCH_RUN=1
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/trigger_terraform_azure_apply.sh [--ref=develop] [--confirm=APPLY] [--no-watch]
+  ./scripts/trigger_terraform_azure_apply.sh [--ref=main] [--confirm=APPLY] [--no-watch]
 
 Examples:
   ./scripts/trigger_terraform_azure_apply.sh
-  ./scripts/trigger_terraform_azure_apply.sh --ref=develop --confirm=APPLY
+  ./scripts/trigger_terraform_azure_apply.sh --ref=main --confirm=APPLY
   ./scripts/trigger_terraform_azure_apply.sh --no-watch
 
 Notes:

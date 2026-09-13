@@ -5,12 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/scripts/azure_terraform_ci_permissions.env"
 DRY_RUN=0
 NO_WATCH=0
-REF="develop"
+REF="main"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/run_azure_permissions_and_trigger_apply.sh [--env-file=path] [--dry-run] [--no-watch] [--ref=develop]
+  ./scripts/run_azure_permissions_and_trigger_apply.sh [--env-file=path] [--dry-run] [--no-watch] [--ref=main]
 
 What it does:
   1) Runs scripts/run_azure_grant_terraform_ci_permissions.sh
@@ -20,7 +20,7 @@ Options:
   --env-file=path   Path to env file (default: ./scripts/azure_terraform_ci_permissions.env)
   --dry-run         Passes --dry-run to permission grant step and stops before workflow trigger
   --no-watch        Trigger workflow without waiting for completion
-  --ref=branch      Git ref for workflow dispatch (default: develop)
+  --ref=branch      Git ref for workflow dispatch (default: main)
 USAGE
 }
 

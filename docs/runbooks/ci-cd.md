@@ -1,16 +1,18 @@
 # CI/CD
 
-Every deployment runs from GitHub Actions on merge to `develop`. Nothing is
-deployed by hand; the only human step is approving an infrastructure apply.
+Every deployment runs from GitHub Actions on merge to `main`. Work lands on
+`develop` by pull request and is promoted with a pull request from `develop`
+to `main`; that merge is the release. Nothing is deployed by hand; the only
+human step is approving an infrastructure apply.
 All three clouds follow the same pattern with OIDC authentication — no
 long-lived keys or secrets in GitHub beyond the tfvars files.
 
 | Workflow | Trigger | Does | Gate |
 |---|---|---|---|
 | `ci.yml` | pull request | build, vet, test, typecheck, terraform fmt/validate | — |
-| `terraform-gcp.yml` / `-aws.yml` / `-azure.yml` | PR: plan · `develop` push touching that cloud's `terraform/**`: plan → apply | infrastructure | environment `gcp-prod` / `aws-prod` / `azure-prod` required reviewers |
-| `deploy-gcp.yml` / `-aws.yml` / `-azure.yml` | `develop` push (code paths) | build + push every image, roll the services that exist, DIMSE VM if configured, health check | — |
-| Cloudflare Pages | `develop` push touching `frontend/landing/**` | builds and publishes aegisimaging.ai | — |
+| `terraform-gcp.yml` / `-aws.yml` / `-azure.yml` | PR to `develop` or `main`: plan · `main` push touching that cloud's `terraform/**`: plan → apply | infrastructure | environment `gcp-prod` / `aws-prod` / `azure-prod` required reviewers |
+| `deploy-gcp.yml` / `-aws.yml` / `-azure.yml` | `main` push (code paths) | build + push every image, roll the services that exist, DIMSE VM if configured, health check | — |
+| Cloudflare Pages | `main` push touching `frontend/landing/**` | builds and publishes aegisimaging.ai | — |
 
 Manual runs: Actions → workflow → **Run workflow**. For the terraform
 workflows, leave `confirm_apply` empty for plan-only, or type `APPLY`.
@@ -100,7 +102,7 @@ minimal footprint), `AWS_DIMSE_INSTANCE_ID`.
 
 The terraform role has `AdministratorAccess` because the module manages IAM,
 KMS, VPC, RDS, ALB, Cognito and WAF; its trust policy only accepts tokens from
-this repository's `develop` branch and pull requests.
+this repository's `main` and `develop` branches and pull requests.
 
 ### Azure
 
@@ -121,7 +123,7 @@ creates the Easy Auth app registration).
 
 ### Cloudflare Pages
 
-Workers & Pages → connect `aegis-imaging/aegis`: production branch `develop`,
+Workers & Pages → connect `aegis-imaging/aegis`: production branch `main`,
 root directory `frontend/landing`, build `npm run build`, output `dist`,
 environment variable `NODE_VERSION=20`, build watch path `frontend/landing/*`.
 Custom domains `aegisimaging.ai` and `www.aegisimaging.ai`.
@@ -131,8 +133,9 @@ Custom domains `aegisimaging.ai` and `www.aegisimaging.ai`.
 1. Bootstrap the identity (above) and set the secrets/variables.
 2. Put the tfvars in the `*_TERRAFORM_TFVARS` secret and open a PR touching
    that cloud's `terraform/` directory — the plan runs on the PR.
-3. Merge; approve the environment. Terraform creates registries, database,
-   compute and load balancing. Services cannot start yet: no images.
+3. Merge to `develop`, promote to `main` by pull request, then approve the
+   environment. Terraform creates registries, database, compute and load
+   balancing. Services cannot start yet: no images.
 4. Run the cloud's deploy workflow once by hand (Run workflow). From then on
    every merge builds, pushes and rolls automatically.
 5. DNS records for the new hostnames (see `minimal-footprint.md` for the
