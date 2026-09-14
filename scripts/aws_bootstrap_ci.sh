@@ -31,12 +31,13 @@ ADMIN_HOST="${ADMIN_HOST:-aws.admin.aegisimaging.ai}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-ops@aegisimaging.ai}"
 PROJECT_NAME="${PROJECT_NAME:-aegis}"
 TF_VERSION="${TF_VERSION:-1.9.8}"
-STATE_BUCKET="aegis-prod-terraform-state"
 LOCK_TABLE="aegis-terraform-locks"
 TF_DIR="terraform/aws"
 MODE="${1:-bootstrap}"
 
 cd "$(dirname "$0")/.."
+# The state bucket name lives in backend.tf (S3 names are global, so it carries a suffix).
+STATE_BUCKET="$(awk -F'"' '/^[[:space:]]+bucket[[:space:]]+=/{print $2; exit}' "$TF_DIR/backend.tf")"
 export AWS_DEFAULT_REGION="$REGION" AWS_PAGER=""
 export PATH="$HOME/.local/bin:$PATH"
 
