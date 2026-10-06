@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # System libraries for DICOM decompression
 RUN apt-get update && apt-get install -y --no-install-recommends \
