@@ -1,10 +1,13 @@
 # ── Terraform S3 backend + state bootstrap resources ──────────────────────────
 #
-# BOOTSTRAP (one-time, before `terraform init`):
+# S3 bucket names are global across all AWS accounts, hence the random suffix;
+# scripts/aws_bootstrap_ci.sh reads the name from the backend block below.
 #
-#   aws s3 mb s3://aegis-prod-terraform-state --region us-east-1
+# BOOTSTRAP (one-time, before `terraform init`; the script does this for you):
+#
+#   aws s3 mb s3://aegis-prod-tfstate-c5dffab6 --region us-east-1
 #   aws s3api put-bucket-versioning \
-#     --bucket aegis-prod-terraform-state \
+#     --bucket aegis-prod-tfstate-c5dffab6 \
 #     --versioning-configuration Status=Enabled
 #   aws dynamodb create-table \
 #     --table-name aegis-terraform-locks \
@@ -20,7 +23,7 @@
 
 terraform {
   backend "s3" {
-    bucket         = "aegis-prod-terraform-state"
+    bucket         = "aegis-prod-tfstate-c5dffab6"
     key            = "aws/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
@@ -31,7 +34,7 @@ terraform {
 # ── State bucket (managed declaratively after bootstrap) ──────────────────────
 
 resource "aws_s3_bucket" "tf_state" {
-  bucket        = "aegis-prod-terraform-state"
+  bucket        = "aegis-prod-tfstate-c5dffab6"
   force_destroy = true # Allow destroy even with state objects (teardown)
 
   # lifecycle {

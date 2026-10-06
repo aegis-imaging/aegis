@@ -23,7 +23,7 @@ Use this as a reference for re-provisioning, disaster recovery, or adding a seco
 | Region | `us-east-1` |
 | Account ID | `<AWS_ACCOUNT_ID>` |
 | IAM deploy user | `<deploy-iam-user>` (access key lives only in your local AWS profile — never commit it) |
-| Terraform state bucket | `aegis-prod-terraform-state` (S3, versioned, KMS-encrypted) |
+| Terraform state bucket | `aegis-prod-tfstate-c5dffab6` (S3, versioned, KMS-encrypted) |
 | Terraform lock table | `aegis-terraform-locks` (DynamoDB) |
 
 ---
@@ -33,9 +33,9 @@ Use this as a reference for re-provisioning, disaster recovery, or adding a seco
 These commands were run once before `terraform init`:
 
 ```bash
-aws s3 mb s3://aegis-prod-terraform-state --region us-east-1
+aws s3 mb s3://aegis-prod-tfstate-c5dffab6 --region us-east-1
 aws s3api put-bucket-versioning \
-  --bucket aegis-prod-terraform-state \
+  --bucket aegis-prod-tfstate-c5dffab6 \
   --versioning-configuration Status=Enabled
 aws dynamodb create-table \
   --table-name aegis-terraform-locks \
@@ -47,7 +47,7 @@ aws dynamodb create-table \
 
 **Terraform import** (after bootstrap, to bring existing resources under TF state):
 ```bash
-terraform import aws_s3_bucket.tf_state aegis-prod-terraform-state
+terraform import aws_s3_bucket.tf_state aegis-prod-tfstate-c5dffab6
 terraform import aws_dynamodb_table.tf_locks aegis-terraform-locks
 ```
 
@@ -360,7 +360,7 @@ cd terraform/aws && terraform output ecr_repositories
 | Admin dashboard API URL | `https://api.aegisimaging.ai` (default) | `https://aws.api.aegisimaging.ai` (via `API_URL` env) |
 | DWV URL | `https://dwv-<CLOUD_RUN_HASH>-uc.a.run.app` (Cloud Run, baked as build arg) | `https://aws.dwv.aegisimaging.ai` (baked as build arg) |
 | CI/CD | GitHub Actions deploys on push to `main` (`deploy-gcp.yml`) | GitHub Actions deploys on push to `main` (`deploy-aws.yml`, once `AWS_CI_ENABLED` is `true`) |
-| Terraform state | GCS bucket `<GCP_PROJECT_ID>-tfstate` | S3 bucket `aegis-prod-terraform-state` |
+| Terraform state | GCS bucket `<GCP_PROJECT_ID>-tfstate` | S3 bucket `aegis-prod-tfstate-c5dffab6` |
 
 ---
 
