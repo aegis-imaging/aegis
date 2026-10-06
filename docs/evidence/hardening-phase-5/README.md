@@ -15,4 +15,5 @@ Store HIPAA day-1 control execution evidence here.
 
 ## Templates
 
-- `global/quarterly-access-model-review-template.md` — quarterly access model review evidence record
+- `global/quarterly-access-model-review-template.md` — quarterly access model review evidence record template
+- `global/2026-06-30_quarterly-access-model-review.md` — completed 2026 Q2 review record for P2-51
